@@ -175,6 +175,7 @@ export class SourceSyncService {
         branch: plan.branch,
         commitSha: plan.commitSha,
         planPath: plan.planPath,
+        publicationMetadata: plan.publicationMetadata,
         slug: plan.slug,
         html,
         fileHash,
