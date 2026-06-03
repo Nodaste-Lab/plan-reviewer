@@ -16,7 +16,12 @@ class PlanReviewer < Formula
   end
 
   service do
-    run [opt_bin/"plan-review", "serve", "--host", "0.0.0.0", "--port", "4317", "--db", "#{Dir.home}/.plan-reviewer/plan-reviewer.sqlite"]
+    run [
+      opt_bin/"plan-review", "serve",
+      "--host", "0.0.0.0",
+      "--port", "4317",
+      "--db", "#{Dir.home}/.plan-reviewer/plan-reviewer.sqlite",
+    ]
     keep_alive true
     log_path var/"log/plan-reviewer.log"
     error_log_path var/"log/plan-reviewer.err.log"

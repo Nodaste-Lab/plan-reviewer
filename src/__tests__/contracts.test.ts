@@ -1131,7 +1131,7 @@ test('Homebrew formula locks the daemon service contract', () => {
 
   assert.match(formula, /class PlanReviewer < Formula/);
   assert.match(formula, /bin\.install_symlink/);
-  assert.match(formula, /"serve", "--host", "0\.0\.0\.0", "--port", "4317"/);
+  assert.match(formula, /"serve",\s+"--host", "0\.0\.0\.0",\s+"--port", "4317"/);
   assert.match(formula, /"\#\{Dir\.home\}\/\.plan-reviewer\/plan-reviewer\.sqlite"/);
   assert.match(formula, /keep_alive true/);
   assert.match(formula, /log_path var\/"log\/plan-reviewer\.log"/);
