@@ -43,6 +43,12 @@ async function register(baseUrl: string) {
       slug: 'fixture',
       html,
       fileHash: sha256(html),
+      publicationMetadata: {
+        worktreePath: '/tmp/fixture',
+        branch: 'main',
+        executionReady: false,
+        executionReadyBasis: 'agent-review-results'
+      },
       updateMode: 'upsert'
     })
   });

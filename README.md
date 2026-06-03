@@ -23,18 +23,20 @@ There is no authentication in the MVP. Anyone who can reach the service can view
 ## Register and Review
 
 ```bash
-plan-review register thoughts/plans/my-plan.html --repo auto --branch auto --commit auto
+plan-review register thoughts/plans/my-plan.html --repo auto --branch auto --commit auto --execution-ready false
 plan-review index
 ```
 
-Open the printed review URL. The registration response is also the canonical source of watcher instructions for agents: successful CLI registration prints a `REQUIRED NEXT ACTION:` block with copy-paste watcher commands, and API registration returns `agentInstructions` inside the existing `{ ok, data }` response envelope. Agents should start a watcher before continuing plan work.
+Open the printed review URL. Publishing requires metadata for the worktree path, branch, optional Linear issue, and whether codex/claude-code review results say the plan is execution ready. The CLI fills worktree and branch from git; pass `--linear-issue <issue>` when applicable and always pass `--execution-ready true|false` based only on agent-review results.
+
+The registration response is also the canonical source of watcher instructions for agents: successful CLI registration prints a `REQUIRED NEXT ACTION:` block with copy-paste watcher commands, and API registration returns `agentInstructions` inside the existing `{ ok, data }` response envelope. Agents should start a watcher before continuing plan work.
 
 By default, registration live-links the local source file: the repo HTML file is authoritative, service blobs are derived cache/history, and later edits to the file sync into the latest rendered version automatically. Open review pages reload their iframe when a synced version is available.
 
 Use `--snapshot` only when you want a detached historical review that will not watch the source file:
 
 ```bash
-plan-review register thoughts/plans/my-plan.html --snapshot
+plan-review register thoughts/plans/my-plan.html --snapshot --execution-ready false
 ```
 
 The browser shell renders sanitized HTML in a no-script iframe and keeps the comment UI in the parent page. Selecting a DOM element opens the composer; image and text comments use the same comment API with `anchorType: "image"` or `anchorType: "text_range"`. If the service cannot read a live-linked source file, it keeps serving the last good rendered version and exposes the sync failure in the API and sidebar.

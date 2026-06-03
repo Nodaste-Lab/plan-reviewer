@@ -21,6 +21,15 @@ import { domAnchor, registeredApp, sampleHtml, sampleRegisterPayload, tempDbPath
 test('schemas validate locked registration, comment, and claim contracts', () => {
   const register = registerPlanSchema.parse(sampleRegisterPayload());
   assert.equal(register.updateMode, 'upsert');
+  assert.equal(register.publicationMetadata.executionReadyBasis, 'agent-review-results');
+  assert.throws(
+    () => registerPlanSchema.parse(sampleRegisterPayload({ publicationMetadata: undefined })),
+    /publicationMetadata/
+  );
+  assert.throws(
+    () => registerPlanSchema.parse(sampleRegisterPayload({ publicationMetadata: { ...register.publicationMetadata, branch: 'other' } })),
+    /publicationMetadata.branch must match branch/
+  );
   assert.throws(
     () => registerPlanSchema.parse(sampleRegisterPayload({ watchMode: 'filesystem' })),
     /sourcePath is required/
@@ -93,6 +102,8 @@ test('registration API returns agent instructions additively across registration
     assert.equal(snapshotData.agentInstructions.reviewUrl, snapshotData.reviewUrl);
     assert.equal(snapshotData.watchCommand, `plan-review watch ${snapshotData.planId} --mode queue`);
     assert.equal(snapshotData.sourceSync.watchMode, 'snapshot');
+    assert.equal(snapshotData.publicationMetadata.worktreePath, '/tmp/sample');
+    assert.equal(snapshotData.publicationMetadata.executionReadyBasis, 'agent-review-results');
     assert.equal(Object.prototype.hasOwnProperty.call(snapshotData.sourceSync, 'error'), true);
     assert.equal(snapshotData.renderedWithWarnings[0].code, 'blocked_script');
     assert.equal(typeof snapshotData.versionId, 'string');
@@ -261,10 +272,18 @@ test('index exposes phase progress and archive hides plans by default', async ()
     assert.equal(apiIndex.statusCode, 200);
     assert.equal(apiIndex.json().data.plans[0].progress.totalPhases, 3);
     assert.equal(apiIndex.json().data.plans[0].progress.completedPhases, 2);
+    assert.equal(apiIndex.json().data.plans[0].plan.publicationMetadata.worktreePath, '/tmp/sample');
+    assert.equal(apiIndex.json().data.plans[0].plan.publicationMetadata.branch, 'main');
+    assert.equal(apiIndex.json().data.plans[0].plan.publicationMetadata.linearIssue, 'NOD-123');
+    assert.equal(apiIndex.json().data.plans[0].plan.publicationMetadata.executionReady, false);
 
     const htmlIndex = await app.inject({ method: 'GET', url: '/' });
     assert.equal(htmlIndex.statusCode, 200);
     assert.match(htmlIndex.body, /2 of 3 phases complete/);
+    assert.match(htmlIndex.body, /\/tmp\/sample\/thoughts\/plans\/sample-plan\.html/);
+    assert.match(htmlIndex.body, /Worktree/);
+    assert.match(htmlIndex.body, /NOD-123/);
+    assert.match(htmlIndex.body, /Execution ready/);
     assert.match(htmlIndex.body, /data-archive-plan=/);
 
     const archived = await app.inject({ method: 'POST', url: `/api/plans/${planId}/archive` });
@@ -352,6 +371,27 @@ test('empty archive page is quiet and archived shell shows restore state', async
     assert.match(shell.body, /Archived/);
     assert.match(shell.body, /id="restore-plan"/);
     assert.doesNotMatch(shell.body, />Archive plan</);
+  } finally {
+    await app.close();
+  }
+});
+
+test('execution-review request button creates an agent-visible comment', async () => {
+  const { app, planId } = await registeredApp('execution-review-request');
+  try {
+    const shell = await app.inject({ method: 'GET', url: `/p/${planId}` });
+    assert.equal(shell.statusCode, 200);
+    assert.match(shell.body, /id="request-execution-review"/);
+
+    const requested = await app.inject({ method: 'POST', url: `/api/plans/${planId}/request-execution-review` });
+    assert.equal(requested.statusCode, 200);
+    assert.equal(requested.json().data.created, true);
+    assert.equal(requested.json().data.comment.body, 'Review this plan with both codex and claude code, iterating on the plan until both agents agree it is execution ready');
+    assert.equal(requested.json().data.comment.status, 'pending');
+    assert.equal(requested.json().data.comment.conversationPayload.type, 'browser.comment.v1');
+
+    const queue = await app.inject({ method: 'GET', url: `/api/plans/${planId}/events/poll?afterSequence=0&mode=queue` });
+    assert.deepEqual(queue.json().data.events.map((event: { eventType: string }) => event.eventType), ['comment.created']);
   } finally {
     await app.close();
   }
@@ -1077,7 +1117,7 @@ test('CLI register prints required watcher instructions and preserves JSON paylo
       child.on('close', code => resolve({ code, stdout, stderr }));
     });
 
-    const human = await runRegister([]);
+    const human = await runRegister(['--execution-ready', 'false', '--linear-issue', 'NOD-999']);
     assert.equal(human.code, 0, human.stderr);
     assert.match(human.stdout, /Plan ID: plan_cli/);
     assert.match(human.stdout, /Review URL: http:\/\/127\.0\.0\.1:\d+\/p\/plan_cli/);
@@ -1091,7 +1131,7 @@ test('CLI register prints required watcher instructions and preserves JSON paylo
     assert.match(human.stdout, /claimed\[0\]\.claim\.id/);
     assert.match(human.stdout, /plan-review ack <commentId> --claim <claimId>/);
 
-    const json = await runRegister(['--json']);
+    const json = await runRegister(['--execution-ready', 'true', '--json']);
     assert.equal(json.code, 0, json.stderr);
     const parsed = JSON.parse(json.stdout);
     assert.deepEqual(parsed, registrationData);
@@ -1126,7 +1166,7 @@ test('CLI register failure does not print watcher instructions', async () => {
     const address = server.address();
     assert(address && typeof address !== 'string');
     const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>(resolve => {
-      const child = spawn(process.execPath, ['dist/cli.js', 'register', planPath, '--url', `http://127.0.0.1:${address.port}`], {
+      const child = spawn(process.execPath, ['dist/cli.js', 'register', planPath, '--url', `http://127.0.0.1:${address.port}`, '--execution-ready', 'false'], {
         cwd: root,
         stdio: ['ignore', 'pipe', 'pipe']
       });

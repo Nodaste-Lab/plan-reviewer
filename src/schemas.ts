@@ -25,6 +25,14 @@ export const markerScreenshotSchema = z.object({
   viewport: z.record(z.string(), z.unknown())
 });
 
+export const planPublicationMetadataSchema = z.object({
+  worktreePath: z.string().trim().min(1),
+  branch: z.string().trim().min(1),
+  linearIssue: z.string().trim().min(1).optional(),
+  executionReady: z.boolean(),
+  executionReadyBasis: z.literal('agent-review-results')
+});
+
 export const registerPlanSchema = z.object({
   repoKey: z.string().optional(),
   repoName: z.string().min(1),
@@ -36,6 +44,7 @@ export const registerPlanSchema = z.object({
   slug: z.string().optional(),
   html: z.string().min(1),
   fileHash: z.string().min(1),
+  publicationMetadata: planPublicationMetadataSchema,
   sourcePath: z.string().min(1).optional(),
   sourceMtimeMs: z.number().nonnegative().optional(),
   sourceSize: z.number().int().nonnegative().optional(),
@@ -52,6 +61,13 @@ export const registerPlanSchema = z.object({
       code: 'custom',
       path: ['sourcePath'],
       message: 'sourcePath is required when watchMode is filesystem'
+    });
+  }
+  if (input.publicationMetadata.branch !== input.branch) {
+    context.addIssue({
+      code: 'custom',
+      path: ['publicationMetadata', 'branch'],
+      message: 'publicationMetadata.branch must match branch'
     });
   }
 });
@@ -101,6 +117,7 @@ export const releaseCommentSchema = z.object({
   reason: z.string().optional()
 });
 
+export type PlanPublicationMetadata = z.infer<typeof planPublicationMetadataSchema>;
 export type RegisterPlanInput = z.infer<typeof registerPlanSchema>;
 export type CreateCommentInput = z.infer<typeof createCommentSchema>;
 export type ClaimCommentsInput = z.infer<typeof claimCommentsSchema>;
