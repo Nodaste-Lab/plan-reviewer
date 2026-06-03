@@ -8,6 +8,7 @@ import { defaultDbPath, PlanReviewError, sha256, slugify } from './util.js';
 import { resolveServiceUrl } from './config.js';
 import { appendNdjson, requestJson } from './client/api.js';
 import { findImageSources } from './htmlImages.js';
+import { renderRegistrationInstructionCommands, type RegistrationAgentInstructions } from './registrationInstructions.js';
 
 interface RegisterResponse {
   planId: string;
@@ -16,8 +17,9 @@ interface RegisterResponse {
   reviewUrl: string;
   indexUrl: string;
   watchCommand: string;
-  sourceSync?: { watchMode: 'filesystem' | 'snapshot'; sourcePath?: string; status?: string; active?: boolean };
+  sourceSync?: { watchMode: 'filesystem' | 'snapshot'; sourcePath?: string; status?: string; error?: unknown; active?: boolean };
   renderedWithWarnings: Array<{ code: string; detail: string }>;
+  agentInstructions?: RegistrationAgentInstructions;
 }
 
 function git(args: string[], cwd = process.cwd()): string | undefined {
@@ -94,6 +96,24 @@ function fullUrl(base: string, maybePath: string): string {
   return maybePath.startsWith('http') ? maybePath : `${base.replace(/\/$/, '')}${maybePath}`;
 }
 
+function registrationInstructionsOutput(data: RegisterResponse, serviceUrl: string): string {
+  if (!data.agentInstructions) return `Watch command: ${data.watchCommand} --url ${serviceUrl}\n`;
+  const renderedCommands = renderRegistrationInstructionCommands(data.agentInstructions, serviceUrl);
+  return [
+    'REQUIRED NEXT ACTION:',
+    data.agentInstructions.nextAction,
+    '',
+    'Preferred watcher command:',
+    renderedCommands.preferredCommand,
+    '',
+    'Durable watcher command:',
+    renderedCommands.durableCommand,
+    '',
+    'Comment lifecycle:',
+    ...data.agentInstructions.processingLoop.map(step => `- ${step}`)
+  ].join('\n') + '\n';
+}
+
 function enrichConversationPayload(value: any, serviceUrl: string) {
   const reviewUrl = value?.evidence?.reviewUrl;
   if (!reviewUrl || typeof reviewUrl !== 'string' || !reviewUrl.startsWith('/')) return value;
@@ -162,7 +182,7 @@ async function registerPlan(filePath: string, options: { url?: string; json?: bo
     return;
   }
   const sync = data.sourceSync?.active ? `active (${data.sourceSync.sourcePath})` : 'snapshot';
-  process.stdout.write(`Plan ID: ${data.planId}\nIndex URL: ${fullUrl(serviceUrl, data.indexUrl)}\nReview URL: ${fullUrl(serviceUrl, data.reviewUrl)}\nSource sync: ${sync}\nWatch command: ${data.watchCommand} --url ${serviceUrl}\n`);
+  process.stdout.write(`Plan ID: ${data.planId}\nIndex URL: ${fullUrl(serviceUrl, data.indexUrl)}\nReview URL: ${fullUrl(serviceUrl, data.reviewUrl)}\nSource sync: ${sync}\n${registrationInstructionsOutput(data, serviceUrl)}`);
 }
 
 async function printIndex(options: { url?: string; json?: boolean; q?: string; repoKey?: string; limit?: string; cursor?: string }) {

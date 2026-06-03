@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan Reviewer: Registration Instructions for Agent Watchers</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1020;
+      --panel: #111827;
+      --panel-2: #0f172a;
+      --text: #e5e7eb;
+      --muted: #a7b0c0;
+      --accent: #38bdf8;
+      --accent-2: #a78bfa;
+      --good: #22c55e;
+      --warn: #f59e0b;
+      --danger: #fb7185;
+      --border: #2b364d;
+      --code: #020617;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.14), transparent 30rem), var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.55;
+    }
+    main { max-width: 1120px; margin: 0 auto; padding: 40px 24px 72px; }
+    header, section, article { border: 1px solid var(--border); background: rgba(17, 24, 39, 0.92); border-radius: 18px; }
+    header { padding: 28px; margin-bottom: 18px; }
+    section { padding: 24px; margin: 18px 0; }
+    article { padding: 18px; margin: 14px 0; background: rgba(15, 23, 42, 0.88); }
+    h1, h2, h3 { line-height: 1.15; margin: 0 0 12px; }
+    h1 { font-size: clamp(2rem, 4vw, 3.4rem); letter-spacing: -0.04em; }
+    h2 { font-size: 1.5rem; color: #f8fafc; }
+    h3 { font-size: 1.05rem; color: #dbeafe; }
+    p { margin: 0 0 12px; }
+    a { color: #7dd3fc; }
+    ul, ol { margin: 10px 0 0 1.2rem; padding: 0; }
+    li { margin: 7px 0; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+    code { background: rgba(2, 6, 23, 0.9); color: #dbeafe; border: 1px solid #1e293b; border-radius: 6px; padding: 0.1rem 0.35rem; }
+    pre { overflow: auto; background: var(--code); color: #dbeafe; border: 1px solid #1e293b; border-radius: 12px; padding: 14px; margin: 12px 0 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { border: 1px solid var(--border); padding: 10px; text-align: left; vertical-align: top; }
+    th { background: #172033; color: #f8fafc; }
+    .eyebrow { color: var(--accent); text-transform: uppercase; font-size: 0.78rem; font-weight: 800; letter-spacing: 0.12em; }
+    .muted { color: var(--muted); }
+    .pill { display: inline-block; border: 1px solid var(--border); background: #172033; border-radius: 999px; padding: 0.25rem 0.6rem; margin: 0.2rem 0.25rem 0.2rem 0; color: #cbd5e1; font-weight: 700; font-size: 0.82rem; }
+    .decision { border-left: 4px solid var(--accent); }
+    .warning { border-left: 4px solid var(--warn); }
+    .success { border-left: 4px solid var(--good); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+    .phase-list { list-style: none; margin-left: 0; }
+    .phase-list li { display: flex; gap: 10px; align-items: flex-start; }
+    .phase-list input { margin-top: 0.35rem; accent-color: var(--accent); }
+  </style>
+</head>
+<body>
+  <main id="plan-root">
+    <header id="overview">
+      <div class="eyebrow">Implementation plan</div>
+      <h1>Provide watcher instructions when agents register plans</h1>
+      <p class="muted">Make the plan-reviewer registration response itself teach agents to start comment monitoring, with a known-good reference implementation in the API and CLI output instead of relying on a skill file being loaded.</p>
+      <p><span class="pill">Repo: plan-reviewer</span><span class="pill">Surface: /api/plans/register</span><span class="pill">CLI: plan-review register</span><span class="pill">Risk: low-medium contract expansion</span></p>
+    </header>
+
+    <section id="product-intent">
+      <h2>Product intent</h2>
+      <article id="intent-statement" class="decision">
+        <h3>Desired outcome</h3>
+        <p>After any agent registers an HTML plan, the service response should make the next operational step unavoidable: start a monitor for browser comments immediately, using an included reference command that is known to work with the existing queue/watch contract.</p>
+      </article>
+      <article id="current-gap" class="warning">
+        <h3>Current gap</h3>
+        <p>Registration already returns <code>watchCommand</code>, and external harness skills may document watcher patterns, but agents can miss or ignore those out-of-repo aids. The instruction is not a first-class response contract, and the CLI's success output presents the watch command as informational rather than a required follow-up.</p>
+      </article>
+      <article id="scope-boundary">
+        <h3>Scope boundary</h3>
+        <p>This plan does not make the server spawn a watcher process on the agent's machine. The server cannot safely control arbitrary agent harnesses. This plan's shipped user-visible outcome is that registration returns actionable instructions plus copy-paste/reference watcher commands. Reliable automatic monitoring is completed when harness adapters consume <code>agentInstructions</code> and auto-start the watcher; that adapter auto-start work is a named follow-up outside this server/CLI contract change.</p>
+      </article>
+    </section>
+
+    <section id="existing-surfaces">
+      <h2>Existing surfaces to change</h2>
+      <table id="surface-table">
+        <thead><tr><th>File</th><th>Current behavior</th><th>Planned change</th></tr></thead>
+        <tbody>
+          <tr><td><code>src/registrationInstructions.ts</code> (new)</td><td>No shared instruction builder exists today.</td><td>Define the typed <code>RegistrationAgentInstructions</code> contract and pure server-owned builder here. The server owns generation; the CLI may import types or formatting helpers, but must not regenerate <code>agentInstructions</code> or mutate JSON output.</td></tr>
+          <tr><td><code>src/storage/database.ts</code></td><td><code>registerPlan()</code> returns IDs, URLs, source sync metadata, <code>repoId</code>, and <code>watchCommand: plan-review watch &lt;planId&gt; --mode queue</code>.</td><td>Continue returning existing registration data without changing legacy fields; expose enough plan data for the server to call the shared instruction builder.</td></tr>
+          <tr><td><code>src/server/app.ts</code></td><td><code>POST /api/plans/register</code> forwards the registration result and adds API-only fields such as <code>renderedWithWarnings</code>.</td><td>Invoke the shared instruction builder server-side, include <code>agentInstructions</code> in the JSON response, and keep existing fields for compatibility.</td></tr>
+          <tr><td><code>src/cli.ts</code></td><td>Human output prints <code>Watch command</code>; <code>--json</code> prints the unwrapped registration data payload returned by <code>requestJson()</code>.</td><td>Consume <code>agentInstructions</code> from the API response. Human output prints a stable required-next-action block; JSON mode preserves the same unwrapped server data payload without rebuilding or enriching instructions.</td></tr>
+          <tr><td><code>src/__tests__/contracts.test.ts</code></td><td>Tests registration, queue lifecycle, and watch fallback, but not registration-time instructions.</td><td>Add tests first for API shape, CLI human output, JSON output, generated reference commands, processing loop guidance, and compatibility fields.</td></tr>
+          <tr><td><code>README.md</code></td><td>Documents manual watch commands after registration.</td><td>Document that registration responses are the canonical source of watcher instructions.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="target-contract">
+      <h2>Target registration contract</h2>
+      <p>The existing raw HTTP response remains <code>{ ok: true, data: { ... } }</code>. The <code>response.data</code> payload below remains valid and gains <code>agentInstructions</code> as an additive field, with <code>watchCommand</code>, <code>sourceSync</code>, and <code>renderedWithWarnings</code> retained for compatibility. Strict closed-schema consumers, if any, must allow unknown additive fields.</p>
+      <pre id="api-contract"><code>// response.data
+{
+  "planId": "plan_abc",
+  "versionId": "ver_abc",
+  "repoId": "repo_abc",
+  "reviewUrl": "/p/plan_abc",
+  "indexUrl": "/",
+  "watchCommand": "plan-review watch plan_abc --mode queue",
+  "sourceSync": { "watchMode": "filesystem", "sourcePath": "/repo/thoughts/plans/example.html", "status": "synced", "error": null, "active": true },
+  "renderedWithWarnings": [],
+  "agentInstructions": {
+    "type": "plan-review.registration.instructions.v1",
+    "required": true,
+    "summary": "Start a monitor for browser comments now and keep it running while you work this plan.",
+    "nextAction": "Start the comment watcher before continuing implementation or review work.",
+    "planId": "plan_abc",
+    "reviewUrl": "/p/plan_abc",
+    "serviceUrlRequired": true,
+    "serviceUrlInstruction": "API consumers should render watcher commands with --url &lt;registration service URL&gt; before execution; for durable tmux commands, the --url flag belongs inside the quoted inner watcher command.",
+    "preferredCommand": "plan-review watch plan_abc --mode queue --format browser-comment --json",
+    "durableCommand": "mkdir -p ~/.plan-reviewer/watchers && tmux new-session -d -s plan-review-plan_abc 'plan-review watch plan_abc --mode queue --format browser-comment --conversation-out ~/.plan-reviewer/watchers/plan_abc.ndjson --json'",
+    "processingLoop": [
+      "Receive a browser.comment.v1 payload from the watcher.",
+      "Claim that event with plan-review queue claim plan_abc --ids &lt;commentId&gt; --json and read &lt;claimId&gt; from claimed[0].claim.id in CLI JSON (raw API data.claimed[0].claim.id); use --one only as a fallback if a future event shape does not expose a comment ID.",
+      "Read the plan and selected context, then make the smallest appropriate plan change.",
+      "Acknowledge with plan-review ack &lt;commentId&gt; --claim &lt;claimId&gt; --summary \"...\" --changed-files thoughts/plans/... --json.",
+      "Resolve with plan-review resolve &lt;commentId&gt; --note \"Done\" --json only after the reviewer-visible issue is complete."
+    ],
+    "referenceImplementations": [
+      { "harness": "pi", "tool": "process", "command": "plan-review watch plan_abc --mode queue --format browser-comment --json" },
+      { "harness": "durable-shell", "tool": "tmux", "command": "mkdir -p ~/.plan-reviewer/watchers && tmux new-session -d -s plan-review-plan_abc 'plan-review watch plan_abc --mode queue --format browser-comment --conversation-out ~/.plan-reviewer/watchers/plan_abc.ndjson --json'" }
+    ]
+  }
+}</code></pre>
+      <article id="url-enrichment-note" class="warning">
+        <h3>URL and JSON behavior decisions</h3>
+        <p>Decision: API commands are portable service-local templates, not fully resolved copy-paste commands. API consumers already know the registration service URL they called and should render watcher commands with <code>--url &lt;registration service URL&gt;</code> before execution so adapters monitor the same service that accepted registration. For flat commands, <code>--url</code> is appended to the watcher command. For durable tmux commands, <code>--url</code> must be inserted inside the quoted inner watcher command, not after the tmux wrapper. <code>agentInstructions.reviewUrl</code> remains the existing relative review path; the builder must not absolutize it because the service may not know its externally reachable URL. The CLI human output is the copy-paste surface and must render the resolved <code>--url</code> using <code>resolveServiceUrl()</code>. CLI <code>--json</code> must print the exact unwrapped registration data payload returned by <code>requestJson()</code>, not the HTTP <code>{ ok, data }</code> envelope and not CLI-enriched commands; enriched JSON adapter shapes are deferred.</p>
+        <p>Decision: <code>preferredCommand</code>, <code>durableCommand</code>, and <code>referenceImplementations</code> are emitted from one helper/builder. The builder constructs commands from <code>planId</code> plus the canonical watcher flag set (<code>--mode queue --format browser-comment --json</code>) and does not parse or string-extend the legacy <code>watchCommand</code>; <code>watchCommand</code> is passed through unchanged for compatibility. The same module exposes a rendering helper that accepts an optional <code>serviceUrl</code> and places <code>--url</code> correctly in both flat and tmux-wrapped command forms, so the CLI formats human output without regenerating <code>agentInstructions</code> or mutating JSON output. Tests should validate the generated object and rendered commands so command examples cannot drift from the canonical watch flags.</p>
+      </article>
+    </section>
+
+    <section id="reference-implementation">
+      <h2>Known-good watcher reference implementation</h2>
+      <p class="muted">The commands in this section show rendered forms after CLI or adapter URL placement. The API/builder templates omit <code>--url</code>; rendered human output and adapters add it according to <code>serviceUrlInstruction</code>.</p>
+      <article id="pi-process-pattern" class="success">
+        <h3>Pi background process pattern</h3>
+        <p>When the registering agent has a background process tool, start the watcher as a managed long-running process and react to <code>browser.comment.v1</code> lines. The <code>pi</code> harness label in <code>referenceImplementations</code> means the Pi harness background-process pattern; the list is extensible, and tests should assert required entries by tool/command semantics rather than treating the two sample entries as a closed enum.</p>
+        <pre><code>plan-review watch &lt;planId&gt; \
+  --mode queue \
+  --format browser-comment \
+  --json \
+  --url &lt;serviceUrl&gt;</code></pre>
+      </article>
+      <article id="durable-tmux-pattern" class="success">
+        <h3>Durable shell pattern</h3>
+        <p>When monitoring must survive the current agent turn, write browser-comment payloads to NDJSON from a detached tmux watcher.</p>
+        <pre><code>mkdir -p ~/.plan-reviewer/watchers
+tmux new-session -d -s plan-review-&lt;planId&gt; \
+  'plan-review watch &lt;planId&gt; --mode queue --format browser-comment \
+   --conversation-out ~/.plan-reviewer/watchers/&lt;planId&gt;.ndjson --json \
+   --url &lt;serviceUrl&gt;'</code></pre>
+      </article>
+      <article id="processing-loop">
+        <h3>Comment processing loop</h3>
+        <p>The builder's <code>agentInstructions.processingLoop</code> array is authoritative. This prose is documentation-only and may summarize the same steps, but tests should assert the builder output rather than treating this HTML copy as a second contract.</p>
+        <ol>
+          <li>Receive a <code>browser.comment.v1</code> payload from the watcher.</li>
+          <li>Run <code>plan-review queue claim &lt;planId&gt; --ids &lt;commentId&gt; --json</code> for that event and read <code>&lt;claimId&gt;</code> from <code>claimed[0].claim.id</code> in CLI JSON, or <code>data.claimed[0].claim.id</code> in raw API JSON; use <code>--one</code> only as a fallback if a future event shape does not expose a comment ID.</li>
+          <li>Read the plan and selected context, then make the smallest appropriate plan change.</li>
+          <li>Run <code>plan-review ack &lt;commentId&gt; --claim &lt;claimId&gt; --summary "..." --changed-files thoughts/plans/... --json</code>.</li>
+          <li>Run <code>plan-review resolve &lt;commentId&gt; --note "Done" --json</code> only after the reviewer-visible issue is complete.</li>
+        </ol>
+      </article>
+    </section>
+
+    <section id="implementation-plan">
+      <h2>Progress</h2>
+      <article id="status-resume-note" class="success">
+        <h3>Status and resume instruction</h3>
+        <p>Implementation starts at P1 and proceeds sequentially through P5 after this plan is approved. Do not add <code>register --watch</code>, <code>--auto-watch</code>, server-managed watcher processes, or other watcher lifecycle behavior in this plan.</p>
+      </article>
+      <ul class="phase-list">
+        <li id="phase-p1-contract"><input type="checkbox" disabled> <span><strong>P1 - Contract helper and tests.</strong></span>
+          <ul>
+            <li><strong>Expected files:</strong> new <code>src/registrationInstructions.ts</code>, <code>src/__tests__/contracts.test.ts</code>.</li>
+            <li><strong>Tests first:</strong> add failing assertions for helper output only: <code>agentInstructions.type</code>, <code>required</code>, <code>summary</code>, <code>nextAction</code>, <code>serviceUrlRequired</code>, <code>preferredCommand</code>, <code>durableCommand</code>, <code>referenceImplementations</code>, <code>processingLoop</code>, <code>serviceUrlInstruction</code>, and rendered flat/tmux commands. Legacy-field compatibility is covered by P2/P3 API and CLI tests, not helper tests.</li>
+            <li><strong>Work:</strong> add a typed <code>RegistrationAgentInstructions</code> shape, pure builder, and command rendering helper. The builder accepts fields guaranteed by every registration result path (<code>planId</code> and <code>reviewUrl</code>), constructs commands from the canonical watcher flag set, and leaves legacy <code>watchCommand</code> as an unchanged compatibility field outside command derivation. The renderer accepts an optional <code>serviceUrl</code> and places <code>--url</code> correctly for both flat and quoted tmux commands.</li>
+            <li><strong>Verify:</strong> run <code>bun run build && node --test dist/__tests__/contracts.test.js</code>; the targeted helper assertions fail before implementation and pass after the helper exists.</li>
+            <li><strong>End State:</strong> one shared module can generate the full instruction object and render copy-paste commands with or without <code>serviceUrl</code>, including canonical commands and processing loop, without importing storage or CLI code.</li>
+          </ul>
+        </li>
+        <li id="phase-p2-api"><input type="checkbox" disabled> <span><strong>P2 - API response and tests.</strong></span>
+          <ul>
+            <li><strong>Expected files:</strong> <code>src/server/app.ts</code>, <code>src/__tests__/contracts.test.ts</code>.</li>
+            <li><strong>Tests first:</strong> extend registration API tests to assert the raw HTTP envelope remains <code>{ ok: true, data: ... }</code>, <code>agentInstructions</code> is added inside <code>data</code>, instructions are present and well-formed for normal registrations, snapshot-mode registrations, and re-registration/upsert, and existing <code>planId</code>, <code>versionId</code>, <code>repoId</code>, URLs, <code>watchCommand</code>, <code>sourceSync.error</code>, and <code>renderedWithWarnings</code> remain unchanged.</li>
+            <li><strong>Work:</strong> invoke the shared builder server-side after registration and include the generated object in <code>POST /api/plans/register</code>.</li>
+            <li><strong>Verify:</strong> <code>bun run build && node --test dist/__tests__/contracts.test.js</code>.</li>
+            <li><strong>End State:</strong> every registration path returns well-formed <code>agentInstructions</code> while all existing registration fields and strict payload expectations remain additive-only.</li>
+          </ul>
+        </li>
+        <li id="phase-p3-cli"><input type="checkbox" disabled> <span><strong>P3 - CLI output and tests.</strong></span>
+          <ul>
+            <li><strong>Expected files:</strong> <code>src/cli.ts</code>, <code>src/__tests__/contracts.test.ts</code>.</li>
+            <li><strong>Tests first:</strong> add CLI tests asserting human stdout includes <code>REQUIRED NEXT ACTION:</code>, <code>--format browser-comment</code>, resolved <code>--url</code>, a durable tmux command whose quoted inner watcher command also contains the resolved <code>--url</code>, and a lifecycle note derived from <code>agentInstructions.processingLoop</code>; add a <code>--json</code> test asserting the exact unwrapped registration data payload is printed without CLI-only enrichment.</li>
+            <li><strong>Work:</strong> have human output consume <code>agentInstructions</code>, render commands with the resolved <code>--url</code> via the shared command rendering helper, update <code>RegisterResponse</code> or import the shared type so the CLI can read <code>RegistrationAgentInstructions</code>, and preserve JSON output as the unwrapped data payload returned by <code>requestJson()</code>.</li>
+            <li><strong>Verify:</strong> run <code>bun run build && node --test dist/__tests__/contracts.test.js</code>; the targeted CLI assertions pass with the required human-output block and JSON behavior.</li>
+            <li><strong>End State:</strong> human CLI registration output is a copy-paste-safe watcher starter, while <code>--json</code> remains the exact unwrapped registration data payload.</li>
+          </ul>
+        </li>
+        <li id="phase-p4-coverage"><input type="checkbox" disabled> <span><strong>P4 - Full coverage hardening.</strong></span>
+          <ul>
+            <li><strong>Expected files:</strong> <code>src/__tests__/contracts.test.ts</code> only unless test helpers need small updates.</li>
+            <li><strong>Tests first:</strong> add or tighten assertions that automated contract coverage exercises the generated <code>--mode queue --format browser-comment --json</code> flags used by the watcher command, that the generated claim instruction references the same <code>commentId</code> field emitted by <code>browser.comment.v1</code>, and that failed registration responses do not include <code>agentInstructions</code> or a <code>REQUIRED NEXT ACTION:</code> block. Live browser-comment smoke is a required release gate after automated coverage passes.</li>
+            <li><strong>Work:</strong> no new product behavior beyond closing test gaps found while implementing P1-P3.</li>
+            <li><strong>Verify:</strong> <code>bun run build && node --test dist/__tests__/contracts.test.js</code>, then <code>bun run test</code>, then the live smoke in <code>#verify-comment-flow</code> before declaring the branch complete.</li>
+            <li><strong>End State:</strong> automated tests guard generated watcher flags, reference commands, compatibility fields, <code>browser.comment.v1</code> payload linkage, failure-path non-emission, and registration instruction presence across variants; live smoke empirically confirms the known-good watcher path on this branch.</li>
+          </ul>
+        </li>
+        <li id="phase-p5-docs"><input type="checkbox" disabled> <span><strong>P5 - Documentation.</strong></span>
+          <ul>
+            <li><strong>Expected files:</strong> <code>README.md</code>.</li>
+            <li><strong>Tests first:</strong> docs are verified by review, not automated tests.</li>
+            <li><strong>Work:</strong> update README registration guidance to make the response-provided instructions canonical, distinguish API templates from CLI copy-paste output, and describe any skill references as external/harness-provided aids rather than in-repo docs.</li>
+            <li><strong>Verify:</strong> README contains canonical registration-response guidance and does not imply an in-repo skill is required.</li>
+            <li><strong>End State:</strong> docs direct agents to registration-returned instructions first and frame harness skills only as supplemental aids.</li>
+          </ul>
+        </li>
+      </ul>
+    </section>
+
+    <section id="acceptance-criteria">
+      <h2>Acceptance criteria</h2>
+      <ul>
+        <li id="ac-api-instructions"><strong>AC1:</strong> Registering through <code>POST /api/plans/register</code> returns <code>agentInstructions.type === "plan-review.registration.instructions.v1"</code>, <code>required === true</code>, non-empty <code>summary</code> and <code>nextAction</code>, <code>serviceUrlRequired === true</code>, a non-empty <code>serviceUrlInstruction</code> that describes flat-vs-tmux <code>--url</code> placement, and a preferred watcher command containing <code>--mode queue --format browser-comment --json</code>.</li>
+        <li id="ac-cli-visible"><strong>AC2:</strong> Running <code>plan-review register thoughts/plans/example.html</code> preserves the existing success fields such as plan ID/review URL/source sync, replaces the old informational <code>Watch command:</code> emphasis with a stable required-action block, and includes: <code>REQUIRED NEXT ACTION:</code>, the next-action text from <code>agentInstructions.nextAction</code>, a preferred watcher command with resolved <code>--url</code>, a durable tmux command whose quoted inner watcher command also contains the resolved <code>--url</code>, and a short lifecycle note derived from <code>agentInstructions.processingLoop</code> that browser comments must be claimed, acknowledged, and resolved through the existing queue lifecycle.</li>
+        <li id="ac-cli-json"><strong>AC3:</strong> Running with <code>--json</code> emits the exact unwrapped machine-readable registration data payload, including <code>agentInstructions</code>, without relying on parsing human prose or adding CLI-only enrichment.</li>
+        <li id="ac-compat"><strong>AC4:</strong> Existing consumers of all current registration fields continue to work, including <code>planId</code>, <code>versionId</code>, <code>repoId</code>, <code>reviewUrl</code>, <code>indexUrl</code>, <code>watchCommand</code>, all existing <code>sourceSync</code> subfields including <code>error</code>, and <code>renderedWithWarnings</code>; CLI JSON still emits the unwrapped server payload.</li>
+        <li id="ac-docs"><strong>AC5:</strong> README tells agents to treat registration instructions as the source of truth and to start a watcher before continuing plan work.</li>
+        <li id="ac-reference-implementations"><strong>AC6:</strong> The generated <code>durableCommand</code> and <code>referenceImplementations</code> include the canonical queue/browser-comment flags and durable tmux + <code>--conversation-out</code> pattern, produced from the same helper as <code>preferredCommand</code>.</li>
+        <li id="ac-processing-loop"><strong>AC7:</strong> <code>agentInstructions.processingLoop</code> includes actionable claim, ack, and resolve guidance using the existing <code>plan-review queue claim &lt;planId&gt; --ids &lt;commentId&gt; --json</code>, <code>plan-review ack &lt;commentId&gt; --claim &lt;claimId&gt; --summary "..." --changed-files &lt;paths&gt; --json</code>, and <code>plan-review resolve &lt;commentId&gt; --note "Done" --json</code> commands, its claim step explains that <code>&lt;claimId&gt;</code> comes from <code>claimed[0].claim.id</code> in CLI JSON / <code>data.claimed[0].claim.id</code> in raw API JSON, and its claim step references the same <code>commentId</code> field emitted by <code>browser.comment.v1</code>. Tests assert the generated guidance names this exact claim-id path.</li>
+        <li id="ac-error-non-emission"><strong>AC8:</strong> Failed registration follows the existing error path and does not include <code>agentInstructions</code> in API error payloads or a <code>REQUIRED NEXT ACTION:</code> watcher block in CLI error output.</li>
+      </ul>
+    </section>
+
+    <section id="bdd-scenarios">
+      <h2>BDD scenarios</h2>
+      <article id="bdd-agent-registers-cli">
+        <h3>Agent registers via CLI</h3>
+        <p><strong>Given</strong> an agent runs <code>plan-review register</code>, <strong>when</strong> registration succeeds, <strong>then</strong> stdout includes the plan URL, source sync state, and a required watcher command with <code>--format browser-comment</code>.</p>
+      </article>
+      <article id="bdd-agent-registers-api">
+        <h3>Agent registers via API</h3>
+        <p><strong>Given</strong> a harness adapter calls <code>/api/plans/register</code>, <strong>when</strong> it parses the JSON response, <strong>then</strong> it can read <code>agentInstructions.preferredCommand</code>, render it with <code>--url</code> using the registration service URL it already called, and start monitoring without consulting a skill file.</p>
+      </article>
+      <article id="bdd-comment-arrives">
+        <h3>Reviewer comments after registration</h3>
+        <p><strong>Given</strong> the registering agent started the provided watcher, <strong>when</strong> a browser reviewer submits a comment, <strong>then</strong> the watcher emits a <code>browser.comment.v1</code> payload and the agent can claim, process, acknowledge, and resolve through existing commands.</p>
+      </article>
+      <article id="bdd-adversarial-agent-ignores-human-output" class="warning">
+        <h3>Adversarial: agent ignores human prose</h3>
+        <p><strong>Given</strong> an agent only consumes machine-readable registration output, <strong>when</strong> it registers a plan with <code>--json</code>, <strong>then</strong> the required watcher instruction is still present in <code>agentInstructions</code> with a stable type, <code>required: true</code>, service URL guidance, and a preferred command template.</p>
+      </article>
+      <article id="bdd-adversarial-registration-fails" class="warning">
+        <h3>Adversarial: registration fails</h3>
+        <p><strong>Given</strong> registration fails because the input is invalid or the service returns an error, <strong>when</strong> the API or CLI surfaces that failure, <strong>then</strong> it follows the existing error path and must not emit <code>agentInstructions</code> or a <code>REQUIRED NEXT ACTION:</code> watcher block.</p>
+      </article>
+      <article id="bdd-adversarial-service-url-missing" class="warning">
+        <h3>Adversarial: copied command lacks service URL</h3>
+        <p><strong>Given</strong> the service is not running on the CLI default URL, <strong>when</strong> the CLI prints registration instructions, <strong>then</strong> every human copy-paste watcher command includes the resolved <code>--url</code> value so the monitor connects to the same service that accepted registration.</p>
+      </article>
+      <article id="bdd-adversarial-api-service-url" class="warning">
+        <h3>Adversarial: API adapter preserves registration service URL</h3>
+        <p><strong>Given</strong> a harness adapter registers through any service URL, <strong>when</strong> it starts <code>agentInstructions.preferredCommand</code> or renders a durable tmux watcher, <strong>then</strong> it places <code>--url &lt;registration service URL&gt;</code> according to <code>agentInstructions.serviceUrlInstruction</code>—appended for flat commands and inside the quoted inner watcher for tmux—so the watcher connects to the service that returned the plan ID.</p>
+      </article>
+      <article id="bdd-adversarial-watcher-crashes" class="warning">
+        <h3>Adversarial: watcher startup fails</h3>
+        <p><strong>Regression guard:</strong> this relies on existing watch fallback coverage in <code>bun run test</code>, not new fallback behavior in this plan. <strong>Given</strong> the agent starts the provided watcher but SSE or the network fails, <strong>when</strong> the command runs, <strong>then</strong> the existing <code>plan-review watch</code> polling fallback and saved watch state keep the watcher usable without losing already-seen sequence position.</p>
+      </article>
+      <article id="bdd-adversarial-duplicate-watchers" class="warning">
+        <h3>Adversarial: duplicate registration or watcher</h3>
+        <p><strong>Regression guard:</strong> this relies on existing queue claim lifecycle coverage in <code>bun run test</code>, not new duplicate-watcher logic in this plan. <strong>Given</strong> an agent re-registers the same plan or starts the watcher more than once, <strong>when</strong> comments arrive, <strong>then</strong> the queue claim lifecycle remains the source of truth and only a holder of an active claim can acknowledge feedback.</p>
+      </article>
+    </section>
+
+    <section id="risks-and-mitigations">
+      <h2>Risks and mitigations</h2>
+      <table id="risk-table">
+        <thead><tr><th>Risk</th><th>Mitigation</th></tr></thead>
+        <tbody>
+          <tr><td>Agents still ignore the instructions.</td><td>Make the CLI wording imperative and machine-readable, then follow up separately with harness adapters that auto-execute <code>agentInstructions</code>.</td></tr>
+          <tr><td>Command examples drift from watch behavior.</td><td>Generate <code>preferredCommand</code>, <code>durableCommand</code>, and <code>referenceImplementations</code> from one helper and test that the generated object contains the flags the existing watcher tests validate.</td></tr>
+          <tr><td>Service URL handling differs between API and CLI.</td><td>Keep server responses portable with explicit <code>serviceUrlInstruction</code>; let CLI human output render <code>--url</code> using <code>resolveServiceUrl()</code> and the shared command rendering helper for copy-paste commands.</td></tr>
+          <tr><td>Durable tmux command may not exist on all systems.</td><td>Label it as durable-shell reference implementation, not the only supported path; keep preferred command harness-neutral.</td></tr>
+          <tr><td>Strict closed-schema consumers may reject additive fields.</td><td>This change is intentionally additive; known repo consumers and CLI JSON tests must preserve current fields, while external strict-schema consumers should allow unknown fields or pin to legacy <code>watchCommand</code>.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="verification-plan">
+      <h2>Verification plan</h2>
+      <ol>
+        <li id="verify-unit">Run the targeted contract gate: <code>bun run build && node --test dist/__tests__/contracts.test.js</code>.</li>
+        <li id="verify-full-tests">Run the full suite: <code>bun run test</code> to catch regressions in registration, watch fallback, queue lifecycle, rendering, and source sync.</li>
+        <li id="verify-manual">Optional reviewer smoke commands: in one terminal run <code>bun run dev -- serve --host 127.0.0.1 --port 4317</code>; in another run <code>bun run dev -- register thoughts/plans/agent-registration-instructions.html --url http://127.0.0.1:4317</code>; confirm stdout includes <code>REQUIRED NEXT ACTION:</code>, the resolved <code>--url http://127.0.0.1:4317</code>, and a review URL that opens.</li>
+        <li id="verify-comment-flow">Required gates: automated contract coverage must exercise the generated command renderer, including the same <code>--mode queue --format browser-comment --json</code> flags used by the watcher command and the <code>commentId</code> field consumed by the claim instruction; release validation must also run a manual watcher smoke, add a browser comment, and confirm a <code>browser.comment.v1</code> line appears. Precondition: the local service is running via <code>bun run dev -- serve --host 127.0.0.1 --port 4317</code>. Copy-paste manual smoke commands: <code>REG=$(bun run dev -- register thoughts/plans/agent-registration-instructions.html --url http://127.0.0.1:4317 --json)</code>; <code>PLAN_ID=$(REG="$REG" node -e 'const data=JSON.parse(process.env.REG); console.log(data.planId)')</code>; <code>VERSION_ID=$(REG="$REG" node -e 'const data=JSON.parse(process.env.REG); console.log(data.versionId)')</code>; <code>rm -f /tmp/plan-review-watch.ndjson</code>; <code>bun run dev -- watch "$PLAN_ID" --mode queue --format browser-comment --json --conversation-out /tmp/plan-review-watch.ndjson --url http://127.0.0.1:4317 &amp; WATCH_PID=$!</code>; <code>trap 'kill "$WATCH_PID" 2&gt;/dev/null || true' EXIT</code>; <code>sleep 1</code>; <code>curl -fsS -X POST -H 'content-type: application/json' -d "{\"versionId\":\"$VERSION_ID\",\"body\":\"smoke\",\"anchorType\":\"dom\",\"anchor\":{\"nodeId\":\"body\"}}" "http://127.0.0.1:4317/api/plans/$PLAN_ID/comments"</code>; <code>sleep 1</code>; <code>grep -q '"type":"browser.comment.v1"' /tmp/plan-review-watch.ndjson &amp;&amp; grep -q '"commentId"' /tmp/plan-review-watch.ndjson</code>; <code>kill "$WATCH_PID" 2&gt;/dev/null || true</code>; <code>trap - EXIT</code>.</li>
+      </ol>
+    </section>
+
+    <section id="decisions-and-follow-up">
+      <h2>Decisions and follow-up</h2>
+      <article id="decision-cli-json">
+        <h3>Decision: CLI JSON is exact unwrapped registration payload</h3>
+        <p>For this phase, <code>plan-review register --json</code> prints the exact unwrapped registration data payload returned by <code>requestJson()</code>, not the HTTP <code>{ ok, data }</code> envelope. CLI-only <code>--url</code> enrichment belongs only in human stdout. If a future adapter needs enriched JSON, add a separate adapter-specific field in a follow-up plan.</p>
+      </article>
+      <article id="follow-up-auto-watch">
+        <h3>Out-of-scope follow-up: register-time process lifecycle</h3>
+        <p>A later phase may consider <code>plan-review register --watch</code> or <code>--auto-watch</code>, but this plan deliberately avoids changing process lifecycle semantics. The current plan only returns instructions and reference implementations.</p>
+      </article>
+    </section>
+  </main>
+</body>
+</html>
