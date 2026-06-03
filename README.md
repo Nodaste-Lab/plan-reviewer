@@ -7,8 +7,8 @@ Local HTML plan review daemon and CLI for plans under `thoughts/plans`.
 From the public Homebrew tap:
 
 ```bash
-brew tap Nodaste-labs/plan-reviewer https://github.com/Nodaste-labs/plan-reviewer.git
-brew install Nodaste-labs/plan-reviewer/plan-reviewer
+brew tap Nodaste-Lab/plan-reviewer https://github.com/Nodaste-Lab/plan-reviewer.git
+brew install Nodaste-Lab/plan-reviewer/plan-reviewer
 brew services start plan-reviewer
 ```
 

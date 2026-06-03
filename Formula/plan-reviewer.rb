@@ -1,7 +1,7 @@
 class PlanReviewer < Formula
   desc "Local HTML plan review daemon and CLI for agent comment workflows"
-  homepage "https://github.com/Nodaste-labs/plan-reviewer"
-  url "https://github.com/Nodaste-labs/plan-reviewer.git", branch: "main"
+  homepage "https://github.com/Nodaste-Lab/plan-reviewer"
+  url "https://github.com/Nodaste-Lab/plan-reviewer.git", branch: "main"
   version "0.1.0"
 
   depends_on "node"
