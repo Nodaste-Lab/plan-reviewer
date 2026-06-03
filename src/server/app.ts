@@ -13,6 +13,7 @@ import {
   resolveCommentSchema
 } from '../schemas.js';
 import { renderPlan } from '../render/render.js';
+import { buildRegistrationAgentInstructions } from '../registrationInstructions.js';
 import { PlanReviewStore, type StoredEvent } from '../storage/database.js';
 import { SourceSyncService } from './sourceSync.js';
 import { fail, ok, PlanReviewError } from '../util.js';
@@ -914,7 +915,8 @@ export function createApp(options: AppOptions): FastifyInstance {
           error: plan.lastSyncError,
           active: !plan.archivedAt && plan.watchMode === 'filesystem' && plan.lastSyncStatus !== 'failed'
         },
-        renderedWithWarnings: rendered.warnings
+        renderedWithWarnings: rendered.warnings,
+        agentInstructions: buildRegistrationAgentInstructions({ planId: result.planId, reviewUrl: result.reviewUrl })
       });
     } catch (error) {
       sendError(reply, error);
