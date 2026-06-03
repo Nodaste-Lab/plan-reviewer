@@ -99,3 +99,7 @@ bun run test
 bun run test:e2e -- --grep "dom annotation|image annotation|plan index"
 bun run test:fixtures -- --scenario seeded-comment-stream
 ```
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.

@@ -2,6 +2,7 @@
   "name": "plan-reviewer",
   "version": "0.1.0",
   "description": "Local HTML plan review daemon and CLI for agent comment workflows",
+  "license": "MIT",
   "bin": {
     "plan-review": "bin/plan-review"
   },
