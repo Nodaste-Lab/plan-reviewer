@@ -8,7 +8,8 @@ import type {
   ClaimCommentsInput,
   CreateCommentInput,
   RegisterPlanInput,
-  ResolveCommentInput
+  ResolveCommentInput,
+  PlanPublicationMetadata
 } from '../schemas.js';
 import { ensureDir, PlanReviewError, sha256, shortHash, slugify } from '../util.js';
 
@@ -23,6 +24,7 @@ export interface PlanRecord {
   commitSha?: string;
   sourcePath?: string;
   watchMode: 'filesystem' | 'snapshot';
+  publicationMetadata: PlanPublicationMetadata;
   lastSyncAt?: string;
   lastSyncStatus?: string;
   lastSyncError?: Record<string, unknown> | null;
@@ -120,6 +122,17 @@ function inferAssetDimensions(bytes: Buffer): { width?: number; height?: number 
 
 function optionalString(value: unknown): string | undefined {
   return value === null || value === undefined || value === '' ? undefined : String(value);
+}
+
+function metadataFromRow(row: Record<string, unknown>): PlanPublicationMetadata {
+  const parsed = parseJson<PlanPublicationMetadata | null>(row.publicationMetadataJson as string | null, null);
+  if (parsed) return parsed;
+  return {
+    worktreePath: optionalString(row.rootPath) ?? optionalString(row.sourcePath) ?? '',
+    branch: String(row.branch ?? 'unknown'),
+    executionReady: false,
+    executionReadyBasis: 'agent-review-results'
+  };
 }
 
 function optionalNumber(value: unknown): number | undefined {
@@ -320,6 +333,7 @@ export class PlanReviewStore {
     this.ensureColumn('plans', 'last_sync_status', 'TEXT');
     this.ensureColumn('plans', 'last_sync_error_json', 'TEXT');
     this.ensureColumn('plans', 'archived_at', 'TEXT');
+    this.ensureColumn('plans', 'publication_metadata_json', 'TEXT');
     this.ensureColumn('plan_versions', 'source_mtime_ms', 'REAL');
     this.ensureColumn('plan_versions', 'source_size', 'INTEGER');
     this.ensureColumn('plan_versions', 'sync_origin', "TEXT NOT NULL DEFAULT 'manual_register'");
@@ -440,14 +454,15 @@ export class PlanReviewStore {
       const watchMode = input.watchMode ?? 'snapshot';
       const lastSyncStatus = watchMode === 'filesystem' ? 'synced' : 'snapshot';
       this.db
-        .prepare(`INSERT INTO plans (id, repo_id, slug, plan_path, source_path, watch_mode, last_sync_at, last_sync_status, last_sync_error_json, archived_at, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+        .prepare(`INSERT INTO plans (id, repo_id, slug, plan_path, source_path, watch_mode, last_sync_at, last_sync_status, last_sync_error_json, archived_at, publication_metadata_json, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
           ON CONFLICT(repo_id, plan_path, slug) DO UPDATE SET updated_at = excluded.updated_at,
             source_path = excluded.source_path, watch_mode = excluded.watch_mode,
             last_sync_at = excluded.last_sync_at, last_sync_status = excluded.last_sync_status,
             last_sync_error_json = excluded.last_sync_error_json,
+            publication_metadata_json = excluded.publication_metadata_json,
             archived_at = plans.archived_at`)
-        .run(planId, repoId, slug, input.planPath, input.sourcePath ?? null, watchMode, now, lastSyncStatus, null, now, now);
+        .run(planId, repoId, slug, input.planPath, input.sourcePath ?? null, watchMode, now, lastSyncStatus, null, JSON.stringify(input.publicationMetadata), now, now);
 
       const htmlName = `${input.fileHash}.html`;
       const renderedName = `${sha256(renderedHtml)}.rendered.html`;
@@ -528,8 +543,8 @@ export class PlanReviewStore {
     const rows = this.db.prepare(`
       SELECT p.id, p.slug, p.plan_path AS planPath, p.source_path AS sourcePath, p.watch_mode AS watchMode,
         p.last_sync_at AS lastSyncAt, p.last_sync_status AS lastSyncStatus, p.last_sync_error_json AS lastSyncErrorJson,
-        p.archived_at AS archivedAt,
-        r.repo_name AS repoName, r.repo_key AS repoKey,
+        p.archived_at AS archivedAt, p.publication_metadata_json AS publicationMetadataJson,
+        r.repo_name AS repoName, r.repo_key AS repoKey, r.root_path AS rootPath,
         v.id AS versionId, v.branch, v.commit_sha AS commitSha, v.file_hash AS fileHash,
         v.html_blob_path AS htmlBlobPath,
         v.source_mtime_ms AS sourceMtimeMs, v.source_size AS sourceSize, v.sync_origin AS syncOrigin,
@@ -566,7 +581,8 @@ export class PlanReviewStore {
         lastSyncAt: optionalString(row.lastSyncAt),
         lastSyncStatus: optionalString(row.lastSyncStatus),
         lastSyncError: parseJson(row.lastSyncErrorJson as string | null, null),
-        archivedAt: optionalString(row.archivedAt)
+        archivedAt: optionalString(row.archivedAt),
+        publicationMetadata: metadataFromRow(row)
       },
       latestVersion: {
         id: row.versionId,
@@ -612,7 +628,8 @@ export class PlanReviewStore {
     const row = this.db.prepare(`
       SELECT p.id, p.repo_id AS repoId, p.slug, p.plan_path AS planPath, p.source_path AS sourcePath,
         p.watch_mode AS watchMode, p.last_sync_at AS lastSyncAt, p.last_sync_status AS lastSyncStatus,
-        p.last_sync_error_json AS lastSyncErrorJson, p.archived_at AS archivedAt, r.repo_name AS repoName, r.repo_key AS repoKey,
+        p.last_sync_error_json AS lastSyncErrorJson, p.archived_at AS archivedAt, p.publication_metadata_json AS publicationMetadataJson,
+        r.repo_name AS repoName, r.repo_key AS repoKey, r.root_path AS rootPath,
         v.id AS versionId, v.file_hash AS fileHash, v.branch, v.commit_sha AS commitSha,
         v.html_blob_path AS htmlBlobPath, v.rendered_blob_path AS renderedBlobPath,
         v.render_warnings_json AS renderWarningsJson, v.source_mtime_ms AS sourceMtimeMs,
@@ -628,7 +645,8 @@ export class PlanReviewStore {
     const slugRows = row ? [] : this.db.prepare(`
       SELECT p.id, p.repo_id AS repoId, p.slug, p.plan_path AS planPath, p.source_path AS sourcePath,
         p.watch_mode AS watchMode, p.last_sync_at AS lastSyncAt, p.last_sync_status AS lastSyncStatus,
-        p.last_sync_error_json AS lastSyncErrorJson, p.archived_at AS archivedAt, r.repo_name AS repoName, r.repo_key AS repoKey,
+        p.last_sync_error_json AS lastSyncErrorJson, p.archived_at AS archivedAt, p.publication_metadata_json AS publicationMetadataJson,
+        r.repo_name AS repoName, r.repo_key AS repoKey, r.root_path AS rootPath,
         v.id AS versionId, v.file_hash AS fileHash, v.branch, v.commit_sha AS commitSha,
         v.html_blob_path AS htmlBlobPath, v.rendered_blob_path AS renderedBlobPath,
         v.render_warnings_json AS renderWarningsJson, v.source_mtime_ms AS sourceMtimeMs,
@@ -666,7 +684,8 @@ export class PlanReviewStore {
         lastSyncAt: optionalString(selectedRow.lastSyncAt),
         lastSyncStatus: optionalString(selectedRow.lastSyncStatus),
         lastSyncError: parseJson(selectedRow.lastSyncErrorJson, null),
-        archivedAt: optionalString(selectedRow.archivedAt)
+        archivedAt: optionalString(selectedRow.archivedAt),
+        publicationMetadata: metadataFromRow(selectedRow)
       },
       version: {
         id: selectedRow.versionId,

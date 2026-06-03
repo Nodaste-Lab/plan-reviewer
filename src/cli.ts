@@ -8,6 +8,7 @@ import { defaultDbPath, PlanReviewError, sha256, slugify } from './util.js';
 import { resolveServiceUrl } from './config.js';
 import { appendNdjson, requestJson } from './client/api.js';
 import { findImageSources } from './htmlImages.js';
+import { renderRegistrationInstructionCommands, type RegistrationAgentInstructions } from './registrationInstructions.js';
 
 interface RegisterResponse {
   planId: string;
@@ -16,8 +17,10 @@ interface RegisterResponse {
   reviewUrl: string;
   indexUrl: string;
   watchCommand: string;
-  sourceSync?: { watchMode: 'filesystem' | 'snapshot'; sourcePath?: string; status?: string; active?: boolean };
+  sourceSync?: { watchMode: 'filesystem' | 'snapshot'; sourcePath?: string; status?: string; error?: unknown; active?: boolean };
+  publicationMetadata?: { worktreePath: string; branch: string; linearIssue?: string; executionReady: boolean; executionReadyBasis: 'agent-review-results' };
   renderedWithWarnings: Array<{ code: string; detail: string }>;
+  agentInstructions?: RegistrationAgentInstructions;
 }
 
 function git(args: string[], cwd = process.cwd()): string | undefined {
@@ -94,6 +97,24 @@ function fullUrl(base: string, maybePath: string): string {
   return maybePath.startsWith('http') ? maybePath : `${base.replace(/\/$/, '')}${maybePath}`;
 }
 
+function registrationInstructionsOutput(data: RegisterResponse, serviceUrl: string): string {
+  if (!data.agentInstructions) return `Watch command: ${data.watchCommand} --url ${serviceUrl}\n`;
+  const renderedCommands = renderRegistrationInstructionCommands(data.agentInstructions, serviceUrl);
+  return [
+    'REQUIRED NEXT ACTION:',
+    data.agentInstructions.nextAction,
+    '',
+    'Preferred watcher command:',
+    renderedCommands.preferredCommand,
+    '',
+    'Durable watcher command:',
+    renderedCommands.durableCommand,
+    '',
+    'Comment lifecycle:',
+    ...data.agentInstructions.processingLoop.map(step => `- ${step}`)
+  ].join('\n') + '\n';
+}
+
 function enrichConversationPayload(value: any, serviceUrl: string) {
   const reviewUrl = value?.evidence?.reviewUrl;
   if (!reviewUrl || typeof reviewUrl !== 'string' || !reviewUrl.startsWith('/')) return value;
@@ -125,7 +146,16 @@ function writeWatchState(filePath: string, key: string, sequence: number): void 
   fs.writeFileSync(filePath, `${JSON.stringify(state, null, 2)}\n`);
 }
 
-async function registerPlan(filePath: string, options: { url?: string; json?: boolean; repo?: string; branch?: string; commit?: string; newThread?: boolean; snapshot?: boolean }) {
+function parseExecutionReady(value: string | undefined): boolean {
+  if (value === undefined) {
+    throw new PlanReviewError('metadata_required', 'register requires --execution-ready true|false', 1, {}, 'Set --execution-ready based only on codex and claude code plan-review results, then retry.');
+  }
+  if (/^(true|yes|1)$/i.test(value)) return true;
+  if (/^(false|no|0)$/i.test(value)) return false;
+  throw new PlanReviewError('validation_failed', '--execution-ready must be true or false', 1, { executionReady: value });
+}
+
+async function registerPlan(filePath: string, options: { url?: string; json?: boolean; repo?: string; branch?: string; commit?: string; newThread?: boolean; snapshot?: boolean; executionReady?: string; linearIssue?: string }) {
   const serviceUrl = resolveServiceUrl(options.url);
   const absolute = path.resolve(filePath);
   const html = fs.readFileSync(absolute, 'utf8');
@@ -145,6 +175,13 @@ async function registerPlan(filePath: string, options: { url?: string; json?: bo
     slug: slugify(path.basename(filePath, path.extname(filePath))),
     html,
     fileHash: sha256(html),
+    publicationMetadata: {
+      worktreePath: meta.rootPath,
+      branch,
+      linearIssue: options.linearIssue,
+      executionReady: parseExecutionReady(options.executionReady),
+      executionReadyBasis: 'agent-review-results' as const
+    },
     sourcePath: options.snapshot ? undefined : absolute,
     sourceMtimeMs: options.snapshot ? undefined : stat.mtimeMs,
     sourceSize: options.snapshot ? undefined : stat.size,
@@ -162,7 +199,7 @@ async function registerPlan(filePath: string, options: { url?: string; json?: bo
     return;
   }
   const sync = data.sourceSync?.active ? `active (${data.sourceSync.sourcePath})` : 'snapshot';
-  process.stdout.write(`Plan ID: ${data.planId}\nIndex URL: ${fullUrl(serviceUrl, data.indexUrl)}\nReview URL: ${fullUrl(serviceUrl, data.reviewUrl)}\nSource sync: ${sync}\nWatch command: ${data.watchCommand} --url ${serviceUrl}\n`);
+  process.stdout.write(`Plan ID: ${data.planId}\nIndex URL: ${fullUrl(serviceUrl, data.indexUrl)}\nReview URL: ${fullUrl(serviceUrl, data.reviewUrl)}\nSource sync: ${sync}\n${registrationInstructionsOutput(data, serviceUrl)}`);
 }
 
 async function printIndex(options: { url?: string; json?: boolean; q?: string; repoKey?: string; limit?: string; cursor?: string }) {
@@ -173,14 +210,14 @@ async function printIndex(options: { url?: string; json?: boolean; q?: string; r
   if (options.limit) params.set('limit', options.limit);
   if (options.cursor) params.set('cursor', options.cursor);
   const query = params.toString();
-  const data = await requestJson<{ plans?: Array<{ plan: { repoName: string; slug: string }; counts: { pending: number; claimed: number; acknowledged: number; resolved: number }; reviewUrl: string }>; nextCursor?: string }>(`${serviceUrl}/api/plans${query ? `?${query}` : ''}`);
+  const data = await requestJson<{ plans?: Array<{ plan: { repoName: string; slug: string; publicationMetadata: { branch: string; executionReady: boolean; linearIssue?: string } }; counts: { pending: number; claimed: number; acknowledged: number; resolved: number }; reviewUrl: string }>; nextCursor?: string }>(`${serviceUrl}/api/plans${query ? `?${query}` : ''}`);
   if (options.json) printJson(data);
   else {
     const rows = data.plans ?? [];
     const table = rows.map(item =>
-      `${item.plan.repoName}\t${item.plan.slug}\tpending:${item.counts.pending} claimed:${item.counts.claimed} ack:${item.counts.acknowledged} resolved:${item.counts.resolved}\t${fullUrl(serviceUrl, item.reviewUrl)}`
+      `${item.plan.repoName}\t${item.plan.slug}\t${item.plan.publicationMetadata.branch}\t${item.plan.publicationMetadata.linearIssue ?? '-'}\texecutionReady:${item.plan.publicationMetadata.executionReady}\tpending:${item.counts.pending} claimed:${item.counts.claimed} ack:${item.counts.acknowledged} resolved:${item.counts.resolved}\t${fullUrl(serviceUrl, item.reviewUrl)}`
     );
-    process.stdout.write(`Index URL: ${serviceUrl}/\nRepo\tPlan\tStatus\tReview URL\n${table.join('\n')}${data.nextCursor ? `\nNext cursor: ${data.nextCursor}` : ''}\n`);
+    process.stdout.write(`Index URL: ${serviceUrl}/\nRepo\tPlan\tBranch\tLinear\tExecution Ready\tStatus\tReview URL\n${table.join('\n')}${data.nextCursor ? `\nNext cursor: ${data.nextCursor}` : ''}\n`);
   }
 }
 
@@ -413,6 +450,8 @@ export async function main(argv: string[] = process.argv.slice(2)) {
     .option('--commit <commit>')
     .option('--new-thread')
     .option('--snapshot', 'register a detached snapshot instead of live filesystem sync')
+    .option('--linear-issue <issue>', 'optional Linear issue associated with this plan')
+    .option('--execution-ready <true|false>', 'whether agent-review results say this plan is execution ready')
     .option('--json')
     .action(registerPlan);
 

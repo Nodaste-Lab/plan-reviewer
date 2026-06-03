@@ -27,6 +27,13 @@ try {
       slug: 'e2e',
       html,
       fileHash: sha256(html),
+      publicationMetadata: {
+        worktreePath: '/tmp/e2e',
+        branch: 'main',
+        linearIssue: 'NOD-E2E',
+        executionReady: false,
+        executionReadyBasis: 'agent-review-results'
+      },
       assets: [{ sourceUrl: './diagram.png', absolutePath: '/tmp/e2e/diagram.png', bytesBase64: imageBytesBase64 }],
       updateMode: 'upsert'
     }
@@ -50,6 +57,13 @@ try {
       sourceMtimeMs: 0,
       sourceSize: 0,
       watchMode: 'filesystem',
+      publicationMetadata: {
+        worktreePath: '/tmp/e2e',
+        branch: 'main',
+        linearIssue: 'NOD-E2E',
+        executionReady: false,
+        executionReadyBasis: 'agent-review-results'
+      },
       updateMode: 'upsert'
     }
   });
@@ -302,6 +316,13 @@ try {
         slug: 'e2e',
         html: missingDomHtml,
         fileHash: sha256(missingDomHtml),
+        publicationMetadata: {
+          worktreePath: '/tmp/e2e',
+          branch: 'main',
+          linearIssue: 'NOD-E2E',
+          executionReady: false,
+          executionReadyBasis: 'agent-review-results'
+        },
         assets: [{ sourceUrl: './diagram.png', absolutePath: '/tmp/e2e/diagram.png', bytesBase64: imageBytesBase64 }],
         updateMode: 'upsert'
       }
@@ -382,6 +403,12 @@ try {
       slug: 'e2e-sync',
       html: syncHtmlV1,
       fileHash: sha256(syncHtmlV1),
+      publicationMetadata: {
+        worktreePath: syncDir,
+        branch: 'main',
+        executionReady: false,
+        executionReadyBasis: 'agent-review-results'
+      },
       sourcePath: syncPath,
       sourceMtimeMs: syncStat.mtimeMs,
       sourceSize: syncStat.size,

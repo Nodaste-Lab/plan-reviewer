@@ -14,12 +14,22 @@ import { SourceSyncService } from '../server/sourceSync.js';
 import { findImageSources } from '../htmlImages.js';
 import { resolveServiceUrl } from '../config.js';
 import { discoverImageAssets } from '../cli.js';
+import { buildRegistrationAgentInstructions, renderRegistrationInstructionCommands } from '../registrationInstructions.js';
 import { sha256 } from '../util.js';
 import { domAnchor, registeredApp, sampleHtml, sampleRegisterPayload, tempDbPath } from './helpers.js';
 
 test('schemas validate locked registration, comment, and claim contracts', () => {
   const register = registerPlanSchema.parse(sampleRegisterPayload());
   assert.equal(register.updateMode, 'upsert');
+  assert.equal(register.publicationMetadata.executionReadyBasis, 'agent-review-results');
+  assert.throws(
+    () => registerPlanSchema.parse(sampleRegisterPayload({ publicationMetadata: undefined })),
+    /publicationMetadata/
+  );
+  assert.throws(
+    () => registerPlanSchema.parse(sampleRegisterPayload({ publicationMetadata: { ...register.publicationMetadata, branch: 'other' } })),
+    /publicationMetadata.branch must match branch/
+  );
   assert.throws(
     () => registerPlanSchema.parse(sampleRegisterPayload({ watchMode: 'filesystem' })),
     /sourcePath is required/
@@ -36,6 +46,124 @@ test('schemas validate locked registration, comment, and claim contracts', () =>
 
   assert.equal(claimCommentsSchema.parse({ mode: 'one' }).leaseSeconds, 300);
   assert.throws(() => claimCommentsSchema.parse({ mode: 'bulk', limit: 0 }));
+});
+
+test('registration instruction helper builds canonical watcher guidance and rendered commands', () => {
+  const instructions = buildRegistrationAgentInstructions({ planId: 'plan_abc', reviewUrl: '/p/plan_abc' });
+  assert.equal(instructions.type, 'plan-review.registration.instructions.v1');
+  assert.equal(instructions.required, true);
+  assert.match(instructions.summary, /Start a monitor/);
+  assert.match(instructions.nextAction, /Start the comment watcher/);
+  assert.equal(instructions.serviceUrlRequired, true);
+  assert.match(instructions.serviceUrlInstruction, /durable tmux/);
+  assert.equal(instructions.reviewUrl, '/p/plan_abc');
+  assert.equal(instructions.preferredCommand, 'plan-review watch plan_abc --mode queue --format browser-comment --json');
+  assert.equal(instructions.durableCommand, "mkdir -p ~/.plan-reviewer/watchers && tmux new-session -d -s plan-review-plan_abc 'plan-review watch plan_abc --mode queue --format browser-comment --conversation-out ~/.plan-reviewer/watchers/plan_abc.ndjson --json'");
+  assert.equal(instructions.referenceImplementations.length, 2);
+  assert.equal(instructions.referenceImplementations[0].tool, 'process');
+  assert.equal(instructions.referenceImplementations[0].command, instructions.preferredCommand);
+  assert.equal(instructions.referenceImplementations[1].tool, 'tmux');
+  assert.equal(instructions.referenceImplementations[1].command, instructions.durableCommand);
+  assert.match(instructions.processingLoop.join('\n'), /browser\.comment\.v1/);
+  assert.match(instructions.processingLoop.join('\n'), /commentId/);
+  assert.match(instructions.processingLoop.join('\n'), /claimed\[0\]\.claim\.id/);
+  assert.match(instructions.processingLoop.join('\n'), /data\.claimed\[0\]\.claim\.id/);
+  assert.match(instructions.processingLoop.join('\n'), /plan-review queue claim plan_abc --ids <commentId> --json/);
+  assert.match(instructions.processingLoop.join('\n'), /plan-review ack <commentId> --claim <claimId> --summary/);
+  assert.match(instructions.processingLoop.join('\n'), /plan-review resolve <commentId> --note/);
+
+  const rendered = renderRegistrationInstructionCommands(instructions, 'http://reviewer.example:4317');
+  assert.equal(rendered.preferredCommand, 'plan-review watch plan_abc --mode queue --format browser-comment --json --url http://reviewer.example:4317');
+  assert.match(rendered.durableCommand, /^mkdir -p ~\/\.plan-reviewer\/watchers && tmux new-session -d -s plan-review-plan_abc '/);
+  assert.match(rendered.durableCommand, /--conversation-out ~\/\.plan-reviewer\/watchers\/plan_abc\.ndjson --json --url http:\/\/reviewer\.example:4317'$/);
+  assert.equal(rendered.referenceImplementations[0].command, rendered.preferredCommand);
+  assert.equal(rendered.referenceImplementations[1].command, rendered.durableCommand);
+});
+
+test('registration API returns agent instructions additively across registration variants', async () => {
+  const app = createApp({ dbPath: tempDbPath('registration-instructions') });
+  try {
+    const snapshot = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload({ watchMode: 'snapshot' })
+    });
+    assert.equal(snapshot.statusCode, 200);
+    assert.equal(snapshot.json().ok, true);
+    const snapshotData = snapshot.json().data;
+    assert.equal(snapshotData.agentInstructions.type, 'plan-review.registration.instructions.v1');
+    assert.equal(snapshotData.agentInstructions.required, true);
+    assert.match(snapshotData.agentInstructions.summary, /Start a monitor/);
+    assert.match(snapshotData.agentInstructions.nextAction, /Start the comment watcher/);
+    assert.equal(snapshotData.agentInstructions.serviceUrlRequired, true);
+    assert.match(snapshotData.agentInstructions.serviceUrlInstruction, /quoted inner watcher/);
+    assert.match(snapshotData.agentInstructions.preferredCommand, /--mode queue --format browser-comment --json/);
+    assert.doesNotMatch(snapshotData.agentInstructions.preferredCommand, /--url/);
+    assert.equal(snapshotData.agentInstructions.reviewUrl, snapshotData.reviewUrl);
+    assert.equal(snapshotData.watchCommand, `plan-review watch ${snapshotData.planId} --mode queue`);
+    assert.equal(snapshotData.sourceSync.watchMode, 'snapshot');
+    assert.equal(snapshotData.publicationMetadata.worktreePath, '/tmp/sample');
+    assert.equal(snapshotData.publicationMetadata.executionReadyBasis, 'agent-review-results');
+    assert.equal(Object.prototype.hasOwnProperty.call(snapshotData.sourceSync, 'error'), true);
+    assert.equal(snapshotData.renderedWithWarnings[0].code, 'blocked_script');
+    assert.equal(typeof snapshotData.versionId, 'string');
+    assert.equal(typeof snapshotData.repoId, 'string');
+
+    const sourceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-review-registration-instructions-'));
+    const sourcePath = path.join(sourceRoot, 'thoughts/plans/sample-plan.html');
+    fs.mkdirSync(path.dirname(sourcePath), { recursive: true });
+    fs.writeFileSync(sourcePath, sampleHtml());
+    const filesystem = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload({
+        rootPath: sourceRoot,
+        planPath: 'thoughts/plans/sample-plan.html',
+        watchMode: 'filesystem',
+        sourcePath,
+        sourceMtimeMs: 1,
+        sourceSize: 10,
+        fileHash: 'filesystem-instructions'
+      })
+    });
+    assert.equal(filesystem.statusCode, 200);
+    const filesystemData = filesystem.json().data;
+    assert.equal(filesystemData.agentInstructions.planId, filesystemData.planId);
+    assert.equal(filesystemData.sourceSync.watchMode, 'filesystem');
+    assert.equal(filesystemData.sourceSync.sourcePath, sourcePath);
+    assert.equal(filesystemData.sourceSync.active, true);
+
+    const reregister = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload({
+        rootPath: sourceRoot,
+        planPath: 'thoughts/plans/sample-plan.html',
+        watchMode: 'filesystem',
+        sourcePath,
+        sourceMtimeMs: 2,
+        sourceSize: 11,
+        fileHash: 'filesystem-instructions-reregister'
+      })
+    });
+    assert.equal(reregister.statusCode, 200);
+    const reregisterData = reregister.json().data;
+    assert.equal(reregisterData.planId, filesystemData.planId);
+    assert.equal(reregisterData.agentInstructions.planId, reregisterData.planId);
+    assert.match(reregisterData.agentInstructions.durableCommand, /--conversation-out/);
+
+    const invalid = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: { ...sampleRegisterPayload(), html: '' }
+    });
+    assert.notEqual(invalid.statusCode, 200);
+    assert.equal(invalid.json().ok, false);
+    assert.equal(invalid.json().data?.agentInstructions, undefined);
+    assert.equal(JSON.stringify(invalid.json()).includes('REQUIRED NEXT ACTION:'), false);
+  } finally {
+    await app.close();
+  }
 });
 
 test('renderer strips active content, rewrites images, and adds deterministic node ids', () => {
@@ -144,10 +272,18 @@ test('index exposes phase progress and archive hides plans by default', async ()
     assert.equal(apiIndex.statusCode, 200);
     assert.equal(apiIndex.json().data.plans[0].progress.totalPhases, 3);
     assert.equal(apiIndex.json().data.plans[0].progress.completedPhases, 2);
+    assert.equal(apiIndex.json().data.plans[0].plan.publicationMetadata.worktreePath, '/tmp/sample');
+    assert.equal(apiIndex.json().data.plans[0].plan.publicationMetadata.branch, 'main');
+    assert.equal(apiIndex.json().data.plans[0].plan.publicationMetadata.linearIssue, 'NOD-123');
+    assert.equal(apiIndex.json().data.plans[0].plan.publicationMetadata.executionReady, false);
 
     const htmlIndex = await app.inject({ method: 'GET', url: '/' });
     assert.equal(htmlIndex.statusCode, 200);
     assert.match(htmlIndex.body, /2 of 3 phases complete/);
+    assert.match(htmlIndex.body, /\/tmp\/sample\/thoughts\/plans\/sample-plan\.html/);
+    assert.match(htmlIndex.body, /Worktree/);
+    assert.match(htmlIndex.body, /NOD-123/);
+    assert.match(htmlIndex.body, /Execution ready/);
     assert.match(htmlIndex.body, /data-archive-plan=/);
 
     const archived = await app.inject({ method: 'POST', url: `/api/plans/${planId}/archive` });
@@ -314,6 +450,27 @@ test('empty archive page is quiet and archived shell shows restore state', async
     assert.match(shell.body, /Archived/);
     assert.match(shell.body, /id="restore-plan"/);
     assert.doesNotMatch(shell.body, />Archive plan</);
+  } finally {
+    await app.close();
+  }
+});
+
+test('execution-review request button creates an agent-visible comment', async () => {
+  const { app, planId } = await registeredApp('execution-review-request');
+  try {
+    const shell = await app.inject({ method: 'GET', url: `/p/${planId}` });
+    assert.equal(shell.statusCode, 200);
+    assert.match(shell.body, /id="request-execution-review"/);
+
+    const requested = await app.inject({ method: 'POST', url: `/api/plans/${planId}/request-execution-review` });
+    assert.equal(requested.statusCode, 200);
+    assert.equal(requested.json().data.created, true);
+    assert.equal(requested.json().data.comment.body, 'Review this plan with both codex and claude code, iterating on the plan until both agents agree it is execution ready');
+    assert.equal(requested.json().data.comment.status, 'pending');
+    assert.equal(requested.json().data.comment.conversationPayload.type, 'browser.comment.v1');
+
+    const queue = await app.inject({ method: 'GET', url: `/api/plans/${planId}/events/poll?afterSequence=0&mode=queue` });
+    assert.deepEqual(queue.json().data.events.map((event: { eventType: string }) => event.eventType), ['comment.created']);
   } finally {
     await app.close();
   }
@@ -988,6 +1145,123 @@ test('CLI watch polling fallback keeps waiting for once until timeout or event',
     assert.equal(conversation.evidence.reviewUrl, `http://127.0.0.1:${address.port}/p/plan_1`);
     assert.equal(polls >= 2, true);
   } finally {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
+
+test('CLI register prints required watcher instructions and preserves JSON payload', async () => {
+  let registerRequests = 0;
+  const registrationData = {
+    planId: 'plan_cli',
+    versionId: 'ver_cli',
+    repoId: 'repo_cli',
+    reviewUrl: '/p/plan_cli',
+    indexUrl: '/',
+    watchCommand: 'plan-review watch plan_cli --mode queue',
+    sourceSync: { watchMode: 'snapshot', status: 'synced', error: null, active: false },
+    renderedWithWarnings: [],
+    agentInstructions: buildRegistrationAgentInstructions({ planId: 'plan_cli', reviewUrl: '/p/plan_cli' })
+  };
+  const server = http.createServer((request, response) => {
+    if (request.url === '/api/plans/register') {
+      registerRequests += 1;
+      request.resume();
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ ok: true, data: registrationData }));
+      return;
+    }
+    response.statusCode = 404;
+    response.end('not found');
+  });
+
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+  const planDir = fs.mkdtempSync(path.join(root, '.tmp-cli-register-'));
+  const planPath = path.join(planDir, 'plan.html');
+  fs.writeFileSync(planPath, sampleHtml());
+  try {
+    const address = server.address();
+    assert(address && typeof address !== 'string');
+    const serviceUrl = `http://127.0.0.1:${address.port}`;
+
+    const runRegister = (args: string[]) => new Promise<{ code: number | null; stdout: string; stderr: string }>(resolve => {
+      const child = spawn(process.execPath, ['dist/cli.js', 'register', planPath, '--url', serviceUrl, ...args], {
+        cwd: root,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', chunk => { stdout += chunk; });
+      child.stderr.on('data', chunk => { stderr += chunk; });
+      child.on('close', code => resolve({ code, stdout, stderr }));
+    });
+
+    const human = await runRegister(['--execution-ready', 'false', '--linear-issue', 'NOD-999']);
+    assert.equal(human.code, 0, human.stderr);
+    assert.match(human.stdout, /Plan ID: plan_cli/);
+    assert.match(human.stdout, /Review URL: http:\/\/127\.0\.0\.1:\d+\/p\/plan_cli/);
+    assert.match(human.stdout, /Source sync: snapshot/);
+    assert.doesNotMatch(human.stdout, /^Watch command:/m);
+    assert.match(human.stdout, /REQUIRED NEXT ACTION:/);
+    assert.match(human.stdout, /Start the comment watcher before continuing implementation or review work\./);
+    assert.match(human.stdout, /plan-review watch plan_cli --mode queue --format browser-comment --json --url http:\/\/127\.0\.0\.1:\d+/);
+    assert.match(human.stdout, /tmux new-session -d -s plan-review-plan_cli 'plan-review watch plan_cli --mode queue --format browser-comment --conversation-out ~\/\.plan-reviewer\/watchers\/plan_cli\.ndjson --json --url http:\/\/127\.0\.0\.1:\d+'/);
+    assert.match(human.stdout, /Comment lifecycle:/);
+    assert.match(human.stdout, /claimed\[0\]\.claim\.id/);
+    assert.match(human.stdout, /plan-review ack <commentId> --claim <claimId>/);
+
+    const json = await runRegister(['--execution-ready', 'true', '--json']);
+    assert.equal(json.code, 0, json.stderr);
+    const parsed = JSON.parse(json.stdout);
+    assert.deepEqual(parsed, registrationData);
+    assert.equal(parsed.agentInstructions.preferredCommand, 'plan-review watch plan_cli --mode queue --format browser-comment --json');
+    assert.doesNotMatch(parsed.agentInstructions.durableCommand, /--url/);
+    assert.equal(registerRequests, 2);
+  } finally {
+    fs.rmSync(planDir, { recursive: true, force: true });
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
+
+test('CLI register failure does not print watcher instructions', async () => {
+  const server = http.createServer((request, response) => {
+    if (request.url === '/api/plans/register') {
+      request.resume();
+      response.statusCode = 400;
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ ok: false, error: { code: 'validation_failed', message: 'Invalid plan', details: {} } }));
+      return;
+    }
+    response.statusCode = 404;
+    response.end('not found');
+  });
+
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+  const planDir = fs.mkdtempSync(path.join(root, '.tmp-cli-register-fail-'));
+  const planPath = path.join(planDir, 'plan.html');
+  fs.writeFileSync(planPath, sampleHtml());
+  try {
+    const address = server.address();
+    assert(address && typeof address !== 'string');
+    const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>(resolve => {
+      const child = spawn(process.execPath, ['dist/cli.js', 'register', planPath, '--url', `http://127.0.0.1:${address.port}`, '--execution-ready', 'false'], {
+        cwd: root,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', chunk => { stdout += chunk; });
+      child.stderr.on('data', chunk => { stderr += chunk; });
+      child.on('close', code => resolve({ code, stdout, stderr }));
+    });
+    assert.notEqual(result.code, 0);
+    assert.match(result.stderr, /ERROR: validation_failed Invalid plan/);
+    assert.doesNotMatch(result.stdout, /REQUIRED NEXT ACTION:/);
+    assert.doesNotMatch(result.stderr, /REQUIRED NEXT ACTION:/);
+    assert.doesNotMatch(result.stdout, /agentInstructions/);
+  } finally {
+    fs.rmSync(planDir, { recursive: true, force: true });
     await new Promise<void>(resolve => server.close(() => resolve()));
   }
 });

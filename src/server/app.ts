@@ -13,6 +13,7 @@ import {
   resolveCommentSchema
 } from '../schemas.js';
 import { renderPlan } from '../render/render.js';
+import { buildRegistrationAgentInstructions } from '../registrationInstructions.js';
 import { PlanReviewStore, type StoredEvent } from '../storage/database.js';
 import { SourceSyncService } from './sourceSync.js';
 import { fail, ok, PlanReviewError } from '../util.js';
@@ -57,8 +58,27 @@ function progressHtml(progress: ReturnType<PlanReviewStore['listPlans']>[number]
   return `<div class="progress-row"><div class="progress-bar" aria-label="${escapeHtml(label)}">${segments}</div><span class="progress-count">${escapeHtml(label)}</span></div>`;
 }
 
+function fullyQualifiedPlanPath(item: ReturnType<PlanReviewStore['listPlans']>[number]): string {
+  if (item.plan.sourcePath && path.isAbsolute(item.plan.sourcePath)) return item.plan.sourcePath;
+  if (path.isAbsolute(String(item.plan.planPath))) return String(item.plan.planPath);
+  const worktreePath = item.plan.publicationMetadata.worktreePath;
+  return worktreePath ? path.join(worktreePath, String(item.plan.planPath)) : String(item.plan.planPath);
+}
+
+function publicationMetadataHtml(item: ReturnType<PlanReviewStore['listPlans']>[number]): string {
+  const metadata = item.plan.publicationMetadata;
+  const linear = metadata.linearIssue ? `<code>${escapeHtml(metadata.linearIssue)}</code>` : '<span class="muted">None</span>';
+  const readyLabel = metadata.executionReady ? 'Yes' : 'No';
+  return `<dl class="plan-metadata">
+    <div><dt>Worktree</dt><dd><code>${escapeHtml(metadata.worktreePath)}</code></dd></div>
+    <div><dt>Branch</dt><dd><code>${escapeHtml(metadata.branch)}</code></dd></div>
+    <div><dt>Linear issue</dt><dd>${linear}</dd></div>
+    <div><dt>Execution ready</dt><dd><span class="ready-pill ${metadata.executionReady ? 'ready' : 'not-ready'}">${readyLabel}</span> <span class="muted">based on agent review results</span></dd></div>
+  </dl>`;
+}
+
 function baseIndexStyles(): string {
-  return `body{margin:0;background:#0b1020;color:#e5e7eb;font-family:system-ui,sans-serif}main{max-width:1100px;margin:0 auto;padding:32px}a{color:#7dd3fc}.page-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.page-header h1{margin:0 0 8px}.nav-link,.restore-plan,.archive-plan{background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px 10px;cursor:pointer;text-decoration:none;font-weight:700}.nav-link.primary,.restore-plan{border-color:#38bdf8;color:#bae6fd}.restore-plan{border-color:#22c55e;color:#bbf7d0}.toolbar{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:10px;margin:18px 0}.toolbar input,.toolbar select{background:#0f172a;color:#e5e7eb;border:1px solid #2b364d;border-radius:6px;padding:10px}.plan-card{border:1px solid #2563eb;border-left:5px solid #2563eb;background:#111827;border-radius:8px;padding:16px;margin:12px 0}.plan-card.complete{border-color:#16a34a;border-left-color:#16a34a}.plan-card.needs-attention{border-color:#f59e0b;border-left-color:#f59e0b;background:linear-gradient(180deg,rgba(245,158,11,.10),#111827 42%)}.plan-card.archived{border-color:#64748b;border-left-color:#64748b}.plan-card-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.plan-card-header h2{margin-top:0}.plan-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.archive-plan:hover,.restore-plan:hover,.nav-link:hover{border-color:#93c5fd}.progress-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;margin:12px 0}.progress-bar{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:5px}.progress-segment{height:14px;border:1px solid #64748b;border-radius:3px;background:transparent}.progress-segment.complete{background:#22c55e;border-color:#22c55e}.progress-count,.progress-empty,.muted{color:#a7b0c0;font-size:13px}.status-pill{display:inline-block;margin-right:8px;border-radius:999px;padding:2px 8px;background:#1d4ed8;color:#dbeafe;font-size:12px;font-weight:700}.complete .status-pill{background:#166534;color:#dcfce7}.status-pill.attention{background:#fbbf24;color:#1c1206}.archived .status-pill{background:#334155;color:#cbd5e1}.attention-summary,.sync-warning-card{border:1px solid rgba(245,158,11,.45);border-radius:8px;background:rgba(245,158,11,.10);padding:12px;margin:12px 0;color:#fde68a}.attention-summary{display:flex;align-items:center;justify-content:space-between;gap:12px}.attention-summary button{background:#92400e;color:#ffedd5;border:1px solid rgba(245,158,11,.65);border-radius:999px;padding:6px 10px;cursor:pointer;font-weight:800}.sync-warning-card.archived-source{border-color:#475569;background:#0f172a;color:#cbd5e1}.sync-warning-card p{margin:.35rem 0 0}.sync-warning-card code{display:inline-block;max-width:100%;overflow-wrap:anywhere}.repair-command code{display:block;margin-top:.25rem;padding:.35rem .5rem}.empty-state,.restore-error{border:1px solid #475569;border-radius:8px;background:#0f172a;padding:14px;margin:12px 0;color:#cbd5e1}.restore-error{border-color:#fb7185;color:#fecdd3}code{background:#0f172a;color:#dbeafe;padding:.1rem .25rem;border-radius:4px}@media(max-width:680px){.page-header,.toolbar,.progress-row{grid-template-columns:1fr;display:grid}.plan-card-header{display:block}.plan-actions{justify-content:flex-start;margin-bottom:8px}}`;
+  return `body{margin:0;background:#0b1020;color:#e5e7eb;font-family:system-ui,sans-serif}main{max-width:1100px;margin:0 auto;padding:32px}a{color:#7dd3fc}.page-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.page-header h1{margin:0 0 8px}.nav-link,.restore-plan,.archive-plan{background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px 10px;cursor:pointer;text-decoration:none;font-weight:700}.nav-link.primary,.restore-plan{border-color:#38bdf8;color:#bae6fd}.restore-plan{border-color:#22c55e;color:#bbf7d0}.toolbar{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:10px;margin:18px 0}.toolbar input,.toolbar select{background:#0f172a;color:#e5e7eb;border:1px solid #2b364d;border-radius:6px;padding:10px}.plan-card{border:1px solid #2563eb;border-left:5px solid #2563eb;background:#111827;border-radius:8px;padding:16px;margin:12px 0}.plan-card.complete{border-color:#16a34a;border-left-color:#16a34a}.plan-card.needs-attention{border-color:#f59e0b;border-left-color:#f59e0b;background:linear-gradient(180deg,rgba(245,158,11,.10),#111827 42%)}.plan-card.archived{border-color:#64748b;border-left-color:#64748b}.plan-card-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.plan-card-header h2{margin-top:0}.plan-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.archive-plan:hover,.restore-plan:hover,.nav-link:hover{border-color:#93c5fd}.plan-metadata{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 14px;margin:12px 0}.plan-metadata div{min-width:0}.plan-metadata dt{color:#a7b0c0;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.03em}.plan-metadata dd{margin:3px 0 0;overflow-wrap:anywhere}.ready-pill{display:inline-block;border-radius:999px;padding:2px 8px;font-size:12px;font-weight:800}.ready-pill.ready{background:#166534;color:#dcfce7}.ready-pill.not-ready{background:#7f1d1d;color:#fecaca}.progress-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;margin:12px 0}.progress-bar{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:5px}.progress-segment{height:14px;border:1px solid #64748b;border-radius:3px;background:transparent}.progress-segment.complete{background:#22c55e;border-color:#22c55e}.progress-count,.progress-empty,.muted{color:#a7b0c0;font-size:13px}.status-pill{display:inline-block;margin-right:8px;border-radius:999px;padding:2px 8px;background:#1d4ed8;color:#dbeafe;font-size:12px;font-weight:700}.complete .status-pill{background:#166534;color:#dcfce7}.status-pill.attention{background:#fbbf24;color:#1c1206}.archived .status-pill{background:#334155;color:#cbd5e1}.attention-summary,.sync-warning-card{border:1px solid rgba(245,158,11,.45);border-radius:8px;background:rgba(245,158,11,.10);padding:12px;margin:12px 0;color:#fde68a}.attention-summary{display:flex;align-items:center;justify-content:space-between;gap:12px}.attention-summary button{background:#92400e;color:#ffedd5;border:1px solid rgba(245,158,11,.65);border-radius:999px;padding:6px 10px;cursor:pointer;font-weight:800}.sync-warning-card.archived-source{border-color:#475569;background:#0f172a;color:#cbd5e1}.sync-warning-card p{margin:.35rem 0 0}.sync-warning-card code{display:inline-block;max-width:100%;overflow-wrap:anywhere}.repair-command code{display:block;margin-top:.25rem;padding:.35rem .5rem}.empty-state,.restore-error{border:1px solid #475569;border-radius:8px;background:#0f172a;padding:14px;margin:12px 0;color:#cbd5e1}.restore-error{border-color:#fb7185;color:#fecdd3}code{background:#0f172a;color:#dbeafe;padding:.1rem .25rem;border-radius:4px}@media(max-width:680px){.page-header,.toolbar,.progress-row,.plan-metadata{grid-template-columns:1fr;display:grid}.plan-card-header{display:block}.plan-actions{justify-content:flex-start;margin-bottom:8px}}`;
 }
 
 function planNeedsAttention(item: ListedPlan): boolean {
@@ -84,12 +104,13 @@ function repairCommand(item: ListedPlan): string {
 function syncWarningHtml(item: ListedPlan, options: { archived?: boolean } = {}): string {
   const title = options.archived ? 'Source unavailable' : 'Source missing';
   const className = `sync-warning-card${options.archived ? ' archived-source' : ''}`;
-  return `<div class="${className}"><strong>${title}</strong><p>Source sync failed for <code>${escapeHtml(sourcePathLabel(item))}</code>: ${escapeHtml(syncErrorDetail(item))}</p><p>Showing cached copy from the last successful render.</p>${options.archived ? '' : `<p class="repair-command">Repair with:<code>${escapeHtml(repairCommand(item))}</code></p>`}</div>`;
+  return `<div class="${className}"><strong>${title}</strong><p>Source sync failed for <code>${escapeHtml(sourcePathLabel(item))}</code>: ${escapeHtml(syncErrorDetail(item))}</p><p>Plan path: <code>${escapeHtml(item.plan.planPath)}</code></p><p>Showing cached copy from the last successful render.</p>${options.archived ? '' : `<p class="repair-command">Repair with:<code>${escapeHtml(repairCommand(item))}</code></p>`}</div>`;
 }
 
 function planCardSearch(item: ListedPlan): string {
+  const metadata = item.plan.publicationMetadata;
   const attentionTerms = planNeedsAttention(item) ? ' needs attention source missing source unavailable failed cached copy' : '';
-  return `${item.plan.repoName} ${item.plan.repoKey} ${item.plan.slug} ${item.plan.planPath}${attentionTerms}`.toLowerCase();
+  return `${item.plan.repoName} ${item.plan.repoKey} ${item.plan.slug} ${fullyQualifiedPlanPath(item)} ${metadata.worktreePath} ${metadata.branch} ${metadata.linearIssue ?? ''}${attentionTerms}`.toLowerCase();
 }
 
 function indexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCount: number): string {
@@ -108,7 +129,8 @@ function indexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCoun
         const cardClass = needsAttention ? 'needs-attention' : complete ? 'complete' : 'incomplete';
         return `<article class="plan-card ${cardClass}" data-plan-id="${escapeHtml(item.plan.id)}" data-repo="${escapeHtml(item.plan.repoName)}" data-search="${escapeHtml(planCardSearch(item))}" data-needs-attention="${needsAttention ? 'true' : 'false'}" aria-label="${escapeHtml(`${item.plan.repoName} / ${item.plan.slug}: ${statusLabel}`)}">
       <div class="plan-card-header"><h2><a href="/p/${escapeHtml(item.plan.id)}">${escapeHtml(item.plan.repoName)} / ${escapeHtml(item.plan.slug)}</a></h2><button class="archive-plan" type="button" data-archive-plan="${escapeHtml(item.plan.id)}">Archive</button></div>
-      <p><code>${escapeHtml(item.plan.planPath)}</code></p>
+      <p><code>${escapeHtml(fullyQualifiedPlanPath(item))}</code></p>
+      ${publicationMetadataHtml(item)}
       ${needsAttention ? syncWarningHtml(item) : ''}
       ${progressHtml(item.progress)}
       <p><span class="status-pill${needsAttention ? ' attention' : ''}">${escapeHtml(statusLabel)}</span> Branch <code>${escapeHtml(item.latestVersion.branch)}</code> · pending ${item.counts.pending} · claimed ${item.counts.claimed} · acknowledged ${item.counts.acknowledged} · resolved ${item.counts.resolved} · activity ${escapeHtml(item.activityAt)}</p>
@@ -138,7 +160,8 @@ function archiveHtml(plans: ReturnType<PlanReviewStore['listPlans']>): string {
     const sourceWarning = planNeedsAttention(item) ? syncWarningHtml(item, { archived: true }) : '';
     return `<article class="plan-card archived ${complete ? 'complete' : 'incomplete'}" data-plan-id="${escapeHtml(item.plan.id)}" data-repo="${escapeHtml(item.plan.repoName)}" data-search="${escapeHtml(planCardSearch(item))}">
       <div class="plan-card-header"><h2>${escapeHtml(item.plan.repoName)} / ${escapeHtml(item.plan.slug)}</h2><div class="plan-actions"><a class="nav-link primary" href="/p/${escapeHtml(item.plan.id)}">Open</a><button class="restore-plan" type="button" data-restore-plan="${escapeHtml(item.plan.id)}">Restore</button></div></div>
-      <p><code>${escapeHtml(item.plan.planPath)}</code></p>
+      <p><code>${escapeHtml(fullyQualifiedPlanPath(item))}</code></p>
+      ${publicationMetadataHtml(item)}
       ${sourceWarning}
       ${progressHtml(item.progress)}
       <p><span class="status-pill">Archived ${escapeHtml(item.plan.archivedAt)}</span> pending ${item.counts.pending} · claimed ${item.counts.claimed} · acknowledged ${item.counts.acknowledged} · resolved ${item.counts.resolved} · activity ${escapeHtml(item.activityAt)}</p>
@@ -174,7 +197,7 @@ function filterPlans(plans: ReturnType<PlanReviewStore['listPlans']>, query: { q
   const filtered = plans.filter(item => {
     const matchesRepo = !query.repoKey || item.plan.repoKey === query.repoKey;
     const matchesStatus = !query.status || Number(item.counts[query.status as keyof typeof item.counts] ?? 0) > 0;
-    const haystack = `${item.plan.repoName} ${item.plan.repoKey} ${item.plan.slug} ${item.plan.planPath}`.toLowerCase();
+    const haystack = `${item.plan.repoName} ${item.plan.repoKey} ${item.plan.slug} ${fullyQualifiedPlanPath(item)}`.toLowerCase();
     const matchesText = !text || haystack.includes(text);
     return matchesRepo && matchesStatus && matchesText;
   });
@@ -187,11 +210,14 @@ function filterPlans(plans: ReturnType<PlanReviewStore['listPlans']>, query: { q
   };
 }
 
+const executionReviewRequestBody = 'Review this plan with both codex and claude code, iterating on the plan until both agents agree it is execution ready';
+
 function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan']): string {
   const escapedPlanId = escapeHtml(plan.id);
+  const reviewButton = '<button id="request-execution-review" type="button">Request execution-ready review</button>';
   const navActions = plan.archivedAt
-    ? `<a href="/archive">← Archive</a><span id="archive-status" class="archive-status">Archived</span><button id="restore-plan" type="button">Restore plan</button>`
-    : `<a href="/">← Plan index</a><span id="archive-status" class="archive-status" hidden></span><button id="archive-plan" type="button">Archive plan</button>`;
+    ? `<a href="/archive">← Archive</a>${reviewButton}<span id="archive-status" class="archive-status">Archived</span><button id="restore-plan" type="button">Restore plan</button>`
+    : `<a href="/">← Plan index</a>${reviewButton}<span id="archive-status" class="archive-status" hidden></span><button id="archive-plan" type="button">Archive plan</button>`;
   return `<!doctype html><html><head><meta charset="utf-8"><title>Plan ${escapedPlanId}</title>
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
@@ -247,6 +273,7 @@ const planId = document.body.dataset.planId;
 const frame = document.getElementById('plan-frame');
 const archivePlanButton = document.getElementById('archive-plan');
 const restorePlanButton = document.getElementById('restore-plan');
+const executionReviewButton = document.getElementById('request-execution-review');
 const composer = document.getElementById('composer');
 const body = document.getElementById('comment-body');
 const discardWarning = document.getElementById('comment-discard-warning');
@@ -295,6 +322,22 @@ restorePlanButton?.addEventListener('click', async () => {
     return;
   }
   window.location.href = '/';
+});
+executionReviewButton?.addEventListener('click', async () => {
+  executionReviewButton.disabled = true;
+  const originalText = executionReviewButton.textContent;
+  const res = await fetch('/api/plans/'+encodeURIComponent(planId)+'/request-execution-review', { method: 'POST' });
+  if (!res.ok) {
+    executionReviewButton.disabled = false;
+    alert('Unable to request execution-ready review.');
+    return;
+  }
+  executionReviewButton.textContent = 'Review requested';
+  await loadMeta();
+  setTimeout(() => {
+    executionReviewButton.disabled = false;
+    executionReviewButton.textContent = originalText;
+  }, 1600);
 });
 async function loadMeta(options = {}){
   const res = await fetch('/api/plans/'+planId);
@@ -954,7 +997,9 @@ export function createApp(options: AppOptions): FastifyInstance {
           error: plan.lastSyncError,
           active: !plan.archivedAt && plan.watchMode === 'filesystem' && plan.lastSyncStatus !== 'failed'
         },
-        renderedWithWarnings: rendered.warnings
+        publicationMetadata: plan.publicationMetadata,
+        renderedWithWarnings: rendered.warnings,
+        agentInstructions: buildRegistrationAgentInstructions({ planId: result.planId, reviewUrl: result.reviewUrl })
       });
     } catch (error) {
       sendError(reply, error);
@@ -1026,6 +1071,30 @@ export function createApp(options: AppOptions): FastifyInstance {
       await sourceSync.register(result.plan.id);
       await sourceSync.syncNow(result.plan.id, 'manual');
       return ok({ plan: result.plan });
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.post('/api/plans/:planId/request-execution-review', async (request, reply) => {
+    try {
+      const { planId } = request.params as { planId: string };
+      const { plan, version } = store.getPlan(planId);
+      const result = store.createComment(plan.id, {
+        versionId: version.id,
+        body: executionReviewRequestBody,
+        anchorType: 'dom',
+        anchor: {
+          cssSelector: 'body',
+          textPreview: 'Plan execution-ready review request',
+          headingPath: ['Plan'],
+          rect: { x: 0, y: 0, width: 1, height: 1 },
+          viewport: { width: 1, height: 1 }
+        },
+        createdBy: { displayName: 'Plan reviewer' }
+      });
+      if (result.created) bus.emitEvent(result.event);
+      return ok({ comment: result.comment, created: result.created });
     } catch (error) {
       sendError(reply, error);
     }

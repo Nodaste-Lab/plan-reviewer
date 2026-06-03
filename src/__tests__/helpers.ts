@@ -22,17 +22,26 @@ export function sampleHtml(): string {
 
 export function sampleRegisterPayload(overrides: Record<string, unknown> = {}) {
   const html = sampleHtml();
+  const rootPath = String(overrides.rootPath ?? '/tmp/sample');
+  const branch = String(overrides.branch ?? 'main');
   return {
     repoKey: 'git@example.com:demo/sample.git',
     repoName: 'sample',
     remoteUrl: 'git@example.com:demo/sample.git',
-    rootPath: '/tmp/sample',
-    branch: 'main',
+    rootPath,
+    branch,
     commitSha: 'abc123',
     planPath: 'thoughts/plans/sample-plan.html',
     slug: 'sample-plan',
     html,
     fileHash: sha256(html),
+    publicationMetadata: {
+      worktreePath: rootPath,
+      branch,
+      linearIssue: 'NOD-123',
+      executionReady: false,
+      executionReadyBasis: 'agent-review-results' as const
+    },
     watchMode: 'snapshot' as const,
     assets: [
       {
