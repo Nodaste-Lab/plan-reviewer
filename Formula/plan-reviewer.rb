@@ -3,6 +3,7 @@ class PlanReviewer < Formula
   homepage "https://github.com/Nodaste-Lab/plan-reviewer"
   url "https://github.com/Nodaste-Lab/plan-reviewer/archive/refs/tags/v0.1.0.tar.gz"
   sha256 "d6fac34c6286032f772b918242fdcb21d302b21aeb4f42b2333f3a739726bf1b"
+  license "MIT"
 
   depends_on "node"
 
