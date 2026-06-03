@@ -33,6 +33,27 @@ try {
   });
   assert.equal(register.ok(), true);
   const registered = (await register.json()).data as { planId: string; versionId: string };
+  const missingSourcePath = path.join(os.tmpdir(), `plan-review-e2e-missing-${process.pid}.html`);
+  fs.rmSync(missingSourcePath, { force: true });
+  const missingSourceRegister = await context.post('/api/plans/register', {
+    data: {
+      repoKey: 'e2e-repo',
+      repoName: 'e2e',
+      rootPath: '/tmp/e2e',
+      branch: 'main',
+      commitSha: 'e2e-missing',
+      planPath: 'thoughts/plans/e2e-missing.html',
+      slug: 'e2e-missing',
+      html: '<!doctype html><html><body><main><p>Missing source e2e</p></main></body></html>',
+      fileHash: sha256('missing-source-e2e'),
+      sourcePath: missingSourcePath,
+      sourceMtimeMs: 0,
+      sourceSize: 0,
+      watchMode: 'filesystem',
+      updateMode: 'upsert'
+    }
+  });
+  assert.equal(missingSourceRegister.ok(), true);
 
   const index = await context.get('/');
   assert.equal(index.ok(), true);
@@ -98,6 +119,14 @@ try {
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
+    await page.goto(`${baseUrl}/`);
+    await page.waitForSelector('[data-attention-filter]');
+    assert.equal(await page.locator('.plan-card').count(), 2);
+    await page.fill('#q', 'e2e');
+    await page.click('[data-attention-filter]');
+    await page.waitForFunction(() => document.querySelectorAll('.plan-card:not([hidden])').length === 1);
+    assert.match(await page.locator('.plan-card:not([hidden])').innerText(), /Source missing/);
+    assert.match(await page.locator('.plan-card:not([hidden])').innerText(), /Showing cached copy/);
     await page.goto(`${baseUrl}/p/${registered.planId}`);
     await page.evaluate(() => {
       const globals = window as typeof window & { html2canvas?: unknown; __html2canvasCalls?: number; __html2canvasMode?: 'success' | 'fail' };
