@@ -313,6 +313,85 @@ test('index exposes phase progress and archive hides plans by default', async ()
   }
 });
 
+test('index makes failed filesystem source sync obvious before opening a plan', async () => {
+  const app = createApp({ dbPath: tempDbPath('index-source-health') });
+  const sourcePath = path.join(os.tmpdir(), `plan-review-index-missing-${process.pid}.html`);
+  const html = `<!doctype html><html><body><section id="progress"><h2>Progress</h2><ul>
+    <li><input type="checkbox" checked /> P1 - Done</li>
+    <li><input type="checkbox" checked /> P2 - Done</li>
+  </ul></section></body></html>`;
+  try {
+    fs.rmSync(sourcePath, { force: true });
+    const registered = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload({
+        slug: 'missing-source-plan',
+        planPath: 'thoughts/plans/missing-source-plan.html',
+        html,
+        fileHash: sha256(html),
+        sourcePath,
+        sourceMtimeMs: 0,
+        sourceSize: 0,
+        watchMode: 'filesystem'
+      })
+    });
+    assert.equal(registered.statusCode, 200);
+    assert.equal(registered.json().data.sourceSync.status, 'failed');
+
+    const index = await app.inject({ method: 'GET', url: '/' });
+    assert.equal(index.statusCode, 200);
+    assert.match(index.body, /1 plan · source file missing/);
+    assert.match(index.body, /data-attention-filter/);
+    assert.match(index.body, /data-needs-attention="true"/);
+    assert.match(index.body, /status-pill attention/);
+    assert.match(index.body, /Source missing/);
+    assert.match(index.body, /Showing cached copy/);
+    assert.match(index.body, /plan-review register thoughts\/plans\/missing-source-plan\.html/);
+    assert.match(index.body, /2 of 2 phases complete/);
+    assert.doesNotMatch(index.body, /class="plan-card complete"[^>]*data-needs-attention="true"/);
+    assert.match(index.body, /attentionOnly/);
+  } finally {
+    await app.close();
+  }
+});
+
+test('archive page keeps archived context while noting failed source sync', async () => {
+  const app = createApp({ dbPath: tempDbPath('archive-source-health') });
+  const sourcePath = path.join(os.tmpdir(), `plan-review-archive-missing-${process.pid}.html`);
+  try {
+    fs.rmSync(sourcePath, { force: true });
+    const registered = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload({
+        slug: 'archived-missing-source',
+        planPath: 'thoughts/plans/archived-missing-source.html',
+        sourcePath,
+        sourceMtimeMs: 0,
+        sourceSize: 0,
+        watchMode: 'filesystem'
+      })
+    });
+    assert.equal(registered.statusCode, 200);
+    const planId = registered.json().data.planId;
+    assert.equal((await app.inject({ method: 'POST', url: `/api/plans/${planId}/archive` })).statusCode, 200);
+
+    const index = await app.inject({ method: 'GET', url: '/' });
+    assert.doesNotMatch(index.body, /archived-missing-source/);
+
+    const archive = await app.inject({ method: 'GET', url: '/archive' });
+    assert.equal(archive.statusCode, 200);
+    assert.match(archive.body, /Archived Plans/);
+    assert.match(archive.body, /archived-missing-source/);
+    assert.match(archive.body, /Archived /);
+    assert.match(archive.body, /Source unavailable/);
+    assert.match(archive.body, /thoughts\/plans\/archived-missing-source\.html/);
+  } finally {
+    await app.close();
+  }
+});
+
 test('archive page renders archived plans and restore controls without mixing active plans', async () => {
   const app = createApp({ dbPath: tempDbPath('archive-page') });
   try {
@@ -1547,6 +1626,9 @@ test('filesystem source recovery watcher syncs after startup read failure', asyn
       const current = await recoveryApp.inject({ method: 'GET', url: `/api/plans/${planId}` });
       return current.json().data.plan.lastSyncStatus === 'failed';
     });
+    const failedIndex = await recoveryApp.inject({ method: 'GET', url: '/' });
+    assert.match(failedIndex.body, /Source missing/);
+    assert.match(failedIndex.body, /data-needs-attention="true"/);
 
     const recoveredHtml = '<!doctype html><html><body><main><p>Recovered</p></main></body></html>';
     fs.writeFileSync(sourcePath, recoveredHtml);
@@ -1556,6 +1638,9 @@ test('filesystem source recovery watcher syncs after startup read failure', asyn
     });
     const recovered = await recoveryApp.inject({ method: 'GET', url: `/api/plans/${planId}` });
     assert.equal(recovered.json().data.plan.lastSyncStatus, 'synced');
+    const recoveredIndex = await recoveryApp.inject({ method: 'GET', url: '/' });
+    assert.doesNotMatch(recoveredIndex.body, /Source missing/);
+    assert.doesNotMatch(recoveredIndex.body, /data-needs-attention="true"/);
   } finally {
     await recoveryApp.close();
     fs.rmSync(sourceDir, { recursive: true, force: true });
