@@ -1,0 +1,40 @@
+{
+  "name": "plan-reviewer",
+  "version": "0.1.0",
+  "description": "Local HTML plan review daemon and CLI for agent comment workflows",
+  "bin": {
+    "plan-review": "bin/plan-review"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "test": "bun run build && node --test dist/**/*.test.js",
+    "test:e2e": "bun run build && node dist/test-fixtures/e2e-run.js",
+    "test:fixtures": "bun run build && node dist/test-fixtures/run.js",
+    "dev": "tsx src/cli.ts"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@medv/finder": "^4.0.2",
+    "@washi-ui/core": "^1.0.2",
+    "better-sqlite3": "^12.4.6",
+    "chokidar": "^4.0.3",
+    "commander": "^12.1.0",
+    "fastify": "^5.6.2",
+    "html2canvas": "^1.4.1",
+    "nanoid": "^5.1.6",
+    "parse5": "^8.0.0",
+    "sanitize-html": "^2.17.0",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^20.19.25",
+    "@types/sanitize-html": "^2.16.0",
+    "playwright": "^1.57.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
