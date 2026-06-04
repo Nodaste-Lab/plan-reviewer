@@ -345,6 +345,17 @@ test('index uses plan source modified time instead of comment activity', async (
       })
     });
     assert.equal(newer.statusCode, 200);
+    const invalidMtime = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload({
+        slug: 'invalid-mtime-plan',
+        planPath: 'thoughts/plans/invalid-mtime-plan.html',
+        fileHash: 'invalid-mtime-hash',
+        sourceMtimeMs: Number.MAX_VALUE
+      })
+    });
+    assert.equal(invalidMtime.statusCode, 200);
 
     const olderData = older.json().data as { planId: string; versionId: string };
     const comment = await app.inject({
@@ -361,9 +372,12 @@ test('index uses plan source modified time instead of comment activity', async (
     assert.equal(comment.statusCode, 200);
 
     const apiIndex = await app.inject({ method: 'GET', url: '/api/plans' });
+    assert.equal(apiIndex.statusCode, 200);
     const olderPlan = apiIndex.json().data.plans.find((item: { plan: { slug: string } }) => item.plan.slug === 'older-modified-plan');
+    const invalidPlan = apiIndex.json().data.plans.find((item: { plan: { slug: string } }) => item.plan.slug === 'invalid-mtime-plan');
     assert.equal(olderPlan.modifiedAt, new Date(olderMtime).toISOString());
     assert.notEqual(olderPlan.modifiedAt, olderPlan.activityAt);
+    assert.match(invalidPlan.modifiedAt, /^\d{4}-\d{2}-\d{2}T/);
 
     const htmlIndex = await app.inject({ method: 'GET', url: '/' });
     assert.match(htmlIndex.body, new RegExp(`<time datetime="${new Date(olderMtime).toISOString()}" data-local-timestamp>`));

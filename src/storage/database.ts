@@ -141,6 +141,12 @@ function optionalNumber(value: unknown): number | undefined {
   return Number.isFinite(number) ? number : undefined;
 }
 
+function isoFromEpochMs(value: number | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+}
+
 function stripHtml(value: string): string {
   return value
     .replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
@@ -569,7 +575,7 @@ export class PlanReviewStore {
       const activityAt = commentActivityAt > planUpdatedAt ? commentActivityAt : planUpdatedAt;
       const htmlBlobPath = optionalString(row.htmlBlobPath);
       const sourceMtimeMs = optionalNumber(row.sourceMtimeMs);
-      const modifiedAt = sourceMtimeMs !== undefined ? new Date(sourceMtimeMs).toISOString() : String(row.versionCreatedAt ?? planUpdatedAt);
+      const modifiedAt = isoFromEpochMs(sourceMtimeMs) ?? String(row.versionCreatedAt ?? planUpdatedAt);
       const progress = htmlBlobPath ? extractPlanProgress(fs.readFileSync(htmlBlobPath, 'utf8')) : { totalPhases: 0, completedPhases: 0, phases: [] };
       return {
       plan: {
