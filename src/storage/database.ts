@@ -141,6 +141,12 @@ function optionalNumber(value: unknown): number | undefined {
   return Number.isFinite(number) ? number : undefined;
 }
 
+function isoFromEpochMs(value: number | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+}
+
 function stripHtml(value: string): string {
   return value
     .replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
@@ -548,7 +554,7 @@ export class PlanReviewStore {
         v.id AS versionId, v.branch, v.commit_sha AS commitSha, v.file_hash AS fileHash,
         v.html_blob_path AS htmlBlobPath,
         v.source_mtime_ms AS sourceMtimeMs, v.source_size AS sourceSize, v.sync_origin AS syncOrigin,
-        p.updated_at AS planUpdatedAt,
+        v.created_at AS versionCreatedAt, p.updated_at AS planUpdatedAt,
         SUM(CASE WHEN c.status = 'pending' THEN 1 ELSE 0 END) AS pending,
         SUM(CASE WHEN c.status = 'claimed' THEN 1 ELSE 0 END) AS claimed,
         SUM(CASE WHEN c.status = 'acknowledged' THEN 1 ELSE 0 END) AS acknowledged,
@@ -568,6 +574,8 @@ export class PlanReviewStore {
       const commentActivityAt = row.commentActivityAt ? String(row.commentActivityAt) : '';
       const activityAt = commentActivityAt > planUpdatedAt ? commentActivityAt : planUpdatedAt;
       const htmlBlobPath = optionalString(row.htmlBlobPath);
+      const sourceMtimeMs = optionalNumber(row.sourceMtimeMs);
+      const modifiedAt = isoFromEpochMs(sourceMtimeMs) ?? String(row.versionCreatedAt ?? planUpdatedAt);
       const progress = htmlBlobPath ? extractPlanProgress(fs.readFileSync(htmlBlobPath, 'utf8')) : { totalPhases: 0, completedPhases: 0, phases: [] };
       return {
       plan: {
@@ -589,7 +597,7 @@ export class PlanReviewStore {
         branch: row.branch,
         commitSha: row.commitSha,
         fileHash: row.fileHash,
-        sourceMtimeMs: optionalNumber(row.sourceMtimeMs),
+        sourceMtimeMs,
         sourceSize: optionalNumber(row.sourceSize),
         syncOrigin: (row.syncOrigin ?? 'manual_register') as 'manual_register' | 'filesystem_watch'
       },
@@ -601,6 +609,7 @@ export class PlanReviewStore {
       },
       progress,
       activityAt,
+      modifiedAt,
       reviewUrl: `/p/${row.id}`
       };
     }).sort((a, b) => String(b.activityAt).localeCompare(String(a.activityAt)));

@@ -285,6 +285,11 @@ test('index exposes phase progress and archive hides plans by default', async ()
     assert.match(htmlIndex.body, /NOD-123/);
     assert.match(htmlIndex.body, /Execution ready/);
     assert.match(htmlIndex.body, /data-archive-plan=/);
+    assert.match(htmlIndex.body, /<div class="plan-actions"><span class="status-pill">Incomplete<\/span><button class="archive-plan"/);
+    assert.match(htmlIndex.body, /<p class="comment-counts"><span class="row-label">Comments<\/span> pending 0 · claimed 0 · acknowledged 0 · resolved 0<\/p>/);
+    assert.match(htmlIndex.body, /<p class="timestamp-row"><span class="row-label">Last updated<\/span> <time datetime="[^"]+" data-local-timestamp>/);
+    assert.match(htmlIndex.body, /Intl\.DateTimeFormat\(undefined,\{dateStyle:'medium',timeStyle:'short'\}\)/);
+    assert.doesNotMatch(htmlIndex.body, /Branch <code>main<\/code> · pending/);
 
     const archived = await app.inject({ method: 'POST', url: `/api/plans/${planId}/archive` });
     assert.equal(archived.statusCode, 200);
@@ -308,6 +313,75 @@ test('index exposes phase progress and archive hides plans by default', async ()
     const visibleAgain = await app.inject({ method: 'GET', url: '/api/plans' });
     assert.equal(visibleAgain.json().data.plans.length, 1);
     assert.equal(visibleAgain.json().data.plans[0].plan.archivedAt, undefined);
+  } finally {
+    await app.close();
+  }
+});
+
+test('index uses plan source modified time instead of comment activity', async () => {
+  const app = createApp({ dbPath: tempDbPath('index-modified-time') });
+  const olderMtime = Date.UTC(2024, 0, 2, 3, 4, 5);
+  const newerMtime = Date.UTC(2024, 5, 6, 7, 8, 9);
+  try {
+    const older = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload({
+        slug: 'older-modified-plan',
+        planPath: 'thoughts/plans/older-modified-plan.html',
+        fileHash: 'older-modified-hash',
+        sourceMtimeMs: olderMtime
+      })
+    });
+    assert.equal(older.statusCode, 200);
+    const newer = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload({
+        slug: 'newer-modified-plan',
+        planPath: 'thoughts/plans/newer-modified-plan.html',
+        fileHash: 'newer-modified-hash',
+        sourceMtimeMs: newerMtime
+      })
+    });
+    assert.equal(newer.statusCode, 200);
+    const invalidMtime = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload({
+        slug: 'invalid-mtime-plan',
+        planPath: 'thoughts/plans/invalid-mtime-plan.html',
+        fileHash: 'invalid-mtime-hash',
+        sourceMtimeMs: Number.MAX_VALUE
+      })
+    });
+    assert.equal(invalidMtime.statusCode, 200);
+
+    const olderData = older.json().data as { planId: string; versionId: string };
+    const comment = await app.inject({
+      method: 'POST',
+      url: `/api/plans/${olderData.planId}/comments`,
+      payload: {
+        versionId: olderData.versionId,
+        body: 'This comment should not change the modified timestamp.',
+        anchorType: 'dom',
+        anchor: domAnchor(),
+        createdBy: { displayName: 'Reviewer' }
+      }
+    });
+    assert.equal(comment.statusCode, 200);
+
+    const apiIndex = await app.inject({ method: 'GET', url: '/api/plans' });
+    assert.equal(apiIndex.statusCode, 200);
+    const olderPlan = apiIndex.json().data.plans.find((item: { plan: { slug: string } }) => item.plan.slug === 'older-modified-plan');
+    const invalidPlan = apiIndex.json().data.plans.find((item: { plan: { slug: string } }) => item.plan.slug === 'invalid-mtime-plan');
+    assert.equal(olderPlan.modifiedAt, new Date(olderMtime).toISOString());
+    assert.notEqual(olderPlan.modifiedAt, olderPlan.activityAt);
+    assert.match(invalidPlan.modifiedAt, /^\d{4}-\d{2}-\d{2}T/);
+
+    const htmlIndex = await app.inject({ method: 'GET', url: '/' });
+    assert.match(htmlIndex.body, new RegExp(`<time datetime="${new Date(olderMtime).toISOString()}" data-local-timestamp>`));
+    assert.match(htmlIndex.body, new RegExp(`<time datetime="${new Date(newerMtime).toISOString()}" data-local-timestamp>`));
   } finally {
     await app.close();
   }
