@@ -12,7 +12,7 @@ class PlanReviewer < Formula
     system "npm", "run", "build"
     system "npm", "prune", "--omit=dev"
 
-    libexec.install "bin", "dist", "node_modules", "package.json", "package-lock.json", "LICENSE", "NOTICE"
+    libexec.install "bin", "dist", "node_modules", "package.json", "package-lock.json"
     bin.install_symlink libexec/"bin/plan-review" => "plan-review"
   end
 
