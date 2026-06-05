@@ -1327,7 +1327,12 @@ test('CLI agent next --wait wakes via poll fallback and claims exactly one comme
     if (request.url?.startsWith('/api/plans/plan_1/events/poll')) {
       polls += 1;
       response.setHeader('content-type', 'application/json');
-      response.end(JSON.stringify({ ok: true, data: { events: polls >= 1 ? [{ sequence: 1, eventType: 'comment.created', payload: { commentId: 'cmt_1' } }] : [], latestSequence: 1, retryAfterMs: 10 } }));
+      response.end(JSON.stringify({
+        ok: true,
+        data: polls === 1
+          ? { events: [], latestSequence: 0, retryAfterMs: 10 }
+          : { events: [{ sequence: 1, eventType: 'comment.created', payload: { commentId: 'cmt_1' } }], latestSequence: 1, retryAfterMs: 10 }
+      }));
       return;
     }
     if (request.url?.startsWith('/api/plans/plan_1/events')) {
@@ -1363,8 +1368,10 @@ test('CLI agent next validates wait flags and timeout errors', async () => {
   assert.match(missingJson.stderr, /agent next requires --json/);
 });
 
-test('CLI agent next --wait does not treat stale poll events as fresh forever', async () => {
+test('CLI agent next --wait starts from queue tail instead of replaying stale poll events', async () => {
   let claims = 0;
+  const pollAfterSequences: number[] = [];
+  const sseLastEventIds: Array<string | undefined> = [];
   const server = http.createServer((request, response) => {
     if (request.url === '/api/plans/plan_1/comments/claim') {
       claims += 1;
@@ -1376,6 +1383,7 @@ test('CLI agent next --wait does not treat stale poll events as fresh forever', 
     if (request.url?.startsWith('/api/plans/plan_1/events/poll')) {
       const url = new URL(request.url, 'http://127.0.0.1');
       const afterSequence = Number(url.searchParams.get('afterSequence') ?? 0);
+      pollAfterSequences.push(afterSequence);
       response.setHeader('content-type', 'application/json');
       response.end(JSON.stringify({
         ok: true,
@@ -1388,6 +1396,7 @@ test('CLI agent next --wait does not treat stale poll events as fresh forever', 
       return;
     }
     if (request.url?.startsWith('/api/plans/plan_1/events')) {
+      sseLastEventIds.push(request.headers['last-event-id']?.toString());
       response.statusCode = 503;
       response.end('sse unavailable');
       return;
@@ -1403,6 +1412,8 @@ test('CLI agent next --wait does not treat stale poll events as fresh forever', 
     const result = await runCli(['agent', 'next', 'plan_1', '--wait', '--json', '--timeout', '100', '--url', `http://127.0.0.1:${address.port}`]);
     assert.equal(result.code, 1, result.stderr);
     assert.equal(claims < 8, true, `stale events caused rapid claim loop: ${claims} attempts`);
+    assert.deepEqual(pollAfterSequences.slice(0, 2), [0, 1]);
+    assert.equal(sseLastEventIds[0], '1');
   } finally {
     await new Promise<void>(resolve => server.close(() => resolve()));
   }

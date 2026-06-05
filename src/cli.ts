@@ -397,6 +397,11 @@ async function sleepForWait(startedAt: number, timeoutMs: number | undefined, de
   await new Promise(resolve => setTimeout(resolve, Math.min(delayMs, remaining ?? delayMs)));
 }
 
+async function initialQueueSequence(serviceUrl: string, planId: string): Promise<number> {
+  const poll = await pollEvents(serviceUrl, planId, 0, 'queue');
+  return Number(poll.latestSequence) || 0;
+}
+
 async function waitForQueueSignal(serviceUrl: string, planId: string, latestSequence: number, startedAt: number, timeoutMs: number | undefined, backoffMs: number): Promise<number> {
   const remaining = remainingTimeoutMs(startedAt, timeoutMs);
   if (remaining !== undefined && remaining <= 0) return latestSequence;
@@ -451,6 +456,13 @@ async function agentNext(planId: string, options: { url?: string; wait?: boolean
   const startedAt = Date.now();
   let backoffMs = 1000;
   let latestSequence = 0;
+  if (shouldWait) {
+    try {
+      latestSequence = await initialQueueSequence(serviceUrl, planId);
+    } catch (error) {
+      if (!isRecoverableWaitError(error)) throw error;
+    }
+  }
   while (true) {
     try {
       const data = await claimOneForAgentNext(planId, serviceUrl, leaseSeconds);
