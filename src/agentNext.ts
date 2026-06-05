@@ -48,7 +48,7 @@ export function optionalWatchCommand(planId: string, serviceUrl?: string): strin
 
 export function durableAgentNextCommand(planId: string, serviceUrl?: string): string {
   const inner = agentNextCommand(planId, { wait: true, serviceUrl });
-  return `while true; do ${inner}; sleep 1; done`;
+  return `until ${inner}; do sleep 1; done`;
 }
 
 export function buildAgentNextEmpty(planId: string): AgentNextEmptyResult {

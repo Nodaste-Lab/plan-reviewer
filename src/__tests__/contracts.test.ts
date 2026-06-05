@@ -86,7 +86,7 @@ test('registration instruction helper builds canonical agent-next guidance and r
   assert.equal(instructions.drainCommand, 'plan-review agent next plan_abc --no-wait --json');
   assert.equal(instructions.listenCommand, instructions.preferredCommand);
   assert.equal(instructions.optionalWatchCommand, 'plan-review watch plan_abc --mode queue --format browser-comment --json');
-  assert.match(instructions.durableCommand, /while true; do plan-review agent next plan_abc --wait --json; sleep 1; done/);
+  assert.match(instructions.durableCommand, /until plan-review agent next plan_abc --wait --json; do sleep 1; done/);
   assert.equal(instructions.referenceImplementations.length, 3);
   assert.equal(instructions.referenceImplementations[0].tool, 'process');
   assert.equal(instructions.referenceImplementations[0].command, instructions.preferredCommand);
@@ -104,7 +104,7 @@ test('registration instruction helper builds canonical agent-next guidance and r
   assert.equal(rendered.drainCommand, 'plan-review agent next plan_abc --no-wait --json --url http://reviewer.example:4317');
   assert.equal(rendered.listenCommand, rendered.preferredCommand);
   assert.equal(rendered.optionalWatchCommand, 'plan-review watch plan_abc --mode queue --format browser-comment --json --url http://reviewer.example:4317');
-  assert.match(rendered.durableCommand, /while true; do plan-review agent next plan_abc --wait --json --url http:\/\/reviewer\.example:4317; sleep 1; done/);
+  assert.match(rendered.durableCommand, /until plan-review agent next plan_abc --wait --json --url http:\/\/reviewer\.example:4317; do sleep 1; done/);
   assert.equal(rendered.referenceImplementations[0].command, rendered.preferredCommand);
   assert.equal(rendered.referenceImplementations[1].command, rendered.durableCommand);
 });
@@ -180,7 +180,7 @@ test('registration API returns agent instructions additively across registration
     const reregisterData = reregister.json().data;
     assert.equal(reregisterData.planId, filesystemData.planId);
     assert.equal(reregisterData.agentInstructions.planId, reregisterData.planId);
-    assert.match(reregisterData.agentInstructions.durableCommand, /while true; do plan-review agent next/);
+    assert.match(reregisterData.agentInstructions.durableCommand, /until plan-review agent next/);
 
     const invalid = await app.inject({
       method: 'POST',
