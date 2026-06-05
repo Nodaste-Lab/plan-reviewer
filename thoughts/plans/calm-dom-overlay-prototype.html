@@ -1,0 +1,633 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Calm DOM Overlay Prototype</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1020;
+      --panel: #111827;
+      --panel-2: #151d2b;
+      --text: #e5e7eb;
+      --muted: #a7b0c0;
+      --line: #2b364d;
+      --accent: #7dd3fc;
+      --accent-strong: #38bdf8;
+      --green: #86efac;
+      --yellow: #fde68a;
+      --red: #fca5a5;
+      --shadow: rgba(0, 0, 0, .35);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.5;
+    }
+
+    main {
+      width: min(1180px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 32px 0 56px;
+    }
+
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { font-size: clamp(28px, 4vw, 46px); line-height: 1.05; margin-bottom: 12px; letter-spacing: 0; }
+    h2 { font-size: 22px; margin-bottom: 12px; }
+    h3 { font-size: 17px; margin-bottom: 8px; }
+    p, li { color: var(--muted); }
+    a { color: var(--accent); }
+    code { color: #bae6fd; }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(280px, .8fr);
+      gap: 24px;
+      align-items: start;
+      margin-bottom: 24px;
+    }
+
+    .summary {
+      border-left: 3px solid var(--accent);
+      padding-left: 16px;
+      color: #cbd5e1;
+      max-width: 760px;
+    }
+
+    .meta {
+      display: grid;
+      gap: 10px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    .meta strong { color: var(--text); }
+
+    section {
+      margin: 24px 0;
+      padding-top: 8px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 16px;
+    }
+
+    .card p:last-child, .card ul:last-child { margin-bottom: 0; }
+
+    .progress-list,
+    .criteria-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 10px;
+    }
+
+    .progress-list li,
+    .criteria-list li {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 12px 14px;
+    }
+
+    .prototype {
+      position: relative;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #0f172a;
+      overflow: hidden;
+    }
+
+    .tabbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 12px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    .tabbar a,
+    .target-controls a {
+      cursor: pointer;
+      user-select: none;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 8px 10px;
+      color: #cbd5e1;
+      background: #172033;
+      font-weight: 700;
+      font-size: 13px;
+      text-decoration: none;
+    }
+
+    .tabbar a:target,
+    .target-controls a:target,
+    #prototype-shell:not(:has(:target)) .tabbar a[href="#option-a"],
+    #prototype-shell:has(#option-a:target) .tabbar a[href="#option-a"],
+    #prototype-shell:has(#option-b:target) .tabbar a[href="#option-b"],
+    #prototype-shell:has(#option-c:target) .tabbar a[href="#option-c"],
+    #prototype-shell:has(#a-target-card:target) .tabbar a[href="#option-a"],
+    #prototype-shell:has(#a-target-table:target) .tabbar a[href="#option-a"],
+    #prototype-shell:has(#a-target-note:target) .tabbar a[href="#option-a"],
+    #prototype-shell:has(#b-target-card:target) .tabbar a[href="#option-b"],
+    #prototype-shell:has(#b-target-table:target) .tabbar a[href="#option-b"],
+    #prototype-shell:has(#b-target-note:target) .tabbar a[href="#option-b"],
+    #prototype-shell:has(#c-target-card:target) .tabbar a[href="#option-c"],
+    #prototype-shell:has(#c-target-table:target) .tabbar a[href="#option-c"],
+    #prototype-shell:has(#c-target-note:target) .tabbar a[href="#option-c"] {
+      border-color: var(--accent);
+      color: #e0f2fe;
+      background: #075985;
+    }
+
+    .panels { padding: 16px; }
+    .option-panel { display: none; gap: 16px; grid-template-columns: minmax(260px, .62fr) minmax(360px, 1fr); align-items: start; }
+    #prototype-shell:not(:has(:target)) #option-a,
+    #prototype-shell:has(#option-a:target) #option-a,
+    #prototype-shell:has(#a-target-card:target) #option-a,
+    #prototype-shell:has(#a-target-table:target) #option-a,
+    #prototype-shell:has(#a-target-note:target) #option-a,
+    #prototype-shell:has(#option-b:target) #option-b,
+    #prototype-shell:has(#b-target-card:target) #option-b,
+    #prototype-shell:has(#b-target-table:target) #option-b,
+    #prototype-shell:has(#b-target-note:target) #option-b,
+    #prototype-shell:has(#option-c:target) #option-c,
+    #prototype-shell:has(#c-target-card:target) #option-c,
+    #prototype-shell:has(#c-target-table:target) #option-c,
+    #prototype-shell:has(#c-target-note:target) #option-c { display: grid; }
+
+    .target-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .mock-shell {
+      border: 1px solid #263248;
+      border-radius: 8px;
+      background: #f8fafc;
+      color: #0f172a;
+      overflow: hidden;
+      box-shadow: 0 18px 40px var(--shadow);
+    }
+
+    .mock-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      height: 34px;
+      padding: 0 12px;
+      border-bottom: 1px solid #dbe3ef;
+      background: #e7edf5;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #94a3b8;
+    }
+
+    .mock-page {
+      position: relative;
+      min-height: 430px;
+      padding: 22px;
+      background: #f8fafc;
+      overflow: hidden;
+    }
+
+    .mock-hero {
+      margin-bottom: 18px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .mock-hero h3 {
+      margin: 0 0 8px;
+      color: #0f172a;
+      font-size: 22px;
+    }
+
+    .mock-lines {
+      display: grid;
+      gap: 8px;
+      width: min(420px, 100%);
+    }
+
+    .mock-line {
+      height: 10px;
+      border-radius: 999px;
+      background: #dbe5f2;
+    }
+
+    .mock-line.short { width: 58%; }
+    .mock-line.mid { width: 76%; }
+
+    .mock-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+
+    .mock-card,
+    .mock-note {
+      border: 1px solid #d7e0ec;
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 14px;
+    }
+
+    .target-card,
+    .target-table,
+    .target-note {
+      box-sizing: border-box;
+      transition:
+        outline-color 160ms ease,
+        box-shadow 160ms ease,
+        border-color 160ms ease;
+    }
+
+    .mock-card h4,
+    .mock-note h4 {
+      margin: 0 0 10px;
+      color: #1f2937;
+      font-size: 15px;
+    }
+
+    .mock-table {
+      border: 1px solid #d7e0ec;
+      border-radius: 8px;
+      background: #ffffff;
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+
+    .mock-row {
+      display: grid;
+      grid-template-columns: 1fr 80px 80px;
+      gap: 10px;
+      padding: 10px 12px;
+      border-bottom: 1px solid #e2e8f0;
+      font-size: 13px;
+      color: #334155;
+    }
+
+    .mock-row:last-child { border-bottom: 0; }
+    .mock-row.header { color: #64748b; font-weight: 800; background: #f1f5f9; }
+    .mock-note { width: 62%; }
+
+    .motion-readout {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid #263248;
+      background: var(--panel-2);
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    #prototype-shell:not(:has(:target)) #option-a .target-card,
+    #prototype-shell:has(#a-target-card:target) #option-a .target-card,
+    #prototype-shell:has(#a-target-table:target) #option-a .target-table,
+    #prototype-shell:has(#a-target-note:target) #option-a .target-note {
+      outline: 2px dotted #38bdf8;
+      outline-offset: -2px;
+      border-color: rgba(56, 189, 248, .6);
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, .65), 0 0 0 5px rgba(125, 211, 252, .08);
+    }
+
+    #prototype-shell:has(#b-target-card:target) #option-b .target-card,
+    #prototype-shell:has(#b-target-table:target) #option-b .target-table,
+    #prototype-shell:has(#b-target-note:target) #option-b .target-note {
+      outline: 1px dashed rgba(14, 116, 144, .95);
+      outline-offset: -2px;
+      border-color: rgba(14, 116, 144, .6);
+      box-shadow: inset 0 0 0 1px rgba(125, 211, 252, .55), 0 0 0 4px rgba(125, 211, 252, .10);
+    }
+
+    #prototype-shell:has(#c-target-card:target) #option-c .target-card,
+    #prototype-shell:has(#c-target-table:target) #option-c .target-table,
+    #prototype-shell:has(#c-target-note:target) #option-c .target-note {
+      outline: 2px solid rgba(56, 189, 248, .82);
+      outline-offset: -2px;
+      border-color: rgba(56, 189, 248, .55);
+      box-shadow: 0 0 0 6px rgba(56, 189, 248, .07), 0 0 0 1px rgba(15, 23, 42, .24);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--panel);
+    }
+
+    th, td {
+      text-align: left;
+      vertical-align: top;
+      padding: 12px;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+    }
+
+    th { color: var(--text); background: #172033; }
+    tr:last-child td { border-bottom: 0; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .target-card,
+      .target-table,
+      .target-note { transition: none; }
+    }
+
+    @media (max-width: 860px) {
+      main { width: min(100vw - 24px, 720px); padding-top: 20px; }
+      .hero, .grid, .option-panel { grid-template-columns: 1fr; }
+      .mock-page { min-height: 470px; }
+      table {
+        display: block;
+        max-width: 100%;
+        overflow-x: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section id="overview" class="hero">
+      <div>
+        <h1>Calm DOM Overlay Prototype</h1>
+        <p class="summary">Replace the current full tinted hover/active highlight with an outline-only targeting surround that moves between DOM objects without a flash. The goal is a quieter Cursor-like interaction that still gives reviewers enough precision to attach comments confidently.</p>
+      </div>
+      <aside id="source-context" class="meta" aria-label="Source context">
+        <div><strong>Primary file:</strong> <code>src/server/app.ts</code></div>
+        <div><strong>Current issue:</strong> filled cyan/purple overlays, page dimming, fast geometry changes.</div>
+        <div><strong>Prototype shape:</strong> CSS-only clickable mock, no plan-authored JavaScript.</div>
+        <div><strong>Claude Code pass:</strong> read-only design review completed; main finding was to remove the <code>9999px</code> scrim and stop normal movement from toggling <code>hidden</code>.</div>
+      </aside>
+    </section>
+
+    <section id="progress">
+      <h2>Progress</h2>
+      <ul class="progress-list">
+        <li id="progress-p1"><input type="checkbox" checked disabled> <strong>P1 - Inspect current overlay.</strong> The active implementation uses fixed parent-page selection boxes over the iframe and injected comment anchors inside the iframe.</li>
+        <li id="progress-p2"><input type="checkbox" checked disabled> <strong>P2 - Draft calmer interaction model.</strong> The model removes page dimming and filled target overlays, keeps a single moving surround, and respects reduced-motion preferences. Claude Code reviewed the direction read-only and confirmed the same implementation risks.</li>
+        <li id="progress-p3"><input type="checkbox" checked disabled> <strong>P3 - Pick one visual direction.</strong> Option A was selected through browser feedback: light blue dotted outline, no live label, no fill, and reliable alignment.</li>
+        <li id="progress-p4"><input type="checkbox" checked disabled> <strong>P4 - Implement and verify.</strong> Updated <code>src/server/app.ts</code> and <code>src/test-fixtures/e2e-run.ts</code>. Verification passed <code>bun run test:e2e</code> and <code>bun run test</code>.</li>
+      </ul>
+    </section>
+
+    <section id="prototype">
+      <h2>Clickable Prototype</h2>
+      <p>Use the option tabs, then click target chips to move the surround between sample DOM objects. The movement is intentionally smooth and there is no full-page dimmer. In the review shell, clicks inside the plan are captured for DOM comments; use the direct rendered prototype at <a href="/render/plan_SFV1CW_Lsioe">/render/plan_SFV1CW_Lsioe</a> for interaction.</p>
+
+      <div class="prototype" id="prototype-shell">
+        <div class="tabbar" aria-label="Prototype options">
+          <a href="#option-a">A: Cursor Dotted</a>
+          <a href="#option-b">B: Corner Assist</a>
+          <a href="#option-c">C: Settled Halo</a>
+        </div>
+
+        <div class="panels">
+          <article class="option-panel" id="option-a">
+            <div>
+              <h3>A: Cursor Dotted</h3>
+              <p>A light blue dotted outline with no floating label. This is closest to the user's requested Cursor model: no fill, no surrounding page tint, and no extra tab competing with page content.</p>
+              <ul>
+                <li>Best fit when precision matters more than annotation branding.</li>
+                <li>Use for hover and active selection with only border weight changing on active.</li>
+                <li>Recommended default unless reviewers say it is too subtle.</li>
+              </ul>
+              <div class="motion-readout" id="option-a-motion">
+                <strong>Motion:</strong> 220ms ease on geometry, 140ms opacity only when entering/leaving the iframe.
+              </div>
+            </div>
+
+            <div>
+              <div class="target-controls" aria-label="Option A targets">
+                <a id="a-target-card" href="#a-target-card">Card</a>
+                <a id="a-target-table" href="#a-target-table">Table</a>
+                <a id="a-target-note" href="#a-target-note">Note</a>
+              </div>
+              <div class="mock-shell">
+                <div class="mock-toolbar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+                <div class="mock-page">
+                  <div class="mock-hero">
+                    <h3>Execution Plan</h3>
+                    <div class="mock-lines"><span class="mock-line"></span><span class="mock-line mid"></span><span class="mock-line short"></span></div>
+                  </div>
+                  <div class="mock-grid">
+                    <div class="mock-card target-card"><h4>Phase One</h4><div class="mock-lines"><span class="mock-line"></span><span class="mock-line short"></span></div></div>
+                    <div class="mock-card"><h4>Phase Two</h4><div class="mock-lines"><span class="mock-line mid"></span><span class="mock-line short"></span></div></div>
+                  </div>
+                  <div class="mock-table target-table">
+                    <div class="mock-row header"><span>Acceptance</span><span>Owner</span><span>Status</span></div>
+                    <div class="mock-row"><span>Overlay has no tinted fill.</span><span>UI</span><span>Open</span></div>
+                    <div class="mock-row"><span>Reduced motion disables animated geometry.</span><span>QA</span><span>Open</span></div>
+                    <div class="mock-row"><span>Selected object remains visible while composer is open.</span><span>UI</span><span>Open</span></div>
+                  </div>
+                  <div class="mock-note target-note"><h4>Reviewer note</h4><div class="mock-lines"><span class="mock-line mid"></span><span class="mock-line short"></span></div></div>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="option-panel" id="option-b">
+            <div>
+              <h3>B: Corner Assist</h3>
+              <p>A dashed outline with two corner accents. It is still outline-only, but the corner marks help distinguish the selected DOM object on dense pages without adding a filled overlay.</p>
+              <ul>
+                <li>Best fit for dense plans with many adjacent bordered cards.</li>
+                <li>Hover can use dashed border only; active adds corner marks.</li>
+                <li>Slightly more visible than Option A, but still calm.</li>
+              </ul>
+              <div class="motion-readout" id="option-b-motion">
+                <strong>Motion:</strong> 240ms geometry transition with constant opacity; no pulse, blink, or page mask.
+              </div>
+            </div>
+
+            <div>
+              <div class="target-controls" aria-label="Option B targets">
+                <a id="b-target-card" href="#b-target-card">Card</a>
+                <a id="b-target-table" href="#b-target-table">Table</a>
+                <a id="b-target-note" href="#b-target-note">Note</a>
+              </div>
+              <div class="mock-shell">
+                <div class="mock-toolbar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+                <div class="mock-page">
+                  <div class="mock-hero">
+                    <h3>Execution Plan</h3>
+                    <div class="mock-lines"><span class="mock-line"></span><span class="mock-line mid"></span><span class="mock-line short"></span></div>
+                  </div>
+                  <div class="mock-grid">
+                    <div class="mock-card target-card"><h4>Phase One</h4><div class="mock-lines"><span class="mock-line"></span><span class="mock-line short"></span></div></div>
+                    <div class="mock-card"><h4>Phase Two</h4><div class="mock-lines"><span class="mock-line mid"></span><span class="mock-line short"></span></div></div>
+                  </div>
+                  <div class="mock-table target-table">
+                    <div class="mock-row header"><span>Acceptance</span><span>Owner</span><span>Status</span></div>
+                    <div class="mock-row"><span>Overlay has no tinted fill.</span><span>UI</span><span>Open</span></div>
+                    <div class="mock-row"><span>Reduced motion disables animated geometry.</span><span>QA</span><span>Open</span></div>
+                    <div class="mock-row"><span>Selected object remains visible while composer is open.</span><span>UI</span><span>Open</span></div>
+                  </div>
+                  <div class="mock-note target-note"><h4>Reviewer note</h4><div class="mock-lines"><span class="mock-line mid"></span><span class="mock-line short"></span></div></div>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="option-panel" id="option-c">
+            <div>
+              <h3>C: Settled Halo</h3>
+              <p>A solid outline with a very light static surround. It is the most visible of the three, intended for users who found dotted outlines too faint while still avoiding filled rectangles and page-wide dimming.</p>
+              <ul>
+                <li>Best fit if contrast feedback says Options A or B disappear on complex content.</li>
+                <li>Active state can use the halo; hover can stay plain outline.</li>
+                <li>More assertive than the recommended default, but much quieter than today's overlay.</li>
+              </ul>
+              <div class="motion-readout" id="option-c-motion">
+                <strong>Motion:</strong> 200ms geometry transition. The halo is static and never expands, pulses, or flashes.
+              </div>
+            </div>
+
+            <div>
+              <div class="target-controls" aria-label="Option C targets">
+                <a id="c-target-card" href="#c-target-card">Card</a>
+                <a id="c-target-table" href="#c-target-table">Table</a>
+                <a id="c-target-note" href="#c-target-note">Note</a>
+              </div>
+              <div class="mock-shell">
+                <div class="mock-toolbar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+                <div class="mock-page">
+                  <div class="mock-hero">
+                    <h3>Execution Plan</h3>
+                    <div class="mock-lines"><span class="mock-line"></span><span class="mock-line mid"></span><span class="mock-line short"></span></div>
+                  </div>
+                  <div class="mock-grid">
+                    <div class="mock-card target-card"><h4>Phase One</h4><div class="mock-lines"><span class="mock-line"></span><span class="mock-line short"></span></div></div>
+                    <div class="mock-card"><h4>Phase Two</h4><div class="mock-lines"><span class="mock-line mid"></span><span class="mock-line short"></span></div></div>
+                  </div>
+                  <div class="mock-table target-table">
+                    <div class="mock-row header"><span>Acceptance</span><span>Owner</span><span>Status</span></div>
+                    <div class="mock-row"><span>Overlay has no tinted fill.</span><span>UI</span><span>Open</span></div>
+                    <div class="mock-row"><span>Reduced motion disables animated geometry.</span><span>QA</span><span>Open</span></div>
+                    <div class="mock-row"><span>Selected object remains visible while composer is open.</span><span>UI</span><span>Open</span></div>
+                  </div>
+                  <div class="mock-note target-note"><h4>Reviewer note</h4><div class="mock-lines"><span class="mock-line mid"></span><span class="mock-line short"></span></div></div>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="recommendation">
+      <h2>Recommendation</h2>
+      <div class="grid">
+        <article class="card" id="recommendation-default">
+          <h3>Default: Option A</h3>
+          <p>Ship the Cursor Dotted treatment first. It directly matches the requested model and removes the two flashiest behaviors: filled target tint and page-wide dimming.</p>
+        </article>
+        <article class="card" id="recommendation-active">
+          <h3>Active Selection</h3>
+          <p>Use the same surround for hover and selected state. Selected can use slightly stronger border weight, but it should not add a floating label or filled overlay. Clicking the surrounded object opens the comment dialog.</p>
+        </article>
+        <article class="card" id="recommendation-comments">
+          <h3>Existing Comments</h3>
+          <p>Keep pending comment anchors visible, but convert their purple filled rectangles to a calmer outline variant so old comments do not recreate the same distraction.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="implementation-plan">
+      <h2>Implementation Plan</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Area</th>
+            <th>Change</th>
+            <th>Reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr id="impl-css-selection">
+            <td><code>.selection-box</code></td>
+            <td>Remove the <code>0 0 0 9999px</code> page mask, remove filled backgrounds, use outline-only border styles, and lengthen geometry transitions to roughly 200-240ms.</td>
+            <td>The current page dimmer and filled boxes create the most visual churn while moving across DOM nodes.</td>
+          </tr>
+          <tr id="impl-comment-anchor">
+            <td><code>.comment-anchor.pending</code></td>
+            <td>Replace purple filled anchors with a dotted or dashed outline. Keep saved comment numbering separate from the live target surround so click targeting remains visually quiet.</td>
+            <td>Existing pending comments should remain discoverable without becoming large tinted blocks.</td>
+          </tr>
+          <tr id="impl-positioning">
+            <td><code>positionSelectionBox</code></td>
+            <td>Derive every live surround rectangle from the selected element's current <code>getBoundingClientRect()</code> after layout, then move one persistent overlay element between those measured rectangles. Avoid hard-coded offsets and avoid unnecessary hide/show cycles when the pointer moves from one valid target to another.</td>
+            <td>Measured geometry is the only reliable alignment source across responsive wrapping, iframe scrolling, font rendering, and changed plan content.</td>
+          </tr>
+          <tr id="impl-coalescing">
+            <td>Pointer movement</td>
+            <td>Coalesce hover rectangle updates with <code>requestAnimationFrame</code>, and consider temporarily shortening or disabling geometry transitions during iframe scroll.</td>
+            <td>The current mousemove path reads target geometry synchronously; a calm overlay should not trade flashiness for pointer or scroll jank.</td>
+          </tr>
+          <tr id="impl-reduced-motion">
+            <td>Motion preference</td>
+            <td>Add <code>@media (prefers-reduced-motion: reduce)</code> to disable overlay geometry transitions.</td>
+            <td>Users who have reduced motion enabled should not receive animated target tracking.</td>
+          </tr>
+          <tr id="impl-washi">
+            <td>Washi overlay</td>
+            <td>Verify whether the mounted Washi read-only overlay is adding a second highlight layer. If so, disable or restyle that layer for DOM targeting mode.</td>
+            <td>The user may be seeing stacked highlight systems, which would amplify flicker and distraction.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="acceptance-criteria">
+      <h2>Acceptance Criteria</h2>
+      <ul class="criteria-list">
+        <li id="ac-no-fill">Hover and selected DOM targets have no tinted rectangular fill and no page-wide dimming mask.</li>
+        <li id="ac-no-live-label">The live hover/selected target surround has no floating label, tab, badge, or caption.</li>
+        <li id="ac-alignment">The live surround aligns to the exact current target rectangle on desktop and mobile, including after text wrapping, iframe scroll, and viewport resize.</li>
+        <li id="ac-smooth-move">Moving from one DOM object to another animates one surround between rectangles instead of flashing off and back on.</li>
+        <li id="ac-click-opens-composer">Clicking a surrounded DOM object opens the comment dialog for that object.</li>
+        <li id="ac-reduced-motion">With <code>prefers-reduced-motion: reduce</code>, the overlay snaps without animated movement.</li>
+        <li id="ac-comment-anchors">Pending and addressed comment anchors are visible but calmer than the current purple filled boxes.</li>
+        <li id="ac-browser-smoke">Browser smoke verifies hover, click selection, composer open/cancel, iframe scroll, and mobile viewport behavior.</li>
+      </ul>
+    </section>
+
+    <section id="open-questions">
+      <h2>Decisions</h2>
+      <ul>
+        <li id="question-default">Default visual direction: Option A, the light blue dotted surround.</li>
+        <li id="question-existing-comments">Existing pending comments keep status separation with a distinct purple dotted outline, but no filled rectangle.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

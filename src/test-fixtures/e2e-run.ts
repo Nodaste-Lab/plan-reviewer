@@ -94,6 +94,13 @@ try {
   const clientCssResponse = await context.get('/client.css');
   assert.equal(clientCssResponse.ok(), true);
   assert.equal(clientCssResponse.headers()['cache-control'], 'no-store');
+  const clientCssText = await clientCssResponse.text();
+  assert.doesNotMatch(clientCssText, /9999px/);
+  assert.doesNotMatch(clientCssText, /\.selection-box\.hover\{[^}]*background:/);
+  assert.doesNotMatch(clientCssText, /\.selection-box\.active\{[^}]*background:/);
+  assert.match(clientCssText, /\.selection-box\.hover\{[^}]*border:2px dotted/);
+  assert.match(clientCssText, /\.selection-box\.active\{[^}]*border:2px dotted/);
+  assert.match(clientCssText, /@media\(prefers-reduced-motion:reduce\)\{\.selection-box\{transition:none\}\}/);
 
   const rendered = await context.get(`/render/${registered.planId}`);
   assert.equal(rendered.ok(), true);
@@ -165,6 +172,42 @@ try {
     });
     await page.waitForSelector('#plan-frame');
     const commentAnchorCount = () => page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelectorAll('.comment-anchor').length ?? 0);
+    const selectionBoxState = (selector: string, targetSelector: string) => page.evaluate(({ selector, targetSelector }) => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const box = document.querySelector<HTMLElement>(selector)!;
+      const target = iframe.contentDocument!.querySelector<HTMLElement>(targetSelector)!;
+      const frameRect = iframe.getBoundingClientRect();
+      const boxRect = box.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      const style = getComputedStyle(box);
+      return {
+        hidden: box.hidden,
+        background: style.backgroundColor,
+        borderStyle: style.borderStyle,
+        borderWidth: style.borderWidth,
+        leftDelta: Math.abs(boxRect.left - (frameRect.left + targetRect.left)),
+        topDelta: Math.abs(boxRect.top - (frameRect.top + targetRect.top)),
+        widthDelta: Math.abs(boxRect.width - targetRect.width),
+        heightDelta: Math.abs(boxRect.height - targetRect.height),
+        text: box.textContent?.trim() ?? ''
+      };
+    }, { selector, targetSelector });
+    await page.evaluate(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const target = iframe.contentDocument!.querySelector('#dom-annotation')!;
+      target.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, view: iframe.contentWindow ?? window }));
+    });
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#hover-selection-box')?.hidden === false);
+    const hoverBox = await selectionBoxState('#hover-selection-box', '#dom-annotation');
+    assert.equal(hoverBox.hidden, false);
+    assert.equal(hoverBox.background, 'rgba(0, 0, 0, 0)');
+    assert.equal(hoverBox.borderStyle, 'dotted');
+    assert.equal(hoverBox.borderWidth, '2px');
+    assert.equal(hoverBox.leftDelta <= 1, true);
+    assert.equal(hoverBox.topDelta <= 1, true);
+    assert.equal(hoverBox.widthDelta <= 1, true);
+    assert.equal(hoverBox.heightDelta <= 1, true);
+    assert.equal(hoverBox.text, '');
     const openDomComposer = async () => {
       await page.evaluate(() => {
         const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame');
@@ -175,6 +218,35 @@ try {
     };
     await page.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#dom-annotation'));
     await openDomComposer();
+    const activeBox = await selectionBoxState('#active-selection-box', '#dom-annotation');
+    assert.equal(activeBox.hidden, false);
+    assert.equal(activeBox.background, 'rgba(0, 0, 0, 0)');
+    assert.equal(activeBox.borderStyle, 'dotted');
+    assert.equal(activeBox.borderWidth, '2px');
+    assert.equal(activeBox.leftDelta <= 1, true);
+    assert.equal(activeBox.topDelta <= 1, true);
+    assert.equal(activeBox.widthDelta <= 1, true);
+    assert.equal(activeBox.heightDelta <= 1, true);
+    assert.equal(activeBox.text, '');
+    await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollTo(0, 120));
+    await page.waitForFunction(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const box = document.querySelector<HTMLElement>('#active-selection-box')!;
+      const target = iframe.contentDocument!.querySelector<HTMLElement>('#dom-annotation')!;
+      const frameRect = iframe.getBoundingClientRect();
+      const boxRect = box.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      return Math.abs(boxRect.left - (frameRect.left + targetRect.left)) <= 1
+        && Math.abs(boxRect.top - (frameRect.top + targetRect.top)) <= 1
+        && Math.abs(boxRect.width - targetRect.width) <= 1
+        && Math.abs(boxRect.height - targetRect.height) <= 1;
+    });
+    const activeBoxAfterScroll = await selectionBoxState('#active-selection-box', '#dom-annotation');
+    assert.equal(activeBoxAfterScroll.leftDelta <= 1, true);
+    assert.equal(activeBoxAfterScroll.topDelta <= 1, true);
+    assert.equal(activeBoxAfterScroll.widthDelta <= 1, true);
+    assert.equal(activeBoxAfterScroll.heightDelta <= 1, true);
+    await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollTo(0, 0));
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => document.querySelector<HTMLElement>('#composer')?.hidden === true);
 
@@ -202,6 +274,16 @@ try {
     await page.waitForFunction(() => (document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelectorAll('.comment-anchor').length ?? 0) > 0);
     assert.equal(await commentAnchorCount(), 1);
     assert.equal(await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector<HTMLElement>('.comment-anchor')?.getAttribute('style')?.includes('NaN')), false);
+    const pendingAnchorStyle = await page.evaluate(() => {
+      const anchor = document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector<HTMLElement>('.comment-anchor.pending');
+      if (!anchor) return null;
+      const style = getComputedStyle(anchor);
+      return { background: style.backgroundColor, borderStyle: style.borderStyle, borderWidth: style.borderWidth };
+    });
+    assert.ok(pendingAnchorStyle);
+    assert.equal(pendingAnchorStyle.background, 'rgba(0, 0, 0, 0)');
+    assert.equal(pendingAnchorStyle.borderStyle, 'dotted');
+    assert.equal(pendingAnchorStyle.borderWidth, '2px');
     assert.equal(await page.evaluate(() => (window as typeof window & { __html2canvasCalls?: number }).__html2canvasCalls), 1);
     const markerTopBeforeScroll = await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('.comment-anchor')?.getBoundingClientRect().top ?? 0);
     await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollTo(0, 120));
@@ -245,6 +327,7 @@ try {
 
     await page.evaluate(() => {
       const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame');
+      iframe?.contentDocument?.getSelection()?.removeAllRanges();
       const target = iframe?.contentDocument?.querySelector('img[alt="image annotation"]');
       target?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: iframe?.contentWindow ?? window }));
     });
@@ -361,6 +444,27 @@ try {
     assert.equal(resolvedAnchor.borderStyle, 'dotted');
     assert.equal(Math.abs(resolvedAnchor.anchorY - resolvedAnchor.targetY) <= 1, true);
     assert.equal(Math.abs(resolvedAnchor.anchorWidth - resolvedAnchor.targetWidth) <= 1, true);
+
+    await page.setViewportSize({ width: 486, height: 902 });
+    await page.goto(`${baseUrl}/p/${registered.planId}`);
+    await page.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#text-target'));
+    await page.evaluate(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const target = iframe.contentDocument!.querySelector('#text-target')!;
+      target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: iframe.contentWindow ?? window }));
+    });
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#composer')?.hidden === false);
+    const mobileActiveBox = await selectionBoxState('#active-selection-box', '#text-target');
+    assert.equal(mobileActiveBox.hidden, false);
+    assert.equal(mobileActiveBox.background, 'rgba(0, 0, 0, 0)');
+    assert.equal(mobileActiveBox.borderStyle, 'dotted');
+    assert.equal(mobileActiveBox.text, '');
+    assert.equal(mobileActiveBox.leftDelta <= 1, true);
+    assert.equal(mobileActiveBox.topDelta <= 1, true);
+    assert.equal(mobileActiveBox.widthDelta <= 1, true);
+    assert.equal(mobileActiveBox.heightDelta <= 1, true);
+    await page.click('#cancel-comment');
+    await page.setViewportSize({ width: 1280, height: 720 });
 
     await page.goto(`${baseUrl}/`);
     await page.once('dialog', dialog => dialog.accept());
