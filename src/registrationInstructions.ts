@@ -41,7 +41,7 @@ export function buildRegistrationAgentInstructions(input: { planId: string; revi
     type: instructionType,
     required: true,
     summary: 'Use the queue-backed agent next command as the primary browser-comment listener loop.',
-    nextAction: 'Drain pending comments with agent next --no-wait, then listen with agent next --wait before continuing implementation or review work.',
+    nextAction: 'Drain pending comments with agent next --no-wait, then listen with agent next --wait before continuing implementation or review work. After a claim, process and ack it before starting another listener.',
     planId: input.planId,
     reviewUrl: input.reviewUrl,
     serviceUrlRequired: true,
@@ -53,11 +53,12 @@ export function buildRegistrationAgentInstructions(input: { planId: string; revi
     optionalWatchCommand: commands.optionalWatchCommand,
     processingLoop: [
       `On start or resume, run ${commands.drainCommand} until it returns status empty.`,
-      `Then run ${commands.listenCommand}; it waits, atomically claims one pending browser.comment.v1, prints commentId and claimId, and exits.`,
+      `Then run ${commands.listenCommand}; it waits, atomically claims one pending browser.comment.v1, prints commentId and claimId, and exits successfully after exactly one claim.`,
+      'If using a managed background process, restart the listener only after the claimed comment has been processed and acknowledged; do not blindly loop successful claim commands or pre-claim multiple comments.',
       'Read the plan and selected context, then make the smallest appropriate plan change.',
       'Acknowledge with the returned ackCommand or plan-review ack <commentId> --claim <claimId> --summary "..." --changed-files thoughts/plans/... --json.',
       'Resolve only after a successful ack when appropriate, then immediately rerun the listen command.',
-      'If the plan-review service restarts or the process exits, restart the same agent next command; queue state and claim leases remain authoritative.',
+      'If the plan-review service restarts or the listener exits before a claim, restart the same agent next command; queue state and claim leases remain authoritative.',
       'Use plan-review watch only as an optional low-latency/debug stream, not as the correctness-critical delivery path.'
     ],
     referenceImplementations: commands.referenceImplementations

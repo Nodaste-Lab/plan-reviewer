@@ -79,6 +79,7 @@ test('registration instruction helper builds canonical agent-next guidance and r
   assert.equal(instructions.required, true);
   assert.match(instructions.summary, /queue-backed agent next/);
   assert.match(instructions.nextAction, /Drain pending comments/);
+  assert.match(instructions.nextAction, /process and ack it before starting another listener/);
   assert.equal(instructions.serviceUrlRequired, true);
   assert.match(instructions.serviceUrlInstruction, /optional watch command is debug-only/);
   assert.equal(instructions.reviewUrl, '/p/plan_abc');
@@ -95,6 +96,8 @@ test('registration instruction helper builds canonical agent-next guidance and r
   assert.equal(instructions.referenceImplementations[2].command, instructions.optionalWatchCommand);
   assert.match(instructions.processingLoop.join('\n'), /browser\.comment\.v1/);
   assert.match(instructions.processingLoop.join('\n'), /commentId and claimId/);
+  assert.match(instructions.processingLoop.join('\n'), /exits successfully after exactly one claim/);
+  assert.match(instructions.processingLoop.join('\n'), /do not blindly loop successful claim commands/);
   assert.match(instructions.processingLoop.join('\n'), /plan-review ack <commentId> --claim <claimId> --summary/);
   assert.match(instructions.processingLoop.join('\n'), /Resolve only after a successful ack/);
   assert.match(instructions.processingLoop.join('\n'), /plan-review watch only as an optional/);
