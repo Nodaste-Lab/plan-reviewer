@@ -4,6 +4,8 @@ export interface RegistrationReferenceImplementation {
   command: string;
 }
 
+import { agentNextCommand, durableAgentNextCommand, optionalWatchCommand } from './agentNext.js';
+
 export interface RegistrationAgentInstructions {
   type: 'plan-review.registration.instructions.v1';
   required: true;
@@ -14,72 +16,69 @@ export interface RegistrationAgentInstructions {
   serviceUrlRequired: true;
   serviceUrlInstruction: string;
   preferredCommand: string;
+  drainCommand: string;
+  listenCommand: string;
   durableCommand: string;
+  optionalWatchCommand: string;
   processingLoop: string[];
   referenceImplementations: RegistrationReferenceImplementation[];
 }
 
 export interface RenderedRegistrationInstructionCommands {
   preferredCommand: string;
+  drainCommand: string;
+  listenCommand: string;
   durableCommand: string;
+  optionalWatchCommand: string;
   referenceImplementations: RegistrationReferenceImplementation[];
 }
 
 const instructionType = 'plan-review.registration.instructions.v1' as const;
-const watcherDirectory = '~/.plan-reviewer/watchers';
-
-function watchCommand(planId: string, options: { conversationOut?: string; serviceUrl?: string } = {}): string {
-  return [
-    'plan-review',
-    'watch',
-    planId,
-    '--mode',
-    'queue',
-    '--format',
-    'browser-comment',
-    ...(options.conversationOut ? ['--conversation-out', options.conversationOut] : []),
-    '--json',
-    ...(options.serviceUrl ? ['--url', options.serviceUrl] : [])
-  ].join(' ');
-}
-
-function durableWatcherCommand(planId: string, serviceUrl?: string): string {
-  const conversationOut = `${watcherDirectory}/${planId}.ndjson`;
-  const inner = watchCommand(planId, { conversationOut, serviceUrl });
-  return `mkdir -p ${watcherDirectory} && tmux new-session -d -s plan-review-${planId} '${inner}'`;
-}
 
 export function buildRegistrationAgentInstructions(input: { planId: string; reviewUrl: string }): RegistrationAgentInstructions {
   const commands = renderRegistrationInstructionCommands({ planId: input.planId }, undefined);
   return {
     type: instructionType,
     required: true,
-    summary: 'Start a monitor for browser comments now and keep it running while you work this plan.',
-    nextAction: 'Start the comment watcher before continuing implementation or review work.',
+    summary: 'Use the queue-backed agent next command as the primary browser-comment listener loop.',
+    nextAction: 'Drain pending comments with agent next --no-wait, then listen with agent next --wait before continuing implementation or review work.',
     planId: input.planId,
     reviewUrl: input.reviewUrl,
     serviceUrlRequired: true,
-    serviceUrlInstruction: 'API consumers should render watcher commands with --url <registration service URL> before execution; for durable tmux commands, the --url flag belongs inside the quoted inner watcher command.',
+    serviceUrlInstruction: 'API consumers should render agent next commands with --url <registration service URL> before execution. The optional watch command is debug-only and is not the correctness-critical delivery path.',
     preferredCommand: commands.preferredCommand,
+    drainCommand: commands.drainCommand,
+    listenCommand: commands.listenCommand,
     durableCommand: commands.durableCommand,
+    optionalWatchCommand: commands.optionalWatchCommand,
     processingLoop: [
-      'Receive a browser.comment.v1 payload from the watcher.',
-      `Claim that event with plan-review queue claim ${input.planId} --ids <commentId> --json and read <claimId> from claimed[0].claim.id in CLI JSON (raw API data.claimed[0].claim.id); use --one only as a fallback if a future event shape does not expose a comment ID.`,
+      `On start or resume, run ${commands.drainCommand} until it returns status empty.`,
+      `Then run ${commands.listenCommand}; it waits, atomically claims one pending browser.comment.v1, prints commentId and claimId, and exits.`,
       'Read the plan and selected context, then make the smallest appropriate plan change.',
-      'Acknowledge with plan-review ack <commentId> --claim <claimId> --summary "..." --changed-files thoughts/plans/... --json.',
-      'Resolve with plan-review resolve <commentId> --note "Done" --json only after the reviewer-visible issue is complete.'
+      'Acknowledge with the returned ackCommand or plan-review ack <commentId> --claim <claimId> --summary "..." --changed-files thoughts/plans/... --json.',
+      'Resolve only after a successful ack when appropriate, then immediately rerun the listen command.',
+      'If the plan-review service restarts or the process exits, restart the same agent next command; queue state and claim leases remain authoritative.',
+      'Use plan-review watch only as an optional low-latency/debug stream, not as the correctness-critical delivery path.'
     ],
     referenceImplementations: commands.referenceImplementations
   };
 }
 
 export function renderRegistrationInstructionCommands(input: { planId: string }, serviceUrl?: string): RenderedRegistrationInstructionCommands {
+  const drainCommand = agentNextCommand(input.planId, { wait: false, serviceUrl });
+  const listenCommand = agentNextCommand(input.planId, { wait: true, serviceUrl });
+  const durableCommand = durableAgentNextCommand(input.planId, serviceUrl);
+  const watchCommand = optionalWatchCommand(input.planId, serviceUrl);
   return {
-    preferredCommand: watchCommand(input.planId, { serviceUrl }),
-    durableCommand: durableWatcherCommand(input.planId, serviceUrl),
+    preferredCommand: listenCommand,
+    drainCommand,
+    listenCommand,
+    durableCommand,
+    optionalWatchCommand: watchCommand,
     referenceImplementations: [
-      { harness: 'pi', tool: 'process', command: watchCommand(input.planId, { serviceUrl }) },
-      { harness: 'durable-shell', tool: 'tmux', command: durableWatcherCommand(input.planId, serviceUrl) }
+      { harness: 'pi', tool: 'process', command: listenCommand },
+      { harness: 'durable-shell', tool: 'shell-loop', command: durableCommand },
+      { harness: 'debug-stream', tool: 'watch', command: watchCommand }
     ]
   };
 }
