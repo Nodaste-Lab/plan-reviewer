@@ -9,6 +9,7 @@ import { resolveServiceUrl } from './config.js';
 import { appendNdjson, requestJson } from './client/api.js';
 import { findImageSources } from './htmlImages.js';
 import { renderRegistrationInstructionCommands, type RegistrationAgentInstructions } from './registrationInstructions.js';
+import { buildAgentNextClaimed, buildAgentNextEmpty } from './agentNext.js';
 
 interface RegisterResponse {
   planId: string;
@@ -104,11 +105,17 @@ function registrationInstructionsOutput(data: RegisterResponse, serviceUrl: stri
     'REQUIRED NEXT ACTION:',
     data.agentInstructions.nextAction,
     '',
-    'Preferred watcher command:',
-    renderedCommands.preferredCommand,
+    'Drain pending comments:',
+    renderedCommands.drainCommand,
     '',
-    'Durable watcher command:',
+    'Primary listener command:',
+    renderedCommands.listenCommand,
+    '',
+    'Durable listener loop:',
     renderedCommands.durableCommand,
+    '',
+    'Optional debug watch stream:',
+    renderedCommands.optionalWatchCommand,
     '',
     'Comment lifecycle:',
     ...data.agentInstructions.processingLoop.map(step => `- ${step}`)
@@ -346,6 +353,160 @@ async function watchPlan(planId: string, options: {
   }
 }
 
+interface ClaimedCommentResponse {
+  claimed: Array<{
+    id: string;
+    planId: string;
+    conversationPayload: Record<string, unknown>;
+    claim?: { id: string } | null;
+  }>;
+}
+
+function parsePositiveInteger(value: string | undefined, optionName: string): number | undefined {
+  if (value === undefined) return undefined;
+  if (!/^\d+$/.test(value)) {
+    throw new PlanReviewError('validation_failed', `${optionName} must be a positive integer`, 400, { [optionName]: value });
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new PlanReviewError('validation_failed', `${optionName} must be a positive integer`, 400, { [optionName]: value });
+  }
+  return parsed;
+}
+
+async function claimOneForAgentNext(planId: string, serviceUrl: string, leaseSeconds: number | undefined): Promise<ClaimedCommentResponse> {
+  const body = leaseSeconds === undefined ? { mode: 'one' } : { mode: 'one', leaseSeconds };
+  return requestJson<ClaimedCommentResponse>(`${serviceUrl}/api/plans/${planId}/comments/claim`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+}
+
+function isRecoverableWaitError(error: unknown): boolean {
+  return error instanceof PlanReviewError && (error.code === 'network_error' || error.statusCode === 503 || error.statusCode >= 500);
+}
+
+function remainingTimeoutMs(startedAt: number, timeoutMs: number | undefined): number | undefined {
+  return timeoutMs === undefined ? undefined : Math.max(0, timeoutMs - (Date.now() - startedAt));
+}
+
+async function sleepForWait(startedAt: number, timeoutMs: number | undefined, delayMs: number): Promise<void> {
+  const remaining = remainingTimeoutMs(startedAt, timeoutMs);
+  if (remaining !== undefined && remaining <= 0) return;
+  await new Promise(resolve => setTimeout(resolve, Math.min(delayMs, remaining ?? delayMs)));
+}
+
+async function initialQueueSequence(serviceUrl: string, planId: string): Promise<number> {
+  const poll = await pollEvents(serviceUrl, planId, 0, 'queue');
+  return Number(poll.latestSequence) || 0;
+}
+
+async function waitForQueueSignal(serviceUrl: string, planId: string, latestSequence: number, startedAt: number, timeoutMs: number | undefined, backoffMs: number): Promise<number> {
+  const remaining = remainingTimeoutMs(startedAt, timeoutMs);
+  if (remaining !== undefined && remaining <= 0) return latestSequence;
+  const signalWaitMs = Math.min(backoffMs, remaining ?? backoffMs);
+  const abort = new AbortController();
+  const abortTimer = setTimeout(() => abort.abort(), signalWaitMs);
+  try {
+    const response = await fetch(`${serviceUrl}/api/plans/${planId}/events?mode=queue`, {
+      headers: latestSequence ? { accept: 'text/event-stream', 'Last-Event-ID': String(latestSequence) } : { accept: 'text/event-stream' },
+      signal: abort.signal
+    });
+    if (!response.ok || !response.body) throw new Error(`SSE unavailable (${response.status})`);
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let rest = '';
+    try {
+      while (true) {
+        const read = await reader.read();
+        if (read.done) break;
+        const parsed = parseSse(rest + decoder.decode(read.value));
+        rest = parsed.rest;
+        for (const event of parsed.events) {
+          if (event.id) latestSequence = Math.max(latestSequence, Number(event.id) || latestSequence);
+          if (event.event && event.event !== 'connected' && event.event !== 'heartbeat') return latestSequence;
+        }
+      }
+    } finally {
+      await reader.cancel().catch(() => undefined);
+    }
+  } catch {
+    const poll = await pollEvents(serviceUrl, planId, latestSequence, 'queue');
+    for (const event of poll.events) latestSequence = Math.max(latestSequence, Number(event.sequence) || latestSequence);
+    if (poll.events.length > 0) return latestSequence;
+    await sleepForWait(startedAt, timeoutMs, poll.retryAfterMs ?? backoffMs);
+  } finally {
+    clearTimeout(abortTimer);
+  }
+  return latestSequence;
+}
+
+async function agentNext(planId: string, options: { url?: string; wait?: boolean; noWait?: boolean; timeout?: string; leaseSeconds?: string; json?: boolean }) {
+  if (!options.json) {
+    throw new PlanReviewError('validation_failed', 'agent next requires --json', 400, {}, 'Retry with --json so the agent receives a machine-readable payload.');
+  }
+  if (options.wait && options.noWait) {
+    throw new PlanReviewError('validation_failed', 'agent next cannot use both --wait and --no-wait', 400, { wait: true, noWait: true });
+  }
+  const serviceUrl = resolveServiceUrl(options.url);
+  const timeoutMs = parsePositiveInteger(options.timeout, 'timeout');
+  const leaseSeconds = parsePositiveInteger(options.leaseSeconds, 'leaseSeconds');
+  const shouldWait = Boolean(options.wait);
+  const startedAt = Date.now();
+  let backoffMs = 1000;
+  let latestSequence = 0;
+  if (shouldWait) {
+    try {
+      latestSequence = await initialQueueSequence(serviceUrl, planId);
+    } catch (error) {
+      if (!isRecoverableWaitError(error)) throw error;
+    }
+  }
+  while (true) {
+    try {
+      const data = await claimOneForAgentNext(planId, serviceUrl, leaseSeconds);
+      const comment = data.claimed[0];
+      if (comment?.claim?.id) {
+        printJson(buildAgentNextClaimed({
+          planId,
+          commentId: comment.id,
+          claimId: comment.claim.id,
+          conversationPayload: enrichConversationPayload(comment.conversationPayload, serviceUrl),
+          serviceUrl
+        }));
+        return;
+      }
+      if (!shouldWait) {
+        printJson(buildAgentNextEmpty(planId));
+        return;
+      }
+      backoffMs = 1000;
+    } catch (error) {
+      if (!shouldWait || !isRecoverableWaitError(error)) throw error;
+    }
+
+    const remaining = remainingTimeoutMs(startedAt, timeoutMs);
+    if (remaining !== undefined && remaining <= 0) {
+      throw new PlanReviewError(
+        'watch_timeout',
+        'No pending browser comment arrived before timeout',
+        1,
+        { planId, timeoutMs },
+        `Retry plan-review agent next ${planId} --wait --json after verifying the reviewer service is reachable, or run --no-wait to check the current queue.`
+      );
+    }
+
+    try {
+      latestSequence = await waitForQueueSignal(serviceUrl, planId, latestSequence, startedAt, timeoutMs, backoffMs);
+    } catch (error) {
+      if (!isRecoverableWaitError(error)) throw error;
+      await sleepForWait(startedAt, timeoutMs, backoffMs);
+    }
+    backoffMs = Math.min(10000, backoffMs * 2);
+  }
+}
+
 async function claim(planId: string, options: { url?: string; all?: boolean; one?: boolean; ids?: string; limit?: string; leaseSeconds?: string; json?: boolean }) {
   const serviceUrl = resolveServiceUrl(options.url);
   const body = options.ids
@@ -474,6 +635,20 @@ export async function main(argv: string[] = process.argv.slice(2)) {
     .option('--conversation-out <path>')
     .option('--state <path>')
     .action(watchPlan);
+
+  const agent = program.command('agent');
+  agent.command('next <planId>')
+    .option('--url <url>')
+    .option('--wait', 'wait for the next pending comment')
+    .option('--no-wait', 'perform one immediate queue check and exit')
+    .option('--timeout <ms>', 'positive timeout in milliseconds for --wait')
+    .option('--lease-seconds <seconds>', 'positive claim lease in seconds')
+    .option('--json', 'required machine-readable output')
+    .action((planId, options) => agentNext(planId, {
+      ...options,
+      wait: argv.includes('--wait') || options.wait === true,
+      noWait: argv.includes('--no-wait')
+    }));
 
   const queue = program.command('queue');
   queue.command('list')

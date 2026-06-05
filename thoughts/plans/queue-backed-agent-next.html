@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan Reviewer: Queue-backed agent next command</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #08111f;
+      --panel: #111827;
+      --panel-2: #0f172a;
+      --text: #e5e7eb;
+      --muted: #a7b0c0;
+      --accent: #38bdf8;
+      --accent-2: #a78bfa;
+      --good: #22c55e;
+      --warn: #f59e0b;
+      --danger: #fb7185;
+      --border: #2b364d;
+      --code: #020617;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.16), transparent 28rem), var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.56;
+    }
+    main { max-width: 1180px; margin: 0 auto; padding: 40px 24px 72px; }
+    header, section, article { border: 1px solid var(--border); background: rgba(17, 24, 39, 0.92); border-radius: 18px; }
+    header { padding: 30px; margin-bottom: 18px; }
+    section { padding: 24px; margin: 18px 0; }
+    article { padding: 18px; margin: 14px 0; background: rgba(15, 23, 42, 0.88); }
+    h1, h2, h3 { line-height: 1.15; margin: 0 0 12px; }
+    h1 { font-size: clamp(2rem, 4vw, 3.3rem); letter-spacing: -0.04em; }
+    h2 { font-size: 1.5rem; color: #f8fafc; }
+    h3 { font-size: 1.06rem; color: #dbeafe; }
+    p { margin: 0 0 12px; }
+    a { color: #7dd3fc; }
+    ul, ol { margin: 10px 0 0 1.2rem; padding: 0; }
+    li { margin: 7px 0; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+    code { background: rgba(2, 6, 23, 0.9); color: #dbeafe; border: 1px solid #1e293b; border-radius: 6px; padding: 0.1rem 0.35rem; }
+    pre { overflow: auto; background: var(--code); color: #dbeafe; border: 1px solid #1e293b; border-radius: 12px; padding: 14px; margin: 12px 0 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { border: 1px solid var(--border); padding: 10px; text-align: left; vertical-align: top; }
+    th { background: #172033; color: #f8fafc; }
+    .eyebrow { color: var(--accent); text-transform: uppercase; font-size: 0.78rem; font-weight: 800; letter-spacing: 0.12em; }
+    .muted { color: var(--muted); }
+    .pill { display: inline-block; border: 1px solid var(--border); background: #172033; border-radius: 999px; padding: 0.25rem 0.6rem; margin: 0.2rem 0.25rem 0.2rem 0; color: #cbd5e1; font-weight: 700; font-size: 0.82rem; }
+    .decision { border-left: 4px solid var(--accent); }
+    .warning { border-left: 4px solid var(--warn); }
+    .success { border-left: 4px solid var(--good); }
+    .danger { border-left: 4px solid var(--danger); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+    .phase-list { list-style: none; margin-left: 0; }
+    .phase-list li.phase { display: block; margin: 14px 0; }
+    .phase-title { display: flex; gap: 10px; align-items: flex-start; }
+    .phase-title input { margin-top: 0.35rem; accent-color: var(--accent); }
+  </style>
+</head>
+<body>
+  <main id="plan-root">
+    <header id="title">
+      <div class="eyebrow">Implementation plan</div>
+      <h1>Make browser-comment delivery queue-backed and agent-agnostic</h1>
+      <p class="muted">Plan for GitHub issue <a href="https://github.com/Nodaste-Lab/plan-reviewer/issues/7">Nodaste-Lab/plan-reviewer#7</a>. This is a planning artifact only; no product code has been changed for this issue.</p>
+      <p><span class="pill">Status: execution-ready</span><span class="pill">CLI: plan-review agent next</span><span class="pill">Queue: authoritative source</span><span class="pill">Risk: medium contract change</span></p>
+    </header>
+
+    <section id="status">
+      <h2>Status</h2>
+      <article id="status-ready" class="success">
+        <h3>Execution-ready planning state</h3>
+        <p>The source issue is concrete, repo surfaces are identified, and the plan locks the command shape, payload contract, queue semantics, registration-instruction change, tests, and verification gates. Implementation should start only after explicit user approval to code.</p>
+      </article>
+    </section>
+
+    <section id="goal">
+      <h2>Goal</h2>
+      <p>Add a first-class CLI command that waits for or checks the authoritative comment queue, atomically claims exactly one pending browser comment, prints one agent-actionable JSON payload, and exits. Registration instructions should prefer that one-shot command instead of requiring every harness to keep a long-running <code>plan-review watch</code> process wired into conversation notifications.</p>
+    </section>
+
+    <section id="why">
+      <h2>Why this plan exists</h2>
+      <p>Issue #7 documents a real missed-reviewer-comment incident: <code>plan-review watch</code> emitted the event, but the harness-side stdout/log-watch notification path did not produce an agent turn. The queue and stream worked; the brittle contract was requiring each agent harness to translate a long-lived stream into actionable conversation state.</p>
+    </section>
+
+    <section id="authority-inputs">
+      <h2>Authority and inputs</h2>
+      <ul>
+        <li><strong>Primary source:</strong> GitHub issue #7, “Make browser-comment delivery queue-backed and agent-agnostic.”</li>
+        <li><strong>Repo reality:</strong> <code>README.md</code>, <code>src/cli.ts</code>, <code>src/server/app.ts</code>, <code>src/storage/database.ts</code>, <code>src/registrationInstructions.ts</code>, <code>src/schemas.ts</code>, <code>src/__tests__/contracts.test.ts</code>.</li>
+        <li><strong>Planning doctrine:</strong> product workflow should make the correct agent behavior the default, absorb routine recovery inside the normal path, and fail closed only for ambiguity or unsafe automation.</li>
+      </ul>
+    </section>
+
+    <section id="current-reality">
+      <h2>Current implementation reality</h2>
+      <table id="reality-table">
+        <thead><tr><th>Surface</th><th>Current behavior</th><th>Implication for this issue</th></tr></thead>
+        <tbody>
+          <tr><td><code>src/cli.ts</code></td><td>Supports <code>register</code>, <code>watch</code>, <code>queue list</code>, <code>queue claim</code>, <code>ack</code>, <code>resolve</code>, and <code>release</code>. <code>watchPlan()</code> emits browser-comment payloads for <code>comment.created</code> but does not claim.</td><td>Add a new <code>agent next &lt;planId&gt;</code> command instead of mutating <code>watch</code> into a claiming command.</td></tr>
+          <tr><td><code>src/storage/database.ts</code></td><td><code>claimComments()</code> already atomically claims pending comments, creates claim IDs, applies lease expiry, and returns full comments containing <code>conversationPayload</code>.</td><td>No schema migration is needed; the new command should use existing claim semantics as the source of truth.</td></tr>
+          <tr><td><code>src/server/app.ts</code></td><td>Exposes <code>POST /api/plans/:planId/comments/claim</code>, <code>GET /api/plans/:planId/events</code>, <code>GET /api/plans/:planId/events/poll</code>, and <code>GET /api/agent/queue</code>.</td><td>The CLI can implement <code>agent next</code> using existing APIs. A new server endpoint is not required unless implementation uncovers a testability or API-contract gap.</td></tr>
+          <tr><td><code>src/registrationInstructions.ts</code></td><td>Builds watcher-first <code>agentInstructions</code> with <code>preferredCommand: plan-review watch ...</code> and a durable tmux watcher command.</td><td>Registration instructions must be rewritten so <code>agent next --wait --json</code> is primary and <code>watch</code> is explicitly optional/debug-only.</td></tr>
+          <tr><td><code>README.md</code></td><td>Documents the watcher/SSE contract as the primary agent watch contract.</td><td>Docs must explain the new command, safe resume checks, and preserved optional <code>watch</code> stream.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="progress">
+      <h2>Progress</h2>
+      <ul class="phase-list">
+        <li class="phase" id="progress-p1"><span class="phase-title"><input type="checkbox" checked disabled> <strong>P1 - Contract and tests</strong></span></li>
+        <li class="phase" id="progress-p2"><span class="phase-title"><input type="checkbox" checked disabled> <strong>P2 - Non-waiting next command</strong></span></li>
+        <li class="phase" id="progress-p3"><span class="phase-title"><input type="checkbox" checked disabled> <strong>P3 - Waiting and timeout behavior</strong></span></li>
+        <li class="phase" id="progress-p4"><span class="phase-title"><input type="checkbox" checked disabled> <strong>P4 - Registration instructions and docs</strong></span></li>
+        <li class="phase" id="progress-p5"><span class="phase-title"><input type="checkbox" checked disabled> <strong>P5 - End-to-end verification</strong></span></li>
+      </ul>
+    </section>
+
+    <section id="resume-instructions">
+      <h2>Resume instructions (agent)</h2>
+      <p>Read this plan fully, then start at the first unchecked item in <code>#progress</code>. Implement phases sequentially. Keep the work scoped to issue #7. Do not remove <code>watch</code>, do not add harness-specific adapters, and do not invent a server-managed watcher lifecycle. If a foundational behavior conflict appears, stop and record a decision/deviation before widening scope.</p>
+    </section>
+
+    <section id="product-intent-alignment">
+      <h2>Product intent alignment</h2>
+      <article id="golden-path" class="decision">
+        <h3>Golden path</h3>
+        <p>After registering a plan, an agent starts a simple listener loop around one normal command: <code>plan-review agent next &lt;planId&gt; --wait --json --url &lt;service-url&gt;</code>. Each invocation waits internally, claims the next pending comment, returns the exact conversation payload plus claim ID, and exits. The harness acts on that payload, acks it with the returned claim ID, optionally resolves after ack, then immediately starts the same command again. This loop replaces stdout-watch plumbing while preserving continuous comment delivery.</p>
+      </article>
+      <article id="listener-loop" class="decision">
+        <h3>Agent listener loop</h3>
+        <p>Registration instructions must render this loop as the primary agent contract: on start or resume, run <code>agent next --no-wait --json</code> until it returns <code>empty</code> to drain pending work, then run <code>agent next --wait --json</code>; after every claimed result is acted on, acked with the returned claim ID, and optionally resolved after ack, rerun <code>agent next --wait --json</code>. If the plan-review service restarts, the active invocation retries until the service returns or the optional timeout expires; if the process exits, the harness restarts the same command and the queue/lease state determines whether work remains.</p>
+      </article>
+      <article id="self-healing" class="decision">
+        <h3>Self-healing expectation</h3>
+        <p>Every loop iteration must consult queue/claim state before relying on stream sequence. In <code>--wait</code> mode, temporary SSE, polling, and network failures are recoverable until the command timeout expires: the command reconnects, retries the intended queue claim, and relies on current queue state rather than any missed event. If a previous process exited or missed notification, rerunning the command should be safe because expired claim leases return comments to pending and the command claims from the authoritative queue.</p>
+      </article>
+      <article id="fail-closed" class="warning">
+        <h3>Fail-closed boundary</h3>
+        <p>The command must not auto-ack or auto-resolve. In <code>--no-wait</code> mode, service unavailability fails immediately with an actionable error. In <code>--wait</code> mode, transient service unavailability is retried until <code>--timeout</code>; only an expired timeout, unknown plan, validation failure, or unsafe claim conflict stops the command.</p>
+      </article>
+    </section>
+
+    <section id="locked-decisions">
+      <h2>Locked decisions</h2>
+      <ul>
+        <li id="decision-command"><strong>Command shape:</strong> implement <code>plan-review agent next &lt;planId&gt; --wait|--no-wait --json --url &lt;service-url&gt; [--lease-seconds &lt;seconds&gt;]</code>. <code>--json</code> is required for <code>agent next</code> in this issue; non-JSON human output is a non-goal. <code>--wait</code> blocks; without <code>--wait</code> or with <code>--no-wait</code>, the command performs one immediate queue claim attempt and exits. Passing both <code>--wait</code> and <code>--no-wait</code>, a non-positive/non-integer <code>--timeout</code>, or a non-positive/non-integer <code>--lease-seconds</code> is <code>validation_failed</code> and exits <code>2</code>. <code>--lease-seconds</code> passes through to the existing claim API and defaults to <code>300</code> seconds, matching <code>claimCommentsSchema</code>.</li>
+        <li id="decision-wait-default"><strong>Wait default:</strong> <code>--wait</code> without <code>--timeout</code> waits indefinitely. <code>--timeout &lt;ms&gt;</code> is optional and bounds the whole wait, including claim attempts, reconnects, SSE reads, poll fallback, and sleeps.</li>
+        <li id="decision-retry"><strong>Retry cadence:</strong> waiting mode attempts an immediate claim, then subscribes to per-plan queue-mode SSE at <code>/api/plans/:planId/events?mode=queue</code> when available. SSE events only wake the command to retry the authoritative claim. If SSE is unavailable or disconnects, use REST polling at <code>/api/plans/:planId/events/poll?mode=queue</code> every 1s initially with exponential backoff capped at 10s. Recoverable errors during <code>--wait</code>: <code>network_error</code> / HTTP 503 from temporary service unavailability. Terminal errors: <code>not_found</code> / HTTP 404, <code>validation_failed</code>, and other 4xx contract errors.</li>
+        <li id="decision-json"><strong>Claimed JSON:</strong> claimed output uses <code>type: "plan-review.agent.next.v1"</code>, <code>status: "claimed"</code>, <code>planId</code>, <code>commentId</code>, <code>claimId</code>, <code>conversationPayload</code>, <code>ackCommand</code>, <code>resolveCommand</code>, and <code>resolveAfterAck: true</code>. <code>resolveCommand</code> is follow-up guidance only and is valid after a successful ack, never as an alternative to ack for a claimed comment.</li>
+        <li id="decision-empty"><strong>Empty JSON:</strong> non-waiting empty output exits <code>0</code> with <code>{ "type": "plan-review.agent.next.v1", "status": "empty", "planId": "..." }</code>. If a previous claim is still active, rerunning <code>agent next</code> must not double-claim it; the command reports <code>empty</code> unless another pending comment is available. After release or lease expiry, the same comment can be claimed again through normal queue state.</li>
+        <li id="decision-errors"><strong>Error output:</strong> successful <code>--json</code> results are JSON on stdout. Errors stay on the existing CLI <code>PlanReviewError</code> stderr path so this change does not create a second CLI-wide error protocol. Existing exit mapping applies: <code>watch_timeout</code> uses status code <code>1</code> and exits <code>1</code>; API/terminal errors such as <code>not_found</code> 404, <code>validation_failed</code>, and exhausted <code>network_error</code> 503 exit <code>2</code>. Tests must assert stderr content and these exit codes.</li>
+        <li id="decision-api"><strong>Server API:</strong> use existing claim and event/poll APIs first. Do not add a new API route unless implementation evidence shows the CLI cannot satisfy the issue’s queue-backed contract with existing endpoints.</li>
+        <li id="decision-watch"><strong>Watch preservation:</strong> leave <code>plan-review watch</code> available and documented as optional low-latency/debug stream, not correctness-critical agent delivery.</li>
+      </ul>
+    </section>
+
+    <section id="target-contract">
+      <h2>Target command contract</h2>
+      <article id="claimed-contract" class="success">
+        <h3>Claimed result</h3>
+        <pre><code>{
+  "type": "plan-review.agent.next.v1",
+  "status": "claimed",
+  "planId": "plan_123",
+  "commentId": "cmt_123",
+  "claimId": "claim_123",
+  "conversationPayload": {
+    "type": "browser.comment.v1",
+    "commentId": "cmt_123",
+    "evidence": {
+      "reviewUrl": "http://mbp.braid-python.ts.net:4317/p/plan_123"
+    }
+  },
+  "ackCommand": "plan-review ack cmt_123 --claim claim_123 --summary \"...\" --changed-files &lt;paths&gt; --json --url http://mbp.braid-python.ts.net:4317",
+  "resolveCommand": "plan-review resolve cmt_123 --note \"Done\" --json --url http://mbp.braid-python.ts.net:4317",
+  "resolveAfterAck": true
+}</code></pre>
+      </article>
+      <article id="empty-contract">
+        <h3>Empty result</h3>
+        <pre><code>{
+  "type": "plan-review.agent.next.v1",
+  "status": "empty",
+  "planId": "plan_123"
+}</code></pre>
+      </article>
+      <article id="error-contract" class="danger">
+        <h3>Timeout / terminal error result</h3>
+        <pre><code>stderr: ERROR: watch_timeout No pending browser comment arrived before timeout
+NEXT: Retry plan-review agent next plan_123 --wait --json after verifying the reviewer service is reachable, or run --no-wait to check the current queue.
+exitCode: 1</code></pre>
+      </article>
+      <article id="contract-notes" class="warning">
+        <h3>Contract notes</h3>
+        <p>The command should enrich relative <code>conversationPayload.evidence.reviewUrl</code> using the resolved service URL, matching current <code>watch</code> behavior. <code>ackCommand</code> and <code>resolveCommand</code> should include the resolved <code>--url</code> so the next operation targets the same service. <code>resolveCommand</code> must be labeled as valid only after successful ack because the current server rejects resolving a claimed comment before it is acknowledged. Error output intentionally uses the existing CLI stderr protocol; do not add a new JSON error envelope in this issue.</p>
+      </article>
+    </section>
+
+    <section id="harness-smoke-contract">
+      <h2>Pi/Codex/Claude Code harness smoke contract</h2>
+      <article id="automated-harness-fixture" class="decision">
+        <h3>Automated restart fixture</h3>
+        <p>Add <code>src/test-fixtures/harness-smoke.ts</code> and wire <code>agent-listener-harness-smoke</code> into <code>src/test-fixtures/run.ts</code>. The automated fixture runs three labeled listener workers named <code>pi</code>, <code>codex</code>, and <code>claude-code</code>; each worker invokes the built CLI command, not a direct API shortcut: <code>node dist/cli.js agent next &lt;planId&gt; --wait --json --timeout 30000 --url &lt;baseUrl&gt;</code>. For each worker, the fixture creates comment #1, waits up to 30 seconds for the worker to claim it, calls <code>ack</code> with the returned claim ID, then optionally resolves it. The fixture then closes the Fastify app, restarts <code>createApp()</code> with the same <code>dbPath</code> and explicitly rebinds to the same captured host and port so <code>&lt;baseUrl&gt;</code> is unchanged for the still-running listener command, creates comment #2, and waits up to 30 seconds for the same worker loop to claim, ack, and optionally resolve it after reconnect/retry. This automated fixture proves the shared command contract and listener loop survive service restart at the same URL; it does not pretend to validate real LLM CLI authentication or TUI behavior.</p>
+      </article>
+      <article id="real-harness-smoke" class="decision">
+        <h3>Real harness release gate</h3>
+        <p>Add an automated real-harness mode in <code>src/test-fixtures/harness-smoke.ts</code> plus operator docs in <code>docs/agent-listener-harness-smoke.md</code> for the actual Pi, Codex, and Claude Code CLIs. Real mode is the release gate when those CLIs are available: the controller registers the test plan, writes <code>/tmp/plan-reviewer-harness-smoke-prompt.md</code> from a checked-in prompt template under <code>src/test-fixtures</code>, launches each real harness with the command templates in <code>#harness-commands</code>, creates comments through the API, restarts the service on the same URL/port, polls server comment state to measure claim and ack timing, captures harness stdout/stderr, and writes evidence JSON. The prompt contract requires each harness to drain with <code>plan-review agent next &lt;planId&gt; --no-wait --json --url &lt;service-url&gt;</code>, listen with <code>plan-review agent next &lt;planId&gt; --wait --json --url &lt;service-url&gt;</code>, ack every claimed comment with the returned claim ID, optionally resolve after ack, rerun listen immediately, retry after service restart on the same service URL/port, and stop only after two comments are processed. The docs must state preconditions clearly: <code>docs/</code> may need to be created, Pi/Codex/Claude Code CLIs must be installed and authenticated, and the Claude path requires an authenticated <code>codex</code> tmux session or a clear precondition-missing failure. Harness driving code or prompt templates may live under <code>src/test-fixtures</code>, <code>scripts</code>, or <code>docs</code>; no Pi/Codex/Claude-specific logic may enter production <code>src/</code>.</p>
+      </article>
+      <article id="harness-commands">
+        <h3>Required real harness command templates</h3>
+        <pre><code># Pi
+pi --no-session -p "$(cat /tmp/plan-reviewer-harness-smoke-prompt.md)"
+
+# Codex; model/config flags may be overridden by CODEX_HARNESS_FLAGS for local installs
+codex exec ${CODEX_HARNESS_FLAGS:--m gpt-5.5 -c 'model_reasoning_effort="medium"'} -s workspace-write -C "$REPO" - &lt; /tmp/plan-reviewer-harness-smoke-prompt.md
+
+# Claude Code, launched through authenticated user tmux session
+prompt=/tmp/plan-reviewer-harness-smoke-prompt.md
+out=/tmp/plan-reviewer-harness-smoke-claude.out
+tmux new-window -t codex -n claude-harness-smoke \
+  "cd '$REPO' &amp;&amp; zsh -ilc 'claude -p \"\$(&lt; $prompt)\" &gt; $out 2&gt;&amp;1; echo EXIT=\$? &gt;&gt; $out'"</code></pre>
+      </article>
+      <article id="harness-evidence">
+        <h3>Pass/fail evidence</h3>
+        <p>Both automated and real harness smokes must emit JSON evidence with: <code>harness</code>, <code>mode</code> (<code>simulated</code> or <code>real</code>), <code>planId</code>, <code>serviceUrl</code>, <code>firstCommentId</code>, <code>secondCommentId</code>, <code>firstClaimLatencyMs</code>, <code>secondClaimLatencyMs</code>, <code>firstAckLatencyMs</code>, <code>secondAckLatencyMs</code>, <code>restartObserved</code>, <code>sameServiceUrlAfterRestart</code>, <code>listenerRestartedOrReconnected</code>, <code>ackResults</code>, <code>resolveResults</code>, and <code>manualIntervention: false</code>. Simulated mode fails if either comment is not claimed and acked within 30 seconds. Real mode fails if either comment is not claimed within 60 seconds or not acked within 180 seconds, if a resolve is attempted before ack, if service restart is not observed at the same URL/port, or if any manual intervention is required after harness startup.</p>
+      </article>
+    </section>
+
+    <section id="acceptance-criteria">
+      <h2>Acceptance criteria</h2>
+      <ol>
+        <li id="ac-1"><code>plan-review agent next &lt;planId&gt; --no-wait --json</code> returns <code>status: "empty"</code> and exits <code>0</code> when no pending comment exists.</li>
+        <li id="ac-2"><code>plan-review agent next &lt;planId&gt; --no-wait --json</code> claims one pending comment and returns <code>commentId</code>, <code>claimId</code>, and <code>conversationPayload.type === "browser.comment.v1"</code>.</li>
+        <li id="ac-3"><code>plan-review agent next &lt;planId&gt; --wait --json --timeout &lt;ms&gt;</code> blocks until a comment exists, then returns exactly one claimed comment and exits <code>0</code>.</li>
+        <li id="ac-4">The returned <code>claimId</code> can be passed directly to <code>plan-review ack &lt;commentId&gt; --claim &lt;claimId&gt; ... --json</code>.</li>
+        <li id="ac-5">If the process exits or the agent misses its notification, rerunning the command is safe because queue and claim leases remain authoritative: active claims are not double-claimed, and released or expired claims become pending and claimable again.</li>
+        <li id="ac-6">Registration output and <code>agentInstructions</code> prefer <code>plan-review agent next &lt;planId&gt; --wait --json</code> and document <code>watch</code> as optional.</li>
+        <li id="ac-7">Existing <code>plan-review watch</code>, <code>queue claim</code>, <code>ack</code>, <code>resolve</code>, and registration JSON compatibility fields remain available.</li>
+        <li id="ac-8">Harness smoke tests prove Pi, Codex, and Claude Code can each subscribe to plan comments through the registered listener loop, claim and ack incoming comments within the mode-specific budgets in <code>#harness-evidence</code>, survive a same-URL plan-review service restart, restart or reconnect their listener, and catch a subsequent comment without manual nudges.</li>
+      </ol>
+    </section>
+
+    <section id="bdd-scenarios">
+      <h2>BDD scenarios</h2>
+      <article id="bdd-empty">
+        <h3>BDD-1: Empty non-waiting queue</h3>
+        <p><strong>Given</strong> a registered plan with no pending comments, <strong>When</strong> an agent runs <code>plan-review agent next &lt;planId&gt; --no-wait --json</code>, <strong>Then</strong> stdout is valid JSON with <code>status: "empty"</code> and no claim is created.</p>
+      </article>
+      <article id="bdd-claim">
+        <h3>BDD-2: Immediate pending comment</h3>
+        <p><strong>Given</strong> a registered plan with one pending browser comment, <strong>When</strong> the agent runs <code>agent next --no-wait --json</code>, <strong>Then</strong> the command claims that comment, returns <code>claimId</code>, returns the original <code>browser.comment.v1</code> payload, and leaves the comment in <code>claimed</code> state until ack, release, or lease expiry.</p>
+      </article>
+      <article id="bdd-wait">
+        <h3>BDD-3: Waiting command</h3>
+        <p><strong>Given</strong> no pending comment at command start, <strong>When</strong> <code>agent next --wait --json --timeout 5000</code> is running and a reviewer creates a comment, <strong>Then</strong> the command detects queue availability, claims one comment, prints one claimed payload, and exits.</p>
+      </article>
+      <article id="bdd-retry">
+        <h3>BDD-4: Missed process notification recovery</h3>
+        <p><strong>Given</strong> an earlier agent process exited or missed a harness notification, <strong>When</strong> the agent reruns <code>agent next --no-wait --json</code> while a prior claim is still active, <strong>Then</strong> it does not double-claim that comment. <strong>When</strong> the prior claim lease expires and <code>claimComments()</code> automatically releases it back to pending, <strong>Then</strong> the command uses queue state to claim the actionable comment instead of depending on prior stream sequence.</p>
+      </article>
+      <article id="bdd-timeout">
+        <h3>BDD-5: Wait timeout</h3>
+        <p><strong>Given</strong> no pending comment arrives before the timeout, <strong>When</strong> <code>agent next --wait --timeout 50 --json</code> runs, <strong>Then</strong> it exits non-zero with an actionable timeout error and does not claim or ack anything.</p>
+      </article>
+      <article id="bdd-registration">
+        <h3>BDD-6: Registration guidance</h3>
+        <p><strong>Given</strong> an agent registers a plan, <strong>When</strong> the CLI human output or API <code>agentInstructions</code> is inspected, <strong>Then</strong> the primary command is <code>plan-review agent next &lt;planId&gt; --wait --json</code>, the resume check is <code>--no-wait</code>, and <code>plan-review watch</code> is labeled optional/debug-only.</p>
+      </article>
+      <article id="bdd-harness-smoke">
+        <h3>BDD-7: Pi, Codex, and Claude Code listener recovery</h3>
+        <p><strong>Given</strong> identical registered test plans for Pi, Codex, and Claude Code, <strong>When</strong> <code>src/test-fixtures/harness-smoke.ts</code> runs simulated mode and real mode with the command templates in <code>#harness-smoke-contract</code>, <strong>Then</strong> each harness claims and acks both comments within the mode-specific budgets, acks each comment before any optional resolve, records the same-URL service restart/reconnect event, and reports zero manual interventions.</p>
+      </article>
+    </section>
+
+    <section id="phase-plan">
+      <h2>Phase-by-phase execution plan</h2>
+
+      <article id="phase-p1-contracts">
+        <h3>P1 - Contract and tests</h3>
+        <h4>End State</h4>
+        <p>Tests define the new agent-next JSON contract, registration-instruction target, and expected CLI command surface before implementation.</p>
+        <h4>Tests first</h4>
+        <ul>
+          <li>Add contract tests for <code>AgentNextResult</code> claimed and empty shapes.</li>
+          <li>Add CLI help/surface tests proving <code>plan-review agent next</code> exists with <code>--wait</code>, <code>--no-wait</code>, <code>--timeout</code>, <code>--json</code>, and optional <code>--lease-seconds</code>; when omitted, the command relies on the existing server-side claim lease default.</li>
+          <li>Add registration-instruction tests that currently fail because <code>preferredCommand</code> is still watcher-first.</li>
+        </ul>
+        <h4>Work</h4>
+        <ul>
+          <li>Create a small shared module if useful, for example <code>src/agentNext.ts</code>, with types/builders for claimed and empty payloads plus command string helpers.</li>
+          <li>Keep helpers pure: no database or network imports in contract builders.</li>
+        </ul>
+        <h4>Expected files</h4>
+        <p><code>src/__tests__/contracts.test.ts</code>, optional new <code>src/agentNext.ts</code>, optional updates to <code>src/registrationInstructions.ts</code>.</p>
+        <h4>Verify</h4>
+        <pre><code>bun run build && node --test dist/__tests__/contracts.test.js</code></pre>
+      </article>
+
+      <article id="phase-p2-no-wait">
+        <h3>P2 - Non-waiting next command</h3>
+        <h4>End State</h4>
+        <p><code>plan-review agent next --no-wait --json</code> returns either one claimed comment payload or an explicit empty result using existing claim APIs.</p>
+        <h4>Tests first</h4>
+        <ul>
+          <li>Add a spawned CLI test with a fake HTTP server returning an empty <code>comments/claim</code> response; assert empty output and exit <code>0</code>.</li>
+          <li>Add a spawned CLI test with one pending claim response; assert <code>commentId</code>, <code>claimId</code>, enriched <code>conversationPayload.evidence.reviewUrl</code>, <code>ackCommand</code>, and <code>resolveCommand</code>.</li>
+          <li>Add an API-backed test using <code>createApp()</code> to prove the command’s claim can be acknowledged by <code>plan-review ack</code>.</li>
+        </ul>
+        <h4>Work</h4>
+        <ul>
+          <li>Add an <code>agent</code> command group and <code>next &lt;planId&gt;</code> subcommand in <code>src/cli.ts</code>.</li>
+          <li>Implement a single immediate attempt by calling <code>POST /api/plans/:planId/comments/claim</code> with <code>{ mode: "one" }</code> plus <code>leaseSeconds</code> only when the user supplied <code>--lease-seconds</code>; otherwise rely on the server-side default lease.</li>
+          <li>Transform <code>claimed[0]</code> into the target JSON payload; if no claimed item is returned, emit the empty result.</li>
+          <li>Reuse existing URL resolution and conversation-payload enrichment behavior.</li>
+        </ul>
+        <h4>Expected files</h4>
+        <p><code>src/cli.ts</code>, <code>src/__tests__/contracts.test.ts</code>, optional <code>src/agentNext.ts</code>.</p>
+        <h4>Verify</h4>
+        <pre><code>bun run build && node --test dist/__tests__/contracts.test.js</code></pre>
+      </article>
+
+      <article id="phase-p3-wait">
+        <h3>P3 - Waiting and timeout behavior</h3>
+        <h4>End State</h4>
+        <p><code>agent next --wait</code> waits portably for queue availability, claims exactly one comment, survives SSE fallback to polling, and respects timeout.</p>
+        <h4>Tests first</h4>
+        <ul>
+          <li>Add a spawned CLI test where the fake service returns empty first, then exposes a comment after an event/poll signal; assert one claimed payload and process exit.</li>
+          <li>Add a fallback test where SSE is unavailable and polling eventually leads to a successful claim.</li>
+          <li>Add a timeout test where no claim becomes available and the command exits non-zero without emitting a successful empty result.</li>
+          <li>Add a service-restart test where <code>--wait</code> begins before the server is reachable, the server later starts, a comment is created, and the command claims it before timeout.</li>
+        </ul>
+        <h4>Work</h4>
+        <ul>
+          <li>Implement wait as a queue-first loop: attempt claim, wait for an SSE/poll signal or retry interval, then attempt claim again.</li>
+          <li>Do not treat stream sequence as authoritative; stream/poll only wakes the command to re-check the queue.</li>
+          <li>Respect <code>--timeout &lt;ms&gt;</code> across claim attempts, SSE reads, reconnects, poll fallback, and sleeps; absence of <code>--timeout</code> means indefinite wait.</li>
+          <li>Use 1s initial retry/backoff capped at 10s for service-unavailable, SSE disconnect, and poll fallback during <code>--wait</code>; treat unknown-plan <code>404</code> and validation failures as terminal.</li>
+          <li>Use existing <code>PlanReviewError</code> stderr output for timeout, terminal network, validation, and unknown-plan errors even under <code>--json</code>.</li>
+        </ul>
+        <h4>Expected files</h4>
+        <p><code>src/cli.ts</code>, <code>src/__tests__/contracts.test.ts</code>, optional <code>src/agentNext.ts</code>.</p>
+        <h4>Verify</h4>
+        <pre><code>bun run build && node --test dist/__tests__/contracts.test.js</code></pre>
+      </article>
+
+      <article id="phase-p4-registration-docs">
+        <h3>P4 - Registration instructions and docs</h3>
+        <h4>End State</h4>
+        <p>Registration output steers every agent toward <code>agent next --wait</code>; <code>watch</code> remains available but no longer carries correctness responsibility.</p>
+        <h4>Tests first</h4>
+        <ul>
+          <li>Update registration helper tests to assert <code>preferredCommand</code> is <code>plan-review agent next &lt;planId&gt; --wait --json</code>.</li>
+          <li>Assert human <code>register</code> output has a required-next-action block for the listener loop: drain with <code>agent next --no-wait --json --url &lt;service-url&gt;</code>, listen with <code>agent next --wait --json --url &lt;service-url&gt;</code>, rerun listen after every ack and any optional resolve, and treat <code>watch</code> as optional/debug.</li>
+          <li>Assert <code>--json</code> registration output preserves the unwrapped API data payload with updated <code>agentInstructions</code> and existing compatibility fields like <code>watchCommand</code>.</li>
+        </ul>
+        <h4>Work</h4>
+        <ul>
+          <li>Update <code>src/registrationInstructions.ts</code> to build the queue-backed agent instruction contract, including <code>drainCommand</code>, <code>listenCommand</code>, <code>optionalWatchCommand</code>, and a <code>processingLoop</code> that explicitly acks first, resolves only after ack when appropriate, and reruns listen afterward.</li>
+          <li>Update <code>registrationInstructionsOutput()</code> in <code>src/cli.ts</code> to render copy-paste-safe <code>agent next</code> listener-loop commands with resolved <code>--url</code>.</li>
+          <li>Update <code>README.md</code> Agent Watch Contract / Queue Lifecycle sections: primary listener loop around <code>agent next</code>, resume drain with <code>--no-wait</code>, optional <code>watch</code>, no harness-specific correctness dependency.</li>
+        </ul>
+        <h4>Expected files</h4>
+        <p><code>src/registrationInstructions.ts</code>, <code>src/cli.ts</code>, <code>README.md</code>, <code>src/__tests__/contracts.test.ts</code>.</p>
+        <h4>Verify</h4>
+        <pre><code>bun run build && node --test dist/__tests__/contracts.test.js</code></pre>
+      </article>
+
+      <article id="phase-p5-e2e">
+        <h3>P5 - End-to-end verification</h3>
+        <h4>End State</h4>
+        <p>The new contract is proven by automated tests and a real CLI flow against the local server.</p>
+        <h4>Tests first</h4>
+        <p>No additional product-contract RED step unless P1-P4 uncover missing coverage; add the harness fixture as a release-gate test in this phase.</p>
+        <h4>Work</h4>
+        <ul>
+          <li>Run the full test suite.</li>
+          <li>Run the fixture/e2e suites named in README.</li>
+          <li>Perform a live smoke: register a plan with <code>--execution-ready false</code>, run <code>agent next --wait --json --timeout</code>, create a browser/API comment, confirm the command exits with a claimed payload, then ack using the returned <code>claimId</code>.</li>
+          <li>Add and run <code>src/test-fixtures/harness-smoke.ts</code> plus the <code>agent-listener-harness-smoke</code> scenario in <code>src/test-fixtures/run.ts</code>. Extend <code>run.ts</code> argument parsing for <code>--harness-mode</code>, <code>--harnesses</code>, and <code>--evidence</code>.</li>
+          <li>Implement simulated mode with three labeled listener workers (<code>pi</code>, <code>codex</code>, <code>claude-code</code>) that invoke <code>node dist/cli.js agent next ...</code>, process two comments by acking first and optionally resolving after ack, and survive a <code>createApp()</code> restart on the same <code>dbPath</code> and same host/port.</li>
+          <li>Implement real mode in the same controller. The controller starts and owns the plan-review service process for the smoke run, registers the test plan, writes <code>/tmp/plan-reviewer-harness-smoke-prompt.md</code> from a checked-in prompt template under <code>src/test-fixtures</code>, launches the requested real harnesses, creates first and second comments through the API, restarts its owned service on the same host/port, polls API comment state to verify claim and ack-before-optional-resolve, captures harness stdout/stderr, measures claim and ack latency, writes the evidence JSON, and fails on timeout, changed service URL, missing ack, pre-ack resolve, harness exit, or any manual intervention marker.</li>
+          <li>Add <code>docs/agent-listener-harness-smoke.md</code> documenting the real Pi, Codex, and Claude Code local smoke procedure with the exact command templates from <code>#harness-commands</code>, the controller command, prompt-template source, the same-URL service restart requirement, and the evidence JSON fields from <code>#harness-evidence</code>.</li>
+          <li>Run the automated real-harness controller when Pi, Codex, and Claude Code are available locally; if any harness is unavailable, the branch is not release-complete for this issue until the missing harness run is completed or the user explicitly waives that gate.</li>
+        </ul>
+        <h4>Expected files</h4>
+        <p><code>src/test-fixtures/run.ts</code>, new <code>src/test-fixtures/harness-smoke.ts</code>, new <code>src/test-fixtures/harness-smoke-prompt.md</code>, new <code>docs/agent-listener-harness-smoke.md</code>, and any small test-only controller helpers under <code>src/test-fixtures</code> or <code>scripts</code>. No harness-specific logic may be added to production <code>src/</code>.</p>
+        <h4>Verify</h4>
+        <pre><code>bun run test
+bun run test:e2e
+bun run test:fixtures -- --scenario seeded-comment-stream
+bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated
+bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode real --harnesses pi,codex,claude-code --evidence /tmp/plan-reviewer-harness-smoke.json</code></pre>
+      </article>
+    </section>
+
+    <section id="verification-strategy">
+      <h2>Verification strategy</h2>
+      <table id="coverage-matrix">
+        <thead><tr><th>Acceptance</th><th>BDD</th><th>Test layer</th><th>Verification command</th></tr></thead>
+        <tbody>
+          <tr><td>AC-1</td><td>BDD-1</td><td>Spawned CLI against fake service plus API-backed empty queue test</td><td><code>bun run build && node --test dist/__tests__/contracts.test.js</code></td></tr>
+          <tr><td>AC-2, AC-4</td><td>BDD-2</td><td>Spawned CLI + <code>createApp()</code> queue/ack integration</td><td><code>bun run build && node --test dist/__tests__/contracts.test.js</code></td></tr>
+          <tr><td>AC-3</td><td>BDD-3, BDD-5</td><td>Spawned CLI wait, poll fallback, timeout tests</td><td><code>bun run build && node --test dist/__tests__/contracts.test.js</code></td></tr>
+          <tr><td>AC-5</td><td>BDD-4</td><td>Lease-expiry/retry test using existing queue semantics plus agent-next retry</td><td><code>bun run build && node --test dist/__tests__/contracts.test.js</code></td></tr>
+          <tr><td>AC-6</td><td>BDD-6</td><td>Registration helper, API response, CLI human output, README review</td><td><code>bun run build && node --test dist/__tests__/contracts.test.js</code></td></tr>
+          <tr><td>AC-7</td><td>All</td><td>Existing contract/e2e/fixture suites</td><td><code>bun run test</code>; <code>bun run test:e2e</code>; <code>bun run test:fixtures -- --scenario seeded-comment-stream</code></td></tr>
+          <tr><td>AC-8</td><td>BDD-7</td><td>Automated labeled-worker restart fixture plus automated real Pi/Codex/Claude Code local smoke controller, both producing evidence JSON</td><td><code>bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated</code>; <code>bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode real --harnesses pi,codex,claude-code --evidence /tmp/plan-reviewer-harness-smoke.json</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="delivery-order">
+      <h2>Delivery order</h2>
+      <ol>
+        <li>Lock failing tests and helper contracts.</li>
+        <li>Ship immediate queue-backed claiming.</li>
+        <li>Ship wait/poll/timeout behavior.</li>
+        <li>Switch registration instructions and README to the new primary command.</li>
+        <li>Run full automated, live-smoke, and Pi/Codex/Claude Code harness-recovery verification.</li>
+      </ol>
+    </section>
+
+    <section id="non-goals">
+      <h2>Non-goals</h2>
+      <ul>
+        <li>Do not remove SSE or <code>plan-review watch</code>.</li>
+        <li>Do not add production Pi, Codex, Claude Code, tmux, or other harness-specific adapters; harness-specific smoke tests are allowed only as verification fixtures for the shared command contract.</li>
+        <li>Do not make the service spawn or supervise local agent watcher processes.</li>
+        <li>Do not auto-ack or auto-resolve comments.</li>
+        <li>Do not change database schema unless implementation proves current claim/lease storage cannot support the contract.</li>
+      </ul>
+    </section>
+
+    <section id="decisions-deviations-log">
+      <h2>Decisions / Deviations log</h2>
+      <article id="log-2026-06-04" class="decision">
+        <h3>2026-06-04 - Plan created from issue #7</h3>
+        <p>Decision: implement <code>plan-review agent next</code> as a CLI-first queue-backed command that uses existing claim and event APIs. This keeps the implementation small and faithful to the issue’s goal: make the agent contract a normal command that returns one actionable item and exits, while preserving <code>watch</code> for low-latency/debug integrations.</p>
+      </article>
+      <article id="log-2026-06-04-harness-smoke" class="decision">
+        <h3>2026-06-04 - Browser comment integrated</h3>
+        <p>Decision: add explicit Pi, Codex, and Claude Code harness smoke coverage as a release gate. The product still ships a harness-agnostic command contract, but verification must prove the three primary agent environments can subscribe, act promptly, recover after a plan-review service restart, and catch later comments without manual nudges.</p>
+      </article>
+      <article id="log-2026-06-05-review-integration" class="decision">
+        <h3>2026-06-05 - Codex and Claude review blockers integrated</h3>
+        <p>Decision: lock the listener-loop contract, wait/retry/error semantics, and harness-smoke execution model. The plan now separates automated labeled-worker restart coverage from the real Pi/Codex/Claude Code local smoke release gate, names the exact expected files and commands, and keeps all harness-specific code out of production <code>src/</code>.</p>
+      </article>
+      <article id="log-2026-06-05-implementation" class="decision">
+        <h3>2026-06-05 - Scoped implementation complete</h3>
+        <p>Implemented the queue-backed <code>plan-review agent next</code> command, updated registration instructions and README, added contract tests, added simulated and real harness smoke fixtures, and integrated scoped Codex/Claude review findings. Final verification passed <code>bun run test</code>, <code>seeded-comment-stream</code>, simulated harness smoke, and real Pi/Codex/Claude Code harness smoke with restart/reconnect evidence. Deferred the unrelated browser lightbox e2e timeout because no UI/lightbox files changed in this branch.</p>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

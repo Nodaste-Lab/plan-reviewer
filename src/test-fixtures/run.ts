@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createApp } from '../server/app.js';
 import { sha256 } from '../util.js';
+import { runHarnessSmoke } from './harness-smoke.js';
 
 function argValue(name: string): string | undefined {
   const index = process.argv.indexOf(name);
@@ -158,4 +159,9 @@ const scenario = argValue('--scenario') ?? 'all';
 if (scenario === 'seeded-comment-stream' || scenario === 'all') await seededCommentStream();
 if (scenario === 'sse-latency' || scenario === 'all') await sseLatency();
 if (scenario === 'queue-claim-ack' || scenario === 'all') await queueClaimAck();
+if (scenario === 'agent-listener-harness-smoke' || scenario === 'all') {
+  const harnessMode = (argValue('--harness-mode') ?? 'simulated') as 'simulated' | 'real';
+  const harnesses = (argValue('--harnesses') ?? 'pi,codex,claude-code').split(',').map(item => item.trim()).filter(Boolean);
+  await runHarnessSmoke({ mode: harnessMode, harnesses, evidencePath: argValue('--evidence') });
+}
 console.log(`fixture scenario passed: ${scenario}`);

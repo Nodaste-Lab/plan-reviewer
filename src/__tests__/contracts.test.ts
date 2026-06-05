@@ -15,6 +15,7 @@ import { findImageSources } from '../htmlImages.js';
 import { resolveServiceUrl } from '../config.js';
 import { discoverImageAssets } from '../cli.js';
 import { buildRegistrationAgentInstructions, renderRegistrationInstructionCommands } from '../registrationInstructions.js';
+import { buildAgentNextClaimed, buildAgentNextEmpty } from '../agentNext.js';
 import { sha256 } from '../util.js';
 import { domAnchor, registeredApp, sampleHtml, sampleRegisterPayload, tempDbPath } from './helpers.js';
 
@@ -48,34 +49,65 @@ test('schemas validate locked registration, comment, and claim contracts', () =>
   assert.throws(() => claimCommentsSchema.parse({ mode: 'bulk', limit: 0 }));
 });
 
-test('registration instruction helper builds canonical watcher guidance and rendered commands', () => {
+test('agent next helpers build locked empty and claimed contracts', () => {
+  assert.deepEqual(buildAgentNextEmpty('plan_abc'), {
+    type: 'plan-review.agent.next.v1',
+    status: 'empty',
+    planId: 'plan_abc'
+  });
+
+  const claimed = buildAgentNextClaimed({
+    planId: 'plan_abc',
+    commentId: 'cmt_abc',
+    claimId: 'claim_abc',
+    serviceUrl: 'http://reviewer.example:4317',
+    conversationPayload: { type: 'browser.comment.v1', evidence: { reviewUrl: 'http://reviewer.example:4317/p/plan_abc' } }
+  });
+  assert.equal(claimed.type, 'plan-review.agent.next.v1');
+  assert.equal(claimed.status, 'claimed');
+  assert.equal(claimed.commentId, 'cmt_abc');
+  assert.equal(claimed.claimId, 'claim_abc');
+  assert.equal(claimed.conversationPayload.type, 'browser.comment.v1');
+  assert.match(claimed.ackCommand, /plan-review ack cmt_abc --claim claim_abc/);
+  assert.match(claimed.resolveCommand, /plan-review resolve cmt_abc --note "Done"/);
+  assert.equal(claimed.resolveAfterAck, true);
+});
+
+test('registration instruction helper builds canonical agent-next guidance and rendered commands', () => {
   const instructions = buildRegistrationAgentInstructions({ planId: 'plan_abc', reviewUrl: '/p/plan_abc' });
   assert.equal(instructions.type, 'plan-review.registration.instructions.v1');
   assert.equal(instructions.required, true);
-  assert.match(instructions.summary, /Start a monitor/);
-  assert.match(instructions.nextAction, /Start the comment watcher/);
+  assert.match(instructions.summary, /queue-backed agent next/);
+  assert.match(instructions.nextAction, /Drain pending comments/);
+  assert.match(instructions.nextAction, /process and ack it before starting another listener/);
   assert.equal(instructions.serviceUrlRequired, true);
-  assert.match(instructions.serviceUrlInstruction, /durable tmux/);
+  assert.match(instructions.serviceUrlInstruction, /optional watch command is debug-only/);
   assert.equal(instructions.reviewUrl, '/p/plan_abc');
-  assert.equal(instructions.preferredCommand, 'plan-review watch plan_abc --mode queue --format browser-comment --json');
-  assert.equal(instructions.durableCommand, "mkdir -p ~/.plan-reviewer/watchers && tmux new-session -d -s plan-review-plan_abc 'plan-review watch plan_abc --mode queue --format browser-comment --conversation-out ~/.plan-reviewer/watchers/plan_abc.ndjson --json'");
-  assert.equal(instructions.referenceImplementations.length, 2);
+  assert.equal(instructions.preferredCommand, 'plan-review agent next plan_abc --wait --json');
+  assert.equal(instructions.drainCommand, 'plan-review agent next plan_abc --no-wait --json');
+  assert.equal(instructions.listenCommand, instructions.preferredCommand);
+  assert.equal(instructions.optionalWatchCommand, 'plan-review watch plan_abc --mode queue --format browser-comment --json');
+  assert.match(instructions.durableCommand, /until plan-review agent next plan_abc --wait --json; do sleep 1; done/);
+  assert.equal(instructions.referenceImplementations.length, 3);
   assert.equal(instructions.referenceImplementations[0].tool, 'process');
   assert.equal(instructions.referenceImplementations[0].command, instructions.preferredCommand);
-  assert.equal(instructions.referenceImplementations[1].tool, 'tmux');
+  assert.equal(instructions.referenceImplementations[1].tool, 'shell-loop');
   assert.equal(instructions.referenceImplementations[1].command, instructions.durableCommand);
+  assert.equal(instructions.referenceImplementations[2].command, instructions.optionalWatchCommand);
   assert.match(instructions.processingLoop.join('\n'), /browser\.comment\.v1/);
-  assert.match(instructions.processingLoop.join('\n'), /commentId/);
-  assert.match(instructions.processingLoop.join('\n'), /claimed\[0\]\.claim\.id/);
-  assert.match(instructions.processingLoop.join('\n'), /data\.claimed\[0\]\.claim\.id/);
-  assert.match(instructions.processingLoop.join('\n'), /plan-review queue claim plan_abc --ids <commentId> --json/);
+  assert.match(instructions.processingLoop.join('\n'), /commentId and claimId/);
+  assert.match(instructions.processingLoop.join('\n'), /exits successfully after exactly one claim/);
+  assert.match(instructions.processingLoop.join('\n'), /do not blindly loop successful claim commands/);
   assert.match(instructions.processingLoop.join('\n'), /plan-review ack <commentId> --claim <claimId> --summary/);
-  assert.match(instructions.processingLoop.join('\n'), /plan-review resolve <commentId> --note/);
+  assert.match(instructions.processingLoop.join('\n'), /Resolve only after a successful ack/);
+  assert.match(instructions.processingLoop.join('\n'), /plan-review watch only as an optional/);
 
   const rendered = renderRegistrationInstructionCommands(instructions, 'http://reviewer.example:4317');
-  assert.equal(rendered.preferredCommand, 'plan-review watch plan_abc --mode queue --format browser-comment --json --url http://reviewer.example:4317');
-  assert.match(rendered.durableCommand, /^mkdir -p ~\/\.plan-reviewer\/watchers && tmux new-session -d -s plan-review-plan_abc '/);
-  assert.match(rendered.durableCommand, /--conversation-out ~\/\.plan-reviewer\/watchers\/plan_abc\.ndjson --json --url http:\/\/reviewer\.example:4317'$/);
+  assert.equal(rendered.preferredCommand, 'plan-review agent next plan_abc --wait --json --url http://reviewer.example:4317');
+  assert.equal(rendered.drainCommand, 'plan-review agent next plan_abc --no-wait --json --url http://reviewer.example:4317');
+  assert.equal(rendered.listenCommand, rendered.preferredCommand);
+  assert.equal(rendered.optionalWatchCommand, 'plan-review watch plan_abc --mode queue --format browser-comment --json --url http://reviewer.example:4317');
+  assert.match(rendered.durableCommand, /until plan-review agent next plan_abc --wait --json --url http:\/\/reviewer\.example:4317; do sleep 1; done/);
   assert.equal(rendered.referenceImplementations[0].command, rendered.preferredCommand);
   assert.equal(rendered.referenceImplementations[1].command, rendered.durableCommand);
 });
@@ -93,11 +125,12 @@ test('registration API returns agent instructions additively across registration
     const snapshotData = snapshot.json().data;
     assert.equal(snapshotData.agentInstructions.type, 'plan-review.registration.instructions.v1');
     assert.equal(snapshotData.agentInstructions.required, true);
-    assert.match(snapshotData.agentInstructions.summary, /Start a monitor/);
-    assert.match(snapshotData.agentInstructions.nextAction, /Start the comment watcher/);
+    assert.match(snapshotData.agentInstructions.summary, /queue-backed agent next/);
+    assert.match(snapshotData.agentInstructions.nextAction, /Drain pending comments/);
     assert.equal(snapshotData.agentInstructions.serviceUrlRequired, true);
-    assert.match(snapshotData.agentInstructions.serviceUrlInstruction, /quoted inner watcher/);
-    assert.match(snapshotData.agentInstructions.preferredCommand, /--mode queue --format browser-comment --json/);
+    assert.match(snapshotData.agentInstructions.serviceUrlInstruction, /debug-only/);
+    assert.match(snapshotData.agentInstructions.preferredCommand, /agent next .* --wait --json/);
+    assert.match(snapshotData.agentInstructions.drainCommand, /agent next .* --no-wait --json/);
     assert.doesNotMatch(snapshotData.agentInstructions.preferredCommand, /--url/);
     assert.equal(snapshotData.agentInstructions.reviewUrl, snapshotData.reviewUrl);
     assert.equal(snapshotData.watchCommand, `plan-review watch ${snapshotData.planId} --mode queue`);
@@ -150,7 +183,7 @@ test('registration API returns agent instructions additively across registration
     const reregisterData = reregister.json().data;
     assert.equal(reregisterData.planId, filesystemData.planId);
     assert.equal(reregisterData.agentInstructions.planId, reregisterData.planId);
-    assert.match(reregisterData.agentInstructions.durableCommand, /--conversation-out/);
+    assert.match(reregisterData.agentInstructions.durableCommand, /until plan-review agent next/);
 
     const invalid = await app.inject({
       method: 'POST',
@@ -1168,6 +1201,263 @@ test('lease expiry emits a queue release event during polling', async () => {
   }
 });
 
+function runCli(args: string[]): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+  return new Promise(resolve => {
+    const child = spawn(process.execPath, ['dist/cli.js', ...args], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', chunk => { stdout += chunk; });
+    child.stderr.on('data', chunk => { stderr += chunk; });
+    child.on('close', code => resolve({ code, stdout, stderr }));
+  });
+}
+
+test('CLI agent next --no-wait returns empty when claim API has no pending comments', async () => {
+  const server = http.createServer((request, response) => {
+    if (request.url === '/api/plans/plan_1/comments/claim') {
+      request.resume();
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ ok: true, data: { claimed: [], events: [], skipped: [] } }));
+      return;
+    }
+    response.statusCode = 404;
+    response.end('not found');
+  });
+
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address();
+    assert(address && typeof address !== 'string');
+    const result = await runCli(['agent', 'next', 'plan_1', '--no-wait', '--json', '--url', `http://127.0.0.1:${address.port}`]);
+    assert.equal(result.code, 0, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), { type: 'plan-review.agent.next.v1', status: 'empty', planId: 'plan_1' });
+  } finally {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
+
+test('CLI agent next --no-wait claims one comment and returns actionable JSON', async () => {
+  let capturedBody = '';
+  const server = http.createServer((request, response) => {
+    if (request.url === '/api/plans/plan_1/comments/claim') {
+      request.on('data', chunk => { capturedBody += chunk; });
+      request.on('end', () => {
+        response.setHeader('content-type', 'application/json');
+        response.end(JSON.stringify({
+          ok: true,
+          data: {
+            claimed: [{
+              id: 'cmt_1',
+              planId: 'plan_1',
+              status: 'claimed',
+              conversationPayload: { type: 'browser.comment.v1', commentId: 'cmt_1', evidence: { reviewUrl: '/p/plan_1' } },
+              claim: { id: 'claim_1' }
+            }],
+            events: [],
+            skipped: []
+          }
+        }));
+      });
+      return;
+    }
+    response.statusCode = 404;
+    response.end('not found');
+  });
+
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address();
+    assert(address && typeof address !== 'string');
+    const serviceUrl = `http://127.0.0.1:${address.port}`;
+    const result = await runCli(['agent', 'next', 'plan_1', '--no-wait', '--json', '--lease-seconds', '60', '--url', serviceUrl]);
+    assert.equal(result.code, 0, result.stderr);
+    assert.deepEqual(JSON.parse(capturedBody), { mode: 'one', leaseSeconds: 60 });
+    const parsed = JSON.parse(result.stdout);
+    assert.equal(parsed.type, 'plan-review.agent.next.v1');
+    assert.equal(parsed.status, 'claimed');
+    assert.equal(parsed.commentId, 'cmt_1');
+    assert.equal(parsed.claimId, 'claim_1');
+    assert.equal(parsed.conversationPayload.evidence.reviewUrl, `${serviceUrl}/p/plan_1`);
+    assert.match(parsed.ackCommand, /plan-review ack cmt_1 --claim claim_1/);
+    assert.match(parsed.ackCommand, new RegExp(`--url ${serviceUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+    assert.match(parsed.resolveCommand, /plan-review resolve cmt_1/);
+    assert.match(parsed.resolveCommand, new RegExp(`--url ${serviceUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+    assert.equal(parsed.resolveAfterAck, true);
+  } finally {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
+
+test('CLI agent next claimed result can be acknowledged with returned claim id', async () => {
+  const app = createApp({ dbPath: tempDbPath('agent-next-ack') });
+  await app.listen({ host: '127.0.0.1', port: 0 });
+  try {
+    const address = app.server.address();
+    assert(address && typeof address !== 'string');
+    const serviceUrl = `http://127.0.0.1:${address.port}`;
+    const registered = await app.inject({ method: 'POST', url: '/api/plans/register', payload: sampleRegisterPayload() });
+    const { planId, versionId } = registered.json().data;
+    await app.inject({ method: 'POST', url: `/api/plans/${planId}/comments`, payload: { versionId, body: 'Agent next please.', anchorType: 'dom', anchor: domAnchor() } });
+    const next = await runCli(['agent', 'next', planId, '--no-wait', '--json', '--url', serviceUrl]);
+    assert.equal(next.code, 0, next.stderr);
+    const payload = JSON.parse(next.stdout);
+    assert.equal(payload.status, 'claimed');
+    const ackResult = await runCli(['ack', payload.commentId, '--claim', payload.claimId, '--summary', 'acked', '--json', '--url', serviceUrl]);
+    assert.equal(ackResult.code, 0, ackResult.stderr);
+    assert.equal(JSON.parse(ackResult.stdout).comment.status, 'acknowledged');
+  } finally {
+    await app.close();
+  }
+});
+
+test('CLI agent next --wait wakes via poll fallback and claims exactly one comment', async () => {
+  let claims = 0;
+  let polls = 0;
+  const server = http.createServer((request, response) => {
+    if (request.url === '/api/plans/plan_1/comments/claim') {
+      claims += 1;
+      request.resume();
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({
+        ok: true,
+        data: claims >= 2
+          ? { claimed: [{ id: 'cmt_1', planId: 'plan_1', conversationPayload: { type: 'browser.comment.v1', commentId: 'cmt_1' }, claim: { id: 'claim_1' } }], events: [] }
+          : { claimed: [], events: [] }
+      }));
+      return;
+    }
+    if (request.url?.startsWith('/api/plans/plan_1/events/poll')) {
+      polls += 1;
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({
+        ok: true,
+        data: polls === 1
+          ? { events: [], latestSequence: 0, retryAfterMs: 10 }
+          : { events: [{ sequence: 1, eventType: 'comment.created', payload: { commentId: 'cmt_1' } }], latestSequence: 1, retryAfterMs: 10 }
+      }));
+      return;
+    }
+    if (request.url?.startsWith('/api/plans/plan_1/events')) {
+      response.statusCode = 503;
+      response.end('sse unavailable');
+      return;
+    }
+    response.statusCode = 404;
+    response.end('not found');
+  });
+
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address();
+    assert(address && typeof address !== 'string');
+    const result = await runCli(['agent', 'next', 'plan_1', '--wait', '--json', '--timeout', '1000', '--url', `http://127.0.0.1:${address.port}`]);
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout).commentId, 'cmt_1');
+    assert.equal(claims, 2);
+  } finally {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
+
+test('CLI agent next validates wait flags and timeout errors', async () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+  const conflicting = spawnSync(process.execPath, ['dist/cli.js', 'agent', 'next', 'plan_1', '--wait', '--no-wait', '--json'], { cwd: root, encoding: 'utf8' });
+  assert.equal(conflicting.status, 2);
+  assert.match(conflicting.stderr, /validation_failed/);
+
+  const missingJson = spawnSync(process.execPath, ['dist/cli.js', 'agent', 'next', 'plan_1', '--no-wait'], { cwd: root, encoding: 'utf8' });
+  assert.equal(missingJson.status, 2);
+  assert.match(missingJson.stderr, /agent next requires --json/);
+});
+
+test('CLI agent next --wait starts from queue tail instead of replaying stale poll events', async () => {
+  let claims = 0;
+  const pollAfterSequences: number[] = [];
+  const sseLastEventIds: Array<string | undefined> = [];
+  const server = http.createServer((request, response) => {
+    if (request.url === '/api/plans/plan_1/comments/claim') {
+      claims += 1;
+      request.resume();
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ ok: true, data: { claimed: [], events: [] } }));
+      return;
+    }
+    if (request.url?.startsWith('/api/plans/plan_1/events/poll')) {
+      const url = new URL(request.url, 'http://127.0.0.1');
+      const afterSequence = Number(url.searchParams.get('afterSequence') ?? 0);
+      pollAfterSequences.push(afterSequence);
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({
+        ok: true,
+        data: {
+          events: afterSequence === 0 ? [{ sequence: 1, eventType: 'comment.created', payload: { commentId: 'already-acked' } }] : [],
+          latestSequence: 1,
+          retryAfterMs: 25
+        }
+      }));
+      return;
+    }
+    if (request.url?.startsWith('/api/plans/plan_1/events')) {
+      sseLastEventIds.push(request.headers['last-event-id']?.toString());
+      response.statusCode = 503;
+      response.end('sse unavailable');
+      return;
+    }
+    response.statusCode = 404;
+    response.end('not found');
+  });
+
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address();
+    assert(address && typeof address !== 'string');
+    const result = await runCli(['agent', 'next', 'plan_1', '--wait', '--json', '--timeout', '100', '--url', `http://127.0.0.1:${address.port}`]);
+    assert.equal(result.code, 1, result.stderr);
+    assert.equal(claims < 8, true, `stale events caused rapid claim loop: ${claims} attempts`);
+    assert.deepEqual(pollAfterSequences.slice(0, 2), [0, 1]);
+    assert.equal(sseLastEventIds[0], '1');
+  } finally {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
+
+test('CLI agent next --wait times out without claiming or empty output', async () => {
+  const server = http.createServer((request, response) => {
+    if (request.url === '/api/plans/plan_1/comments/claim') {
+      request.resume();
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ ok: true, data: { claimed: [], events: [] } }));
+      return;
+    }
+    if (request.url?.startsWith('/api/plans/plan_1/events/poll')) {
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ ok: true, data: { events: [], latestSequence: 0, retryAfterMs: 10 } }));
+      return;
+    }
+    if (request.url?.startsWith('/api/plans/plan_1/events')) {
+      response.statusCode = 503;
+      response.end('sse unavailable');
+      return;
+    }
+    response.statusCode = 404;
+    response.end('not found');
+  });
+
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address();
+    assert(address && typeof address !== 'string');
+    const result = await runCli(['agent', 'next', 'plan_1', '--wait', '--json', '--timeout', '50', '--url', `http://127.0.0.1:${address.port}`]);
+    assert.equal(result.code, 1, result.stderr);
+    assert.equal(result.stdout, '');
+    assert.match(result.stderr, /ERROR: watch_timeout No pending browser comment arrived before timeout/);
+    assert.match(result.stderr, /NEXT: Retry plan-review agent next plan_1 --wait --json/);
+  } finally {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
+
 test('CLI watch polling fallback keeps waiting for once until timeout or event', async () => {
   let polls = 0;
   const server = http.createServer((request, response) => {
@@ -1277,18 +1567,23 @@ test('CLI register prints required watcher instructions and preserves JSON paylo
     assert.match(human.stdout, /Source sync: snapshot/);
     assert.doesNotMatch(human.stdout, /^Watch command:/m);
     assert.match(human.stdout, /REQUIRED NEXT ACTION:/);
-    assert.match(human.stdout, /Start the comment watcher before continuing implementation or review work\./);
+    assert.match(human.stdout, /Drain pending comments with agent next --no-wait/);
+    assert.match(human.stdout, /Drain pending comments:/);
+    assert.match(human.stdout, /plan-review agent next plan_cli --no-wait --json --url http:\/\/127\.0\.0\.1:\d+/);
+    assert.match(human.stdout, /Primary listener command:/);
+    assert.match(human.stdout, /plan-review agent next plan_cli --wait --json --url http:\/\/127\.0\.0\.1:\d+/);
+    assert.match(human.stdout, /Optional debug watch stream:/);
     assert.match(human.stdout, /plan-review watch plan_cli --mode queue --format browser-comment --json --url http:\/\/127\.0\.0\.1:\d+/);
-    assert.match(human.stdout, /tmux new-session -d -s plan-review-plan_cli 'plan-review watch plan_cli --mode queue --format browser-comment --conversation-out ~\/\.plan-reviewer\/watchers\/plan_cli\.ndjson --json --url http:\/\/127\.0\.0\.1:\d+'/);
     assert.match(human.stdout, /Comment lifecycle:/);
-    assert.match(human.stdout, /claimed\[0\]\.claim\.id/);
+    assert.match(human.stdout, /commentId and claimId/);
     assert.match(human.stdout, /plan-review ack <commentId> --claim <claimId>/);
 
     const json = await runRegister(['--execution-ready', 'true', '--json']);
     assert.equal(json.code, 0, json.stderr);
     const parsed = JSON.parse(json.stdout);
     assert.deepEqual(parsed, registrationData);
-    assert.equal(parsed.agentInstructions.preferredCommand, 'plan-review watch plan_cli --mode queue --format browser-comment --json');
+    assert.equal(parsed.agentInstructions.preferredCommand, 'plan-review agent next plan_cli --wait --json');
+    assert.equal(parsed.agentInstructions.drainCommand, 'plan-review agent next plan_cli --no-wait --json');
     assert.doesNotMatch(parsed.agentInstructions.durableCommand, /--url/);
     assert.equal(registerRequests, 2);
   } finally {
@@ -1536,12 +1831,18 @@ test('CLI help is wired through the installed bin entrypoint', () => {
   assert.equal(result.status, 0);
   assert.match(result.stdout, /plan-review/);
   assert.match(result.stdout, /watch/);
+  assert.match(result.stdout, /agent/);
   assert.match(result.stdout, /ack/);
   assert.match(result.stdout, /resolve/);
   assert.match(result.stdout, /release/);
   assert.match(spawnSync(process.execPath, ['dist/cli.js', 'register', '--help'], { cwd: root, encoding: 'utf8' }).stdout, /--new-thread/);
   assert.match(spawnSync(process.execPath, ['dist/cli.js', 'index', '--help'], { cwd: root, encoding: 'utf8' }).stdout, /--repo-key/);
   assert.match(spawnSync(process.execPath, ['dist/cli.js', 'queue', '--help'], { cwd: root, encoding: 'utf8' }).stdout, /list/);
+  assert.match(spawnSync(process.execPath, ['dist/cli.js', 'agent', '--help'], { cwd: root, encoding: 'utf8' }).stdout, /next/);
+  assert.match(spawnSync(process.execPath, ['dist/cli.js', 'agent', 'next', '--help'], { cwd: root, encoding: 'utf8' }).stdout, /--wait/);
+  assert.match(spawnSync(process.execPath, ['dist/cli.js', 'agent', 'next', '--help'], { cwd: root, encoding: 'utf8' }).stdout, /--no-wait/);
+  assert.match(spawnSync(process.execPath, ['dist/cli.js', 'agent', 'next', '--help'], { cwd: root, encoding: 'utf8' }).stdout, /--timeout/);
+  assert.match(spawnSync(process.execPath, ['dist/cli.js', 'agent', 'next', '--help'], { cwd: root, encoding: 'utf8' }).stdout, /--lease-seconds/);
   assert.match(spawnSync(process.execPath, ['dist/cli.js', 'ack', '--help'], { cwd: root, encoding: 'utf8' }).stdout, /--changed-files/);
   assert.match(spawnSync(process.execPath, ['dist/cli.js', 'resolve', '--help'], { cwd: root, encoding: 'utf8' }).stdout, /--commit/);
   assert.match(spawnSync(process.execPath, ['dist/cli.js', 'release', '--help'], { cwd: root, encoding: 'utf8' }).stdout, /--claim/);

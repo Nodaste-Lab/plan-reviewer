@@ -29,7 +29,7 @@ plan-review index
 
 Open the printed review URL. Publishing requires metadata for the worktree path, branch, optional Linear issue, and whether codex/claude-code review results say the plan is execution ready. The CLI fills worktree and branch from git; pass `--linear-issue <issue>` when applicable and always pass `--execution-ready true|false` based only on agent-review results.
 
-The registration response is also the canonical source of watcher instructions for agents: successful CLI registration prints a `REQUIRED NEXT ACTION:` block with copy-paste watcher commands, and API registration returns `agentInstructions` inside the existing `{ ok, data }` response envelope. Agents should start a watcher before continuing plan work.
+The registration response is also the canonical source of listener instructions for agents: successful CLI registration prints a `REQUIRED NEXT ACTION:` block with copy-paste `agent next` commands, and API registration returns `agentInstructions` inside the existing `{ ok, data }` response envelope. Agents should drain pending queue work and start the listener command before continuing plan work.
 
 By default, registration live-links the local source file: the repo HTML file is authoritative, service blobs are derived cache/history, and later edits to the file sync into the latest rendered version automatically. Open review pages reload their iframe when a synced version is available.
 
@@ -41,9 +41,25 @@ plan-review register thoughts/plans/my-plan.html --snapshot --execution-ready fa
 
 The browser shell renders sanitized HTML in a no-script iframe and keeps the comment UI in the parent page. Selecting a DOM element opens the composer; image and text comments use the same comment API with `anchorType: "image"` or `anchorType: "text_range"`. If the service cannot read a live-linked source file, it keeps serving the last good rendered version and exposes the sync failure in the API and sidebar.
 
-## Agent Watch Contract
+## Agent Listener Contract
 
-Agents can keep an open SSE connection for queue events. Prefer the `agentInstructions.preferredCommand` returned by registration; API command templates are service-local and adapters should render them with `--url <registration service URL>` before execution. CLI human output already renders copy-paste commands with the resolved `--url`.
+Agents should use the queue-backed `agent next` command as the primary browser-comment delivery path. Prefer the `agentInstructions.preferredCommand` returned by registration; API command templates are service-local and adapters should render them with `--url <registration service URL>` before execution. CLI human output already renders copy-paste commands with the resolved `--url`.
+
+On start or resume, drain any pending work until the command reports `empty`:
+
+```bash
+plan-review agent next plan_123 --no-wait --json --url http://127.0.0.1:4317
+```
+
+Then listen for the next actionable comment:
+
+```bash
+plan-review agent next plan_123 --wait --json --url http://127.0.0.1:4317
+```
+
+A claimed result includes `commentId`, `claimId`, the original `browser.comment.v1` `conversationPayload`, and copy-paste `ackCommand` / `resolveCommand` guidance. After acting on the comment, ack with the returned claim ID, optionally resolve after ack, then immediately run the wait command again. Active claims are not double-claimed by reruns; released or expired claims return to pending through normal queue state.
+
+The older watch stream remains available as an optional low-latency/debug stream, not as the correctness-critical agent delivery path:
 
 ```bash
 plan-review watch plan_123 --mode queue --format browser-comment --json --url http://127.0.0.1:4317
@@ -63,16 +79,22 @@ SSE frames use `id: <sequence>`, `event: comment.created|comment.claimed|comment
 GET /api/plans/:planId/events/poll?afterSequence=<last-seen-sequence>&mode=queue
 ```
 
-Poll responses include `{ events, latestSequence, retryAfterMs }`. The CLI falls back to 10-second REST polling when the stream is unavailable.
+Poll responses include `{ events, latestSequence, retryAfterMs }`. `agent next --wait` uses SSE and REST polling only to wake another authoritative queue claim attempt; missed events do not make comments unrecoverable.
 
 ## Queue Lifecycle
 
-Comments are delivered at least once. An agent should claim, process, ack, then optionally resolve. Browser-comment watcher payloads include `commentId`; claim that exact ID and read the claim ID from `claimed[0].claim.id` in CLI JSON (raw API path: `data.claimed[0].claim.id`).
+Comments are delivered at least once. An agent should claim, process, ack, then optionally resolve. `agent next` performs the claim and returns the claim ID directly.
+
+```bash
+plan-review agent next plan_123 --wait --json
+plan-review ack cmt_123 --claim claim_123 --note "Updated the plan" --json
+plan-review resolve cmt_123 --note "Done" --json
+```
+
+`plan-review queue claim` remains available for manual/debug flows:
 
 ```bash
 plan-review queue claim plan_123 --ids cmt_123 --json
-plan-review ack cmt_123 --claim claim_123 --note "Updated the plan" --json
-plan-review resolve cmt_123 --note "Done" --json
 ```
 
 Direct ack without an active matching claim returns `409 claim_required`. Claims have a default 5-minute lease and expired claims return to `pending`.
@@ -98,6 +120,7 @@ bun install
 bun run test
 bun run test:e2e -- --grep "dom annotation|image annotation|plan index"
 bun run test:fixtures -- --scenario seeded-comment-stream
+bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated
 ```
 
 ## License
