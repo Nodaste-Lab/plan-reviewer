@@ -22,6 +22,37 @@ function isInsideDirectory(parent: string, child: string): boolean {
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
+class IncompleteSourceWriteError extends Error {
+  code = 'incomplete_source_write';
+
+  constructor(sourcePath: string) {
+    super(`Incomplete source write observed for ${sourcePath}; kept serving the last good render.`);
+  }
+}
+
+function trimTrailingWhitespaceAndComments(value: string): string {
+  let current = value.trimEnd();
+  while (current.endsWith('-->')) {
+    const commentStart = current.lastIndexOf('<!--');
+    if (commentStart === -1) return current;
+    current = current.slice(0, commentStart).trimEnd();
+  }
+  return current;
+}
+
+function removeTrailingCloseTag(value: string, tagName: 'body' | 'html'): string | undefined {
+  const current = trimTrailingWhitespaceAndComments(value);
+  const match = new RegExp(`</${tagName}\\s*>$`, 'i').exec(current);
+  if (!match || match.index === undefined) return undefined;
+  return current.slice(0, match.index);
+}
+
+function isCompleteHtmlSource(html: string): boolean {
+  const withoutHtml = removeTrailingCloseTag(html, 'html');
+  if (withoutHtml === undefined) return false;
+  return removeTrailingCloseTag(withoutHtml, 'body') !== undefined;
+}
+
 export function discoverSourceAssets(html: string, sourcePath: string) {
   const planDir = path.dirname(sourcePath);
   const absolutePlanDir = path.resolve(planDir);
@@ -165,6 +196,7 @@ export class SourceSyncService {
       const stat = fs.statSync(plan.sourcePath);
       if (!stat.isFile()) throw new Error(`Source path is not a file: ${plan.sourcePath}`);
       const html = fs.readFileSync(plan.sourcePath, 'utf8');
+      if (!isCompleteHtmlSource(html)) throw new IncompleteSourceWriteError(plan.sourcePath);
       const fileHash = sha256(html);
       const htmlChanged = fileHash !== version.fileHash;
       const needsWatcherRefresh = this.recoveryWatchers.has(plan.id);
@@ -205,11 +237,14 @@ export class SourceSyncService {
   private fail(planId: string, error: unknown, reason = 'filesystem_watch'): void {
     const message = error instanceof Error ? error.message : String(error);
     const code = error && typeof error === 'object' && 'code' in error ? String((error as { code?: unknown }).code) : undefined;
+    const nextAction = code === 'incomplete_source_write'
+      ? 'The last good render is still being served. Finish the source write with closing </body> and </html> tags; source sync will retry on the next stable complete change.'
+      : 'Fix source file permissions/path or run plan-review register <path> --snapshot to keep a detached review.';
     const event = this.store.markPlanSyncFailed(planId, {
       message,
       code,
       reason,
-      nextAction: 'Fix source file permissions/path or run plan-review register <path> --snapshot to keep a detached review.'
+      nextAction
     });
     this.bus.emitEvent(event);
   }

@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Issue 10 Partial Source Write Guard Plan</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0b1020; --panel:#111827; --muted:#a7b0c0; --text:#e5e7eb; --accent:#7dd3fc; --border:#2b364d; --warn:#fbbf24; --ok:#22c55e; }
+    body { margin:0; background:var(--bg); color:var(--text); font:16px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    main { max-width:1040px; margin:0 auto; padding:32px 20px 56px; }
+    section, article { background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:20px; margin:16px 0; }
+    h1, h2, h3 { color:#f8fafc; line-height:1.2; } h1 { margin-top:0; font-size:34px; } h2 { margin-top:0; }
+    a { color:var(--accent); } code, pre { background:#020617; color:#dbeafe; border-radius:6px; } code { padding:.1rem .35rem; } pre { padding:14px; overflow:auto; }
+    .status { display:inline-block; border:1px solid var(--ok); color:#bbf7d0; border-radius:999px; padding:4px 10px; font-weight:700; }
+    .muted { color:var(--muted); } .warn { color:#fde68a; } .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; }
+    li { margin:.35rem 0; } table { border-collapse:collapse; width:100%; } th,td { border:1px solid var(--border); padding:8px; vertical-align:top; } th { color:#f8fafc; background:#0f172a; }
+  </style>
+</head>
+<body>
+<main>
+  <h1 id="title">Issue 10 Partial Source Write Guard Plan</h1>
+  <p class="status" id="status">Status: implementation complete; scoped Codex and Claude reviews passed</p>
+
+  <section id="goal">
+    <h2>Goal</h2>
+    <p>Prevent live-linked plan review pages from silently publishing and displaying intermediate, partially written source HTML as the latest plan version.</p>
+  </section>
+
+  <section id="why-this-plan-exists">
+    <h2>Why this plan exists</h2>
+    <p>GitHub issue <a href="https://github.com/Nodaste-Lab/plan-reviewer/issues/10">#10</a> documents a reliable reproduction where the source watcher renders the prefix of a plan while an agent is mid-write. The browser shell looks healthy, comments still show, and no sync warning appears, but later plan sections are absent.</p>
+  </section>
+
+  <section id="authority-and-inputs">
+    <h2>Authority and inputs</h2>
+    <ul>
+      <li>Issue source of truth: <a href="https://github.com/Nodaste-Lab/plan-reviewer/issues/10">GitHub issue #10</a>.</li>
+      <li>Triage evidence from live browser reproduction: fresh registration/comment/claim paths loaded fully; non-atomic partial source write reproduced missing middle/bottom plan content.</li>
+      <li>Current source-sync implementation: <code>src/server/sourceSync.ts</code>.</li>
+      <li>Current render and store contracts: <code>src/render/render.ts</code>, <code>src/storage/database.ts</code>, <code>src/server/app.ts</code>.</li>
+      <li>Regression test home: <code>src/__tests__/contracts.test.ts</code> plus browser fixture coverage in <code>src/test-fixtures/e2e-run.ts</code> only if contract coverage is insufficient.</li>
+    </ul>
+  </section>
+
+  <section id="current-implementation-reality">
+    <h2>Current implementation reality</h2>
+    <div class="grid">
+      <article id="reality-watchers">
+        <h3>Watcher behavior</h3>
+        <p><code>SourceSyncService.register()</code> creates chokidar watchers with <code>awaitWriteFinish: false</code>. Changes schedule <code>syncNow()</code> after a fixed 500ms debounce.</p>
+      </article>
+      <article id="reality-rendering">
+        <h3>Rendering behavior</h3>
+        <p><code>performSync()</code> reads the source once, renders those bytes, and commits a new filesystem-watch version when render succeeds. It does not prove the write is complete.</p>
+      </article>
+      <article id="reality-invalid-html">
+        <h3>Invalid source behavior</h3>
+        <p><code>renderPlan()</code> rejects parse errors, and source read failures keep the last good render. Missing end tags can still parse/render enough to become a successful partial version.</p>
+      </article>
+      <article id="reality-ui">
+        <h3>UI behavior</h3>
+        <p>The browser refreshes the iframe on <code>plan.version.synced</code>. If a partial source is committed as a valid version, the UI truthfully shows that bad version and has no reason to warn.</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="progress">
+    <h2>Progress</h2>
+    <ul>
+      <li><label><input type="checkbox" checked> P1 tests lock partial-write regression</label></li>
+      <li><label><input type="checkbox" checked> P2 source sync reads only stable complete documents</label></li>
+      <li><label><input type="checkbox" checked> P3 browser/API status remains truthful during deferred sync</label></li>
+      <li><label><input type="checkbox" checked> P4 lifecycle verification covers issue reproduction</label></li>
+    </ul>
+  </section>
+
+  <section id="resume-instructions">
+    <h2>Resume instructions (agent)</h2>
+    <p>Read this plan fully, then execute the first unchecked Progress item. Do not widen scope beyond issue #10. Preserve the live-linked source workflow and existing missing-source recovery behavior. Use tests first for each phase, then implement the smallest source-sync change that makes those tests pass. Ask the user only if a compatibility decision would change accepted plan document shape.</p>
+  </section>
+
+  <section id="product-intent-alignment">
+    <h2>Product intent alignment</h2>
+    <ul>
+      <li><strong>Default workflow:</strong> users and agents keep editing ordinary live-linked HTML plan files; the service absorbs transient write states.</li>
+      <li><strong>Safe default:</strong> never replace the latest reviewable version with source bytes that look like an incomplete write.</li>
+      <li><strong>Self-healing:</strong> when the source becomes stable and complete, automatically sync and clear any warning without manual re-registration.</li>
+      <li><strong>Fail-closed boundary:</strong> if the source remains incomplete or unreadable beyond a bounded retry window, keep serving the last good version and expose an actionable sync warning.</li>
+      <li><strong>Operator/agent guidance:</strong> error metadata should explain that the service observed an incomplete source write, kept the last good render, and will retry on the next stable change.</li>
+    </ul>
+  </section>
+
+  <section id="locked-decisions">
+    <h2>Locked decisions</h2>
+    <ol>
+      <li id="decision-last-good"><strong>Last good remains authoritative during unsafe sync.</strong> Do not publish a new version until the source passes stability/completeness checks.</li>
+      <li id="decision-filesystem-only"><strong>Guard filesystem sync, not manual snapshot semantics.</strong> Issue #10 is about live-linked source watchers and startup rehydration for filesystem plans.</li>
+      <li id="decision-no-size-heuristic"><strong>Avoid rejecting intentional large deletions by size alone.</strong> Size deltas may inform diagnostics, but should not be the sole validity rule.</li>
+      <li id="decision-complete-html"><strong>Live-linked plan source is expected to be a complete HTML document.</strong> The primary mandatory guard must inspect the raw source bytes, not parse5's re-serialized output, because parse5 can auto-close truncated documents. Treat the source as incomplete unless its final significant raw tokens close the document structure, e.g. <code>&lt;/body&gt;</code> followed only by optional whitespace/comments and <code>&lt;/html&gt;</code> followed only by optional whitespace. Do not use broad substring checks; embedded examples containing literal or escaped close-tag text must not satisfy completeness.</li>
+      <li id="decision-assets"><strong>Image-only changes must still sync.</strong> The guard must not break existing relative image watch tests.</li>
+      <li id="decision-dynamic-rendering"><strong>Dynamic browser refresh remains a product contract.</strong> The fix must not degrade live-linked plans into manual refresh or snapshot-only behavior; complete source changes should still propagate to already-open review pages automatically.</li>
+      <li id="decision-primary-guard"><strong>Structural completeness is the primary guard.</strong> Stat stability and chokidar write-finish behavior are supplementary timing protections only; they cannot catch a quiescent truncated file after a service restart. The same raw-source completeness guard must run through the existing <code>rehydrateFromStore()</code> → <code>syncNow('startup')</code> → <code>performSync()</code> path without adding a divergent startup branch.</li>
+    </ol>
+  </section>
+
+  <section id="acceptance-criteria">
+    <h2>Acceptance criteria</h2>
+    <ul>
+      <li id="ac1"><strong>AC1:</strong> A filesystem-watch sync triggered while the source file contains only a valid-looking prefix does not create a new latest version and does not replace the rendered iframe content.</li>
+      <li id="ac2"><strong>AC2:</strong> The plan metadata reports a truthful non-synced state with actionable detail when an incomplete source write is deferred or rejected.</li>
+      <li id="ac3"><strong>AC3:</strong> Once the complete source file is restored or rewritten atomically, source sync creates the expected latest version and clears the warning automatically.</li>
+      <li id="ac4"><strong>AC4:</strong> Source deletion/unreadable-source recovery and missing/changed relative image sync behavior continue to pass existing tests.</li>
+      <li id="ac5"><strong>AC5:</strong> Service restart while a source file is incomplete does not promote the incomplete source during startup rehydration.</li>
+      <li id="ac6"><strong>AC6:</strong> Fresh registration, browser comment creation, and claimed-comment state remain unaffected by the guard.</li>
+      <li id="ac7"><strong>AC7:</strong> Adversarial negative cases are covered: valid-looking prefixes, prefixes containing embedded close-tag text before the truncation point, parse-invalid fragments, rapid partial-to-full write flaps, service restart with partial source, intentional complete large-to-small rewrites, and asset-only changes all produce the correct last-good, warning, or sync behavior without silent partial publication.</li>
+      <li id="ac8"><strong>AC8:</strong> Already-open browser review pages dynamically refresh after complete source changes and asset-only changes, while incomplete writes never trigger a visible partial iframe refresh.</li>
+    </ul>
+  </section>
+
+  <section id="bdd-scenarios">
+    <h2>BDD scenarios</h2>
+    <article id="bdd-partial-watch">
+      <h3>BDD1: watcher sees partial write</h3>
+      <p><strong>Given</strong> a live-linked plan has a last good render containing top, middle, and bottom sentinels, <strong>when</strong> the watched source temporarily contains only the top prefix, <strong>then</strong> the latest render still contains the last good middle/bottom sentinels and the plan status says the new source update was deferred or failed as incomplete.</p>
+    </article>
+    <article id="bdd-recovery">
+      <h3>BDD2: complete source recovers automatically</h3>
+      <p><strong>Given</strong> an incomplete source update was rejected, <strong>when</strong> the complete HTML source is written, <strong>then</strong> the service syncs the new content, emits a plan version sync event, and removes the warning from API/UI metadata.</p>
+    </article>
+    <article id="bdd-startup">
+      <h3>BDD3: restart with incomplete source</h3>
+      <p><strong>Given</strong> a filesystem plan exists in the database with a last good render, <strong>when</strong> the service starts and the source file is currently incomplete, <strong>then</strong> startup rehydration does not promote the incomplete bytes and the plan remains reviewable from the cached last good render.</p>
+    </article>
+    <article id="bdd-intentional-small-plan">
+      <h3>BDD4: intentional complete small plan remains valid</h3>
+      <p><strong>Given</strong> a user intentionally replaces a large plan with a much smaller but complete HTML document, <strong>when</strong> source sync runs, <strong>then</strong> the smaller complete document is accepted despite the size decrease.</p>
+    </article>
+    <article id="bdd-assets">
+      <h3>BDD5: relative asset changes still sync</h3>
+      <p><strong>Given</strong> the HTML source is unchanged and a watched relative image changes, <strong>when</strong> source sync runs, <strong>then</strong> the rendered asset hash updates as it does today.</p>
+    </article>
+    <article id="bdd-invalid-fragment">
+      <h3>BDD6: parse-invalid fragment keeps last good render</h3>
+      <p><strong>Given</strong> a live-linked plan has a last good render, <strong>when</strong> the source temporarily contains parse-invalid or unsafe HTML, <strong>then</strong> the service does not publish a new version, records actionable sync failure metadata, and keeps serving the last good render.</p>
+    </article>
+    <article id="bdd-embedded-close-tags">
+      <h3>BDD7: embedded close-tag text does not bypass completeness</h3>
+      <p><strong>Given</strong> a live-linked plan contains an earlier code example or prose with literal or escaped <code>&lt;/body&gt;</code>/<code>&lt;/html&gt;</code> text, <strong>when</strong> a partial source prefix is cut after that example but before the real document ending, <strong>then</strong> the raw-source completeness guard rejects it and keeps the last good render.</p>
+    </article>
+    <article id="bdd-quiescent-partial">
+      <h3>BDD8: quiescent partial source is rejected on startup</h3>
+      <p><strong>Given</strong> a source file is no longer being written but remains truncated, <strong>when</strong> service startup rehydrates filesystem plans, <strong>then</strong> timing/stability checks alone are not considered sufficient and the structural completeness guard prevents publishing the partial source.</p>
+    </article>
+    <article id="bdd-rapid-flap">
+      <h3>BDD9: rapid partial-to-full write flap does not flash partial content</h3>
+      <p><strong>Given</strong> an agent writes a partial prefix and shortly after writes the complete document, <strong>when</strong> browser pages receive sync events, <strong>then</strong> no partial version is emitted and the final complete version is the only new render shown.</p>
+    </article>
+    <article id="bdd-repeated-incomplete">
+      <h3>BDD10: repeated incomplete writes remain bounded and recoverable</h3>
+      <p><strong>Given</strong> repeated incomplete writes occur over several watcher cycles, <strong>when</strong> source sync retries or defers them, <strong>then</strong> the service keeps the last good render, keeps status truthful, avoids unbounded listener/timer churn, and recovers when a complete document appears.</p>
+    </article>
+    <article id="bdd-open-browser-refresh">
+      <h3>BDD11: open browser refreshes dynamically for complete changes only</h3>
+      <p><strong>Given</strong> a review page is already open, <strong>when</strong> a complete plan edit or watched asset edit is synced, <strong>then</strong> the client receives the sync event and reloads the iframe to the new complete version; <strong>when</strong> an incomplete source write is rejected, <strong>then</strong> the client shows truthful sync status without replacing the iframe with partial content.</p>
+    </article>
+  </section>
+
+  <section id="test-coverage-matrix">
+    <h2>Test coverage matrix</h2>
+    <table>
+      <thead><tr><th>Acceptance</th><th>Scenarios</th><th>Planned test layer</th><th>Likely file</th></tr></thead>
+      <tbody>
+        <tr><td>AC1, AC2</td><td>BDD1</td><td>Node contract/unit test using <code>SourceSyncService.syncNow()</code> against temp source/db; assert no new version, last-good render remains, and failure detail mentions incomplete source</td><td><code>src/__tests__/contracts.test.ts</code></td></tr>
+        <tr><td>AC3</td><td>BDD2</td><td>Contract test: partial rejected, complete rewrite accepted, warning cleared, new version emitted only for complete source</td><td><code>src/__tests__/contracts.test.ts</code></td></tr>
+        <tr><td>AC5</td><td>BDD3</td><td>App restart/rehydration test using same db path with source still incomplete; assert cached last-good render survives startup</td><td><code>src/__tests__/contracts.test.ts</code></td></tr>
+        <tr><td>AC4</td><td>BDD5</td><td>Existing source recovery and image watch tests stay green; add explicit assertion that HTML-unchanged asset sync bypasses partial-document rejection correctly</td><td><code>src/__tests__/contracts.test.ts</code></td></tr>
+        <tr><td>AC6</td><td>Comment lifecycle smoke</td><td>Existing comment and registration API/browser tests stay green; add fixture only if contract tests miss the UI warning path</td><td><code>src/test-fixtures/e2e-run.ts</code></td></tr>
+        <tr><td>AC7</td><td>BDD4, BDD6</td><td>Adversarial negative tests for intentional complete large-to-small rewrite versus incomplete/invalid fragments; assert only incomplete/invalid sources are rejected</td><td><code>src/__tests__/contracts.test.ts</code></td></tr>
+        <tr><td>AC7</td><td>BDD7</td><td>Adversarial raw-source test where a truncated prefix contains earlier literal or escaped <code>&lt;/body&gt;</code>/<code>&lt;/html&gt;</code> text; assert embedded close-tag text does not satisfy completeness</td><td><code>src/__tests__/contracts.test.ts</code></td></tr>
+        <tr><td>AC5, AC7</td><td>BDD8</td><td>Quiescent partial-source startup test proving stat stability and write-finish timing are insufficient alone; assert startup rehydration keeps last-good render</td><td><code>src/__tests__/contracts.test.ts</code></td></tr>
+        <tr><td>AC7</td><td>BDD9, BDD10</td><td>Adversarial timing tests for partial-to-full flaps and repeated incomplete writes; assert no partial event/render is published, timers remain bounded, and final complete source recovers</td><td><code>src/__tests__/contracts.test.ts</code></td></tr>
+        <tr><td>AC8</td><td>BDD11</td><td>Browser or app-level event test proving complete source and asset changes emit refresh-worthy sync events, while incomplete writes do not emit a partial-version sync event</td><td><code>src/test-fixtures/e2e-run.ts</code> or <code>src/__tests__/contracts.test.ts</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="phase-plan">
+    <h2>Phase-by-phase execution plan</h2>
+
+    <article id="phase-p1-tests">
+      <h3>P1: tests lock partial-write regression</h3>
+      <h4>End State</h4>
+      <p>Failing tests prove the current code promotes partial source writes and startup rehydration can persist them.</p>
+      <h4>Tests first</h4>
+      <p>Add tests around <code>SourceSyncService.syncNow()</code> and app restart that use a full HTML document with bottom sentinel, then overwrite with adversarial variants: a valid-looking prefix missing terminal HTML structure and bottom sentinel, a prefix containing earlier literal or escaped close-tag text before truncation, a parse-invalid fragment, a quiescent truncated file on startup, repeated incomplete writes, a rapid partial-to-full flap, and an intentional complete large-to-small rewrite that must still be accepted.</p>
+      <h4>Work</h4>
+      <p>No production work in this phase. Keep tests narrowly scoped to issue #10, but make the negative matrix strong enough that an implementation cannot pass by merely checking file size, by suppressing all source sync, or by breaking complete small-plan and asset-only updates.</p>
+      <h4>Expected files</h4>
+      <ul><li><code>src/__tests__/contracts.test.ts</code></li></ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build
+node --test dist/__tests__/contracts.test.js --test-name-pattern "partial|incomplete|source"</code></pre>
+    </article>
+
+    <article id="phase-p2-source-guard">
+      <h3>P2: source sync reads only stable complete documents</h3>
+      <h4>End State</h4>
+      <p>Filesystem sync waits for stable source state and rejects/defer-syncs incomplete HTML without registering a new version.</p>
+      <h4>Tests first</h4>
+      <p>Run P1 tests and confirm they fail before implementation.</p>
+      <h4>Work</h4>
+      <ul>
+        <li>Introduce a small raw-source completeness helper in <code>src/server/sourceSync.ts</code> and treat it as the mandatory gate before rendering/registering filesystem auto-sync bytes.</li>
+        <li>Make the helper inspect raw source bytes and require terminal document closure at the final significant tokens, so parse5 serialization or embedded close-tag examples cannot satisfy the guard.</li>
+        <li>Optionally add a small source-read stability helper or mirrored write-finish behavior as supplementary protection against actively changing files, but do not rely on timing checks as the core correctness mechanism.</li>
+        <li>On incomplete source, call existing sync-failure metadata path or a new narrowly named deferred-incomplete status while keeping the last good render.</li>
+        <li>Preserve successful sync behavior for complete smaller files and relative asset-only updates.</li>
+        <li>Preserve dynamic client refresh by emitting sync events only after accepted complete renders, not for rejected incomplete source states.</li>
+      </ul>
+      <h4>Expected files</h4>
+      <ul><li><code>src/server/sourceSync.ts</code></li></ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build
+node --test dist/__tests__/contracts.test.js --test-name-pattern "partial|incomplete|source"</code></pre>
+    </article>
+
+    <article id="phase-p3-status">
+      <h3>P3: browser/API status remains truthful during deferred sync</h3>
+      <h4>End State</h4>
+      <p>API and browser sidebar/index explain that the source update was incomplete and the cached last good render is still being served.</p>
+      <h4>Tests first</h4>
+      <p>Add assertions to the P1/P2 tests for <code>lastSyncStatus</code>, <code>lastSyncError.message</code>, and rendered content after incomplete source detection.</p>
+      <h4>Work</h4>
+      <ul>
+        <li>Use existing <code>markPlanSyncFailed()</code> semantics if sufficient.</li>
+        <li>For incomplete writes, tailor the failure message and <code>nextAction</code> so it does not misleadingly describe permissions/path repair or snapshot registration; it should say an incomplete source write was observed, the last good render is still being served, and the service will retry on the next stable complete change.</li>
+        <li>If a distinct status is needed, keep it additive and update only API/UI status rendering that already handles source sync failures.</li>
+        <li>Ensure the warning clears when complete source sync succeeds.</li>
+      </ul>
+      <h4>Expected files</h4>
+      <ul>
+        <li><code>src/server/sourceSync.ts</code></li>
+        <li><code>src/server/app.ts</code> only if existing failure rendering cannot express the state clearly</li>
+        <li><code>src/storage/database.ts</code> only if a new sync status is required</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build
+node --test dist/__tests__/contracts.test.js --test-name-pattern "source sync|partial|incomplete"</code></pre>
+    </article>
+
+    <article id="phase-p4-verification">
+      <h3>P4: lifecycle verification covers issue reproduction</h3>
+      <h4>End State</h4>
+      <p>The full suite passes, and a manual issue-style reproduction confirms the browser no longer displays a partial plan as latest.</p>
+      <h4>Tests first</h4>
+      <p>No new test-first work unless P1-P3 reveal a browser-only gap.</p>
+      <h4>Work</h4>
+      <ul>
+        <li>Run the full automated suite.</li>
+        <li>Manually reproduce issue #10 with a temporary live-linked plan: full render, partial source write, service restart, complete restore.</li>
+        <li>Verify an already-open browser page dynamically refreshes for a complete source edit and does not refresh its iframe to partial content during an incomplete write.</li>
+        <li>Record observed behavior in the PR notes, including whether the UI warning appears and clears.</li>
+      </ul>
+      <h4>Expected files</h4>
+      <ul><li>No new files expected beyond tests/source changes from earlier phases.</li></ul>
+      <h4>Verify</h4>
+      <pre><code>bun run test
+bun run test:e2e</code></pre>
+    </article>
+  </section>
+
+  <section id="verification-strategy">
+    <h2>Verification strategy</h2>
+    <ul>
+      <li>Contract tests prove source-sync correctness without depending on browser timing.</li>
+      <li>Existing image/source recovery tests prove no regression to missing-source and asset watch behavior.</li>
+      <li>Manual browser lifecycle reproduction validates the actual user-visible failure mode from issue #10.</li>
+      <li>Open-browser refresh verification proves the fix strengthens dynamic rendering instead of hiding partial-write risk behind manual refresh or stale caching.</li>
+    </ul>
+  </section>
+
+  <section id="delivery-order">
+    <h2>Delivery order</h2>
+    <ol>
+      <li>Land failing regression tests for partial source writes.</li>
+      <li>Implement stable/complete source guard in <code>SourceSyncService</code>.</li>
+      <li>Tighten API/UI warning assertions only if current failed-sync status is not expressive enough.</li>
+      <li>Run full suite and manual browser reproduction.</li>
+    </ol>
+  </section>
+
+  <section id="non-goals">
+    <h2>Non-goals</h2>
+    <ul>
+      <li>No rewrite of the renderer or sanitizer.</li>
+      <li>No change to browser comment queue semantics.</li>
+      <li>No replacement of live-linked source sync with snapshot-only registration.</li>
+      <li>No broad plan validation policy beyond the minimum needed to reject incomplete filesystem auto-sync reads.</li>
+      <li>No product code changes during this planning step.</li>
+    </ul>
+  </section>
+
+  <section id="decisions-deviations-log">
+    <h2>Decisions / Deviations log</h2>
+    <ul>
+      <li>2026-06-06: Created from reproduction evidence and GitHub issue #10 on branch <code>issue-10-partial-source-write-guard</code>. No implementation started.</li>
+      <li>2026-06-06: Integrated browser review comment requesting adversarial negative coverage by adding AC7, BDD6-BDD8, and explicit negative/timing rows in the test coverage matrix.</li>
+      <li>2026-06-06: Integrated browser review comment requesting dynamic rendering preservation by adding a locked dynamic-refresh decision, AC8, BDD9, event/client refresh test coverage, and manual open-browser verification.</li>
+      <li>2026-06-06: Integrated Claude plan-review blockers by making raw-source structural completeness the mandatory primary guard, adding embedded close-tag and quiescent-partial startup adversarial coverage, clarifying that timing checks are supplementary, tailoring incomplete-write guidance, and correcting the e2e verification command.</li>
+      <li>2026-06-06: Re-ran Codex and Claude plan reviews after blocker integration. Both approved the plan as execution-ready with no remaining blockers.</li>
+      <li>2026-06-06: Completed P1-P3 implementation. Added source-sync contract coverage for partial prefixes, embedded close-tag prefixes, startup rehydration with quiescent incomplete source, repeated incomplete writes, rapid recovery, complete small rewrites, render failures, and event behavior. Implemented raw terminal <code>&lt;/body&gt;</code>/<code>&lt;/html&gt;</code> completeness guard in <code>SourceSyncService</code> with incomplete-write failure guidance. Focused verification passed with <code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js --test-name-pattern "source sync|partial|incomplete"</code>.</li>
+      <li>2026-06-06: Completed P4 verification. <code>bun run test</code> passed, <code>bun run test:e2e</code> passed, and a manual Playwright lifecycle reproduction confirmed an already-open review page keeps the last good iframe during an incomplete source write, shows the incomplete-source warning, refreshes after complete restore, and clears the warning.</li>
+      <li>2026-06-06: After adding the literal close-tag adversarial assertion, reran full automated validation: <code>bun run test</code> passed and <code>bun run test:e2e</code> passed.</li>
+      <li>2026-06-06: Scoped implementation reviews passed. Codex returned <code>VERDICT: PASS_SCOPED</code> with no findings. Claude Code returned <code>VERDICT: PASS_SCOPED</code> with no in-scope defects and one out-of-scope follow-up about the inherent limit of a raw terminal-token check if a partial write ends exactly at embedded literal close-tag bytes.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>
