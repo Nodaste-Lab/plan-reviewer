@@ -1858,6 +1858,7 @@ test('Homebrew formula locks the daemon service contract', () => {
   const formula = fs.readFileSync(formulaPath, 'utf8');
 
   assert.match(formula, /class PlanReviewer < Formula/);
+  assert.match(formula, /head "https:\/\/github\.com\/Nodaste-Lab\/plan-reviewer\.git", branch: "main"/);
   assert.match(formula, /bin\.install_symlink/);
   assert.match(formula, /"serve",\s+"--host", "0\.0\.0\.0",\s+"--port", "4317"/);
   assert.match(formula, /"\#\{Dir\.home\}\/\.plan-reviewer\/plan-reviewer\.sqlite"/);

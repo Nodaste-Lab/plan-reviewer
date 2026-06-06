@@ -3,6 +3,7 @@ class PlanReviewer < Formula
   homepage "https://github.com/Nodaste-Lab/plan-reviewer"
   url "https://github.com/Nodaste-Lab/plan-reviewer/archive/refs/tags/v0.1.0.tar.gz"
   sha256 "d6fac34c6286032f772b918242fdcb21d302b21aeb4f42b2333f3a739726bf1b"
+  head "https://github.com/Nodaste-Lab/plan-reviewer.git", branch: "main"
   # The stable v0.1.0 tarball predates the repository's Apache-2.0 migration.
   # Update this to Apache-2.0 with the next release URL and checksum.
   license "MIT"
