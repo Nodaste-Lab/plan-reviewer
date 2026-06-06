@@ -1959,6 +1959,250 @@ test('registration reports failed source sync when API source path is unreadable
   }
 });
 
+function sourceSyncSentinelHtml(label: string, extra = ''): string {
+  return `<!doctype html><html><head><title>Source sync ${label}</title></head><body><main><p id="top">TOP ${label}</p><p id="middle">MIDDLE ${label}</p>${extra}<p id="bottom">BOTTOM ${label}</p></main></body></html>`;
+}
+
+function sourceSyncPartialPrefix(label: string): string {
+  return `<!doctype html><html><head><title>Source sync ${label}</title></head><body><main><p id="top">TOP ${label}</p>`;
+}
+
+function sourceSyncEmbeddedCloseTagPrefix(label: string): string {
+  return `<!doctype html><html><head><title>Source sync ${label}</title></head><body><main><pre>&lt;/body&gt;&lt;/html&gt;</pre><p id="top">TOP ${label}</p>`;
+}
+
+function sourceSyncLiteralCloseTagPrefix(label: string): string {
+  return `<!doctype html><html><head><title>Source sync ${label}</title></head><body><main><pre></body></html></pre><p id="top">TOP ${label}</p>`;
+}
+
+function sourceSyncRegisterPayload(sourcePath: string, html: string, slug: string) {
+  const stat = fs.statSync(sourcePath);
+  return sampleRegisterPayload({
+    planPath: `${slug}.html`,
+    slug,
+    html,
+    fileHash: sha256(html),
+    sourcePath,
+    sourceMtimeMs: stat.mtimeMs,
+    sourceSize: stat.size,
+    watchMode: 'filesystem',
+    assets: []
+  });
+}
+
+test('source sync rejects incomplete partial source writes and recovers complete source', async () => {
+  const store = new PlanReviewStore(tempDbPath('source-incomplete-recovery'));
+  const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-review-source-incomplete-'));
+  const sourcePath = path.join(sourceDir, 'incomplete-recovery.html');
+  const initialHtml = sourceSyncSentinelHtml('initial');
+  fs.writeFileSync(sourcePath, initialHtml);
+  const events: Array<{ eventType: string }> = [];
+  const sourceSync = new SourceSyncService(store, { emitEvent(event) { events.push(event); } });
+  try {
+    const payload = sourceSyncRegisterPayload(sourcePath, initialHtml, 'incomplete-recovery');
+    const rendered = renderPlan(payload);
+    const registered = store.registerPlan(payload, rendered.renderedHtml, rendered.warnings);
+
+    fs.writeFileSync(sourcePath, sourceSyncPartialPrefix('partial'));
+    await sourceSync.syncNow(registered.planId, 'manual');
+
+    const afterPartial = store.getPlan(registered.planId);
+    assert.equal(afterPartial.version.id, registered.versionId);
+    assert.equal(afterPartial.plan.lastSyncStatus, 'failed');
+    assert.match(String(afterPartial.plan.lastSyncError?.message), /incomplete source write/i);
+    assert.match(String(afterPartial.plan.lastSyncError?.nextAction), /last good render/i);
+    assert.match(store.getRenderedHtml(registered.planId), /BOTTOM initial/);
+    assert.doesNotMatch(store.getRenderedHtml(registered.planId), /TOP partial/);
+    assert.equal(events.some(event => event.eventType === 'plan.version.synced'), false);
+
+    const recoveredHtml = sourceSyncSentinelHtml('recovered');
+    fs.writeFileSync(sourcePath, recoveredHtml);
+    await sourceSync.syncNow(registered.planId, 'manual');
+
+    const recovered = store.getPlan(registered.planId);
+    assert.notEqual(recovered.version.id, registered.versionId);
+    assert.equal(recovered.plan.lastSyncStatus, 'synced');
+    assert.equal(recovered.plan.lastSyncError, null);
+    assert.match(store.getRenderedHtml(registered.planId), /BOTTOM recovered/);
+  } finally {
+    await sourceSync.close();
+    store.close();
+    fs.rmSync(sourceDir, { recursive: true, force: true });
+  }
+});
+
+test('source sync rejects partial prefixes with embedded close-tag text but accepts complete small rewrites', async () => {
+  const store = new PlanReviewStore(tempDbPath('source-embedded-close-tags'));
+  const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-review-source-embedded-close-'));
+  const sourcePath = path.join(sourceDir, 'embedded-close-tags.html');
+  const initialHtml = sourceSyncSentinelHtml('large', '<section><p>Additional plan detail that can be intentionally removed later.</p></section>');
+  fs.writeFileSync(sourcePath, initialHtml);
+  const sourceSync = new SourceSyncService(store, { emitEvent() {} });
+  try {
+    const payload = sourceSyncRegisterPayload(sourcePath, initialHtml, 'embedded-close-tags');
+    const rendered = renderPlan(payload);
+    const registered = store.registerPlan(payload, rendered.renderedHtml, rendered.warnings);
+
+    fs.writeFileSync(sourcePath, sourceSyncEmbeddedCloseTagPrefix('embedded'));
+    await sourceSync.syncNow(registered.planId, 'manual');
+
+    const rejected = store.getPlan(registered.planId);
+    assert.equal(rejected.version.id, registered.versionId);
+    assert.equal(rejected.plan.lastSyncStatus, 'failed');
+    assert.match(String(rejected.plan.lastSyncError?.message), /incomplete source write/i);
+    assert.match(store.getRenderedHtml(registered.planId), /BOTTOM large/);
+    assert.doesNotMatch(store.getRenderedHtml(registered.planId), /TOP embedded/);
+
+    fs.writeFileSync(sourcePath, sourceSyncLiteralCloseTagPrefix('literal'));
+    await sourceSync.syncNow(registered.planId, 'manual');
+
+    const literalRejected = store.getPlan(registered.planId);
+    assert.equal(literalRejected.version.id, registered.versionId);
+    assert.equal(literalRejected.plan.lastSyncStatus, 'failed');
+    assert.match(String(literalRejected.plan.lastSyncError?.message), /incomplete source write/i);
+    assert.match(store.getRenderedHtml(registered.planId), /BOTTOM large/);
+    assert.doesNotMatch(store.getRenderedHtml(registered.planId), /TOP literal/);
+
+    const smallerCompleteHtml = '<!doctype html><html><body><main><p>Small complete replacement.</p></main></body></html>';
+    fs.writeFileSync(sourcePath, smallerCompleteHtml);
+    await sourceSync.syncNow(registered.planId, 'manual');
+
+    const accepted = store.getPlan(registered.planId);
+    assert.notEqual(accepted.version.id, registered.versionId);
+    assert.equal(accepted.plan.lastSyncStatus, 'synced');
+    assert.match(store.getRenderedHtml(registered.planId), /Small complete replacement/);
+    assert.doesNotMatch(store.getRenderedHtml(registered.planId), /BOTTOM large/);
+  } finally {
+    await sourceSync.close();
+    store.close();
+    fs.rmSync(sourceDir, { recursive: true, force: true });
+  }
+});
+
+test('startup source sync rejects quiescent incomplete source and keeps cached last good render', async () => {
+  const dbPath = tempDbPath('source-startup-incomplete');
+  const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-review-source-startup-incomplete-'));
+  const sourcePath = path.join(sourceDir, 'startup-incomplete.html');
+  const initialHtml = sourceSyncSentinelHtml('startup-good');
+  fs.writeFileSync(sourcePath, initialHtml);
+  const waitFor = async (predicate: () => Promise<boolean>) => {
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline) {
+      if (await predicate()) return;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    assert.fail('timed out waiting for startup incomplete source sync');
+  };
+  let app = createApp({ dbPath });
+  try {
+    const stat = fs.statSync(sourcePath);
+    const registered = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload({
+        planPath: 'startup-incomplete.html',
+        slug: 'startup-incomplete',
+        html: initialHtml,
+        fileHash: sha256(initialHtml),
+        sourcePath,
+        sourceMtimeMs: stat.mtimeMs,
+        sourceSize: stat.size,
+        watchMode: 'filesystem',
+        assets: []
+      })
+    });
+    assert.equal(registered.statusCode, 200);
+    const planId = registered.json().data.planId;
+    const firstVersionId = registered.json().data.versionId;
+    await app.close();
+
+    fs.writeFileSync(sourcePath, sourceSyncPartialPrefix('startup-partial'));
+    app = createApp({ dbPath });
+    await waitFor(async () => {
+      const meta = await app.inject({ method: 'GET', url: `/api/plans/${planId}` });
+      const data = meta.json().data;
+      return data.plan.lastSyncStatus === 'failed' || data.latestVersion.id !== firstVersionId;
+    });
+
+    const meta = await app.inject({ method: 'GET', url: `/api/plans/${planId}` });
+    assert.equal(meta.json().data.latestVersion.id, firstVersionId);
+    assert.equal(meta.json().data.plan.lastSyncStatus, 'failed');
+    assert.match(String(meta.json().data.plan.lastSyncError.message), /incomplete source write/i);
+    const rendered = await app.inject({ method: 'GET', url: `/render/${planId}` });
+    assert.match(rendered.body, /BOTTOM startup-good/);
+    assert.doesNotMatch(rendered.body, /TOP startup-partial/);
+  } finally {
+    await app.close();
+    fs.rmSync(sourceDir, { recursive: true, force: true });
+  }
+});
+
+test('source sync does not emit partial version events during repeated incomplete writes or rapid recovery', async () => {
+  const store = new PlanReviewStore(tempDbPath('source-incomplete-events'));
+  const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-review-source-incomplete-events-'));
+  const sourcePath = path.join(sourceDir, 'incomplete-events.html');
+  const initialHtml = sourceSyncSentinelHtml('events-good');
+  fs.writeFileSync(sourcePath, initialHtml);
+  const events: Array<{ eventType: string }> = [];
+  const sourceSync = new SourceSyncService(store, { emitEvent(event) { events.push(event); } });
+  try {
+    const payload = sourceSyncRegisterPayload(sourcePath, initialHtml, 'incomplete-events');
+    const rendered = renderPlan(payload);
+    const registered = store.registerPlan(payload, rendered.renderedHtml, rendered.warnings);
+
+    fs.writeFileSync(sourcePath, sourceSyncPartialPrefix('partial-one'));
+    await sourceSync.syncNow(registered.planId, 'manual');
+    fs.writeFileSync(sourcePath, sourceSyncPartialPrefix('partial-two'));
+    await sourceSync.syncNow(registered.planId, 'manual');
+
+    assert.equal(store.getPlan(registered.planId).version.id, registered.versionId);
+    assert.equal(events.filter(event => event.eventType === 'plan.sync.failed').length, 2);
+    assert.equal(events.some(event => event.eventType === 'plan.version.synced'), false);
+    assert.match(store.getRenderedHtml(registered.planId), /BOTTOM events-good/);
+
+    const completeHtml = sourceSyncSentinelHtml('events-recovered');
+    fs.writeFileSync(sourcePath, completeHtml);
+    await sourceSync.syncNow(registered.planId, 'manual');
+
+    assert.equal(events.filter(event => event.eventType === 'plan.version.synced').length, 1);
+    assert.match(store.getRenderedHtml(registered.planId), /BOTTOM events-recovered/);
+    assert.doesNotMatch(store.getRenderedHtml(registered.planId), /partial-one|partial-two/);
+  } finally {
+    await sourceSync.close();
+    store.close();
+    fs.rmSync(sourceDir, { recursive: true, force: true });
+  }
+});
+
+test('source sync failed render keeps last good render and actionable metadata', async () => {
+  const store = new PlanReviewStore(tempDbPath('source-render-failure'));
+  const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-review-source-render-failure-'));
+  const sourcePath = path.join(sourceDir, 'render-failure.html');
+  const initialHtml = sourceSyncSentinelHtml('render-good');
+  fs.writeFileSync(sourcePath, initialHtml);
+  const sourceSync = new SourceSyncService(store, { emitEvent() {} });
+  try {
+    const payload = sourceSyncRegisterPayload(sourcePath, initialHtml, 'render-failure');
+    const rendered = renderPlan(payload);
+    const registered = store.registerPlan(payload, rendered.renderedHtml, rendered.warnings);
+
+    const invalidCompleteHtml = '<!doctype html><html><body><main><div id="dup" id="other"></div></main></body></html>';
+    fs.writeFileSync(sourcePath, invalidCompleteHtml);
+    await sourceSync.syncNow(registered.planId, 'manual');
+
+    const failed = store.getPlan(registered.planId);
+    assert.equal(failed.version.id, registered.versionId);
+    assert.equal(failed.plan.lastSyncStatus, 'failed');
+    assert.match(String(failed.plan.lastSyncError?.message), /parsed safely/i);
+    assert.match(String(failed.plan.lastSyncError?.nextAction), /source file/i);
+    assert.match(store.getRenderedHtml(registered.planId), /BOTTOM render-good/);
+  } finally {
+    await sourceSync.close();
+    store.close();
+    fs.rmSync(sourceDir, { recursive: true, force: true });
+  }
+});
+
 test('filesystem source recovery watcher syncs after startup read failure', async () => {
   const dbPath = tempDbPath('source-recovery-watch');
   const app = createApp({ dbPath });
