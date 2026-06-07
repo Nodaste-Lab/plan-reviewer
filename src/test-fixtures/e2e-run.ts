@@ -15,6 +15,9 @@ const baseUrl = `http://127.0.0.1:${address.port}`;
 try {
   const context = await request.newContext({ baseURL: baseUrl });
   const imageBytesBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lqSL4wAAAABJRU5ErkJggg==';
+  const slowImageBytes = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="120" height="180"><rect width="120" height="180" fill="#38bdf8"/></svg>');
+  const slowImageBytesBase64 = slowImageBytes.toString('base64');
+  const slowImageAssetPath = `/assets/${sha256(slowImageBytes)}`;
   const html = '<!doctype html><html><body><main><div style="height:240px"></div><section id="dom-annotation"><h1>DOM annotation</h1><p>Plan index target.</p></section><section id="text-annotation"><h2>Text annotation</h2><p id="text-target">Text range context target for reviewer selection.</p></section><figure><img src="./diagram.png" alt="image annotation" width="120" height="90"></figure><div style="height:1200px"></div></main></body></html>';
   const register = await context.post('/api/plans/register', {
     data: {
@@ -490,7 +493,19 @@ try {
       });
     });
     delayMissingRender = true;
-    const missingDomHtml = html.replace('<section id="dom-annotation"><h1>DOM annotation</h1><p>Plan index target.</p></section>', '');
+    let resumeSlowImage: (() => void) | null = null;
+    const slowImageSeen = new Promise<void>(resolve => {
+      page.route(`**${slowImageAssetPath}`, async route => {
+        resolve();
+        await new Promise<void>(resume => {
+          resumeSlowImage = resume;
+        });
+        await route.continue();
+      });
+    });
+    const missingDomHtml = html
+      .replace('<section id="dom-annotation"><h1>DOM annotation</h1><p>Plan index target.</p></section>', '')
+      .replace('<section id="text-annotation">', '<figure><img src="./slow.svg" alt="slow image"></figure><section id="text-annotation">');
     const changed = await context.post('/api/plans/register', {
       data: {
         repoKey: 'e2e-repo',
@@ -509,7 +524,10 @@ try {
           executionReady: false,
           executionReadyBasis: 'agent-review-results'
         },
-        assets: [{ sourceUrl: './diagram.png', absolutePath: '/tmp/e2e/diagram.png', bytesBase64: imageBytesBase64 }],
+        assets: [
+          { sourceUrl: './diagram.png', absolutePath: '/tmp/e2e/diagram.png', bytesBase64: imageBytesBase64 },
+          { sourceUrl: './slow.svg', absolutePath: '/tmp/e2e/slow.svg', bytesBase64: slowImageBytesBase64 }
+        ],
         updateMode: 'upsert'
       }
     });
@@ -541,8 +559,17 @@ try {
     assert.equal(await page.evaluate(() => Boolean(document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#dom-annotation'))), true);
     await page.click('#cancel-comment');
     await page.waitForFunction(() => !document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#dom-annotation'));
+    await slowImageSeen;
+    const resumeImage = resumeSlowImage as (() => void) | null;
+    assert.ok(resumeImage);
+    resumeImage();
+    await page.waitForFunction(() => {
+      const image = document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector<HTMLImageElement>('img[alt="slow image"]');
+      return Boolean(image?.complete && image.naturalHeight > 0);
+    });
     await page.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('Comment created during render refresh'));
     await page.unroute(`**/render/${registered.planId}*`);
+    await page.unroute(`**${slowImageAssetPath}`);
     assert.equal(await page.getAttribute('#plan-frame', 'src'), frameSrcBeforePlanUpdate);
     assert.equal(await page.evaluate(() => (window as typeof window & { __planFrameLoadCount?: number }).__planFrameLoadCount), 0);
     assert.equal(await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollY), 120);

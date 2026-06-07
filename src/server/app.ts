@@ -435,6 +435,7 @@ async function refreshPlanFrameContent(nextVersionId, options = {}){
   replaceAttributes(doc.body, parsed.body);
   doc.head.replaceChildren(...[...parsed.head.childNodes].map(node => doc.importNode(node, true)));
   doc.body.replaceChildren(...[...parsed.body.childNodes].map(node => doc.importNode(node, true)));
+  scheduleFrameImageReflows();
   versionId = nextVersionId;
   hovered = null;
   selected = null;
@@ -602,6 +603,16 @@ function scheduleMarkerReflow(){
     redrawMarkers();
     updateSelectionBoxes();
   });
+}
+function scheduleFrameImageReflows(){
+  const doc = frame.contentDocument;
+  if (!doc) return;
+  for (const image of [...doc.images]) {
+    if (image.complete) continue;
+    image.addEventListener('load', scheduleMarkerReflow, { once: true });
+    image.addEventListener('error', scheduleMarkerReflow, { once: true });
+    if (typeof image.decode === 'function') void image.decode().then(scheduleMarkerReflow, scheduleMarkerReflow);
+  }
 }
 async function markerScreenshot(anchor){
   if (typeof html2canvas !== 'function' || !frame.contentDocument || !frame.contentWindow) {
