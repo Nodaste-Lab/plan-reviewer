@@ -387,6 +387,109 @@ try {
     assert.equal(resolvedResponse.ok(), true);
     await page.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('Resolved DOM annotation maps by selector fallback'));
 
+    let delayNextRender = false;
+    let resumeDelayedRender: (() => void) | null = null;
+    const delayedRenderSeen = new Promise<void>(resolve => {
+      page.route(`**/render/${registered.planId}*`, async route => {
+        const url = new URL(route.request().url());
+        if (delayNextRender && url.searchParams.has('versionId')) {
+          delayNextRender = false;
+          resolve();
+          await new Promise<void>(resume => {
+            resumeDelayedRender = resume;
+          });
+        }
+        await route.continue();
+      });
+    });
+    delayNextRender = true;
+    const staleRaceHtml = html.replace('Plan index target.', 'Race stale target.');
+    const staleRace = await context.post('/api/plans/register', {
+      data: {
+        repoKey: 'e2e-repo',
+        repoName: 'e2e',
+        rootPath: '/tmp/e2e',
+        branch: 'main',
+        commitSha: 'e2e-race-stale',
+        planPath: 'thoughts/plans/e2e.html',
+        slug: 'e2e',
+        html: staleRaceHtml,
+        fileHash: sha256(staleRaceHtml),
+        publicationMetadata: {
+          worktreePath: '/tmp/e2e',
+          branch: 'main',
+          linearIssue: 'NOD-E2E',
+          executionReady: false,
+          executionReadyBasis: 'agent-review-results'
+        },
+        assets: [{ sourceUrl: './diagram.png', absolutePath: '/tmp/e2e/diagram.png', bytesBase64: imageBytesBase64 }],
+        updateMode: 'upsert'
+      }
+    });
+    assert.equal(staleRace.ok(), true);
+    await delayedRenderSeen;
+    const newestRaceHtml = html.replace('Plan index target.', 'Race newest target.');
+    const newestRace = await context.post('/api/plans/register', {
+      data: {
+        repoKey: 'e2e-repo',
+        repoName: 'e2e',
+        rootPath: '/tmp/e2e',
+        branch: 'main',
+        commitSha: 'e2e-race-newest',
+        planPath: 'thoughts/plans/e2e.html',
+        slug: 'e2e',
+        html: newestRaceHtml,
+        fileHash: sha256(newestRaceHtml),
+        publicationMetadata: {
+          worktreePath: '/tmp/e2e',
+          branch: 'main',
+          linearIssue: 'NOD-E2E',
+          executionReady: false,
+          executionReadyBasis: 'agent-review-results'
+        },
+        assets: [{ sourceUrl: './diagram.png', absolutePath: '/tmp/e2e/diagram.png', bytesBase64: imageBytesBase64 }],
+        updateMode: 'upsert'
+      }
+    });
+    assert.equal(newestRace.ok(), true);
+    await page.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.body.textContent?.includes('Race newest target'));
+    const resumeRender = resumeDelayedRender as (() => void) | null;
+    assert.ok(resumeRender);
+    resumeRender();
+    await page.waitForTimeout(250);
+    assert.equal(await page.evaluate(() => {
+      const text = document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.body.textContent ?? '';
+      return text.includes('Race newest target') && !text.includes('Race stale target');
+    }), true);
+    await page.unroute(`**/render/${registered.planId}*`);
+
+    await page.evaluate(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      (window as typeof window & { __planFrameLoadCount?: number }).__planFrameLoadCount = 0;
+      iframe.addEventListener('load', () => {
+        (window as typeof window & { __planFrameLoadCount?: number }).__planFrameLoadCount =
+          ((window as typeof window & { __planFrameLoadCount?: number }).__planFrameLoadCount ?? 0) + 1;
+      });
+      iframe.contentWindow?.scrollTo(0, 120);
+    });
+    const frameSrcBeforePlanUpdate = await page.getAttribute('#plan-frame', 'src');
+
+    let delayMissingRender = false;
+    let resumeMissingRender: (() => void) | null = null;
+    const missingRenderSeen = new Promise<void>(resolve => {
+      page.route(`**/render/${registered.planId}*`, async route => {
+        const url = new URL(route.request().url());
+        if (delayMissingRender && url.searchParams.has('versionId')) {
+          delayMissingRender = false;
+          resolve();
+          await new Promise<void>(resume => {
+            resumeMissingRender = resume;
+          });
+        }
+        await route.continue();
+      });
+    });
+    delayMissingRender = true;
     const missingDomHtml = html.replace('<section id="dom-annotation"><h1>DOM annotation</h1><p>Plan index target.</p></section>', '');
     const changed = await context.post('/api/plans/register', {
       data: {
@@ -411,7 +514,38 @@ try {
       }
     });
     assert.equal(changed.ok(), true);
+    await missingRenderSeen;
+    const commentDuringRefresh = await context.post(`/api/plans/${registered.planId}/comments`, {
+      data: {
+        versionId: registered.versionId,
+        body: 'Comment created during render refresh',
+        anchorType: 'dom',
+        anchor: { cssSelector: '#text-target', textPreview: 'Text range context target', rect: { x: 0, y: 0, width: 20, height: 20 } }
+      }
+    });
+    assert.equal(commentDuringRefresh.ok(), true);
+    await page.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('Comment created during render refresh'));
+    await page.evaluate(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const target = iframe.contentDocument!.querySelector('#text-target')!;
+      target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: iframe.contentWindow ?? window }));
+    });
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#composer')?.hidden === false);
+    await page.fill('#comment-body', 'Draft opened during render refresh');
+    const resumeMissing = resumeMissingRender as (() => void) | null;
+    assert.ok(resumeMissing);
+    resumeMissing();
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#deferred-refresh-notice')?.hidden === false);
+    await page.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('Comment created during render refresh'));
+    assert.equal(await page.inputValue('#comment-body'), 'Draft opened during render refresh');
+    assert.equal(await page.evaluate(() => Boolean(document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#dom-annotation'))), true);
+    await page.click('#cancel-comment');
     await page.waitForFunction(() => !document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#dom-annotation'));
+    await page.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('Comment created during render refresh'));
+    await page.unroute(`**/render/${registered.planId}*`);
+    assert.equal(await page.getAttribute('#plan-frame', 'src'), frameSrcBeforePlanUpdate);
+    assert.equal(await page.evaluate(() => (window as typeof window & { __planFrameLoadCount?: number }).__planFrameLoadCount), 0);
+    assert.equal(await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollY), 120);
     await page.waitForFunction(
       commentId => Boolean(document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector(`.comment-anchor.addressed[data-comment-id="${commentId}"]`)),
       resolvedFallback.comment.id
@@ -444,6 +578,23 @@ try {
     assert.equal(resolvedAnchor.borderStyle, 'dotted');
     assert.equal(Math.abs(resolvedAnchor.anchorY - resolvedAnchor.targetY) <= 1, true);
     assert.equal(Math.abs(resolvedAnchor.anchorWidth - resolvedAnchor.targetWidth) <= 1, true);
+    await page.evaluate(() => {
+      const textarea = document.querySelector<HTMLTextAreaElement>('#comment-body')!;
+      const originalFocus = textarea.focus.bind(textarea);
+      (window as typeof window & { __commentBodyFocusCount?: number }).__commentBodyFocusCount = 0;
+      textarea.focus = () => {
+        (window as typeof window & { __commentBodyFocusCount?: number }).__commentBodyFocusCount =
+          ((window as typeof window & { __commentBodyFocusCount?: number }).__commentBodyFocusCount ?? 0) + 1;
+        originalFocus();
+      };
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const target = iframe.contentDocument!.querySelector('#text-target')!;
+      target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: iframe.contentWindow ?? window }));
+    });
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#composer')?.hidden === false);
+    assert.equal(await page.evaluate(() => (window as typeof window & { __commentBodyFocusCount?: number }).__commentBodyFocusCount), 1);
+    await page.click('#cancel-comment');
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#composer')?.hidden === true);
 
     await page.setViewportSize({ width: 486, height: 902 });
     await page.goto(`${baseUrl}/p/${registered.planId}`);

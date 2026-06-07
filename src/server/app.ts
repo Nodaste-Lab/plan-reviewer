@@ -319,6 +319,8 @@ let panX = 0;
 let panY = 0;
 let panMode = false;
 let versionId = null;
+let loadMetaGeneration = 0;
+let planRefreshGeneration = 0;
 let deferredPlanRefresh = null;
 let lightboxDragStart = null;
 let lightboxPanStart = null;
@@ -381,6 +383,7 @@ executionReviewButton?.addEventListener('click', async () => {
   }, 1600);
 });
 async function loadMeta(options = {}){
+  const loadGeneration = ++loadMetaGeneration;
   const res = await fetch('/api/plans/'+planId);
   const json = await res.json();
   const latestVersionId = json.data.latestVersion.id;
@@ -389,18 +392,60 @@ async function loadMeta(options = {}){
     if (!options.bypassDialogDefer && hasOpenCommentDialog()) {
       queueDeferredPlanRefresh({ versionId: latestVersionId, forceReloadPlan: Boolean(options.forceReloadPlan) });
     } else {
-      reloadPlanFrame(latestVersionId, { clearSelection: true });
+      const refreshGeneration = ++planRefreshGeneration;
+      await refreshPlanFrameContent(latestVersionId, { clearSelection: true, forceReloadPlan: Boolean(options.forceReloadPlan), refreshGeneration });
     }
   } else if (!versionId) {
     versionId = latestVersionId;
   }
+  if (loadGeneration !== loadMetaGeneration) {
+    redrawMarkers();
+    return;
+  }
   renderSyncWarning(json.data.plan);
   renderComments(json.data.comments || []);
 }
-function reloadPlanFrame(nextVersionId, options = {}){
+function replaceAttributes(target, source){
+  for (const attr of [...target.attributes]) target.removeAttribute(attr.name);
+  for (const attr of [...source.attributes]) target.setAttribute(attr.name, attr.value);
+}
+async function refreshPlanFrameContent(nextVersionId, options = {}){
   if (options.clearSelection) clearPendingSelection();
-  frame.src = '/render/'+encodeURIComponent(planId)+'?versionId='+encodeURIComponent(nextVersionId)+'&t='+Date.now();
+  const doc = frame.contentDocument;
+  const win = frame.contentWindow;
+  if (!doc || !doc.documentElement || !doc.head || !doc.body) return;
+  const scrollX = win?.scrollX || 0;
+  const scrollY = win?.scrollY || 0;
+  let parsed;
+  try {
+    const res = await fetch('/render/'+encodeURIComponent(planId)+'?versionId='+encodeURIComponent(nextVersionId), { cache: 'no-store' });
+    if (!res.ok) throw new Error('Plan render refresh failed: ' + res.status);
+    parsed = new DOMParser().parseFromString(await res.text(), 'text/html');
+  } catch (error) {
+    console.warn('Unable to refresh plan frame in place', error);
+    return;
+  }
+  if (options.refreshGeneration !== planRefreshGeneration) return;
+  if (hasOpenCommentDialog()) {
+    queueDeferredPlanRefresh({ versionId: nextVersionId, forceReloadPlan: Boolean(options.forceReloadPlan) });
+    return;
+  }
+  replaceAttributes(doc.documentElement, parsed.documentElement);
+  replaceAttributes(doc.head, parsed.head);
+  replaceAttributes(doc.body, parsed.body);
+  doc.head.replaceChildren(...[...parsed.head.childNodes].map(node => doc.importNode(node, true)));
+  doc.body.replaceChildren(...[...parsed.body.childNodes].map(node => doc.importNode(node, true)));
   versionId = nextVersionId;
+  hovered = null;
+  selected = null;
+  selectedForScreenshot = null;
+  pendingAnchor = null;
+  void mountWashiOverlay();
+  win?.scrollTo(scrollX, scrollY);
+  requestAnimationFrame(() => {
+    win?.scrollTo(scrollX, scrollY);
+    scheduleMarkerReflow();
+  });
 }
 function hasOpenCommentDialog(){
   return !composer.hidden && (Boolean(pendingAnchor) || body.value.trim().length > 0);
