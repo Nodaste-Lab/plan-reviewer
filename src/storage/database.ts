@@ -654,7 +654,7 @@ export class PlanReviewStore {
 
   latestEventSequence(planId: string, mode: 'all' | 'queue' = 'all'): number {
     const eventFilter = mode === 'queue'
-      ? "AND event_type IN ('comment.created','comment.claimed','comment.acknowledged','comment.resolved','comment.released')"
+      ? "AND event_type IN ('comment.created','comment.claimed','comment.acknowledged','comment.resolved','comment.released','comment.deleted')"
       : '';
     const row = this.db
       .prepare(`SELECT COALESCE(MAX(sequence), 0) AS latest FROM comment_events WHERE plan_id = ? ${eventFilter}`)
@@ -665,10 +665,10 @@ export class PlanReviewStore {
   getPlanCounts(planId: string): { pending: number; claimed: number; acknowledged: number; resolved: number } {
     const row = this.db.prepare(`
       SELECT
-        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
-        SUM(CASE WHEN status = 'claimed' THEN 1 ELSE 0 END) AS claimed,
-        SUM(CASE WHEN status = 'acknowledged' THEN 1 ELSE 0 END) AS acknowledged,
-        SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) AS resolved
+        SUM(CASE WHEN deleted_at IS NULL AND status = 'pending' THEN 1 ELSE 0 END) AS pending,
+        SUM(CASE WHEN deleted_at IS NULL AND status = 'claimed' THEN 1 ELSE 0 END) AS claimed,
+        SUM(CASE WHEN deleted_at IS NULL AND status = 'acknowledged' THEN 1 ELSE 0 END) AS acknowledged,
+        SUM(CASE WHEN deleted_at IS NULL AND status = 'resolved' THEN 1 ELSE 0 END) AS resolved
       FROM comments
       WHERE plan_id = ?
     `).get(planId) as Record<string, unknown> | undefined;

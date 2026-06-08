@@ -1125,7 +1125,7 @@ test('HTTP API registers plans, creates comments, claims, acks, resolves, and po
       url: `/api/plans/${planId}/comments`,
       payload: {
         versionId,
-        body: 'Retry after resolution.',
+        body: 'Add the agent watch contract here.',
         anchorType: 'dom',
         anchor: domAnchor(),
         clientMutationId: 'comment-1'
@@ -1356,6 +1356,10 @@ test('duplicate client mutation ids compare fingerprints and reject conflicting 
 test('pending unclaimed comments can be deleted and are excluded from queue surfaces', async () => {
   const { app, planId, versionId } = await registeredApp('delete-comments');
   try {
+    const initialMeta = await app.inject({ method: 'GET', url: `/api/plans/${planId}` });
+    assert.equal(initialMeta.statusCode, 200);
+    const initialPendingCount = initialMeta.json().data.counts.pending;
+
     const createDeleted = await app.inject({
       method: 'POST',
       url: `/api/plans/${planId}/comments`,
@@ -1375,7 +1379,7 @@ test('pending unclaimed comments can be deleted and are excluded from queue surf
     assert.equal(list.statusCode, 200);
     assert.equal(list.json().data.comments.some((comment: { id: string }) => comment.id === deletedComment.id), false);
     const meta = await app.inject({ method: 'GET', url: `/api/plans/${planId}` });
-    assert.equal(meta.json().data.counts.pending, 0);
+    assert.equal(meta.json().data.counts.pending, initialPendingCount);
     assert.equal(meta.json().data.comments.some((comment: { id: string }) => comment.id === deletedComment.id), false);
     const queue = await app.inject({ method: 'GET', url: `/api/agent/queue?planId=${planId}` });
     assert.equal(queue.statusCode, 200);
