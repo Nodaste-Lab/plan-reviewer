@@ -450,8 +450,17 @@ try {
     await page.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#text-target'));
     await page.evaluate(() => {
       const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
-      const target = iframe.contentDocument!.querySelector('#text-target')!;
-      target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: iframe.contentWindow ?? window }));
+      const target = iframe.contentDocument!.querySelector<HTMLElement>('#text-target')!;
+      const rect = target.getBoundingClientRect();
+      const touch = { clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 };
+      const start = new Event('touchstart', { bubbles: true, cancelable: true });
+      Object.defineProperty(start, 'touches', { value: [touch] });
+      Object.defineProperty(start, 'changedTouches', { value: [touch] });
+      target.dispatchEvent(start);
+      const end = new Event('touchend', { bubbles: true, cancelable: true });
+      Object.defineProperty(end, 'touches', { value: [] });
+      Object.defineProperty(end, 'changedTouches', { value: [touch] });
+      target.dispatchEvent(end);
     });
     await page.waitForFunction(() => document.querySelector<HTMLElement>('#composer')?.hidden === false);
     const mobileActiveBox = await selectionBoxState('#active-selection-box', '#text-target');
@@ -463,7 +472,37 @@ try {
     assert.equal(mobileActiveBox.topDelta <= 1, true);
     assert.equal(mobileActiveBox.widthDelta <= 1, true);
     assert.equal(mobileActiveBox.heightDelta <= 1, true);
-    await page.click('#cancel-comment');
+    await page.fill('#comment-body', 'Mobile touch annotation comment');
+    await page.click('#submit-comment');
+    await page.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('Mobile touch annotation comment'));
+    assert.equal(await page.evaluate(() => document.body.classList.contains('comments-open')), true);
+    await page.click('#mobile-comments-toggle');
+    await page.evaluate(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const target = iframe.contentDocument!.querySelector<HTMLElement>('img[alt="image annotation"]')!;
+      const rect = target.getBoundingClientRect();
+      const touch = { clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 };
+      const start = new Event('touchstart', { bubbles: true, cancelable: true });
+      Object.defineProperty(start, 'touches', { value: [touch] });
+      Object.defineProperty(start, 'changedTouches', { value: [touch] });
+      target.dispatchEvent(start);
+      const end = new Event('touchend', { bubbles: true, cancelable: true });
+      Object.defineProperty(end, 'touches', { value: [] });
+      Object.defineProperty(end, 'changedTouches', { value: [touch] });
+      target.dispatchEvent(end);
+    });
+    await page.waitForSelector('#lightbox:not([hidden])');
+    assert.equal(await page.evaluate(() => {
+      const controls = [...document.querySelectorAll<HTMLElement>('#comment-body,#submit-comment')];
+      return controls.every(control => {
+        const rect = control.getBoundingClientRect();
+        const top = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        return top === control || Boolean(top?.closest?.('#comment-body,#submit-comment'));
+      });
+    }), true);
+    await page.fill('#comment-body', 'Mobile image touch comment');
+    await page.click('#submit-comment');
+    await page.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('Mobile image touch comment'));
     await page.setViewportSize({ width: 1280, height: 720 });
 
     await page.goto(`${baseUrl}/`);
@@ -577,7 +616,7 @@ try {
   }
 
   const comments = await context.get(`/api/plans/${registered.planId}/comments`);
-  const commentData = (await comments.json()).data.comments as Array<{ body: string; screenshotAssetId?: string; anchor?: { selectedText?: string; planNodeId?: string; domPath?: string; xpath?: string; textQuote?: unknown; normalizedPoint?: unknown; normalizedRect?: { width: number; height: number }; displayedRect?: unknown; zoomState?: { scale: number; panX?: number; panY?: number }; imageHash?: string } }>;
+  const commentData = (await comments.json()).data.comments as Array<{ body: string; screenshotAssetId?: string; anchor?: { selectedText?: string; planNodeId?: string; domPath?: string; xpath?: string; textQuote?: unknown; normalizedPoint?: { x?: number; y?: number }; normalizedRect?: { width: number; height: number }; displayedRect?: unknown; zoomState?: { scale: number; panX?: number; panY?: number }; imageHash?: string } }>;
   const uiComment = commentData.find(comment => comment.body === 'Browser DOM annotation comment\nsecond line');
   assert.ok(uiComment?.screenshotAssetId);
   const uiFallbackComment = commentData.find(comment => comment.body === 'Browser DOM annotation without screenshot');
@@ -598,6 +637,12 @@ try {
   assert.equal(typeof uiImageComment.anchor.zoomState?.scale, 'number');
   assert.equal((uiImageComment.anchor.zoomState?.panX ?? 0) !== 0 || (uiImageComment.anchor.zoomState?.panY ?? 0) !== 0, true);
   assert.equal(typeof uiImageComment.anchor.imageHash, 'string');
+  const mobileImageComment = commentData.find(comment => comment.body === 'Mobile image touch comment');
+  const mobileImagePoint = mobileImageComment?.anchor?.normalizedPoint;
+  assert.equal(typeof mobileImagePoint?.x, 'number');
+  assert.equal(typeof mobileImagePoint?.y, 'number');
+  assert.equal(Number.isFinite(mobileImagePoint?.x), true);
+  assert.equal(Number.isFinite(mobileImagePoint?.y), true);
   const asset = await context.get(`/comment-assets/${uiComment.screenshotAssetId}`);
   assert.equal(asset.ok(), true);
   const assetBody = await asset.body();
