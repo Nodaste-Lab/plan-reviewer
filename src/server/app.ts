@@ -326,6 +326,12 @@ let versionId = null;
 let loadMetaGeneration = 0;
 let planRefreshGeneration = 0;
 let latestEventSequence = 0;
+let eventPollingStarted = false;
+let eventPollTimer = null;
+let eventPollController = null;
+let eventPollInFlight = false;
+let eventPollStopped = false;
+let eventPollBackoffMs = 1000;
 let metadataLoadPromise = null;
 let metadataLoadTimer = null;
 let pendingMetaOptions = null;
@@ -409,14 +415,17 @@ function mergeMetaOptions(left = {}, right = {}){
   return {
     reloadPlan: Boolean(left.reloadPlan || right.reloadPlan),
     forceReloadPlan: Boolean(left.forceReloadPlan || right.forceReloadPlan),
-    bypassDialogDefer: Boolean(left.bypassDialogDefer || right.bypassDialogDefer)
+    bypassDialogDefer: Boolean(left.bypassDialogDefer || right.bypassDialogDefer),
+    advanceEventSequence: Boolean(left.advanceEventSequence || right.advanceEventSequence)
   };
 }
 async function loadMeta(options = {}){
   const loadGeneration = ++loadMetaGeneration;
   const res = await fetch('/api/plans/'+planId);
   const json = await res.json();
-  latestEventSequence = Math.max(latestEventSequence, Number(json.data.latestEventSequence || 0));
+  if (!eventPollingStarted || options.advanceEventSequence) {
+    latestEventSequence = Math.max(latestEventSequence, Number(json.data.latestEventSequence || 0));
+  }
   const latestVersionId = json.data.latestVersion.id;
   const shouldReloadPlan = options.reloadPlan && versionId && (latestVersionId !== versionId || options.forceReloadPlan);
   if (shouldReloadPlan) {
@@ -557,6 +566,27 @@ function handlePlanVersionEvent(event){
     if (event.type !== 'plan.version.synced' && data.versionId && data.versionId === versionId) return;
   } catch {}
   scheduleMetaLoad({ reloadPlan: true, forceReloadPlan: event.type === 'plan.version.synced' });
+}
+function normalizeStoredEvent(event){
+  return {
+    type: String(event?.eventType || event?.type || ''),
+    data: JSON.stringify(event?.payload || {})
+  };
+}
+function handlePlanReviewEvent(event){
+  if (event.type === 'plan.version.registered' || event.type === 'plan.version.synced') {
+    handlePlanVersionEvent(event);
+    return;
+  }
+  if (event.type === 'plan.sync.failed'
+    || event.type === 'comment.created'
+    || event.type === 'comment.claimed'
+    || event.type === 'comment.acknowledged'
+    || event.type === 'comment.resolved'
+    || event.type === 'comment.released'
+    || event.type === 'comment.deleted') {
+    scheduleMetaLoad();
+  }
 }
 function renderComments(items){
   renderMarkers(items);
@@ -1207,19 +1237,77 @@ body.addEventListener('keydown', event => {
   submitPendingComment();
 });
 submitCommentButton?.addEventListener('click', submitPendingComment);
-function startEventStream(){
-  const source = new EventSource('/api/plans/'+planId+'/events?mode=all&afterSequence='+encodeURIComponent(String(latestEventSequence)));
-  source.addEventListener('plan.version.registered', handlePlanVersionEvent);
-  source.addEventListener('plan.version.synced', handlePlanVersionEvent);
-  source.addEventListener('plan.sync.failed', () => scheduleMetaLoad());
-  source.addEventListener('comment.created', () => scheduleMetaLoad());
-  source.addEventListener('comment.claimed', () => scheduleMetaLoad());
-  source.addEventListener('comment.acknowledged', () => scheduleMetaLoad());
-  source.addEventListener('comment.resolved', () => scheduleMetaLoad());
-  source.addEventListener('comment.released', () => scheduleMetaLoad());
-  source.addEventListener('comment.deleted', () => scheduleMetaLoad());
+function clearEventPollTimer(){
+  if (!eventPollTimer) return;
+  clearTimeout(eventPollTimer);
+  eventPollTimer = null;
 }
-loadMeta().then(startEventStream).catch(error => console.warn('Unable to load plan metadata', error));
+function scheduleEventPoll(delayMs){
+  clearEventPollTimer();
+  if (eventPollStopped || document.hidden) return;
+  eventPollTimer = setTimeout(() => {
+    eventPollTimer = null;
+    void pollEvents();
+  }, delayMs);
+}
+function abortEventPoll(){
+  if (!eventPollController) return;
+  eventPollController.abort();
+  eventPollController = null;
+}
+async function pollEvents(){
+  if (eventPollStopped || eventPollInFlight || document.hidden) return;
+  eventPollInFlight = true;
+  eventPollController = new AbortController();
+  try {
+    const url = '/api/plans/'+planId+'/events/poll?mode=all&afterSequence='+encodeURIComponent(String(latestEventSequence))+'&limit=200';
+    const res = await fetch(url, { cache: 'no-store', signal: eventPollController.signal });
+    if (!res.ok) throw new Error('Event poll failed: ' + res.status);
+    const json = await res.json();
+    const events = Array.isArray(json.data?.events) ? json.data.events : [];
+    for (const storedEvent of events) {
+      latestEventSequence = Math.max(latestEventSequence, Number(storedEvent.sequence || 0));
+      handlePlanReviewEvent(normalizeStoredEvent(storedEvent));
+    }
+    if (events.length < 200) {
+      latestEventSequence = Math.max(latestEventSequence, Number(json.data?.latestSequence || 0));
+    }
+    eventPollBackoffMs = 1000;
+    scheduleEventPoll(events.length >= 200 ? 0 : 1000);
+  } catch (error) {
+    if (!eventPollStopped && !document.hidden && error?.name !== 'AbortError') {
+      console.warn('Unable to poll plan events', error);
+      scheduleEventPoll(eventPollBackoffMs);
+      eventPollBackoffMs = Math.min(10000, eventPollBackoffMs * 2);
+    }
+  } finally {
+    eventPollController = null;
+    eventPollInFlight = false;
+  }
+}
+function startEventPolling(){
+  eventPollingStarted = true;
+  eventPollStopped = false;
+  scheduleEventPoll(0);
+}
+function stopEventPolling(){
+  eventPollStopped = true;
+  clearEventPollTimer();
+  abortEventPoll();
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    clearEventPollTimer();
+    abortEventPoll();
+    return;
+  }
+  void scheduleMetaLoad({ advanceEventSequence: true }).then(() => {
+    eventPollBackoffMs = 1000;
+    scheduleEventPoll(0);
+  });
+});
+window.addEventListener('pagehide', stopEventPolling);
+loadMeta({ advanceEventSequence: true }).then(startEventPolling).catch(error => console.warn('Unable to load plan metadata', error));
 `;
 
 function sendError(reply: FastifyReply, error: unknown) {

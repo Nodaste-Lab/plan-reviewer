@@ -169,6 +169,31 @@ try {
     assert.equal(response.ok(), true);
     return (await response.json()).data as { planId: string; versionId: string };
   };
+  const registerTinyPlan = async (slug: string) => {
+    const tinyHtml = `<!doctype html><html><body><main><section id="${slug}"><h1>${slug}</h1><p>Many tabs target.</p></section></main></body></html>`;
+    const response = await context.post('/api/plans/register', {
+      data: {
+        repoKey: `e2e-${slug}-repo`,
+        repoName: `e2e-${slug}`,
+        rootPath: `/tmp/e2e-${slug}`,
+        branch: 'main',
+        commitSha: `e2e-${slug}`,
+        planPath: `thoughts/plans/${slug}.html`,
+        slug,
+        html: tinyHtml,
+        fileHash: sha256(tinyHtml),
+        publicationMetadata: {
+          worktreePath: `/tmp/e2e-${slug}`,
+          branch: 'main',
+          executionReady: false,
+          executionReadyBasis: 'agent-review-results'
+        },
+        updateMode: 'upsert'
+      }
+    });
+    assert.equal(response.ok(), true);
+    return (await response.json()).data as { planId: string; versionId: string };
+  };
   const createStormComment = (planId: string, versionId: string, index: number, bodyPrefix = 'Storm comment') => context.post(`/api/plans/${planId}/comments`, {
     data: {
       versionId,
@@ -217,6 +242,27 @@ try {
       maxActive: stats?.maxActive ?? 0,
       maxDuration: Math.max(0, ...(stats?.durations ?? []))
     };
+  });
+  const installEventSourceCounter = async (page: import('playwright').Page) => {
+    await page.addInitScript(() => {
+      const stats = { count: 0, urls: [] as string[] };
+      (window as typeof window & { __eventSourceStats?: typeof stats }).__eventSourceStats = stats;
+      const OriginalEventSource = window.EventSource;
+      const WrappedEventSource = function(this: EventSource, url: string | URL, eventSourceInitDict?: EventSourceInit) {
+        stats.count += 1;
+        stats.urls.push(String(url));
+        return new OriginalEventSource(url, eventSourceInitDict);
+      } as unknown as typeof EventSource;
+      WrappedEventSource.prototype = OriginalEventSource.prototype;
+      Object.defineProperty(WrappedEventSource, 'CONNECTING', { value: OriginalEventSource.CONNECTING });
+      Object.defineProperty(WrappedEventSource, 'OPEN', { value: OriginalEventSource.OPEN });
+      Object.defineProperty(WrappedEventSource, 'CLOSED', { value: OriginalEventSource.CLOSED });
+      window.EventSource = WrappedEventSource;
+    });
+  };
+  const eventSourceStats = (page: import('playwright').Page) => page.evaluate(() => {
+    const stats = (window as typeof window & { __eventSourceStats?: { count: number; urls: string[] } }).__eventSourceStats;
+    return { count: stats?.count ?? 0, urls: stats?.urls ?? [] };
   });
   const commentRows = (page: import('playwright').Page) => page.evaluate(() => document.querySelectorAll('.comment-row').length);
 
@@ -288,6 +334,43 @@ try {
 	      const archive = await context.post(`/api/plans/${stormPlan.planId}/archive`);
 	      assert.equal(archive.ok(), true);
 	    }
+
+    const manyTabPlans = await Promise.all(Array.from({ length: 10 }, (_value, index) => registerTinyPlan(`many-tabs-${index}`)));
+    const manyTabContext = await browser.newContext();
+    const manyTabRequests = { sse: 0, poll: 0 };
+    try {
+      const manyTabPages = [];
+      for (const plan of manyTabPlans) {
+        const tab = await manyTabContext.newPage();
+        await installEventSourceCounter(tab);
+        tab.on('request', request => {
+          const url = new URL(request.url());
+          if (/\/api\/plans\/[^/]+\/events$/.test(url.pathname)) manyTabRequests.sse += 1;
+          if (/\/api\/plans\/[^/]+\/events\/poll$/.test(url.pathname)) manyTabRequests.poll += 1;
+        });
+        await tab.goto(`${baseUrl}/p/${plan.planId}`, { waitUntil: 'domcontentloaded', timeout: 10000 });
+        await tab.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('No comments yet'), undefined, { timeout: 10000 });
+        manyTabPages.push(tab);
+      }
+      const finalFetchOk = await Promise.race([
+        manyTabPages[0].evaluate(async () => {
+          const response = await fetch('/api/plans?limit=1', { cache: 'no-store' });
+          return response.ok;
+        }),
+        new Promise<boolean>(resolve => setTimeout(() => resolve(false), 2000))
+      ]);
+      assert.equal(finalFetchOk, true, 'same-origin fetch timed out after opening many review pages');
+      const sourceStats = await Promise.all(manyTabPages.map(tab => eventSourceStats(tab)));
+      assert.equal(sourceStats.reduce((sum, stats) => sum + stats.count, 0), 0, `browser review pages constructed EventSource: ${JSON.stringify(sourceStats)}`);
+      assert.equal(manyTabRequests.sse, 0, `browser review pages requested SSE route ${manyTabRequests.sse} times`);
+      assert.equal(manyTabRequests.poll > 0, true, `browser review pages did not request finite poll route: ${JSON.stringify(manyTabRequests)}`);
+    } finally {
+      await manyTabContext.close();
+      for (const plan of manyTabPlans) {
+        const archive = await context.post(`/api/plans/${plan.planId}/archive`);
+        assert.equal(archive.ok(), true);
+      }
+    }
 
 	    const page = await browser.newPage();
     await page.goto(`${baseUrl}/`);
