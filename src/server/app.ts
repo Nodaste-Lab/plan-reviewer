@@ -574,7 +574,7 @@ function planReviewTitle(title){
   return /(?:^|\\s)Plan Review$/i.test(normalized) ? normalized : normalized + ' · Plan Review';
 }
 function updateShellTitleFromRenderedDocument(doc){
-  document.title = planReviewTitle(doc?.title || doc?.querySelector?.('title')?.textContent || '');
+  document.title = planReviewTitle(doc?.head?.querySelector?.('title')?.textContent || '');
 }
 async function refreshPlanFrameContent(nextVersionId, options = {}){
   if (options.clearSelection) clearPendingSelection();

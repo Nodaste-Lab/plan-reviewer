@@ -832,6 +832,36 @@ try {
     }), true);
     await page.unroute(`**/render/${registered.planId}*`);
 
+    const bodyTitleRefreshHtml = html
+      .replace('<title>E2E Plan</title>', '')
+      .replace('<section id="text-annotation">', '<svg><title>Inline Icon Title</title></svg><section id="text-annotation">')
+      .replace('Race newest target.', 'Body title fallback target.');
+    const bodyTitleRefresh = await context.post('/api/plans/register', {
+      data: {
+        repoKey: 'e2e-repo',
+        repoName: 'e2e',
+        rootPath: '/tmp/e2e',
+        branch: 'main',
+        commitSha: 'e2e-body-title-refresh',
+        planPath: 'thoughts/plans/e2e.html',
+        slug: 'e2e',
+        html: bodyTitleRefreshHtml,
+        fileHash: sha256(bodyTitleRefreshHtml),
+        publicationMetadata: {
+          worktreePath: '/tmp/e2e',
+          branch: 'main',
+          linearIssue: 'NOD-E2E',
+          executionReady: false,
+          executionReadyBasis: 'agent-review-results'
+        },
+        assets: [{ sourceUrl: './diagram.png', absolutePath: '/tmp/e2e/diagram.png', bytesBase64: imageBytesBase64 }],
+        updateMode: 'upsert'
+      }
+    });
+    assert.equal(bodyTitleRefresh.ok(), true);
+    await page.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('main title')?.textContent === 'Inline Icon Title');
+    await page.waitForFunction(() => document.title === 'e2e / e2e · Plan Review');
+
     await page.evaluate(() => {
       const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
       (window as typeof window & { __planFrameLoadCount?: number }).__planFrameLoadCount = 0;
