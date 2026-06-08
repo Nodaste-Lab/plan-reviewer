@@ -44,7 +44,7 @@
   <section id="status">
     <h2>Status</h2>
     <p><strong>Plan status:</strong> execution-ready and implemented on branch <code>fix-duplicate-comments</code>. Keep this artifact as the source of truth for scoped verification and review status.</p>
-    <p><strong>Implementation status:</strong> all phases implemented; scoped implementation review loop in progress before commit, push, PR, and post-PR monitoring.</p>
+    <p><strong>Implementation status:</strong> all phases implemented; PR monitoring is active. Latest Codex PR feedback is classified as <code>REGRESSION_FROM_THIS_DIFF</code> and is being addressed without expanding scope.</p>
   </section>
 
   <section id="goal">
@@ -145,7 +145,7 @@
       <li id="ac-6">Claimed, acknowledged, and resolved comments cannot be deleted through this feature.</li>
       <li id="ac-7">Deleted comments are absent from normal comment lists, <code>listPlans()</code> count aggregates, markers, automatic queue claims, and explicit selected-mode claims; explicit claim attempts for deleted comment IDs fail closed with <code>409 invalid_state</code> while existing active-claim <code>claim_conflict</code> behavior remains unchanged.</li>
       <li id="ac-8">Deleting a comment emits a queue/all event that open pages use to refresh.</li>
-      <li id="ac-9">Existing claim, ack, release, resolve, event replay, and source sync behavior remains unchanged. The only intentionally changed existing contract is duplicate-identifier conflict rejection for mismatched fingerprints, covered by <a href="#ac-4">AC-4</a>.</li>
+      <li id="ac-9">Existing claim, ack, release, resolve, event replay, and source sync behavior remains unchanged for non-deleted comments. The intentionally changed existing contracts are duplicate-identifier conflict rejection for mismatched fingerprints, covered by <a href="#ac-4">AC-4</a>, and deleted comments acting as terminal state for lifecycle endpoints so hidden/deleted work cannot be acknowledged, released, or resolved.</li>
     </ol>
   </section>
 
@@ -367,7 +367,8 @@ bun run test</code></pre>
       <li>2026-06-08: Integrated Codex implementation-review blockers by preserving browser delete conflict guidance across the required metadata refresh and updating the Status section from planning-only to implemented/review-loop state.</li>
       <li>2026-06-08: Integrated Codex re-review blockers by preserving the submit-in-flight guard when reviewers click another plan section during a slow submit, snapshotting the submitted anchor before async work, and adding contract coverage that duplicate retry after soft-delete emits no new event.</li>
       <li>2026-06-08: Final scoped reviews passed: Codex <code>PASS_SCOPED</code>; Claude <code>PASS_WITH_DEFERRED_FOLLOW_UPS</code> with deferred out-of-scope notes for shared-state e2e anchor-count precision, stale cosmetic delete error clearing, and missing browser e2e for the already contract-tested <code>duplicate_comment_deleted</code> terminal path.</li>
-      <li>2026-06-08: Final verification passed: <code>bun run build && node --test dist/__tests__/contracts.test.js && bun run test && bun run test:e2e && bun run test:fixtures -- --scenario seeded-comment-stream && bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated</code>.</li>
+      <li>2026-06-08: Integrated Codex PR feedback by treating soft-deleted comments as terminal for ack, resolve, and release endpoints. Classification: <code>REGRESSION_FROM_THIS_DIFF</code>, because this branch introduced hidden soft-deleted comments while leaving stale lifecycle IDs able to emit new lifecycle events.</li>
+      <li>2026-06-08: Final verification passed before PR and again after the Codex PR feedback fix: <code>bun run build && node --test dist/__tests__/contracts.test.js && bun run test && bun run test:e2e && bun run test:fixtures -- --scenario seeded-comment-stream && bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated</code>.</li>
     </ul>
   </section>
 </main>

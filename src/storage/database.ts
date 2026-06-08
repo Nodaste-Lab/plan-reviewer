@@ -1191,11 +1191,23 @@ export class PlanReviewStore {
     return tx();
   }
 
+  private assertCommentNotDeleted(comment: StoredComment, action: string) {
+    if (!comment.deletedAt) return;
+    throw new PlanReviewError(
+      'invalid_state',
+      `Deleted comments cannot be ${action}`,
+      409,
+      { commentId: comment.id, status: comment.status, deletedAt: comment.deletedAt },
+      'Refresh the comments list; deleted comments are no longer available.'
+    );
+  }
+
   ackComment(commentId: string, input: AckCommentInput) {
     const tx = this.db.transaction(() => {
       let comment = this.getComment(commentId);
       const expiredEvents = this.releaseExpiredClaims(comment.planId);
       comment = this.getComment(commentId);
+      this.assertCommentNotDeleted(comment, 'acknowledged');
       if (comment.status === 'acknowledged' || comment.status === 'resolved') {
         return { comment, alreadyAcknowledged: true, expiredEvents };
       }
@@ -1226,6 +1238,7 @@ export class PlanReviewStore {
   resolveComment(commentId: string, input: ResolveCommentInput) {
     const tx = this.db.transaction(() => {
       const comment = this.getComment(commentId);
+      this.assertCommentNotDeleted(comment, 'resolved');
       if (comment.status === 'resolved') {
         return { comment, alreadyResolved: true };
       }
@@ -1257,6 +1270,7 @@ export class PlanReviewStore {
   releaseComment(commentId: string, claimId: string, reason = 'released') {
     const tx = this.db.transaction(() => {
       const comment = this.getComment(commentId);
+      this.assertCommentNotDeleted(comment, 'released');
       if (comment.status === 'acknowledged' || comment.status === 'resolved') {
         throw new PlanReviewError('invalid_state', 'Acknowledged or resolved comments cannot be released back to pending', 409, { commentId, status: comment.status });
       }

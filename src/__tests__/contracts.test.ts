@@ -1400,6 +1400,34 @@ test('pending unclaimed comments can be deleted and are excluded from queue surf
     assert.equal(eventsAfterDuplicateDeleted.statusCode, 200);
     assert.deepEqual(eventsAfterDuplicateDeleted.json().data.events, []);
 
+    const ackDeleted = await app.inject({
+      method: 'POST',
+      url: `/api/comments/${deletedComment.id}/ack`,
+      payload: { claimId: 'claim_stale' }
+    });
+    assert.equal(ackDeleted.statusCode, 409);
+    assert.equal(ackDeleted.json().error.code, 'invalid_state');
+
+    const resolveDeleted = await app.inject({
+      method: 'POST',
+      url: `/api/comments/${deletedComment.id}/resolve`,
+      payload: { resolutionNote: 'stale resolve' }
+    });
+    assert.equal(resolveDeleted.statusCode, 409);
+    assert.equal(resolveDeleted.json().error.code, 'invalid_state');
+
+    const releaseDeleted = await app.inject({
+      method: 'POST',
+      url: `/api/comments/${deletedComment.id}/release`,
+      payload: { claimId: 'claim_stale' }
+    });
+    assert.equal(releaseDeleted.statusCode, 409);
+    assert.equal(releaseDeleted.json().error.code, 'invalid_state');
+
+    const eventsAfterDeletedLifecycleAttempts = await app.inject({ method: 'GET', url: `/api/plans/${planId}/events/poll?afterSequence=${sequenceAfterDelete}&mode=all` });
+    assert.equal(eventsAfterDeletedLifecycleAttempts.statusCode, 200);
+    assert.deepEqual(eventsAfterDeletedLifecycleAttempts.json().data.events, []);
+
     const claimedCreate = await app.inject({
       method: 'POST',
       url: `/api/plans/${planId}/comments`,
