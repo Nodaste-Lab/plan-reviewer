@@ -235,8 +235,8 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan']): stri
   const navActions = plan.archivedAt
     ? `<a href="/archive">← Archive</a>${reviewButton}<span id="archive-status" class="archive-status">Archived</span><button id="restore-plan" type="button">Restore plan</button>`
     : `<a href="/">← Plan index</a>${reviewButton}<span id="archive-status" class="archive-status" hidden></span><button id="archive-plan" type="button">Archive plan</button>`;
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Plan ${escapedPlanId}</title>
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'">
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Plan ${escapedPlanId}</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="stylesheet" href="/client.css">
   </head><body data-plan-id="${escapedPlanId}">

@@ -90,7 +90,9 @@ try {
   const shellResponse = await context.get(`/p/${registered.planId}`);
   assert.equal(shellResponse.ok(), true);
   assert.equal(shellResponse.headers()['cache-control'], 'no-store');
-  assert.match(await shellResponse.text(), /rel="icon" type="image\/svg\+xml" href="\/favicon\.svg"/);
+  const shellHtml = await shellResponse.text();
+  assert.match(shellHtml, /<meta name="viewport" content="width=device-width, initial-scale=1">/);
+  assert.match(shellHtml, /rel="icon" type="image\/svg\+xml" href="\/favicon\.svg"/);
   const clientJsResponse = await context.get('/client.js');
   assert.equal(clientJsResponse.ok(), true);
   assert.equal(clientJsResponse.headers()['cache-control'], 'no-store');
