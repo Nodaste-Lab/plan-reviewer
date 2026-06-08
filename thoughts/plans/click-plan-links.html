@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan: Let rendered plan links remain clickable</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1020;
+      --panel: #111827;
+      --panel-2: #162033;
+      --text: #e5e7eb;
+      --muted: #a7b0c0;
+      --accent: #38bdf8;
+      --accent-2: #c084fc;
+      --border: #2b364d;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top left, rgba(56,189,248,.12), transparent 32rem), var(--bg);
+      color: var(--text);
+      font: 16px/1.55 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main { max-width: 1060px; margin: 0 auto; padding: 40px 22px 72px; }
+    header, section, article {
+      background: rgba(17, 24, 39, .88);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 22px;
+      margin: 18px 0;
+      box-shadow: 0 18px 48px rgba(0,0,0,.24);
+    }
+    header { border-color: rgba(56,189,248,.42); }
+    h1, h2, h3 { line-height: 1.18; margin: 0 0 12px; }
+    h1 { font-size: clamp(2rem, 4vw, 3rem); }
+    h2 { font-size: 1.4rem; color: #f8fafc; }
+    h3 { font-size: 1.08rem; color: #dbeafe; }
+    p { margin: .5rem 0 1rem; }
+    a { color: #7dd3fc; }
+    code, pre {
+      background: #0f172a;
+      color: #dbeafe;
+      border-radius: 8px;
+    }
+    code { padding: .1rem .32rem; }
+    pre { padding: 14px; overflow-x: auto; border: 1px solid var(--border); }
+    ul, ol { padding-left: 1.35rem; }
+    li { margin: .4rem 0; }
+    .muted { color: var(--muted); }
+    .pill {
+      display: inline-block;
+      border: 1px solid rgba(56,189,248,.5);
+      border-radius: 999px;
+      padding: 4px 10px;
+      color: #bae6fd;
+      background: rgba(14, 116, 144, .22);
+      font-size: .86rem;
+      font-weight: 700;
+      margin-right: 8px;
+    }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+    .card { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+    .good { border-color: rgba(34,197,94,.45); }
+    .warn { border-color: rgba(245,158,11,.55); }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { border: 1px solid var(--border); padding: 10px; text-align: left; vertical-align: top; }
+    th { background: #0f172a; color: #dbeafe; }
+    .checkbox-list { list-style: none; padding-left: 0; }
+    .checkbox-list li::before { content: "☐"; color: var(--accent); font-weight: 900; margin-right: 8px; }
+  </style>
+</head>
+<body>
+<main>
+  <header id="summary">
+    <span class="pill">Plan-reviewer UI</span><span class="pill">Planning only</span>
+    <h1>Let rendered plan links remain clickable</h1>
+    <p class="muted">Bug: the review shell captures every click inside the rendered plan iframe as comment intent, so clicking a normal anchor opens the comment composer instead of following the link. While hovering a link, the UI should not present a comment target; the reviewer should click nearby DOM text/container areas to comment on link-adjacent content.</p>
+  </header>
+
+  <section id="product-intent">
+    <h2>Product intent</h2>
+    <ul>
+      <li id="intent-links-work"><strong>Native links work.</strong> A click or tap directly on an anchor/control inside the rendered plan must keep its normal browser behavior: fragment/default-target links may navigate the iframe, and <code>target="_blank"</code> links may open a new tab/window instead of being silently blocked by the review shell.</li>
+      <li id="intent-comment-near-link"><strong>Comments remain easy around links.</strong> Clicking surrounding text or container DOM still opens the composer on the nearest plan node.</li>
+      <li id="intent-hover-communicates-boundary"><strong>Hover communicates the boundary.</strong> When the pointer is over a link/control, no hover selection outline should imply that clicking will comment.</li>
+      <li id="intent-small-change"><strong>Keep scope narrow.</strong> Fix the event targeting contract; do not redesign comment mode, iframe rendering, or anchor sanitization.</li>
+    </ul>
+  </section>
+
+  <section id="current-behavior">
+    <h2>Observed implementation</h2>
+    <div class="grid">
+      <article id="current-click-handler" class="card warn">
+        <h3>Global iframe click capture</h3>
+        <p><code>src/server/app.ts</code> attaches a capturing <code>click</code> listener to the rendered plan document. It always calls <code>event.preventDefault()</code> and <code>event.stopPropagation()</code>, then opens the element composer.</p>
+      </article>
+      <article id="current-targeting" class="card warn">
+        <h3>Target selection</h3>
+        <p><code>commentTargetFromEvent</code> resolves to the nearest <code>[data-plan-node-id]</code> or the raw element. Because render assigns <code>data-plan-node-id</code> broadly, anchors are treated as commentable plan nodes.</p>
+      </article>
+      <article id="current-hover" class="card warn">
+        <h3>Hover outline</h3>
+        <p>The iframe <code>mousemove</code> listener updates <code>hovered</code> for the event target without excluding interactive descendants, so anchors can show a comment affordance.</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="implementation-plan">
+    <h2>Implementation plan</h2>
+    <ol>
+      <li id="phase-1-tests"><strong>Write failing e2e coverage first.</strong> Extend the plan fixture in <code>src/test-fixtures/e2e-run.ts</code> with a separate link-specific section, not by changing the existing <code>#dom-annotation</code> section or <code>Plan index target.</code> paragraph, because later scenarios use exact-string replacements against those literals. Add an inline same-document anchor such as <code>href="#link-target"</code> next to normal text, plus a matching target element. Use <code>page.frameLocator('#plan-frame')</code> and a real Playwright pointer click on the anchor's rendered iframe coordinates, not a synthetic <code>dispatchEvent</code>, then assert the composer stays hidden and <code>iframe.contentWindow.location.hash === '#link-target'</code>. Assert anchor hover does not show a hover box after the deferred <code>requestAnimationFrame</code> reflow, and clicking adjacent non-link DOM still opens the composer.</li>
+      <li id="phase-2-helper"><strong>Add one interactive-target helper.</strong> In <code>src/server/app.ts</code>, add a small helper near <code>commentTargetFromEvent</code> that returns the closest interactive element with native/default behavior after sanitization: <code>a[href]</code>, <code>button</code>, <code>input</code>, <code>textarea</code>, <code>select</code>, labels associated with controls, <code>summary</code>, and <code>area[href]</code>. Exclude role-only selectors such as <code>[role="button"]</code> or <code>[role="link"]</code> unless implementation also adds dedicated tests proving they are not dead zones in no-script rendered plans. Add a point-based variant for touch coordinates so <code>touchend</code> checks the same element that <code>commentTargetFromPoint()</code> would otherwise comment on.</li>
+      <li id="phase-3-mouse"><strong>Respect the helper in mouse hover and click paths.</strong> In the iframe <code>mousemove</code> listener, clear <code>hovered</code> and reflow boxes when the target is interactive. In the iframe <code>click</code> listener, make the interactive guard the first branch, before <code>preventDefault()</code>, <code>stopPropagation()</code>, or <code>suppressSyntheticClickUntil</code>, so native clicks are not cancelled.</li>
+      <li id="phase-4-touch"><strong>Apply the same rule to touch.</strong> In <code>touchstart</code>, if the touch point is interactive, clear <code>hovered</code> and schedule a selection-box reflow so no stale hover affordance remains. In <code>touchend</code>, use the touch point to detect an interactive element before <code>openElementComposer(commentTargetFromPoint(...))</code>; return without opening the composer and without setting <code>suppressSyntheticClickUntil</code> for those taps.</li>
+      <li id="phase-5-sandbox"><strong>Permit native popup targets.</strong> Update the rendered plan iframe sandbox in <code>src/server/app.ts</code> from <code>allow-same-origin</code> to include <code>allow-popups</code>, so <code>target="_blank"</code> plan links are not silently blocked after the click interception fix. Keep scripts disabled and keep popups sandboxed; do not use <code>allow-popups-to-escape-sandbox</code> because same-origin SVG asset popups could otherwise escape the no-script sandbox.</li>
+      <li id="phase-6-verify"><strong>Verify behavior and regressions.</strong> Run build and e2e tests. Keep the primary click test deterministic with the in-fixture <code>#link-target</code> anchor rather than external navigation that could leave the review fixture. For <code>target="_blank"</code>, use a real Playwright pointer click and a bounded <code>popup</code> assertion against a controlled same-origin <code>http</code>/<code>https</code> URL that survives sanitization, proving the sandbox allows the popup path without opening the composer.</li>
+      <li id="phase-7-touch-coverage"><strong>Give touch behavior credible coverage.</strong> Prefer adding a separate Playwright context with <code>hasTouch: true</code> and a real <code>locator.tap()</code> on the rendered link to assert composer remains hidden after the existing 120ms delayed touch path and the iframe reaches <code>#link-target</code>. If the environment cannot support a real touch context, use observable synthetic-event fallback coverage only: dispatch synthetic touch events on the link and assert the composer remains hidden after the delayed touch path, then deliberately dispatch a synthetic click/activation and assert the iframe reaches <code>#link-target</code>. Also assert adjacent non-link touch still opens the composer.</li>
+    </ol>
+  </section>
+
+  <section id="proposed-helper-contract">
+    <h2>Proposed helper contract</h2>
+    <pre><code>function interactiveTargetFromEvent(event) {
+  const rawTarget = event?.target;
+  const element = rawTarget?.nodeType === 1 ? rawTarget : rawTarget?.parentElement;
+  return interactiveTargetFromElement(element);
+}
+
+function interactiveTargetFromPoint(doc, event) {
+  const touch = event.changedTouches?.[0] || event.touches?.[0];
+  if (!touch) return interactiveTargetFromEvent(event);
+  return interactiveTargetFromElement(doc.elementFromPoint(touch.clientX, touch.clientY));
+}</code></pre>
+    <p class="muted">The actual implementation should share the selector and target normalization with <code>commentTargetFromEvent</code> / <code>commentTargetFromPoint</code> so mouse and touch gates test the same DOM element that would otherwise become the comment target. Do not gate the <code>mouseup</code> text-selection path; selecting text that spans or includes link text is deliberate comment intent and should continue to open the composer. A linked image inside <code>&lt;a&gt;</code> should follow the link rather than opening the image comment lightbox; users can comment on surrounding DOM or the standalone image when it is not link-wrapped.</p>
+  </section>
+
+  <section id="bdd-scenarios">
+    <h2>BDD scenarios</h2>
+    <article id="bdd-link-click" class="card good">
+      <h3>Scenario: clicking a rendered link</h3>
+      <p><strong>Given</strong> a rendered plan contains a same-document link such as <code>&lt;a href="#link-target"&gt;Example&lt;/a&gt;</code>, <strong>when</strong> the reviewer clicks the link text with a real Playwright pointer click on the anchor's rendered iframe coordinates, <strong>then</strong> the review shell does not open the comment composer and the iframe reaches <code>#link-target</code>.</p>
+    </article>
+    <article id="bdd-link-hover" class="card good">
+      <h3>Scenario: hovering a rendered link</h3>
+      <p><strong>Given</strong> the pointer is over a rendered link, <strong>when</strong> the hover handler runs, <strong>then</strong> the hover selection box is hidden and no comment affordance appears over the link.</p>
+    </article>
+    <article id="bdd-adjacent-comment" class="card good">
+      <h3>Scenario: commenting near a link</h3>
+      <p><strong>Given</strong> a paragraph contains text before and after a link, <strong>when</strong> the reviewer clicks adjacent non-link text or the paragraph area, <strong>then</strong> the composer opens on the nearest plan node as it does today.</p>
+    </article>
+    <article id="bdd-touch-link" class="card good">
+      <h3>Scenario: tapping a rendered link on mobile</h3>
+      <p><strong>Given</strong> a touch device viewport, <strong>when</strong> the reviewer taps a rendered link, <strong>then</strong> touch handling does not open the comment composer or suppress the synthetic click.</p>
+    </article>
+    <article id="bdd-blank-link" class="card good">
+      <h3>Scenario: opening a target-blank link</h3>
+      <p><strong>Given</strong> a rendered plan contains a link with <code>target="_blank"</code> to a controlled deterministic URL, <strong>when</strong> the reviewer clicks the link with a real Playwright pointer click, <strong>then</strong> a bounded Playwright <code>popup</code> assertion observes the browser's new-tab path, the review shell does not open the composer, and scripts remain disabled.</p>
+    </article>
+  </section>
+
+  <section id="acceptance-criteria">
+    <h2>Acceptance criteria</h2>
+    <ul>
+      <li id="ac-link-click">Anchor clicks inside rendered plans are not intercepted by comment creation.</li>
+      <li id="ac-link-hover">Hovering over an anchor/control hides the comment hover selection box.</li>
+      <li id="ac-around-link">Clicking non-interactive DOM around a link still starts a comment.</li>
+      <li id="ac-touch">Touch taps on links have credible coverage: preferably a real <code>hasTouch</code> Playwright <code>locator.tap()</code> verifies no composer after the delayed touch path and navigation to <code>#link-target</code>; otherwise observable synthetic-event fallback coverage verifies link touch leaves the composer hidden after the delayed path, a deliberate follow-up click/activation reaches <code>#link-target</code>, and adjacent non-link touch still opens the composer.</li>
+      <li id="ac-blank-link"><code>target="_blank"</code> plan links are not silently blocked by the iframe sandbox after the event-layer fix.</li>
+      <li id="ac-tests"><code>bun run build</code> and <code>bun run test:e2e</code> pass.</li>
+    </ul>
+  </section>
+
+  <section id="progress">
+    <h2>Progress</h2>
+    <ul class="checkbox-list">
+      <li id="progress-p1">Completed — added failing e2e assertions for link hover/click and adjacent comment behavior.</li>
+      <li id="progress-p2">Completed — added the interactive-target helper in <code>src/server/app.ts</code>.</li>
+      <li id="progress-p3">Completed — gated mouse hover and click comment handlers.</li>
+      <li id="progress-p4">Completed — gated touch handlers and synthetic click suppression.</li>
+      <li id="progress-p5">Completed — permitted target-blank links in the iframe sandbox.</li>
+      <li id="progress-p6">Completed — added real touch coverage.</li>
+      <li id="progress-p7">Completed — ran build and e2e verification.</li>
+    </ul>
+  </section>
+
+  <section id="non-goals">
+    <h2>Non-goals</h2>
+    <ul>
+      <li id="non-goal-mode-toggle">No new explicit comment-mode toggle.</li>
+      <li id="non-goal-renderer">No changes to HTML sanitization or data-plan-node-id assignment unless tests prove the event-layer fix is insufficient.</li>
+      <li id="non-goal-navigation-policy">No custom JavaScript link-opening policy and no forced rewrite of default-target anchors; the only navigation-policy change is allowing sandboxed <code>target="_blank"</code> links to use native browser popup behavior without escaping the iframe sandbox.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>
