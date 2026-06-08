@@ -243,7 +243,7 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan']): stri
     <nav id="plan-navbar" aria-label="Plan actions">${navActions}</nav>
     <div id="app">
       <aside id="sidebar"><h1>Comments</h1><div id="sync-warning" hidden></div><div id="deferred-refresh-notice" hidden>Plan updated in the background. Finish or cancel this comment to refresh.</div><div id="comments"></div></aside>
-      <main id="review"><iframe id="plan-frame" sandbox="allow-same-origin" src="/render/${escapedPlanId}"></iframe><button id="mobile-comments-toggle" type="button" aria-controls="sidebar" aria-expanded="false">Comments</button><div id="hover-selection-box" class="selection-box hover" hidden></div><div id="active-selection-box" class="selection-box active" hidden></div></main>
+      <main id="review"><iframe id="plan-frame" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" src="/render/${escapedPlanId}"></iframe><button id="mobile-comments-toggle" type="button" aria-controls="sidebar" aria-expanded="false">Comments</button><div id="hover-selection-box" class="selection-box hover" hidden></div><div id="active-selection-box" class="selection-box active" hidden></div></main>
     </div>
     <div id="lightbox" class="lightbox" hidden><header><button id="zoom-out">-</button><button id="zoom-reset">Reset</button><button id="zoom-in">+</button><button id="pan-toggle">Pan</button><button id="close-lightbox">Close</button></header><div id="lightbox-stage" class="lightbox-stage"><img id="lightbox-image" alt=""><div id="image-selection-box" hidden></div></div></div>
     <div id="composer" hidden><textarea id="comment-body" placeholder="Comment on selection"></textarea><div id="comment-discard-warning" hidden>Your comment would be lost. Use Cancel to discard it.</div><button id="submit-comment">Submit</button><button id="cancel-comment">Cancel</button></div>
@@ -772,9 +772,24 @@ function updateSelectionBoxes(){
   positionSelectionBox(hoverSelectionBox, hovered && hovered !== selected ? hovered : null);
   positionSelectionBox(activeSelectionBox, selected);
 }
-function commentTargetFromEvent(event){
+const nativeInteractiveSelector = 'a[href],button,input,textarea,select,label[for],summary,area[href]';
+function elementFromEvent(event){
   const rawTarget = event?.target;
-  const element = rawTarget?.nodeType === 1 ? rawTarget : rawTarget?.parentElement;
+  return rawTarget?.nodeType === 1 ? rawTarget : rawTarget?.parentElement;
+}
+function interactiveTargetFromElement(element){
+  return element?.closest?.(nativeInteractiveSelector) || null;
+}
+function interactiveTargetFromEvent(event){
+  return interactiveTargetFromElement(elementFromEvent(event));
+}
+function interactiveTargetFromPoint(doc, event){
+  const touch = event.changedTouches?.[0] || event.touches?.[0];
+  if (!touch) return interactiveTargetFromEvent(event);
+  return interactiveTargetFromElement(doc.elementFromPoint(touch.clientX, touch.clientY));
+}
+function commentTargetFromEvent(event){
+  const element = elementFromEvent(event);
   return element?.closest?.('[data-plan-node-id]') || element || null;
 }
 function commentTargetFromPoint(doc, event){
@@ -939,6 +954,11 @@ function attachFrameListeners(){
   doc.addEventListener('touchstart', event => {
     const point = touchPoint(event);
     touchStart = point ? { ...point, moved: false } : null;
+    if (interactiveTargetFromPoint(doc, event)) {
+      hovered = null;
+      scheduleSelectionBoxUpdate();
+      return;
+    }
     const target = commentTargetFromEvent(event);
     if (target && target !== hovered) {
       hovered = target;
@@ -954,6 +974,7 @@ function attachFrameListeners(){
     }
   }, true);
   doc.addEventListener('touchend', event => {
+    const endedOnInteractiveTarget = Boolean(interactiveTargetFromPoint(doc, event));
     setTimeout(() => {
       if (adoptTextSelection()) {
         touchStart = null;
@@ -962,12 +983,18 @@ function attachFrameListeners(){
       const start = touchStart;
       touchStart = null;
       if (touchMoved(start, event)) return;
+      if (endedOnInteractiveTarget) return;
       const target = commentTargetFromPoint(doc, event);
       if (openElementComposer(target, event)) suppressSyntheticClickUntil = Date.now() + 700;
     }, 120);
   }, true);
   doc.addEventListener('mousemove', event => {
-    const target = event.target.closest?.('[data-plan-node-id]') || event.target;
+    if (interactiveTargetFromEvent(event)) {
+      hovered = null;
+      scheduleSelectionBoxUpdate();
+      return;
+    }
+    const target = commentTargetFromEvent(event);
     if (target && target !== hovered) {
       hovered = target;
       scheduleSelectionBoxUpdate();
@@ -978,6 +1005,7 @@ function attachFrameListeners(){
     scheduleSelectionBoxUpdate();
   }, true);
   doc.addEventListener('click', event => {
+    if (interactiveTargetFromEvent(event)) return;
     event.preventDefault();
     event.stopPropagation();
     if (Date.now() < suppressSyntheticClickUntil) return;
