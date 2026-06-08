@@ -1301,7 +1301,7 @@ document.addEventListener('visibilitychange', () => {
     abortEventPoll();
     return;
   }
-  void scheduleMetaLoad({ advanceEventSequence: true }).then(() => {
+  void scheduleMetaLoad({ reloadPlan: true, forceReloadPlan: true, advanceEventSequence: true }).then(() => {
     eventPollBackoffMs = 1000;
     scheduleEventPoll(0);
   });

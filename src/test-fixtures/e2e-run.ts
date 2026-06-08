@@ -1172,6 +1172,20 @@ try {
     await syncPage.waitForFunction(() => document.querySelector<HTMLElement>('#sync-warning')?.hidden === false);
     fs.writeFileSync(syncPath, syncHtmlV3);
     await syncPage.waitForFunction(() => document.querySelector<HTMLElement>('#sync-warning')?.hidden === true);
+
+    await syncPage.evaluate(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    const syncHtmlV4 = syncHtmlV3.replace('Source sync v3', 'Source sync v4');
+    fs.writeFileSync(syncPath, syncHtmlV4);
+    await syncPage.waitForTimeout(1000);
+    assert.equal(await syncPage.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.body?.textContent?.includes('Source sync v4')), false);
+    await syncPage.evaluate(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await syncPage.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.body?.textContent?.includes('Source sync v4'), undefined, { timeout: 5000 });
   } finally {
     await syncBrowser.close();
     fs.rmSync(syncDir, { recursive: true, force: true });
