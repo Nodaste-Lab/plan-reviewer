@@ -1125,7 +1125,7 @@ test('HTTP API registers plans, creates comments, claims, acks, resolves, and po
       url: `/api/plans/${planId}/comments`,
       payload: {
         versionId,
-        body: 'Retry after resolution.',
+        body: 'Add the agent watch contract here.',
         anchorType: 'dom',
         anchor: domAnchor(),
         clientMutationId: 'comment-1'
@@ -1265,6 +1265,225 @@ test('plan detail counts and progress match index values for the same plan', asy
     assert.ok(indexPlan);
     assert.deepEqual(detail.json().data.counts, indexPlan.counts);
     assert.deepEqual(detail.json().data.progress, indexPlan.progress);
+  } finally {
+    await app.close();
+  }
+});
+
+test('duplicate client mutation ids compare fingerprints and reject conflicting reuse', async () => {
+  const { app, planId, versionId } = await registeredApp('duplicate-fingerprints');
+  try {
+    const create = await app.inject({
+      method: 'POST',
+      url: `/api/plans/${planId}/comments`,
+      payload: {
+        versionId,
+        body: 'Fingerprint baseline',
+        anchorType: 'dom',
+        anchor: domAnchor(),
+        clientMutationId: 'fingerprint-1'
+      }
+    });
+    assert.equal(create.statusCode, 200);
+    const comment = create.json().data.comment;
+
+    const reorderedAnchor = {
+      outerHtmlPreview: '<section id="phase-p1"><h2>Phase 1</h2></section>',
+      textPreview: 'Phase 1 Register the plan.',
+      viewport: { height: 800, width: 1280 },
+      rect: { width: 300, height: 80, y: 20, x: 10 },
+      headingPath: ['Phase 1'],
+      textQuote: { suffix: '', prefix: 'Phase 1', exact: 'Register the plan.' },
+      domPath: 'html/body/main/section[1]',
+      cssSelector: '#phase-p1',
+      planNodeId: 'phase-p1'
+    };
+    const exactRetry = await app.inject({
+      method: 'POST',
+      url: `/api/plans/${planId}/comments`,
+      payload: {
+        versionId,
+        body: 'Fingerprint baseline',
+        anchorType: 'dom',
+        anchor: reorderedAnchor,
+        clientMutationId: 'fingerprint-1'
+      }
+    });
+    assert.equal(exactRetry.statusCode, 200);
+    assert.equal(exactRetry.json().data.created, false);
+    assert.equal(exactRetry.json().data.comment.id, comment.id);
+
+    const bodyConflict = await app.inject({
+      method: 'POST',
+      url: `/api/plans/${planId}/comments`,
+      payload: { versionId, body: 'Changed body', anchorType: 'dom', anchor: domAnchor(), clientMutationId: 'fingerprint-1' }
+    });
+    assert.equal(bodyConflict.statusCode, 409);
+    assert.equal(bodyConflict.json().error.code, 'duplicate_comment_conflict');
+    assert.match(bodyConflict.json().error.nextAction, /Refresh the comments list/);
+
+    const anchorConflict = await app.inject({
+      method: 'POST',
+      url: `/api/plans/${planId}/comments`,
+      payload: { versionId, body: 'Fingerprint baseline', anchorType: 'dom', anchor: { ...domAnchor(), textPreview: 'Changed anchor' }, clientMutationId: 'fingerprint-1' }
+    });
+    assert.equal(anchorConflict.statusCode, 409);
+    assert.equal(anchorConflict.json().error.code, 'duplicate_comment_conflict');
+
+    const secondVersion = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload({ commitSha: 'def456', fileHash: 'second-version-fingerprint', html: sampleHtml().replace('Register the plan.', 'Register the plan again.') })
+    });
+    assert.equal(secondVersion.statusCode, 200);
+    assert.equal(secondVersion.json().data.planId, planId);
+    const versionConflict = await app.inject({
+      method: 'POST',
+      url: `/api/plans/${planId}/comments`,
+      payload: { versionId: secondVersion.json().data.versionId, body: 'Fingerprint baseline', anchorType: 'dom', anchor: domAnchor(), clientMutationId: 'fingerprint-1' }
+    });
+    assert.equal(versionConflict.statusCode, 409);
+    assert.equal(versionConflict.json().error.code, 'duplicate_comment_conflict');
+
+    const events = await app.inject({ method: 'GET', url: `/api/plans/${planId}/events/poll?afterSequence=0&mode=queue` });
+    assert.equal(events.statusCode, 200);
+    assert.equal(events.json().data.events.filter((event: { eventType: string }) => event.eventType === 'comment.created').length, 1);
+  } finally {
+    await app.close();
+  }
+});
+
+test('pending unclaimed comments can be deleted and are excluded from queue surfaces', async () => {
+  const { app, planId, versionId } = await registeredApp('delete-comments');
+  try {
+    const initialMeta = await app.inject({ method: 'GET', url: `/api/plans/${planId}` });
+    assert.equal(initialMeta.statusCode, 200);
+    const initialPendingCount = initialMeta.json().data.counts.pending;
+
+    const createDeleted = await app.inject({
+      method: 'POST',
+      url: `/api/plans/${planId}/comments`,
+      payload: { versionId, body: 'Delete me', anchorType: 'dom', anchor: domAnchor(), clientMutationId: 'delete-me' }
+    });
+    assert.equal(createDeleted.statusCode, 200);
+    const deletedComment = createDeleted.json().data.comment;
+
+    const deleteResponse = await app.inject({ method: 'DELETE', url: `/api/comments/${deletedComment.id}` });
+    assert.equal(deleteResponse.statusCode, 200);
+    assert.equal(deleteResponse.json().data.comment.deletedAt.length > 0, true);
+    const afterDeleteEvents = await app.inject({ method: 'GET', url: `/api/plans/${planId}/events/poll?afterSequence=0&mode=all` });
+    assert.equal(afterDeleteEvents.statusCode, 200);
+    const sequenceAfterDelete = afterDeleteEvents.json().data.latestSequence;
+
+    const list = await app.inject({ method: 'GET', url: `/api/plans/${planId}/comments` });
+    assert.equal(list.statusCode, 200);
+    assert.equal(list.json().data.comments.some((comment: { id: string }) => comment.id === deletedComment.id), false);
+    const meta = await app.inject({ method: 'GET', url: `/api/plans/${planId}` });
+    assert.equal(meta.json().data.counts.pending, initialPendingCount);
+    assert.equal(meta.json().data.comments.some((comment: { id: string }) => comment.id === deletedComment.id), false);
+    const queue = await app.inject({ method: 'GET', url: `/api/agent/queue?planId=${planId}` });
+    assert.equal(queue.statusCode, 200);
+    assert.equal(queue.json().data.items.some((comment: { id: string }) => comment.id === deletedComment.id), false);
+
+    const selectedClaimDeleted = await app.inject({
+      method: 'POST',
+      url: `/api/plans/${planId}/comments/claim`,
+      payload: { mode: 'selected', commentIds: [deletedComment.id] }
+    });
+    assert.equal(selectedClaimDeleted.statusCode, 409);
+    assert.equal(selectedClaimDeleted.json().error.code, 'invalid_state');
+
+    const duplicateAfterDelete = await app.inject({
+      method: 'POST',
+      url: `/api/plans/${planId}/comments`,
+      payload: { versionId, body: 'Delete me', anchorType: 'dom', anchor: domAnchor(), clientMutationId: 'delete-me' }
+    });
+    assert.equal(duplicateAfterDelete.statusCode, 409);
+    assert.equal(duplicateAfterDelete.json().error.code, 'duplicate_comment_deleted');
+    const eventsAfterDuplicateDeleted = await app.inject({ method: 'GET', url: `/api/plans/${planId}/events/poll?afterSequence=${sequenceAfterDelete}&mode=all` });
+    assert.equal(eventsAfterDuplicateDeleted.statusCode, 200);
+    assert.deepEqual(eventsAfterDuplicateDeleted.json().data.events, []);
+
+    const ackDeleted = await app.inject({
+      method: 'POST',
+      url: `/api/comments/${deletedComment.id}/ack`,
+      payload: { claimId: 'claim_stale' }
+    });
+    assert.equal(ackDeleted.statusCode, 409);
+    assert.equal(ackDeleted.json().error.code, 'invalid_state');
+
+    const resolveDeleted = await app.inject({
+      method: 'POST',
+      url: `/api/comments/${deletedComment.id}/resolve`,
+      payload: { resolutionNote: 'stale resolve' }
+    });
+    assert.equal(resolveDeleted.statusCode, 409);
+    assert.equal(resolveDeleted.json().error.code, 'invalid_state');
+
+    const releaseDeleted = await app.inject({
+      method: 'POST',
+      url: `/api/comments/${deletedComment.id}/release`,
+      payload: { claimId: 'claim_stale' }
+    });
+    assert.equal(releaseDeleted.statusCode, 409);
+    assert.equal(releaseDeleted.json().error.code, 'invalid_state');
+
+    const eventsAfterDeletedLifecycleAttempts = await app.inject({ method: 'GET', url: `/api/plans/${planId}/events/poll?afterSequence=${sequenceAfterDelete}&mode=all` });
+    assert.equal(eventsAfterDeletedLifecycleAttempts.statusCode, 200);
+    assert.deepEqual(eventsAfterDeletedLifecycleAttempts.json().data.events, []);
+
+    const claimedCreate = await app.inject({
+      method: 'POST',
+      url: `/api/plans/${planId}/comments`,
+      payload: { versionId, body: 'Claimed cannot delete', anchorType: 'dom', anchor: domAnchor() }
+    });
+    assert.equal(claimedCreate.statusCode, 200);
+    const claimedComment = claimedCreate.json().data.comment;
+    const claim = await app.inject({ method: 'POST', url: `/api/plans/${planId}/comments/claim`, payload: { mode: 'selected', commentIds: [claimedComment.id] } });
+    assert.equal(claim.statusCode, 200);
+    const deleteClaimed = await app.inject({ method: 'DELETE', url: `/api/comments/${claimedComment.id}` });
+    assert.equal(deleteClaimed.statusCode, 409);
+    assert.equal(deleteClaimed.json().error.code, 'invalid_state');
+
+    const acknowledgedCreate = await app.inject({
+      method: 'POST',
+      url: `/api/plans/${planId}/comments`,
+      payload: { versionId, body: 'Acknowledged cannot delete', anchorType: 'dom', anchor: domAnchor() }
+    });
+    assert.equal(acknowledgedCreate.statusCode, 200);
+    const acknowledged = acknowledgedCreate.json().data.comment;
+    const acknowledgedClaim = await app.inject({ method: 'POST', url: `/api/plans/${planId}/comments/claim`, payload: { mode: 'selected', commentIds: [acknowledged.id] } });
+    assert.equal(acknowledgedClaim.statusCode, 200);
+    const ack = await app.inject({ method: 'POST', url: `/api/comments/${acknowledged.id}/ack`, payload: { claimId: acknowledgedClaim.json().data.claimed[0].claim.id } });
+    assert.equal(ack.statusCode, 200);
+    const deleteAcknowledged = await app.inject({ method: 'DELETE', url: `/api/comments/${acknowledged.id}` });
+    assert.equal(deleteAcknowledged.statusCode, 409);
+    assert.equal(deleteAcknowledged.json().error.code, 'invalid_state');
+    const resolve = await app.inject({ method: 'POST', url: `/api/comments/${acknowledged.id}/resolve`, payload: { resolutionNote: 'resolved' } });
+    assert.equal(resolve.statusCode, 200);
+    const deleteResolved = await app.inject({ method: 'DELETE', url: `/api/comments/${acknowledged.id}` });
+    assert.equal(deleteResolved.statusCode, 409);
+    assert.equal(deleteResolved.json().error.code, 'invalid_state');
+
+    const expiringCreate = await app.inject({
+      method: 'POST',
+      url: `/api/plans/${planId}/comments`,
+      payload: { versionId, body: 'Delete after expired claim', anchorType: 'dom', anchor: domAnchor() }
+    });
+    assert.equal(expiringCreate.statusCode, 200);
+    const expiring = expiringCreate.json().data.comment;
+    const expiringClaim = await app.inject({ method: 'POST', url: `/api/plans/${planId}/comments/claim`, payload: { mode: 'selected', commentIds: [expiring.id], leaseSeconds: 1 } });
+    assert.equal(expiringClaim.statusCode, 200);
+    await new Promise(resolve => setTimeout(resolve, 1100));
+    const deleteExpired = await app.inject({ method: 'DELETE', url: `/api/comments/${expiring.id}` });
+    assert.equal(deleteExpired.statusCode, 200);
+
+    const events = await app.inject({ method: 'GET', url: `/api/plans/${planId}/events/poll?afterSequence=0&mode=all` });
+    assert.equal(events.statusCode, 200);
+    assert.equal(events.json().data.events.some((event: { eventType: string; commentId: string }) => event.eventType === 'comment.deleted' && event.commentId === deletedComment.id), true);
+    const queueEvents = await app.inject({ method: 'GET', url: `/api/plans/${planId}/events/poll?afterSequence=0&mode=queue` });
+    assert.equal(queueEvents.statusCode, 200);
+    assert.equal(queueEvents.json().data.events.some((event: { eventType: string; commentId: string }) => event.eventType === 'comment.deleted' && event.commentId === deletedComment.id), true);
   } finally {
     await app.close();
   }

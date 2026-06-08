@@ -10,6 +10,7 @@ export const eventTypeSchema = z.enum([
   'comment.acknowledged',
   'comment.resolved',
   'comment.released',
+  'comment.deleted',
   'plan.version.registered',
   'plan.version.synced',
   'plan.sync.failed',

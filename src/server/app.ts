@@ -296,6 +296,7 @@ const executionReviewButton = document.getElementById('request-execution-review'
 const composer = document.getElementById('composer');
 const body = document.getElementById('comment-body');
 const discardWarning = document.getElementById('comment-discard-warning');
+const submitCommentButton = document.getElementById('submit-comment');
 const comments = document.getElementById('comments');
 const mobileCommentsToggle = document.getElementById('mobile-comments-toggle');
 const syncWarning = document.getElementById('sync-warning');
@@ -310,6 +311,9 @@ let hovered = null;
 let selected = null;
 let selectedForScreenshot = null;
 let pendingAnchor = null;
+let pendingCommentMutationId = null;
+let submitInFlight = false;
+let pendingDeleteError = null;
 let markerCount = 0;
 let markerComments = [];
 let markerReflowQueued = false;
@@ -343,7 +347,20 @@ function setMobileCommentsOpen(open){
   mobileCommentsToggle?.setAttribute('aria-expanded', String(open));
   updateMobileCommentsToggle();
 }
+function newCommentMutationId(){
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  return 'comment-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+}
+function ensurePendingCommentMutationId(){
+  if (!pendingCommentMutationId) pendingCommentMutationId = newCommentMutationId();
+  return pendingCommentMutationId;
+}
+function setSubmitInFlight(value){
+  submitInFlight = value;
+  if (submitCommentButton) submitCommentButton.disabled = value;
+}
 function showComposer(){
+  if (pendingAnchor) ensurePendingCommentMutationId();
   setMobileCommentsOpen(false);
   composer.hidden = false;
   body.focus();
@@ -553,10 +570,42 @@ function renderComments(items){
     const metadata = [response.responseSummary || response.resolutionNote || response.note, changed, response.runId, response.handoffPath, response.commitSha].filter(Boolean).map(escapeHtml).join(' · ');
     const context = [c.anchor?.textPreview, c.anchor?.selectedText, c.anchor?.textQuote?.exact, c.anchor?.cssSelector].filter(Boolean).map(escapeHtml).join(' · ');
     const screenshot = c.screenshotAssetId ? '<a href="/comment-assets/'+encodeURIComponent(c.screenshotAssetId)+'">screenshot</a>' : '';
-    return '<div class="comment-row"><strong>#'+c.sequence+' '+escapeHtml(c.status)+'</strong><p>'+escapeHtml(c.body)+'</p><small>'+escapeHtml(c.anchorType)+' · '+escapeHtml(c.anchorState)+(metadata ? ' · '+metadata : '')+'</small>'+(context ? '<p><small>Context: '+context+'</small></p>' : '')+(screenshot ? '<p><small>'+screenshot+'</small></p>' : '')+'</div>';
+    const canDelete = c.status === 'pending' && !c.claim;
+    const deleteError = pendingDeleteError?.commentId === c.id ? '<small class="comment-delete-error" data-delete-error="'+escapeHtml(c.id)+'">'+escapeHtml(pendingDeleteError.message)+'</small>' : '<small class="comment-delete-error" data-delete-error="'+escapeHtml(c.id)+'" hidden></small>';
+    const deleteAction = canDelete || pendingDeleteError?.commentId === c.id ? '<p>'+(canDelete ? '<button type="button" data-delete-comment="'+escapeHtml(c.id)+'">Delete</button> ' : '')+deleteError+'</p>' : '';
+    return '<div class="comment-row" data-comment-id="'+escapeHtml(c.id)+'"><strong>#'+c.sequence+' '+escapeHtml(c.status)+'</strong><p>'+escapeHtml(c.body)+'</p><small>'+escapeHtml(c.anchorType)+' · '+escapeHtml(c.anchorState)+(metadata ? ' · '+metadata : '')+'</small>'+(context ? '<p><small>Context: '+context+'</small></p>' : '')+(screenshot ? '<p><small>'+screenshot+'</small></p>' : '')+deleteAction+'</div>';
   }).join('');
   comments.innerHTML = rows || '<p class="comments-empty">No comments yet. Tap a plan section to start one.</p>';
 }
+async function deleteComment(commentId, button){
+  const error = comments.querySelector('[data-delete-error="'+CSS.escape(commentId)+'"]');
+  if (error) { error.hidden = true; error.textContent = ''; }
+  button.disabled = true;
+  let res;
+  let json;
+  try {
+    res = await fetch('/api/comments/'+encodeURIComponent(commentId), { method: 'DELETE' });
+    json = await res.json();
+  } catch {
+    if (error) { error.textContent = 'Unable to delete comment. Check the service and retry.'; error.hidden = false; }
+    button.disabled = false;
+    return;
+  }
+  if (!json.ok) {
+    pendingDeleteError = { commentId, message: json.error?.message || 'Unable to delete comment.' };
+    await loadMeta();
+    return;
+  }
+  pendingDeleteError = null;
+  await loadMeta();
+}
+comments.addEventListener('click', event => {
+  const target = event.target;
+  const button = target instanceof Element ? target.closest('[data-delete-comment]') : null;
+  if (!button) return;
+  event.preventDefault();
+  deleteComment(button.dataset.deleteComment, button);
+});
 function escapeHtml(value){ return String(value).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])); }
 function renderMarkers(items){
   markerComments = items.filter(comment => comment.anchor?.rect);
@@ -847,7 +896,7 @@ function touchMoved(start, event){
   return start.moved || Math.hypot(point.x - start.x, point.y - start.y) > 12;
 }
 function openElementComposer(element, event){
-  if (!element || typeof element.getBoundingClientRect !== 'function') return false;
+  if (submitInFlight || !element || typeof element.getBoundingClientRect !== 'function') return false;
   selected = element.closest?.('[data-plan-node-id]') || element;
   selectedForScreenshot = selected;
   pendingAnchor = anchorForElement(selected, event);
@@ -870,6 +919,8 @@ function clearPendingSelection(){
   selected = null;
   selectedForScreenshot = null;
   pendingAnchor = null;
+  pendingCommentMutationId = null;
+  setSubmitInFlight(false);
   body.value = '';
   clearDiscardWarning();
   composer.hidden = true;
@@ -982,6 +1033,7 @@ function attachFrameListeners(){
   frameListenersAttached = true;
   const doc = frame.contentDocument;
   const adoptTextSelection = () => {
+    if (submitInFlight) return false;
     const selection = doc.getSelection();
     if (!selection || selection.isCollapsed || !selection.toString().trim()) return false;
     pendingAnchor = anchorForSelection(selection);
@@ -1099,28 +1151,50 @@ window.addEventListener('mouseup', event => {
   lightboxDragStart = null;
 });
 async function submitPendingComment(){
-  if (!pendingAnchor || !body.value.trim()) return;
+  if (!pendingAnchor || !body.value.trim() || submitInFlight) return;
+  const anchor = pendingAnchor;
   const note = body.value;
-  const marker = addMarker(pendingAnchor.rect);
-  await new Promise(requestAnimationFrame);
-  await new Promise(requestAnimationFrame);
-  let screenshot;
+  const mutationId = ensurePendingCommentMutationId();
+  setSubmitInFlight(true);
+  const marker = addMarker(anchor.rect);
   try {
-    screenshot = await markerScreenshot(pendingAnchor);
+    await new Promise(requestAnimationFrame);
+    await new Promise(requestAnimationFrame);
+    let screenshot;
+    try {
+      screenshot = await markerScreenshot(anchor);
+    } catch (error) {
+      console.warn('Unable to capture marker screenshot; submitting comment without screenshot.', error);
+    }
+    const res = await fetch('/api/plans/'+planId+'/comments', {
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body: JSON.stringify({ versionId, body: note, anchorType:anchor.type, anchor: anchor.anchor, markerScreenshot: screenshot, createdBy:{ displayName: localStorage.getItem('plan-reviewer-name') || 'Anonymous reviewer' }, clientMutationId: mutationId })
+    });
+    const json = await res.json();
+    if (!json.ok) {
+      marker.remove();
+      await loadMeta();
+      if (json.error?.code === 'duplicate_comment_deleted') {
+        clearPendingSelection();
+        alert(json.error.message);
+        await applyDeferredPlanRefreshIfIdle();
+        return;
+      }
+      alert(json.error?.message || 'Unable to submit comment.');
+      setSubmitInFlight(false);
+      return;
+    }
+    clearPendingSelection();
+    await loadMeta();
+    if (isMobileShell()) setMobileCommentsOpen(true);
+    await applyDeferredPlanRefreshIfIdle();
   } catch (error) {
-    console.warn('Unable to capture marker screenshot; submitting comment without screenshot.', error);
+    marker.remove();
+    console.warn('Unable to submit comment.', error);
+    alert('Unable to submit comment. Check the plan-review service and retry.');
+    setSubmitInFlight(false);
   }
-  const res = await fetch('/api/plans/'+planId+'/comments', {
-    method:'POST',
-    headers:{'content-type':'application/json'},
-    body: JSON.stringify({ versionId, body: note, anchorType:pendingAnchor.type, anchor: pendingAnchor.anchor, markerScreenshot: screenshot, createdBy:{ displayName: localStorage.getItem('plan-reviewer-name') || 'Anonymous reviewer' } })
-  });
-  const json = await res.json();
-  if (!json.ok) { marker.remove(); alert(json.error.message); }
-  clearPendingSelection();
-  await scheduleMetaLoad();
-  if (isMobileShell()) setMobileCommentsOpen(true);
-  await applyDeferredPlanRefreshIfIdle();
 }
 body.addEventListener('keydown', event => {
   if (event.key === 'Escape') {
@@ -1132,7 +1206,7 @@ body.addEventListener('keydown', event => {
   event.preventDefault();
   submitPendingComment();
 });
-document.getElementById('submit-comment').addEventListener('click', submitPendingComment);
+submitCommentButton?.addEventListener('click', submitPendingComment);
 function startEventStream(){
   const source = new EventSource('/api/plans/'+planId+'/events?mode=all&afterSequence='+encodeURIComponent(String(latestEventSequence)));
   source.addEventListener('plan.version.registered', handlePlanVersionEvent);
@@ -1143,6 +1217,7 @@ function startEventStream(){
   source.addEventListener('comment.acknowledged', () => scheduleMetaLoad());
   source.addEventListener('comment.resolved', () => scheduleMetaLoad());
   source.addEventListener('comment.released', () => scheduleMetaLoad());
+  source.addEventListener('comment.deleted', () => scheduleMetaLoad());
 }
 loadMeta().then(startEventStream).catch(error => console.warn('Unable to load plan metadata', error));
 `;
@@ -1421,6 +1496,18 @@ export function createApp(options: AppOptions): FastifyInstance {
       const { commentId } = request.params as { commentId: string };
       const input = releaseCommentSchema.parse(request.body);
       const result = store.releaseComment(commentId, input.claimId, input.reason);
+      bus.emitEvent(result.event);
+      return ok({ comment: result.comment });
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.delete('/api/comments/:commentId', async (request, reply) => {
+    try {
+      const { commentId } = request.params as { commentId: string };
+      const result = store.deleteComment(commentId);
+      for (const event of result.expiredEvents ?? []) bus.emitEvent(event);
       bus.emitEvent(result.event);
       return ok({ comment: result.comment });
     } catch (error) {

@@ -436,6 +436,72 @@ try {
     await page.click('#cancel-comment');
     await page.waitForFunction(() => document.querySelector<HTMLElement>('#composer')?.hidden === true);
 
+    let delayNextCommentPost = false;
+    let resumeCommentPost: (() => void) | null = null;
+    let delayedCommentPostSeen = new Promise<void>(resolve => {
+      page.route(`**/api/plans/${registered.planId}/comments`, async route => {
+        if (route.request().method() === 'POST' && delayNextCommentPost) {
+          delayNextCommentPost = false;
+          resolve();
+          await new Promise<void>(resume => {
+            resumeCommentPost = resume;
+          });
+        }
+        await route.continue();
+      });
+    });
+    const countCommentsWithBody = async (body: string) => {
+      const response = await context.get(`/api/plans/${registered.planId}/comments`);
+      assert.equal(response.ok(), true);
+      return ((await response.json()).data.comments as Array<{ body: string }>).filter(comment => comment.body === body).length;
+    };
+    await openDomComposer();
+    await page.fill('#comment-body', 'Browser duplicate submit guard');
+    delayNextCommentPost = true;
+    await page.click('#submit-comment');
+    await delayedCommentPostSeen;
+    assert.equal(await page.evaluate(() => document.querySelector<HTMLButtonElement>('#submit-comment')?.disabled), true);
+    await page.evaluate(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const target = iframe.contentDocument!.querySelector('#text-target')!;
+      target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: iframe.contentWindow ?? window }));
+    });
+    assert.equal(await page.inputValue('#comment-body'), 'Browser duplicate submit guard');
+    assert.equal(await page.evaluate(() => document.querySelector<HTMLButtonElement>('#submit-comment')?.disabled), true);
+    await page.evaluate(() => document.querySelector<HTMLButtonElement>('#submit-comment')?.click());
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter');
+    const resumeDuplicateSubmit = resumeCommentPost as (() => void) | null;
+    assert.ok(resumeDuplicateSubmit);
+    resumeDuplicateSubmit();
+    await page.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('Browser duplicate submit guard'));
+    assert.equal(await countCommentsWithBody('Browser duplicate submit guard'), 1);
+
+    delayedCommentPostSeen = new Promise<void>(resolve => {
+      page.route(`**/api/plans/${registered.planId}/comments`, async route => {
+        if (route.request().method() === 'POST' && delayNextCommentPost) {
+          delayNextCommentPost = false;
+          resolve();
+          await new Promise<void>(resume => {
+            resumeCommentPost = resume;
+          });
+        }
+        await route.continue();
+      });
+    });
+    await openDomComposer();
+    await page.fill('#comment-body', 'Browser keyboard button submit guard');
+    delayNextCommentPost = true;
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter');
+    await delayedCommentPostSeen;
+    await page.evaluate(() => document.querySelector<HTMLButtonElement>('#submit-comment')?.click());
+    const resumeKeyboardSubmit = resumeCommentPost as (() => void) | null;
+    assert.ok(resumeKeyboardSubmit);
+    resumeKeyboardSubmit();
+    await page.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('Browser keyboard button submit guard'));
+    assert.equal(await countCommentsWithBody('Browser keyboard button submit guard'), 1);
+    await page.unroute(`**/api/plans/${registered.planId}/comments`);
+    await page.evaluate(() => { (window as typeof window & { __html2canvasCalls?: number }).__html2canvasCalls = 0; });
+
     await openDomComposer();
     await page.waitForFunction(() => document.querySelector<HTMLElement>('#composer')?.hidden === false);
     await page.fill('#comment-body', 'Browser DOM annotation comment');
@@ -447,7 +513,7 @@ try {
     await page.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('Browser DOM annotation comment'));
     await page.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('second line'));
     await page.waitForFunction(() => (document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelectorAll('.comment-anchor').length ?? 0) > 0);
-    assert.equal(await commentAnchorCount(), 1);
+    assert.equal(await commentAnchorCount() >= 1, true);
     assert.equal(await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector<HTMLElement>('.comment-anchor')?.getAttribute('style')?.includes('NaN')), false);
     const pendingAnchorStyle = await page.evaluate(() => {
       const anchor = document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector<HTMLElement>('.comment-anchor.pending');
@@ -481,6 +547,49 @@ try {
     assert.equal(await page.evaluate(() => (window as typeof window & { __html2canvasCalls?: number }).__html2canvasCalls), 2);
     await page.evaluate(() => { (window as typeof window & { __html2canvasMode?: 'success' | 'fail' }).__html2canvasMode = 'success'; });
 
+    await openDomComposer();
+    await page.fill('#comment-body', 'Browser delete pending comment');
+    await page.click('#submit-comment');
+    await page.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('Browser delete pending comment'));
+    const deleteRow = page.locator('.comment-row').filter({ hasText: 'Browser delete pending comment' });
+    await deleteRow.getByRole('button', { name: 'Delete' }).click();
+    await page.waitForFunction(() => !document.querySelector('#comments')?.textContent?.includes('Browser delete pending comment'));
+    assert.equal(await countCommentsWithBody('Browser delete pending comment'), 0);
+
+    await openDomComposer();
+    await page.fill('#comment-body', 'Browser delete conflict guidance');
+    await page.click('#submit-comment');
+    await page.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('Browser delete conflict guidance'));
+    await page.route('**/api/comments/*', async route => {
+      if (route.request().method() !== 'DELETE') return route.continue();
+      await route.fulfill({
+        status: 409,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: false, error: { code: 'invalid_state', message: 'Only pending unclaimed comments can be deleted', details: {}, nextAction: 'Refresh and retry after the claim is released.' } })
+      });
+    });
+    const conflictRow = page.locator('.comment-row').filter({ hasText: 'Browser delete conflict guidance' });
+    await conflictRow.getByRole('button', { name: 'Delete' }).click();
+    await conflictRow.locator('.comment-delete-error').waitFor({ state: 'visible' });
+    assert.match(await conflictRow.locator('.comment-delete-error').innerText(), /Only pending unclaimed comments can be deleted/);
+    await page.unroute('**/api/comments/*');
+
+    const claimedUiComment = await context.post(`/api/plans/${registered.planId}/comments`, {
+      data: {
+        versionId: registered.versionId,
+        body: 'Browser claimed delete unavailable',
+        anchorType: 'dom',
+        anchor: { planNodeId: 'dom-annotation', cssSelector: '#dom-annotation', textPreview: 'DOM annotation', rect: { x: 0, y: 240, width: 200, height: 80 } }
+      }
+    });
+    assert.equal(claimedUiComment.ok(), true);
+    const claimedUi = (await claimedUiComment.json()).data.comment as { id: string };
+    const claimedUiClaim = await context.post(`/api/plans/${registered.planId}/comments/claim`, { data: { mode: 'selected', commentIds: [claimedUi.id] } });
+    assert.equal(claimedUiClaim.ok(), true);
+    await page.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('Browser claimed delete unavailable'));
+    const claimedRowDeleteButtons = await page.locator('.comment-row').filter({ hasText: 'Browser claimed delete unavailable' }).getByRole('button', { name: 'Delete' }).count();
+    assert.equal(claimedRowDeleteButtons, 0);
+
     await page.evaluate(() => {
       const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
       const doc = iframe.contentDocument!;
@@ -498,7 +607,7 @@ try {
     await page.fill('#comment-body', 'Browser text annotation comment');
     await page.click('#submit-comment');
     await page.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('Browser text annotation comment'));
-    assert.equal(await page.evaluate(() => (window as typeof window & { __html2canvasCalls?: number }).__html2canvasCalls), 3);
+    assert.equal(await page.evaluate(() => (window as typeof window & { __html2canvasCalls?: number }).__html2canvasCalls), 5);
 
     await page.evaluate(() => {
       const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame');
@@ -527,7 +636,7 @@ try {
     await page.fill('#comment-body', 'Browser image annotation comment');
     await page.click('#submit-comment');
     await page.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('Browser image annotation comment'));
-    assert.equal(await page.evaluate(() => (window as typeof window & { __html2canvasCalls?: number }).__html2canvasCalls), 4);
+    assert.equal(await page.evaluate(() => (window as typeof window & { __html2canvasCalls?: number }).__html2canvasCalls), 6);
     assert.match(await page.locator('#comments').innerText(), /image · mapped/);
     await page.reload();
     await page.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('Browser image annotation comment'));
