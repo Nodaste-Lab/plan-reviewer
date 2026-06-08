@@ -627,6 +627,17 @@ test('review shell title uses rendered plan title with safe fallback and escapin
     const blankShell = await app.inject({ method: 'GET', url: `/p/${blank.json().data.planId}` });
     assert.match(blankShell.body, /<title>sample \/ blank-title · Plan Review<\/title>/);
 
+    const bodyTitleHtml = '<!doctype html><html><body><main><svg><title>Icon Title</title></svg><p>No head title.</p></main></body></html>';
+    const bodyTitle = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload({ html: bodyTitleHtml, fileHash: sha256(bodyTitleHtml), slug: 'body-title', planPath: 'thoughts/plans/body-title.html' })
+    });
+    assert.equal(bodyTitle.statusCode, 200);
+    const bodyTitleShell = await app.inject({ method: 'GET', url: `/p/${bodyTitle.json().data.planId}` });
+    assert.match(bodyTitleShell.body, /<title>sample \/ body-title · Plan Review<\/title>/);
+    assert.doesNotMatch(bodyTitleShell.body, /Icon Title/);
+
     const entityTitleHtml = '<!doctype html><html><head><title>Research&nbsp;Plan</title></head><body><main><p>Entity.</p></main></body></html>';
     const entity = await app.inject({
       method: 'POST',

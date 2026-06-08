@@ -65,20 +65,18 @@ function htmlTextContent(node: HtmlNode): string {
   return '';
 }
 
-function findTitleElement(node: HtmlNode): HtmlElement | undefined {
-  if ('tagName' in node && node.tagName === 'title') return node;
+function childElement(node: HtmlNode, tagName: string): HtmlElement | undefined {
   if ('childNodes' in node && Array.isArray(node.childNodes)) {
-    for (const child of node.childNodes) {
-      const title = findTitleElement(child);
-      if (title) return title;
-    }
+    return node.childNodes.find((child): child is HtmlElement => 'tagName' in child && child.tagName === tagName);
   }
   return undefined;
 }
 
 function renderedHtmlTitle(renderedHtml: string): string | undefined {
   const document = parse(renderedHtml) as DefaultTreeAdapterMap['document'];
-  const titleElement = findTitleElement(document as unknown as HtmlNode);
+  const htmlElement = childElement(document as unknown as HtmlNode, 'html');
+  const headElement = childElement(htmlElement ?? (document as unknown as HtmlNode), 'head');
+  const titleElement = headElement ? childElement(headElement, 'title') : undefined;
   const normalized = normalizePlanTitle(titleElement ? htmlTextContent(titleElement) : '');
   return normalized || undefined;
 }
