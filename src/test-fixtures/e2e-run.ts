@@ -1186,6 +1186,30 @@ try {
       document.dispatchEvent(new Event('visibilitychange'));
     });
     await syncPage.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.body?.textContent?.includes('Source sync v4'), undefined, { timeout: 5000 });
+
+    await syncPage.evaluate(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    const syncHtmlV5 = syncHtmlV4.replace('Source sync v4', 'Source sync v5');
+    fs.writeFileSync(syncPath, syncHtmlV5);
+    await syncPage.waitForTimeout(1000);
+    assert.equal(await syncPage.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.body?.textContent?.includes('Source sync v5')), false);
+    let failedVisibleCatchup = false;
+    await syncPage.route(`${baseUrl}/api/plans/${syncRegistered.planId}`, async route => {
+      if (!failedVisibleCatchup) {
+        failedVisibleCatchup = true;
+        await route.fulfill({ status: 503, contentType: 'application/json', body: '{"ok":false}' });
+        return;
+      }
+      await route.continue();
+    });
+    await syncPage.evaluate(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await syncPage.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.body?.textContent?.includes('Source sync v5'), undefined, { timeout: 5000 });
+    assert.equal(failedVisibleCatchup, true);
   } finally {
     await syncBrowser.close();
     fs.rmSync(syncDir, { recursive: true, force: true });

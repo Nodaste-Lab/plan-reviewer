@@ -1301,7 +1301,9 @@ document.addEventListener('visibilitychange', () => {
     abortEventPoll();
     return;
   }
-  void scheduleMetaLoad({ reloadPlan: true, forceReloadPlan: true, advanceEventSequence: true }).then(() => {
+  void scheduleMetaLoad({ reloadPlan: true, forceReloadPlan: true, advanceEventSequence: true }).catch(error => {
+    console.warn('Unable to refresh plan after visibility restore', error);
+  }).finally(() => {
     eventPollBackoffMs = 1000;
     scheduleEventPoll(0);
   });
