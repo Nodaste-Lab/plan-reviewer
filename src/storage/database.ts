@@ -76,6 +76,7 @@ export interface StoredComment {
   agentResponse?: Record<string, unknown>;
   createdBy: Record<string, unknown>;
   createdAt: string;
+  deletedAt?: string;
   claim?: { id: string; agentId: string; leaseExpiresAt: string } | null;
 }
 
@@ -102,6 +103,23 @@ function hostname(): string {
   } catch {
     return 'unknown-host';
   }
+}
+
+function normalizeJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(item => normalizeJsonValue(item));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, item]) => item !== undefined)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, item]) => [key, normalizeJsonValue(item)])
+    );
+  }
+  return value;
+}
+
+function stableJson(value: unknown): string {
+  return JSON.stringify(normalizeJsonValue(parseJson(JSON.stringify(value), null)));
 }
 
 function inferAssetContentType(sourceUrl: string, bytes: Buffer): string | null {
@@ -340,6 +358,7 @@ export class PlanReviewStore {
     this.ensureColumn('plans', 'last_sync_error_json', 'TEXT');
     this.ensureColumn('plans', 'archived_at', 'TEXT');
     this.ensureColumn('plans', 'publication_metadata_json', 'TEXT');
+    this.ensureColumn('comments', 'deleted_at', 'TEXT');
     this.ensureColumn('plan_versions', 'source_mtime_ms', 'REAL');
     this.ensureColumn('plan_versions', 'source_size', 'INTEGER');
     this.ensureColumn('plan_versions', 'sync_origin', "TEXT NOT NULL DEFAULT 'manual_register'");
@@ -555,10 +574,10 @@ export class PlanReviewStore {
         v.html_blob_path AS htmlBlobPath,
         v.source_mtime_ms AS sourceMtimeMs, v.source_size AS sourceSize, v.sync_origin AS syncOrigin,
         v.created_at AS versionCreatedAt, p.updated_at AS planUpdatedAt,
-        SUM(CASE WHEN c.status = 'pending' THEN 1 ELSE 0 END) AS pending,
-        SUM(CASE WHEN c.status = 'claimed' THEN 1 ELSE 0 END) AS claimed,
-        SUM(CASE WHEN c.status = 'acknowledged' THEN 1 ELSE 0 END) AS acknowledged,
-        SUM(CASE WHEN c.status = 'resolved' THEN 1 ELSE 0 END) AS resolved,
+        SUM(CASE WHEN c.deleted_at IS NULL AND c.status = 'pending' THEN 1 ELSE 0 END) AS pending,
+        SUM(CASE WHEN c.deleted_at IS NULL AND c.status = 'claimed' THEN 1 ELSE 0 END) AS claimed,
+        SUM(CASE WHEN c.deleted_at IS NULL AND c.status = 'acknowledged' THEN 1 ELSE 0 END) AS acknowledged,
+        SUM(CASE WHEN c.deleted_at IS NULL AND c.status = 'resolved' THEN 1 ELSE 0 END) AS resolved,
         MAX(COALESCE(c.updated_at, c.created_at)) AS commentActivityAt
       FROM plans p
       JOIN repos r ON r.id = p.repo_id
@@ -821,7 +840,31 @@ export class PlanReviewStore {
         ? this.db.prepare('SELECT id FROM comments WHERE plan_id = ? AND client_mutation_id = ?').get(planId, input.clientMutationId) as { id: string } | undefined
         : undefined;
       if (duplicate) {
-        return { comment: this.getComment(duplicate.id), event: this.getCommentCreatedEvent(duplicate.id), created: false };
+        const existing = this.getComment(duplicate.id);
+        if (existing.deletedAt) {
+          throw new PlanReviewError(
+            'duplicate_comment_deleted',
+            'This comment draft was already submitted and then deleted.',
+            409,
+            { commentId: existing.id, clientMutationId: input.clientMutationId },
+            'Refresh the comments list and start a new comment if you still need to submit feedback.'
+          );
+        }
+        const sameFingerprint =
+          existing.versionId === input.versionId &&
+          existing.body === input.body &&
+          existing.anchorType === input.anchorType &&
+          stableJson(existing.anchor) === stableJson(input.anchor);
+        if (!sameFingerprint) {
+          throw new PlanReviewError(
+            'duplicate_comment_conflict',
+            'This comment draft identifier was already used for different comment content.',
+            409,
+            { commentId: existing.id, clientMutationId: input.clientMutationId },
+            'Refresh the comments list before retrying, or start a new comment from the current selection.'
+          );
+        }
+        return { comment: existing, event: this.getCommentCreatedEvent(duplicate.id), created: false };
       }
 
       const now = nowIso();
@@ -961,6 +1004,7 @@ export class PlanReviewStore {
       agentResponse: row.agent_response_json ? parseJson(String(row.agent_response_json), {}) : undefined,
       createdBy: parseJson(String(row.created_by_json), {}),
       createdAt: String(row.created_at),
+      deletedAt: row.deleted_at ? String(row.deleted_at) : undefined,
       claim: row.activeClaimId
         ? {
             id: String(row.activeClaimId),
@@ -1012,7 +1056,7 @@ export class PlanReviewStore {
   }
 
   listComments(planId: string, filters: { status?: string; anchorState?: string; sinceSequence?: number; versionId?: string } = {}) {
-    const clauses = ['c.plan_id = ?'];
+    const clauses = ['c.plan_id = ?', 'c.deleted_at IS NULL'];
     const params: unknown[] = [planId];
     if (filters.versionId) {
       clauses.push('c.version_id = ?');
@@ -1093,6 +1137,19 @@ export class PlanReviewStore {
       const events: StoredEvent[] = [...expiredEvents];
       const skipped: Array<{ commentId: string; reason: string }> = [];
       for (const comment of comments) {
+        if (comment.deletedAt) {
+          if (input.mode === 'selected') {
+            throw new PlanReviewError(
+              'invalid_state',
+              'Deleted comments cannot be claimed',
+              409,
+              { commentId: comment.id, status: comment.status, deletedAt: comment.deletedAt },
+              'Refresh the comments list; deleted comments are no longer available to agents.'
+            );
+          }
+          skipped.push({ commentId: comment.id, reason: 'deleted' });
+          continue;
+        }
         if (comment.planId !== planId || comment.status !== 'pending') {
           if (input.mode === 'selected' && comment.status === 'claimed') {
             throw new PlanReviewError('claim_conflict', `Comment ${comment.id} is already claimed`, 409, {
@@ -1225,9 +1282,48 @@ export class PlanReviewStore {
     return tx();
   }
 
+  deleteComment(commentId: string) {
+    const tx = this.db.transaction(() => {
+      let comment = this.getComment(commentId);
+      const expiredEvents = this.releaseExpiredClaims(comment.planId);
+      comment = this.getComment(commentId);
+      if (comment.deletedAt) {
+        throw new PlanReviewError(
+          'invalid_state',
+          'Deleted comments cannot be deleted again',
+          409,
+          { commentId, status: comment.status, deletedAt: comment.deletedAt },
+          'Refresh the comments list; this comment has already been deleted.'
+        );
+      }
+      if (comment.status !== 'pending' || comment.claim) {
+        throw new PlanReviewError(
+          'invalid_state',
+          'Only pending unclaimed comments can be deleted',
+          409,
+          { commentId, status: comment.status, claim: comment.claim },
+          comment.status === 'claimed'
+            ? 'Release the claim, acknowledge it, resolve it, or wait for the claim lease to expire before deleting.'
+            : 'Only pending unclaimed comments can be deleted.'
+        );
+      }
+      const now = nowIso();
+      this.db.prepare('UPDATE comments SET deleted_at = ?, updated_at = ? WHERE id = ?').run(now, now, commentId);
+      const updated = this.getComment(commentId);
+      const event = this.addEvent(updated.planId, 'comment.deleted', {
+        eventType: 'comment.deleted',
+        planId: updated.planId,
+        commentId,
+        comment: updated
+      }, commentId);
+      return { comment: updated, event, expiredEvents };
+    });
+    return tx();
+  }
+
   eventsAfter(planId: string, afterSequence = 0, mode: 'all' | 'queue' = 'all', limit = 200): StoredEvent[] {
     const eventFilter = mode === 'queue'
-      ? "AND event_type IN ('comment.created','comment.claimed','comment.acknowledged','comment.resolved','comment.released')"
+      ? "AND event_type IN ('comment.created','comment.claimed','comment.acknowledged','comment.resolved','comment.released','comment.deleted')"
       : '';
     const rows = this.db
       .prepare(`SELECT * FROM comment_events WHERE plan_id = ? AND sequence > ? ${eventFilter} ORDER BY sequence ASC LIMIT ?`)
@@ -1237,7 +1333,7 @@ export class PlanReviewStore {
 
   queueSnapshot(filters: { repoKey?: string; planId?: string; limit?: number }) {
     this.releaseExpiredClaims(filters.planId);
-    const clauses = ["c.status = 'pending'"];
+    const clauses = ["c.status = 'pending'", 'c.deleted_at IS NULL'];
     const params: unknown[] = [];
     if (filters.planId) {
       clauses.push('c.plan_id = ?');

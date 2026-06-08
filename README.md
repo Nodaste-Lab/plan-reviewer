@@ -39,7 +39,7 @@ Use `--snapshot` only when you want a detached historical review that will not w
 plan-review register thoughts/plans/my-plan.html --snapshot --execution-ready false
 ```
 
-The browser shell renders sanitized HTML in a no-script iframe and keeps the comment UI in the parent page. Selecting a DOM element opens the composer; image and text comments use the same comment API with `anchorType: "image"` or `anchorType: "text_range"`. If the service cannot read a live-linked source file, it keeps serving the last good rendered version and exposes the sync failure in the API and sidebar.
+The browser shell renders sanitized HTML in a no-script iframe and keeps the comment UI in the parent page. Selecting a DOM element opens the composer; image and text comments use the same comment API with `anchorType: "image"` or `anchorType: "text_range"`. Each open select → comment composer gets one browser-generated `clientMutationId`; retries from that same composer reuse the identifier, so repeated Submit clicks, keyboard submit, or network retries create at most one comment. If the service cannot read a live-linked source file, it keeps serving the last good rendered version and exposes the sync failure in the API and sidebar.
 
 ## Agent Listener Contract
 
@@ -73,7 +73,7 @@ Accept: text/event-stream
 Last-Event-ID: <last-seen-sequence>
 ```
 
-SSE frames use `id: <sequence>`, `event: comment.created|comment.claimed|comment.acknowledged|comment.resolved|comment.released`, and JSON `data`. Non-queue event streams also include `plan.version.registered`, `plan.version.synced`, and `plan.sync.failed` for browser refresh/status updates. On reconnect, `Last-Event-ID` replays later events. Heartbeats are sent every 15 seconds. If SSE is unavailable, agents poll:
+SSE frames use `id: <sequence>`, `event: comment.created|comment.claimed|comment.acknowledged|comment.resolved|comment.released|comment.deleted`, and JSON `data`. Non-queue event streams also include `plan.version.registered`, `plan.version.synced`, and `plan.sync.failed` for browser refresh/status updates. On reconnect, `Last-Event-ID` replays later events. Heartbeats are sent every 15 seconds. If SSE is unavailable, agents poll:
 
 ```http
 GET /api/plans/:planId/events/poll?afterSequence=<last-seen-sequence>&mode=queue
@@ -99,6 +99,10 @@ plan-review queue claim plan_123 --ids cmt_123 --json
 
 Direct ack without an active matching claim returns `409 claim_required`. Claims have a default 5-minute lease and expired claims return to `pending`.
 
+Duplicate comment creation is idempotent only for the same `clientMutationId` and the same fingerprint: `versionId`, `body`, `anchorType`, and canonicalized `anchor`. Canonicalized anchors compare JSON values with recursively sorted object keys, preserved array order, exact primitive values, and no dropped fields. `markerScreenshot` and `createdBy` differences are treated as retry noise; the first stored screenshot and creator win. A mismatched fingerprint returns `409 duplicate_comment_conflict` with an actionable next step. If the original comment for that `clientMutationId` was soft-deleted, retrying returns `409 duplicate_comment_deleted` and does not recreate or undelete it.
+
+Pending unclaimed comments can be deleted from the browser UI or with `DELETE /api/comments/:commentId`. Claimed, acknowledged, resolved, and already deleted comments return `409 invalid_state`. Deletion is API/browser-only in this scope; there is no CLI delete command.
+
 ## Browser Comment Bridge
 
 Every comment event carries `conversationPayload.type = "browser.comment.v1"`. Host adapters for Codex, Claude, or Pi can append that payload into the active conversation, let the agent answer there, and call `ack` or `resolve` with a response summary, changed files, run ID, and optional commit SHA. The service stores the response metadata but does not implement a separate chat product.
@@ -118,7 +122,7 @@ The MVP is intentionally unauthenticated. Future bearer tokens, private share li
 ```bash
 bun install
 bun run test
-bun run test:e2e -- --grep "dom annotation|image annotation|plan index"
+bun run test:e2e
 bun run test:fixtures -- --scenario seeded-comment-stream
 bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated
 ```

@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Comment Idempotency and Unclaimed Delete Plan</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0b1020; --panel:#111827; --panel-2:#0f172a; --text:#e5e7eb; --muted:#a7b0c0; --accent:#38bdf8; --accent-2:#a78bfa; --good:#22c55e; --warn:#f59e0b; --bad:#fb7185; --border:#2b364d; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:linear-gradient(180deg,#070b16,var(--bg)); color:var(--text); font:16px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    main { max-width:1120px; margin:0 auto; padding:40px 22px 80px; }
+    header.hero { border:1px solid #1f3b57; background:radial-gradient(circle at top left,rgba(56,189,248,.18),transparent 34%),var(--panel); border-radius:18px; padding:30px; margin-bottom:22px; }
+    h1 { margin:0 0 10px; font-size:clamp(30px,5vw,48px); line-height:1.05; }
+    h2 { margin:34px 0 12px; font-size:26px; }
+    h3 { margin:24px 0 8px; font-size:20px; color:#dbeafe; }
+    h4 { margin:18px 0 8px; color:#c4b5fd; }
+    p, li { color:var(--text); }
+    .muted, small { color:var(--muted); }
+    a { color:#7dd3fc; }
+    section, article { border:1px solid var(--border); background:rgba(17,24,39,.86); border-radius:14px; padding:20px; margin:18px 0; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; }
+    .card { border:1px solid var(--border); background:var(--panel-2); border-radius:12px; padding:14px; }
+    .pill { display:inline-block; padding:3px 9px; border-radius:999px; font-size:12px; font-weight:800; letter-spacing:.02em; background:#164e63; color:#cffafe; }
+    .pill.warn { background:#78350f; color:#fde68a; }
+    .pill.good { background:#14532d; color:#bbf7d0; }
+    code, pre { background:#020617; color:#dbeafe; border-radius:8px; }
+    code { padding:.12rem .3rem; }
+    pre { padding:12px; overflow:auto; border:1px solid var(--border); }
+    table { width:100%; border-collapse:collapse; margin:10px 0; }
+    th, td { border:1px solid var(--border); padding:10px; text-align:left; vertical-align:top; }
+    th { background:#172033; color:#dbeafe; }
+    .phase { border-left:4px solid var(--accent); }
+    .callout { border-color:rgba(245,158,11,.5); background:rgba(245,158,11,.08); }
+  </style>
+</head>
+<body>
+<main>
+  <header class="hero" id="title">
+    <span class="pill warn">execution-ready plan · review metadata false until gated</span>
+    <h1>Comment Idempotency and Unclaimed Delete Plan</h1>
+    <p class="muted">Plan for preventing duplicate browser comments from repeated submits, detecting duplicate comment identifiers, and allowing safe deletion of unclaimed comments.</p>
+  </header>
+
+  <section id="status">
+    <h2>Status</h2>
+    <p><strong>Plan status:</strong> execution-ready and implemented on branch <code>fix-duplicate-comments</code>. Keep this artifact as the source of truth for scoped verification and review status.</p>
+    <p><strong>Implementation status:</strong> all phases implemented; scoped implementation review loop in progress before commit, push, PR, and post-PR monitoring.</p>
+  </section>
+
+  <section id="goal">
+    <h2>Goal</h2>
+    <p>Each browser select → comment composer cycle must create at most one comment, even when the reviewer submits repeatedly while the dialog is still open or while the service is slow. The system must detect duplicate comment identifiers, distinguish true retries from conflicting reuse, and let reviewers delete comments that are still pending and unclaimed.</p>
+  </section>
+
+  <section id="why">
+    <h2>Why this plan exists</h2>
+    <p>When the plan service is slow or unhealthy, reviewers may press Submit multiple times before the composer dismisses. The existing backend has partial idempotency through <code>clientMutationId</code>, but the browser composer does not send one and the submit control is not guarded during the in-flight request. This can create duplicate agent-visible comments and duplicate queue work.</p>
+  </section>
+
+  <section id="authority-inputs">
+    <h2>Authority and inputs</h2>
+    <ul>
+      <li>User request: prevent duplicate comments, assign a unique comment identifier per select → comment cycle, detect duplicate adds, and allow deletion of unclaimed comments.</li>
+      <li>Repo guidance: <code>AGENTS.md</code> requires HTML plan artifacts, product intent alignment, TDD/BDD phases, and plan-review registration.</li>
+      <li>Product intent: <code>thoughts/specs/product_intent.md</code> prioritizes durable, deduplicated comments and canonical queue state.</li>
+      <li>Observed files: <code>src/server/app.ts</code>, <code>src/schemas.ts</code>, <code>src/storage/database.ts</code>, <code>src/cli.ts</code>, <code>src/__tests__/contracts.test.ts</code>, <code>src/test-fixtures/e2e-run.ts</code>, and <code>README.md</code>.</li>
+    </ul>
+  </section>
+
+  <section id="current-reality">
+    <h2>Current implementation reality</h2>
+    <div class="grid">
+      <article class="card" id="reality-browser-submit">
+        <h3>Browser submit path</h3>
+        <p><code>submitPendingComment()</code> in <code>src/server/app.ts</code> posts <code>versionId</code>, body, anchor, <code>markerScreenshot</code>, and createdBy. It does not include <code>clientMutationId</code>, and the Submit button remains usable while the async request is active.</p>
+      </article>
+      <article class="card" id="reality-schema">
+        <h3>Existing idempotency hook</h3>
+        <p><code>createCommentSchema</code> already accepts optional <code>clientMutationId</code>. The database already has <code>UNIQUE(plan_id, client_mutation_id)</code>.</p>
+      </article>
+      <article class="card" id="reality-store">
+        <h3>Backend retry behavior</h3>
+        <p><code>PlanReviewStore.createComment()</code> already returns the original comment with <code>created:false</code> when the same <code>clientMutationId</code> is reused, but it does not yet reject conflicting payload reuse.</p>
+      </article>
+      <article class="card" id="reality-delete-gap">
+        <h3>Deletion gap</h3>
+        <p>There is no comment delete route, no deleted comment state, and no browser affordance to remove pending comments that have not been claimed.</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="progress">
+    <h2>Progress</h2>
+    <ul>
+      <li><label><input type="checkbox" checked> P1 Browser idempotent submit</label></li>
+      <li><label><input type="checkbox" checked> P2 Server duplicate conflict detection</label></li>
+      <li><label><input type="checkbox" checked> P3 Pending unclaimed delete API</label></li>
+      <li><label><input type="checkbox" checked> P4 Browser delete affordance</label></li>
+      <li><label><input type="checkbox" checked> P5 Documentation and optional CLI parity</label></li>
+    </ul>
+  </section>
+
+  <section id="resume-instructions">
+    <h2>Resume instructions (agent)</h2>
+    <p>Read this document fully, then continue from the first unchecked item in <a href="#progress">Progress</a>. For each phase, write or update the specified tests first where practical, implement only the phase scope, run the phase verify commands, request one quality-reviewer pass for implementation phases, integrate blocking findings, update Progress only after the phase clears, and append any decisions to <a href="#decisions-log">Decisions / Deviations log</a>. Ask the user only for decisions that materially change external behavior and cannot be resolved from repo evidence.</p>
+  </section>
+
+  <section id="product-intent-alignment">
+    <h2>Product intent alignment</h2>
+    <ul>
+      <li>Advances the desired outcome that review comments are durable, deduplicated, queue-visible, and recoverable across browser, CLI, service, and agent restarts.</li>
+      <li>Supports the simplest reviewer workflow by making repeated Submit attempts safe instead of requiring the reviewer to know whether the service accepted the first request.</li>
+      <li>Supports canonical server queue state by enforcing idempotency and delete eligibility in storage/API logic, not only in the browser.</li>
+      <li>Preserves fail-closed behavior for claimed, acknowledged, and resolved comments because deleting agent-visible work can create authority and data-loss ambiguity.</li>
+    </ul>
+  </section>
+
+  <section id="locked-decisions">
+    <h2>Locked decisions</h2>
+    <ol>
+      <li id="decision-one-id-per-cycle">Each select → comment composer cycle gets one browser-generated <code>clientMutationId</code>.</li>
+      <li id="decision-retry-same-id">Every retry from that still-open composer reuses the same identifier.</li>
+      <li id="decision-server-source">The server remains the source of truth; browser guards improve UX but do not replace server idempotency.</li>
+      <li id="decision-conflict-detect">Duplicate identifiers with materially different fingerprint payloads are rejected as conflicts. The fingerprint fields are exactly <code>versionId</code>, <code>body</code>, <code>anchorType</code>, and canonicalized <code>anchor</code>.</li>
+      <li id="decision-anchor-canonicalization">Anchor canonicalization means comparing the JSON-safe normalized anchor value with object keys sorted recursively, array order preserved, primitive values preserved exactly, null preserved, and no anchor fields dropped. The comparison uses the stable JSON string for that normalized value.</li>
+      <li id="decision-retry-noise">Duplicate retries ignore <code>markerScreenshot</code> and <code>createdBy</code> differences. The first successful create preserves the original screenshot asset and creator; later retries with the same fingerprint do not update stored comment fields.</li>
+      <li id="decision-after-delete-retry">A duplicate POST whose <code>clientMutationId</code> belongs to a soft-deleted comment returns <code>409 duplicate_comment_deleted</code>, emits no new event, and never recreates or undeletes the comment. Browser retry handling treats this as terminal: refresh comments/markers, dismiss any stale in-flight draft for that deleted identifier, and show a short notice if the composer is still visible.</li>
+      <li id="decision-deleted-observability">Point lookups must still be able to observe soft-deleted comments. <code>getComment()</code> must not filter deleted rows the way normal list/count/queue queries do; the returned shape must expose deletion state through <code>deletedAt</code> or equivalent so duplicate detection and selected-mode claims can fail closed instead of falling through to not-found or crashing.</li>
+      <li id="decision-delete-pending-only">Only effectively pending comments with no active claim may be deleted.</li>
+      <li id="decision-soft-delete">Deletion should be soft-delete unless implementation evidence proves hard-delete is safe for event/audit consistency.</li>
+      <li id="decision-no-fuzzy-dedupe">No fuzzy body/anchor dedupe; only the explicit per-cycle identifier defines idempotency.</li>
+      <li id="decision-cli-out-of-scope">CLI comment deletion is out of scope for this plan. Recovery deletion is API/browser/README only unless a later plan identifies a concrete operator workflow gap.</li>
+    </ol>
+  </section>
+
+  <section id="acceptance-criteria">
+    <h2>Acceptance criteria</h2>
+    <ol>
+      <li id="ac-1">Repeated button clicks from one open composer create exactly one stored comment and one queue-visible <code>comment.created</code> event.</li>
+      <li id="ac-2">Keyboard submit plus button submit from one open composer create exactly one stored comment.</li>
+      <li id="ac-3">Network/service retries using the same <code>clientMutationId</code> and the same fingerprint fields (<code>versionId</code>, <code>body</code>, <code>anchorType</code>, canonicalized <code>anchor</code>) return the existing non-deleted comment with <code>created:false</code>.</li>
+      <li id="ac-4">The same <code>clientMutationId</code> with different body, anchor type, canonicalized anchor, or version is rejected with <code>409 duplicate_comment_conflict</code> and an actionable <code>nextAction</code>; differing <code>markerScreenshot</code> or <code>createdBy</code> alone is accepted as retry noise and does not mutate the original comment.</li>
+      <li id="ac-4b">The same <code>clientMutationId</code> after the original comment was deleted returns <code>409 duplicate_comment_deleted</code>, emits no event, and does not recreate or undelete the comment.</li>
+      <li id="ac-5">A pending unclaimed comment can be deleted through the API and browser UI.</li>
+      <li id="ac-6">Claimed, acknowledged, and resolved comments cannot be deleted through this feature.</li>
+      <li id="ac-7">Deleted comments are absent from normal comment lists, <code>listPlans()</code> count aggregates, markers, automatic queue claims, and explicit selected-mode claims; explicit claim attempts for deleted comment IDs fail closed with <code>409 invalid_state</code> while existing active-claim <code>claim_conflict</code> behavior remains unchanged.</li>
+      <li id="ac-8">Deleting a comment emits a queue/all event that open pages use to refresh.</li>
+      <li id="ac-9">Existing claim, ack, release, resolve, event replay, and source sync behavior remains unchanged. The only intentionally changed existing contract is duplicate-identifier conflict rejection for mismatched fingerprints, covered by <a href="#ac-4">AC-4</a>.</li>
+    </ol>
+  </section>
+
+  <section id="bdd-scenarios">
+    <h2>BDD scenarios</h2>
+    <article id="bdd-double-click" class="card">
+      <h3>BDD-1: Repeated Submit clicks</h3>
+      <p><strong>Given</strong> a reviewer opens a comment composer for one selected DOM section<br><strong>When</strong> they click Submit multiple times before the first request completes<br><strong>Then</strong> exactly one comment is stored, exactly one marker appears, and later duplicate responses identify the existing comment.</p>
+    </article>
+    <article id="bdd-keyboard-button" class="card">
+      <h3>BDD-2: Keyboard and button submit race</h3>
+      <p><strong>Given</strong> the composer has a valid draft<br><strong>When</strong> the reviewer triggers keyboard submit and button submit for the same draft<br><strong>Then</strong> both requests, if sent, use the same identifier and only one comment exists.</p>
+    </article>
+    <article id="bdd-network-retry" class="card">
+      <h3>BDD-3: Lost response retry</h3>
+      <p><strong>Given</strong> the service stores a comment but the browser misses the response<br><strong>When</strong> the browser retries the same request with the same identifier<br><strong>Then</strong> the API returns <code>created:false</code>, the original comment ID, and no new queue event.</p>
+    </article>
+    <article id="bdd-conflicting-id" class="card">
+      <h3>BDD-4: Conflicting identifier reuse</h3>
+      <p><strong>Given</strong> identifier X is already consumed by one comment fingerprint<br><strong>When</strong> another request uses X with different body, canonicalized anchor, anchor type, or version<br><strong>Then</strong> the API returns <code>409 duplicate_comment_conflict</code> with an actionable <code>nextAction</code> explaining the draft ID was already consumed.<br><strong>And</strong> if only screenshot or creator metadata differs, the API returns the original non-deleted comment with <code>created:false</code> and does not mutate the original stored metadata.</p>
+    </article>
+    <article id="bdd-duplicate-after-delete" class="card">
+      <h3>BDD-5: Duplicate retry after delete</h3>
+      <p><strong>Given</strong> a pending unclaimed comment is created with identifier X and then soft-deleted<br><strong>When</strong> a duplicate POST arrives with identifier X<br><strong>Then</strong> the API returns <code>409 duplicate_comment_deleted</code>, emits no new event, and does not recreate or undelete the comment.<br><strong>And</strong> the browser refreshes comments/markers and dismisses or notices any stale in-flight draft for that identifier.</p>
+    </article>
+    <article id="bdd-delete-pending" class="card">
+      <h3>BDD-6: Delete pending unclaimed comment</h3>
+      <p><strong>Given</strong> a pending comment has no active claim<br><strong>When</strong> the reviewer deletes it<br><strong>Then</strong> it disappears from comment lists, markers, counts, and queue claims, and clients refresh from a <code>comment.deleted</code> event.</p>
+    </article>
+    <article id="bdd-delete-claimed" class="card">
+      <h3>BDD-7: Reject deleting active claimed work</h3>
+      <p><strong>Given</strong> an agent has an active claim on a comment<br><strong>When</strong> a reviewer tries to delete it<br><strong>Then</strong> the API returns <code>409 invalid_state</code> with guidance to release, ack/resolve, or wait for lease expiry.</p>
+    </article>
+    <article id="bdd-expired-claim-delete" class="card">
+      <h3>BDD-8: Expired claim releases before delete decision</h3>
+      <p><strong>Given</strong> a comment has a claim whose lease expired<br><strong>When</strong> delete is requested<br><strong>Then</strong> the store first releases the expired claim and then allows deletion because the effective state is pending and unclaimed.</p>
+    </article>
+    <article id="bdd-explicit-claim-deleted" class="card">
+      <h3>BDD-9: Explicit claim of deleted comment fails closed</h3>
+      <p><strong>Given</strong> a comment was soft-deleted<br><strong>When</strong> an agent or operator calls selected-mode claim with that deleted comment ID<br><strong>Then</strong> the API returns <code>409 invalid_state</code>, does not create a claim, and does not emit a queue event.<br><strong>And</strong> this is a new deleted-ID fail-closed branch: existing selected-mode behavior for active claimed comments still returns <code>claim_conflict</code>, and existing non-deleted non-pending skip behavior is not broadened.</p>
+    </article>
+  </section>
+
+  <section id="test-coverage-matrix">
+    <h2>Test coverage matrix</h2>
+    <table>
+      <thead><tr><th>Acceptance / scenario</th><th>Test layer</th><th>Expected test file or command</th></tr></thead>
+      <tbody>
+        <tr><td><a href="#ac-1">AC-1</a>, <a href="#bdd-double-click">BDD-1</a></td><td>Browser e2e</td><td><code>src/test-fixtures/e2e-run.ts</code>; <code>bun run test:e2e</code></td></tr>
+        <tr><td><a href="#ac-2">AC-2</a>, <a href="#bdd-keyboard-button">BDD-2</a></td><td>Browser e2e</td><td><code>src/test-fixtures/e2e-run.ts</code></td></tr>
+        <tr><td><a href="#ac-3">AC-3</a>, <a href="#ac-4">AC-4</a>, <a href="#bdd-network-retry">BDD-3</a>, <a href="#bdd-conflicting-id">BDD-4</a></td><td>HTTP contract</td><td><code>src/__tests__/contracts.test.ts</code>; <code>bun run build && node --test dist/__tests__/contracts.test.js</code></td></tr>
+        <tr><td><a href="#ac-4b">AC-4b</a> through <a href="#ac-8">AC-8</a>, <a href="#bdd-duplicate-after-delete">BDD-5</a> through <a href="#bdd-explicit-claim-deleted">BDD-9</a></td><td>HTTP contract and browser e2e</td><td><code>src/__tests__/contracts.test.ts</code>, <code>src/test-fixtures/e2e-run.ts</code></td></tr>
+        <tr><td><a href="#ac-9">AC-9</a></td><td>Regression suite</td><td><code>bun run test</code>; <code>bun run test:e2e</code> for browser-impacting changes; <code>bun run test:fixtures -- --scenario seeded-comment-stream</code> and <code>bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated</code> for queue/listener changes; update intentionally changed duplicate-identifier assertions under <a href="#ac-4">AC-4</a> instead of treating them as regressions</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="phase-plan">
+    <h2>Phase-by-phase execution plan</h2>
+
+    <article class="phase" id="phase-p1-browser-idempotent-submit">
+      <h3>P1 Browser idempotent submit</h3>
+      <h4>End State</h4>
+      <p>Every open composer has one stable draft identifier, Submit is guarded while a request is in flight, and duplicate UI submits cannot produce duplicate stored comments.</p>
+      <h4>Tests first</h4>
+      <p>Add e2e coverage in <code>src/test-fixtures/e2e-run.ts</code> that opens one composer, triggers repeated Submit actions quickly, and asserts one visible comment, one marker, and one API comment. If request interception is too brittle, use a small in-page fetch delay shim scoped to the comment POST.</p>
+      <h4>Work</h4>
+      <ul>
+        <li>Add composer-local state in <code>clientJs</code>: a generated <code>pendingCommentMutationId</code> and <code>submitInFlight</code>.</li>
+        <li>Generate the identifier when opening DOM, text, or image composers; reuse it until the composer is cleared or cancelled.</li>
+        <li>Send <code>clientMutationId</code> in the comment POST body.</li>
+        <li>Disable Submit and ignore additional submit attempts while <code>submitInFlight</code> is true.</li>
+        <li>On failed submit, keep the draft and identifier available for retry; on success or cancel, clear both.</li>
+      </ul>
+      <h4>Expected files</h4>
+      <p><code>src/server/app.ts</code>, <code>src/test-fixtures/e2e-run.ts</code></p>
+      <h4>Verify</h4>
+      <pre><code>bun run build
+bun run test:e2e</code></pre>
+    </article>
+
+    <article class="phase" id="phase-p2-server-duplicate-conflict">
+      <h3>P2 Server duplicate conflict detection</h3>
+      <h4>End State</h4>
+      <p>The API treats exact duplicate identifiers as idempotent retries and rejects conflicting identifier reuse with an actionable error.</p>
+      <h4>Tests first</h4>
+      <p>Add contract tests for exact fingerprint retry success, body mismatch <code>409 duplicate_comment_conflict</code>, canonicalized anchor mismatch <code>409 duplicate_comment_conflict</code>, version mismatch <code>409 duplicate_comment_conflict</code>, actionable <code>nextAction</code> on each conflict, screenshot-only retry acceptance without mutation, createdBy-only retry acceptance without mutation, and no new queue event after accepted retry. Update the existing duplicate-retry assertion in <code>src/__tests__/contracts.test.ts</code> that currently reuses <code>clientMutationId: 'comment-1'</code> with a different body: the idempotent <code>200 created:false</code> assertion must reuse the same fingerprint, and the different-body request must become a separate <code>409 duplicate_comment_conflict</code> assertion. This is an intentional locked-contract change, not a regression.</p>
+      <h4>Work</h4>
+      <ul>
+        <li>Add deterministic duplicate matching inside <code>PlanReviewStore.createComment()</code> using exactly <code>versionId</code>, <code>body</code>, <code>anchorType</code>, and canonicalized <code>anchor</code>.</li>
+        <li>Canonicalize <code>anchor</code> by normalizing the JSON-safe parsed value with recursively sorted object keys, preserved array order, preserved primitive/null values, no field dropping, then comparing the stable JSON string.</li>
+        <li>Duplicate matching must load the stored comment's fingerprint fields, not only the duplicate row ID. Fetch the stored <code>versionId</code>, <code>body</code>, <code>anchorType</code>, and stored <code>anchor</code> for comparison.</li>
+        <li>On duplicate <code>clientMutationId</code>, return existing non-deleted comment with <code>created:false</code> only when those fingerprint fields match.</li>
+        <li>Ignore duplicate retry differences in <code>markerScreenshot</code> and <code>createdBy</code>; preserve the first successful comment's screenshot asset and creator without mutation.</li>
+        <li>Throw <code>PlanReviewError('duplicate_comment_conflict', ...)</code> with status <code>409</code> and next-action guidance when the fingerprint differs.</li>
+        <li>Before implementing P2, grep tests and fixtures for other <code>clientMutationId</code> reuse so any intentionally changed duplicate-fingerprint expectations are updated in the same phase.</li>
+        <li>Keep clients that omit <code>clientMutationId</code> working as today.</li>
+      </ul>
+      <h4>Expected files</h4>
+      <p><code>src/storage/database.ts</code>, <code>src/__tests__/contracts.test.ts</code>, optionally <code>src/schemas.ts</code></p>
+      <h4>Verify</h4>
+      <pre><code>bun run build && node --test dist/__tests__/contracts.test.js
+bun run test
+bun run test:fixtures -- --scenario seeded-comment-stream
+bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated</code></pre>
+    </article>
+
+    <article class="phase" id="phase-p3-delete-api">
+      <h3>P3 Pending unclaimed delete API</h3>
+      <h4>End State</h4>
+      <p>Pending unclaimed comments can be safely soft-deleted through the API. Deleted comments no longer appear in normal lists, counts, markers, or claim results.</p>
+      <h4>Tests first</h4>
+      <p>Add contract tests for successful pending delete, list/count/automatic-claim exclusion, selected-mode claim rejection for deleted comment IDs, active claimed deletion rejection, acknowledged/resolved deletion rejection, expired-claim release before delete, and duplicate retry after soft-delete returning <code>409 duplicate_comment_deleted</code> with no new event.</p>
+      <h4>Work</h4>
+      <ul>
+        <li>Add <code>deleted_at</code> to <code>comments</code> via migration helper.</li>
+        <li>Exclude deleted comments from <code>listComments()</code>, the inline <code>SUM(CASE ...)</code> count aggregates in <code>listPlans()</code>, queue snapshots, and automatic claim selection. Any query that treats <code>status = 'pending'</code> as visible or claimable must also require <code>deleted_at IS NULL</code>.</li>
+        <li>Do not filter deleted rows from <code>getComment()</code>. Point lookups must return soft-deleted comments with deletion state exposed as <code>deletedAt</code> or equivalent so duplicate detection and selected-mode claim can make deliberate 409 decisions.</li>
+        <li>Make selected-mode claim fail closed with <code>409 invalid_state</code> when any requested comment ID is soft-deleted; do not create a claim or emit an event. This is a new deleted-ID branch only: preserve current <code>claim_conflict</code> for active claimed selected comments and preserve existing non-deleted non-pending skip semantics.</li>
+        <li>In duplicate detection, after <code>deleted_at</code> exists, throw <code>PlanReviewError('duplicate_comment_deleted', ...)</code> with status <code>409</code> and no event when the identifier belongs to a soft-deleted comment; do not recreate, undelete, or mutate the deleted original.</li>
+        <li>Add event type <code>comment.deleted</code> to schemas and event filters. Its payload must mirror existing comment lifecycle events: <code>{ eventType:'comment.deleted', planId, commentId, comment }</code>, where <code>comment</code> exposes deletion state. Ensure both queue/all SSE streams and poll/replay paths accept and replay the new <code>comment.*</code> event without disrupting existing event replay semantics.</li>
+        <li>Add <code>deleteComment(commentId)</code> that releases expired claims before deciding eligibility.</li>
+        <li>Add <code>DELETE /api/comments/:commentId</code> in <code>src/server/app.ts</code>.</li>
+        <li>Return <code>409 invalid_state</code> for active claimed, acknowledged, resolved, or already deleted comments with clear next-action guidance.</li>
+      </ul>
+      <h4>Expected files</h4>
+      <p><code>src/schemas.ts</code>, <code>src/storage/database.ts</code>, <code>src/server/app.ts</code>, <code>src/__tests__/contracts.test.ts</code></p>
+      <h4>Verify</h4>
+      <pre><code>bun run build && node --test dist/__tests__/contracts.test.js
+bun run test
+bun run test:fixtures -- --scenario seeded-comment-stream
+bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated</code></pre>
+    </article>
+
+    <article class="phase" id="phase-p4-browser-delete">
+      <h3>P4 Browser delete affordance</h3>
+      <h4>End State</h4>
+      <p>Reviewers can delete pending unclaimed comments from the sidebar, and open review pages refresh when comments are deleted elsewhere.</p>
+      <h4>Tests first</h4>
+      <p>Add e2e coverage that creates a comment, deletes it from the sidebar, verifies row/marker/API removal, and verifies claimed comments are not deletable or show conflict guidance after refresh.</p>
+      <h4>Work</h4>
+      <ul>
+        <li>Render a Delete button only for comments with <code>status === 'pending'</code> and no active <code>claim</code>.</li>
+        <li>Call <code>DELETE /api/comments/:commentId</code>, disable the button while deleting, and refresh metadata on success.</li>
+        <li>On conflict, show a short inline error and refresh to reflect current state.</li>
+        <li>Listen for <code>comment.deleted</code> SSE and call <code>loadMeta()</code>.</li>
+      </ul>
+      <h4>Expected files</h4>
+      <p><code>src/server/app.ts</code>, <code>src/test-fixtures/e2e-run.ts</code></p>
+      <h4>Verify</h4>
+      <pre><code>bun run build
+bun run test:e2e
+bun run test</code></pre>
+    </article>
+
+    <article class="phase" id="phase-p5-docs-cli">
+      <h3>P5 Documentation and optional CLI parity</h3>
+      <h4>End State</h4>
+      <p>The documented browser/API lifecycle matches the implementation. CLI comment deletion remains out of scope for this plan.</p>
+      <h4>Tests first</h4>
+      <p>No CLI tests are required because CLI comment deletion is intentionally out of scope. Documentation changes are verified by build/test coverage from earlier phases and manual README review against the locked API/browser lifecycle.</p>
+      <h4>Work</h4>
+      <ul>
+        <li>Update <code>README.md</code> to document one identifier per composer cycle, retry semantics, conflict semantics, and unclaimed deletion eligibility.</li>
+        <li>Document that deletion is available through browser UI and HTTP API, not CLI, in this plan's scope.</li>
+        <li>Keep API/browser terminology aligned: pending, claimed, acknowledged, resolved, deleted.</li>
+      </ul>
+      <h4>Expected files</h4>
+      <p><code>README.md</code></p>
+      <h4>Verify</h4>
+      <pre><code>bun run build
+bun run test</code></pre>
+    </article>
+  </section>
+
+  <section id="verification-strategy">
+    <h2>Verification strategy</h2>
+    <p>Use API contract tests to lock server idempotency, duplicate conflict detection, delete eligibility, event emission, counts, and queue exclusion. Use browser e2e tests to lock reviewer-facing duplicate prevention, submit recovery, delete affordance, and marker/list refresh. Run full regression after implementation because comment lifecycle changes touch browser UI, API routes, storage filters, event streams, and CLI/agent queue behavior. Include fixture gates for <code>seeded-comment-stream</code> and simulated <code>agent-listener-harness-smoke</code> whenever queue/listener-feeding behavior changes.</p>
+  </section>
+
+  <section id="delivery-order">
+    <h2>Delivery order</h2>
+    <ol>
+      <li>Browser sends a stable per-composer <code>clientMutationId</code> and guards in-flight submits.</li>
+      <li>Backend rejects conflicting duplicate identifiers.</li>
+      <li>Backend supports soft-delete for pending unclaimed comments.</li>
+      <li>Browser exposes delete and refreshes from delete events.</li>
+      <li>Docs align with the locked API/browser lifecycle; CLI deletion remains out of scope.</li>
+    </ol>
+  </section>
+
+  <section id="non-goals">
+    <h2>Non-goals</h2>
+    <ul>
+      <li>No fuzzy deduplication by comment body, text selection, coordinates, or anchor similarity.</li>
+      <li>No deletion of active claimed, acknowledged, or resolved comments.</li>
+      <li>No auth or role model changes.</li>
+      <li>No CLI delete command in this plan.</li>
+      <li>No rewrite of the browser shell or agent listener architecture.</li>
+      <li>No change to source sync completeness rules.</li>
+    </ul>
+  </section>
+
+  <section id="decisions-log">
+    <h2>Decisions / Deviations log</h2>
+    <ul>
+      <li>2026-06-08: Plan materialized as an HTML artifact under <code>thoughts/plans/</code> after repo guidance was bootstrapped to prevent chat-only planning.</li>
+      <li>2026-06-08: Chose explicit per-composer <code>clientMutationId</code> over fuzzy dedupe because it is deterministic, already partly supported by storage, and matches product intent for canonical server state.</li>
+      <li>2026-06-08: Chose soft-delete as the default implementation target to preserve event/audit consistency unless implementation evidence proves hard-delete safe.</li>
+      <li>2026-06-08: Integrated Codex plan-review blockers by locking duplicate fingerprint fields (<code>versionId</code>, <code>body</code>, <code>anchorType</code>, canonicalized <code>anchor</code>), treating screenshot/creator differences as retry noise, and moving CLI deletion out of scope.</li>
+      <li>2026-06-08: Integrated Claude plan-review blocker by replacing unsupported <code>--grep</code> e2e verify commands with the real full <code>bun run test:e2e</code> gate.</li>
+      <li>2026-06-08: Integrated Codex re-review blockers by defining anchor canonicalization exactly and locking duplicate POST after delete to <code>409 duplicate_comment_deleted</code> with no recreate, undelete, mutation, or event.</li>
+      <li>2026-06-08: Integrated Claude re-review selected-claim gap by requiring explicit selected-mode claims for deleted comment IDs to fail closed with <code>409 invalid_state</code> and no event.</li>
+      <li>2026-06-08: Integrated Codex final-review blockers by moving duplicate-after-delete tests/work from P2 to P3 after soft-delete exists, and locking fingerprint conflicts to <code>409 duplicate_comment_conflict</code> with actionable <code>nextAction</code>.</li>
+      <li>2026-06-08: Integrated Claude final-review blockers by requiring <code>getComment()</code> to keep returning soft-deleted rows with deletion state, pinning deleted selected-mode claim as a new <code>409 invalid_state</code> branch that preserves existing <code>claim_conflict</code> behavior, and naming the <code>listPlans()</code> count aggregates that must exclude deleted rows.</li>
+      <li>2026-06-08: Integrated Claude approval-review blocker by calling out the existing mismatched-body <code>clientMutationId</code> contract test as an intentional AC-4 contract change, requiring stored fingerprint fields to be loaded for duplicate comparison, and narrowing AC-9 so it does not contradict the planned duplicate-conflict behavior.</li>
+      <li>2026-06-08: Integrated Claude final approval blocker by adding required fixture gates for seeded comment streams and simulated agent-listener harness coverage, plus clarified <code>comment.deleted</code> event payload/replay expectations and the browser <code>markerScreenshot</code> field name.</li>
+      <li>2026-06-08: Implemented all five phases. Verification run so far: <code>bun run build</code>, <code>bun run build && node --test dist/__tests__/contracts.test.js</code>, <code>bun run test:e2e</code>, targeted fixture scenarios, and <code>bun run test</code>.</li>
+      <li>2026-06-08: Integrated Codex implementation-review blockers by preserving browser delete conflict guidance across the required metadata refresh and updating the Status section from planning-only to implemented/review-loop state.</li>
+      <li>2026-06-08: Integrated Codex re-review blockers by preserving the submit-in-flight guard when reviewers click another plan section during a slow submit, snapshotting the submitted anchor before async work, and adding contract coverage that duplicate retry after soft-delete emits no new event.</li>
+      <li>2026-06-08: Final scoped reviews passed: Codex <code>PASS_SCOPED</code>; Claude <code>PASS_WITH_DEFERRED_FOLLOW_UPS</code> with deferred out-of-scope notes for shared-state e2e anchor-count precision, stale cosmetic delete error clearing, and missing browser e2e for the already contract-tested <code>duplicate_comment_deleted</code> terminal path.</li>
+      <li>2026-06-08: Final verification passed: <code>bun run build && node --test dist/__tests__/contracts.test.js && bun run test && bun run test:e2e && bun run test:fixtures -- --scenario seeded-comment-stream && bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated</code>.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>
