@@ -18,7 +18,7 @@ try {
   const slowImageBytes = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="120" height="180"><rect width="120" height="180" fill="#38bdf8"/></svg>');
   const slowImageBytesBase64 = slowImageBytes.toString('base64');
   const slowImageAssetPath = `/assets/${sha256(slowImageBytes)}`;
-  const html = `<!doctype html><html><body><main><div style="height:240px"></div><section id="dom-annotation"><h1>DOM annotation</h1><p>Plan index target.</p></section><section id="link-annotation"><h2>Link annotation</h2><p id="link-comment-target"><span id="link-adjacent-text">Commentable text before</span> <a id="plan-test-link" href="#link-target">fragment link</a> <span>after link.</span></p><p><a id="blank-plan-link" href="${baseUrl}/favicon.svg" target="_blank">Open asset in new tab</a></p><p><label id="wrapping-control-label"><input id="wrapped-control" type="checkbox"> <span id="wrapped-control-label-text">Toggle wrapped control</span></label></p><div id="link-target" style="margin-top:20px">Link target</div></section><section id="text-annotation"><h2>Text annotation</h2><p id="text-target">Text range context target for reviewer selection.</p></section><figure><img src="./diagram.png" alt="image annotation" width="120" height="90"></figure><div style="height:1200px"></div></main></body></html>`;
+  const html = `<!doctype html><html><head><title>E2E Plan</title></head><body><main><div style="height:240px"></div><section id="dom-annotation"><h1>DOM annotation</h1><p>Plan index target.</p></section><section id="link-annotation"><h2>Link annotation</h2><p id="link-comment-target"><span id="link-adjacent-text">Commentable text before</span> <a id="plan-test-link" href="#link-target">fragment link</a> <span>after link.</span></p><p><a id="blank-plan-link" href="${baseUrl}/favicon.svg" target="_blank">Open asset in new tab</a></p><p><label id="wrapping-control-label"><input id="wrapped-control" type="checkbox"> <span id="wrapped-control-label-text">Toggle wrapped control</span></label></p><div id="link-target" style="margin-top:20px">Link target</div></section><section id="text-annotation"><h2>Text annotation</h2><p id="text-target">Text range context target for reviewer selection.</p></section><figure><img src="./diagram.png" alt="image annotation" width="120" height="90"></figure><div style="height:1200px"></div></main></body></html>`;
   const register = await context.post('/api/plans/register', {
     data: {
       repoKey: 'e2e-repo',
@@ -382,6 +382,7 @@ try {
     assert.match(await page.locator('.plan-card:not([hidden])').innerText(), /Source missing/);
     assert.match(await page.locator('.plan-card:not([hidden])').innerText(), /Showing cached copy/);
     await page.goto(`${baseUrl}/p/${registered.planId}`);
+    assert.equal(await page.title(), 'E2E Plan · Plan Review');
     await page.evaluate(() => {
       const globals = window as typeof window & { html2canvas?: unknown; __html2canvasCalls?: number; __html2canvasMode?: 'success' | 'fail' };
       globals.__html2canvasCalls = 0;
@@ -770,7 +771,7 @@ try {
       });
     });
     delayNextRender = true;
-    const staleRaceHtml = html.replace('Plan index target.', 'Race stale target.');
+    const staleRaceHtml = html.replace('<title>E2E Plan</title>', '<title>Race Stale Plan</title>').replace('Plan index target.', 'Race stale target.');
     const staleRace = await context.post('/api/plans/register', {
       data: {
         repoKey: 'e2e-repo',
@@ -795,7 +796,7 @@ try {
     });
     assert.equal(staleRace.ok(), true);
     await delayedRenderSeen;
-    const newestRaceHtml = html.replace('Plan index target.', 'Race newest target.');
+    const newestRaceHtml = html.replace('<title>E2E Plan</title>', '<title>Race Newest Plan</title>').replace('Plan index target.', 'Race newest target.');
     const newestRace = await context.post('/api/plans/register', {
       data: {
         repoKey: 'e2e-repo',
@@ -820,6 +821,7 @@ try {
     });
     assert.equal(newestRace.ok(), true);
     await page.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.body.textContent?.includes('Race newest target'));
+    await page.waitForFunction(() => document.title === 'Race Newest Plan · Plan Review');
     const resumeRender = resumeDelayedRender as (() => void) | null;
     assert.ok(resumeRender);
     resumeRender();

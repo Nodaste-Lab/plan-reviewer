@@ -608,6 +608,62 @@ test('empty archive page is quiet and archived shell shows restore state', async
   }
 });
 
+test('review shell title uses rendered plan title with safe fallback and escaping', async () => {
+  const app = createApp({ dbPath: tempDbPath('review-shell-title') });
+  try {
+    const titled = await app.inject({ method: 'POST', url: '/api/plans/register', payload: sampleRegisterPayload() });
+    assert.equal(titled.statusCode, 200);
+    const titledShell = await app.inject({ method: 'GET', url: `/p/${titled.json().data.planId}` });
+    assert.equal(titledShell.statusCode, 200);
+    assert.match(titledShell.body, /<title>Sample Plan · Plan Review<\/title>/);
+
+    const blankTitleHtml = '<!doctype html><html><head><title>   </title></head><body><main><p>No title.</p></main></body></html>';
+    const blank = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload({ html: blankTitleHtml, fileHash: sha256(blankTitleHtml), slug: 'blank-title', planPath: 'thoughts/plans/blank-title.html' })
+    });
+    assert.equal(blank.statusCode, 200);
+    const blankShell = await app.inject({ method: 'GET', url: `/p/${blank.json().data.planId}` });
+    assert.match(blankShell.body, /<title>sample \/ blank-title · Plan Review<\/title>/);
+
+    const entityTitleHtml = '<!doctype html><html><head><title>Research&nbsp;Plan</title></head><body><main><p>Entity.</p></main></body></html>';
+    const entity = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload({ html: entityTitleHtml, fileHash: sha256(entityTitleHtml), slug: 'entity-title', planPath: 'thoughts/plans/entity-title.html' })
+    });
+    assert.equal(entity.statusCode, 200);
+    const entityShell = await app.inject({ method: 'GET', url: `/p/${entity.json().data.planId}` });
+    assert.match(entityShell.body, /<title>Research Plan · Plan Review<\/title>/);
+    assert.doesNotMatch(entityShell.body, /&amp;nbsp;/);
+
+    const escapedTitleHtml = '<!doctype html><html><head><title>Special &lt;Plan&gt; &amp; "Quotes"</title></head><body><main><p>Escaped.</p></main></body></html>';
+    const escaped = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload({ html: escapedTitleHtml, fileHash: sha256(escapedTitleHtml), slug: 'escaped-title', planPath: 'thoughts/plans/escaped-title.html' })
+    });
+    assert.equal(escaped.statusCode, 200);
+    const escapedShell = await app.inject({ method: 'GET', url: `/p/${escaped.json().data.planId}` });
+    assert.match(escapedShell.body, /<title>Special &lt;Plan&gt; &amp; &quot;Quotes&quot; · Plan Review<\/title>/);
+    assert.doesNotMatch(escapedShell.body, /<title>Special <Plan>/);
+
+    const suffixedTitleHtml = '<!doctype html><html><head><title>Already Plan Review</title></head><body><main><p>Suffixed.</p></main></body></html>';
+    const suffixed = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload({ html: suffixedTitleHtml, fileHash: sha256(suffixedTitleHtml), slug: 'suffixed-title', planPath: 'thoughts/plans/suffixed-title.html' })
+    });
+    assert.equal(suffixed.statusCode, 200);
+    const suffixedShell = await app.inject({ method: 'GET', url: `/p/${suffixed.json().data.planId}` });
+    assert.match(suffixedShell.body, /<title>Already Plan Review<\/title>/);
+    assert.doesNotMatch(suffixedShell.body, /Already Plan Review · Plan Review/);
+  } finally {
+    await app.close();
+  }
+});
+
 test('execution-review request button creates an agent-visible comment', async () => {
   const { app, planId } = await registeredApp('execution-review-request');
   try {
