@@ -281,7 +281,7 @@ body{margin:0;background:#0b1020;color:#e5e7eb;font-family:system-ui,sans-serif}
 #composer textarea{width:260px;height:90px;background:#020617;color:#e5e7eb;border:1px solid #2b364d;border-radius:6px;padding:8px;display:block}
 #composer button{margin-top:8px;margin-right:8px}.plan-review-selected{outline:2px dotted #38bdf8!important;box-shadow:none!important}.lightbox{position:fixed;inset:36px 360px 36px 36px;background:#020617;border:1px solid #38bdf8;z-index:12;display:grid;grid-template-rows:auto 1fr}.lightbox[hidden]{display:none}.lightbox header{display:flex;gap:8px;padding:10px;border-bottom:1px solid #2b364d}.lightbox img{max-width:100%;max-height:100%;place-self:center;transform-origin:center}.lightbox-stage{display:grid;overflow:hidden;position:relative}#image-selection-box{position:absolute;border:2px solid #38bdf8;background:rgba(56,189,248,.2);pointer-events:none}#mobile-comments-toggle{display:none}
 @media(prefers-reduced-motion:reduce){.selection-box{transition:none}}
-@media(max-width:760px){body{overflow:hidden}#plan-navbar{position:sticky;top:0;z-index:30;height:56px;box-sizing:border-box;justify-content:flex-start;gap:8px;padding:8px;overflow-x:auto;overscroll-behavior-x:contain}#plan-navbar a,#plan-navbar button{flex:0 0 auto;min-height:40px;padding:8px 10px;font-size:13px;line-height:1.15;white-space:normal}#request-execution-review{max-width:170px}#app{display:block;min-height:calc(100dvh - 56px)}#review{height:calc(100dvh - 56px);overflow:hidden}#plan-frame{width:100%;height:100%;border:0}#sidebar{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:24;max-height:min(72dvh,620px);box-sizing:border-box;border-left:0;border-top:1px solid #2b364d;border-radius:18px 18px 0 0;padding:12px 16px calc(16px + env(safe-area-inset-bottom));background:#111827;box-shadow:0 -16px 40px rgba(0,0,0,.45);overflow:auto;transform:translateY(100%);transition:transform .18s ease}body.comments-open #sidebar{transform:translateY(0)}#sidebar h1{position:sticky;top:-12px;margin:0 0 12px;padding:8px 0 10px;background:#111827;font-size:20px;z-index:1}.comment-row{padding:12px;margin:10px 0}.comment-row p{margin:.55rem 0}.comments-empty{margin:0;color:#a7b0c0;font-size:14px}#mobile-comments-toggle{display:flex;position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:25;min-height:44px;align-items:center;gap:6px;border:1px solid #38bdf8;border-radius:999px;background:#075985;color:#e0f2fe;padding:0 14px;font-weight:800;box-shadow:0 12px 28px rgba(0,0,0,.35)}body.comments-open #mobile-comments-toggle{background:#0f172a;border-color:#64748b}#composer{left:0;right:0;bottom:0;top:auto;z-index:40;box-sizing:border-box;border-left:0;border-right:0;border-bottom:0;border-radius:18px 18px 0 0;padding:14px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -16px 40px rgba(0,0,0,.48)}#composer textarea{width:100%;height:122px;box-sizing:border-box;font-size:16px}#composer button{min-height:44px;padding:8px 12px}.lightbox{inset:0;z-index:50;border:0}.lightbox header{flex-wrap:wrap}.selection-box{border-radius:4px}.marker{width:28px;height:28px}}
+@media(max-width:760px){body{overflow:hidden}#plan-navbar{position:sticky;top:0;z-index:30;height:56px;box-sizing:border-box;justify-content:flex-start;gap:8px;padding:8px;overflow-x:auto;overscroll-behavior-x:contain}#plan-navbar a,#plan-navbar button{flex:0 0 auto;min-height:40px;padding:8px 10px;font-size:13px;line-height:1.15;white-space:normal}#request-execution-review{max-width:170px}#app{display:block;min-height:calc(100dvh - 56px)}#review{height:calc(100dvh - 56px);overflow:hidden}#plan-frame{width:100%;height:100%;border:0}#sidebar{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:24;max-height:min(72dvh,620px);box-sizing:border-box;border-left:0;border-top:1px solid #2b364d;border-radius:18px 18px 0 0;padding:12px 16px calc(16px + env(safe-area-inset-bottom));background:#111827;box-shadow:0 -16px 40px rgba(0,0,0,.45);overflow:auto;transform:translateY(100%);transition:transform .18s ease}body.comments-open #sidebar{transform:translateY(0)}#sidebar h1{position:sticky;top:-12px;margin:0 0 12px;padding:8px 0 10px;background:#111827;font-size:20px;z-index:1}.comment-row{padding:12px;margin:10px 0}.comment-row p{margin:.55rem 0}.comments-empty{margin:0;color:#a7b0c0;font-size:14px}#mobile-comments-toggle{display:flex;position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:25;min-height:44px;align-items:center;gap:6px;border:1px solid #38bdf8;border-radius:999px;background:#075985;color:#e0f2fe;padding:0 14px;font-weight:800;box-shadow:0 12px 28px rgba(0,0,0,.35)}body.comments-open #mobile-comments-toggle{background:#0f172a;border-color:#64748b}#composer{left:0;right:0;bottom:0;top:auto;z-index:60;box-sizing:border-box;border-left:0;border-right:0;border-bottom:0;border-radius:18px 18px 0 0;padding:14px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -16px 40px rgba(0,0,0,.48)}#composer textarea{width:100%;height:122px;box-sizing:border-box;font-size:16px}#composer button{min-height:44px;padding:8px 12px}.lightbox{inset:0;z-index:50;border:0}.lightbox header{flex-wrap:wrap}.selection-box{border-radius:4px}.marker{width:28px;height:28px}}
 `;
 
 const clientJs = `
@@ -324,6 +324,8 @@ let planRefreshGeneration = 0;
 let deferredPlanRefresh = null;
 let lightboxDragStart = null;
 let lightboxPanStart = null;
+let touchStart = null;
+let suppressSyntheticClickUntil = 0;
 let washi = null;
 function isMobileShell(){ return window.matchMedia('(max-width: 760px)').matches; }
 function updateMobileCommentsToggle(){
@@ -732,10 +734,17 @@ function hashString(value){
   }
   return (hash >>> 0).toString(16).padStart(8, '0');
 }
+function eventPoint(event){
+  const touch = event?.changedTouches?.[0] || event?.touches?.[0];
+  if (touch) return { clientX: touch.clientX, clientY: touch.clientY };
+  if (Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)) return { clientX: event.clientX, clientY: event.clientY };
+  return null;
+}
 function imagePointFor(element, event){
   const rect = element.getBoundingClientRect();
-  const x = event ? Math.min(1, Math.max(0, (event.clientX - rect.left) / Math.max(1, rect.width))) : 0.5;
-  const y = event ? Math.min(1, Math.max(0, (event.clientY - rect.top) / Math.max(1, rect.height))) : 0.5;
+  const point = eventPoint(event);
+  const x = point ? Math.min(1, Math.max(0, (point.clientX - rect.left) / Math.max(1, rect.width))) : 0.5;
+  const y = point ? Math.min(1, Math.max(0, (point.clientY - rect.top) / Math.max(1, rect.height))) : 0.5;
   return { x, y };
 }
 function displayedRectFor(element){
@@ -763,6 +772,37 @@ function updateSelectionBoxes(){
   positionSelectionBox(hoverSelectionBox, hovered && hovered !== selected ? hovered : null);
   positionSelectionBox(activeSelectionBox, selected);
 }
+function commentTargetFromEvent(event){
+  const rawTarget = event?.target;
+  const element = rawTarget?.nodeType === 1 ? rawTarget : rawTarget?.parentElement;
+  return element?.closest?.('[data-plan-node-id]') || element || null;
+}
+function commentTargetFromPoint(doc, event){
+  const touch = event.changedTouches?.[0] || event.touches?.[0];
+  if (!touch) return commentTargetFromEvent(event);
+  const element = doc.elementFromPoint(touch.clientX, touch.clientY);
+  return element?.closest?.('[data-plan-node-id]') || element || commentTargetFromEvent(event);
+}
+function touchPoint(event){
+  const point = eventPoint(event);
+  return point ? { x: point.clientX, y: point.clientY } : null;
+}
+function touchMoved(start, event){
+  const point = touchPoint(event);
+  if (!start || !point) return Boolean(start?.moved);
+  return start.moved || Math.hypot(point.x - start.x, point.y - start.y) > 12;
+}
+function openElementComposer(element, event){
+  if (!element || typeof element.getBoundingClientRect !== 'function') return false;
+  selected = element.closest?.('[data-plan-node-id]') || element;
+  selectedForScreenshot = selected;
+  pendingAnchor = anchorForElement(selected, event);
+  updateSelectionBoxes();
+  if (selected.tagName?.toLowerCase() === 'img') showLightbox(selected);
+  clearDiscardWarning();
+  showComposer();
+  return true;
+}
 function scheduleSelectionBoxUpdate(){
   if (selectionBoxReflowQueued) return;
   selectionBoxReflowQueued = true;
@@ -772,6 +812,7 @@ function scheduleSelectionBoxUpdate(){
   });
 }
 function clearPendingSelection(){
+  hovered = null;
   selected = null;
   selectedForScreenshot = null;
   pendingAnchor = null;
@@ -895,7 +936,36 @@ function attachFrameListeners(){
     return true;
   };
   doc.addEventListener('mouseup', () => { adoptTextSelection(); }, true);
-  doc.addEventListener('touchend', () => { setTimeout(adoptTextSelection, 120); }, true);
+  doc.addEventListener('touchstart', event => {
+    const point = touchPoint(event);
+    touchStart = point ? { ...point, moved: false } : null;
+    const target = commentTargetFromEvent(event);
+    if (target && target !== hovered) {
+      hovered = target;
+      scheduleSelectionBoxUpdate();
+    }
+  }, true);
+  doc.addEventListener('touchmove', event => {
+    if (!touchStart) return;
+    if (touchMoved(touchStart, event)) {
+      touchStart.moved = true;
+      hovered = null;
+      scheduleSelectionBoxUpdate();
+    }
+  }, true);
+  doc.addEventListener('touchend', event => {
+    setTimeout(() => {
+      if (adoptTextSelection()) {
+        touchStart = null;
+        return;
+      }
+      const start = touchStart;
+      touchStart = null;
+      if (touchMoved(start, event)) return;
+      const target = commentTargetFromPoint(doc, event);
+      if (openElementComposer(target, event)) suppressSyntheticClickUntil = Date.now() + 700;
+    }, 120);
+  }, true);
   doc.addEventListener('mousemove', event => {
     const target = event.target.closest?.('[data-plan-node-id]') || event.target;
     if (target && target !== hovered) {
@@ -910,14 +980,9 @@ function attachFrameListeners(){
   doc.addEventListener('click', event => {
     event.preventDefault();
     event.stopPropagation();
+    if (Date.now() < suppressSyntheticClickUntil) return;
     if (adoptTextSelection()) return;
-    selected = event.target.closest('[data-plan-node-id]') || event.target;
-    selectedForScreenshot = selected;
-    pendingAnchor = anchorForElement(selected, event);
-    updateSelectionBoxes();
-    if (selected.tagName.toLowerCase() === 'img') showLightbox(selected);
-    clearDiscardWarning();
-    showComposer();
+    openElementComposer(commentTargetFromEvent(event), event);
   }, true);
   doc.addEventListener('scroll', scheduleMarkerReflow, true);
   frame.contentWindow?.addEventListener('scroll', scheduleMarkerReflow);
