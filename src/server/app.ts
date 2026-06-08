@@ -772,13 +772,16 @@ function updateSelectionBoxes(){
   positionSelectionBox(hoverSelectionBox, hovered && hovered !== selected ? hovered : null);
   positionSelectionBox(activeSelectionBox, selected);
 }
-const nativeInteractiveSelector = 'a[href],button,input,textarea,select,label[for],summary,area[href]';
+const nativeInteractiveSelector = 'a[href],button,input,textarea,select,summary,area[href]';
 function elementFromEvent(event){
   const rawTarget = event?.target;
   return rawTarget?.nodeType === 1 ? rawTarget : rawTarget?.parentElement;
 }
 function interactiveTargetFromElement(element){
-  return element?.closest?.(nativeInteractiveSelector) || null;
+  const nativeTarget = element?.closest?.(nativeInteractiveSelector);
+  if (nativeTarget) return nativeTarget;
+  const label = element?.closest?.('label');
+  return label?.control ? label : null;
 }
 function interactiveTargetFromEvent(event){
   return interactiveTargetFromElement(elementFromEvent(event));
