@@ -321,6 +321,10 @@ let panMode = false;
 let versionId = null;
 let loadMetaGeneration = 0;
 let planRefreshGeneration = 0;
+let latestEventSequence = 0;
+let metadataLoadPromise = null;
+let metadataLoadTimer = null;
+let pendingMetaOptions = null;
 let deferredPlanRefresh = null;
 let lightboxDragStart = null;
 let lightboxPanStart = null;
@@ -378,25 +382,33 @@ executionReviewButton?.addEventListener('click', async () => {
     return;
   }
   executionReviewButton.textContent = 'Review requested';
-  await loadMeta();
+  await scheduleMetaLoad();
   setTimeout(() => {
     executionReviewButton.disabled = false;
     executionReviewButton.textContent = originalText;
   }, 1600);
 });
+function mergeMetaOptions(left = {}, right = {}){
+  return {
+    reloadPlan: Boolean(left.reloadPlan || right.reloadPlan),
+    forceReloadPlan: Boolean(left.forceReloadPlan || right.forceReloadPlan),
+    bypassDialogDefer: Boolean(left.bypassDialogDefer || right.bypassDialogDefer)
+  };
+}
 async function loadMeta(options = {}){
   const loadGeneration = ++loadMetaGeneration;
   const res = await fetch('/api/plans/'+planId);
   const json = await res.json();
+  latestEventSequence = Math.max(latestEventSequence, Number(json.data.latestEventSequence || 0));
   const latestVersionId = json.data.latestVersion.id;
   const shouldReloadPlan = options.reloadPlan && versionId && (latestVersionId !== versionId || options.forceReloadPlan);
   if (shouldReloadPlan) {
     if (!options.bypassDialogDefer && hasOpenCommentDialog()) {
       queueDeferredPlanRefresh({ versionId: latestVersionId, forceReloadPlan: Boolean(options.forceReloadPlan) });
-    } else {
-      const refreshGeneration = ++planRefreshGeneration;
-      await refreshPlanFrameContent(latestVersionId, { clearSelection: true, forceReloadPlan: Boolean(options.forceReloadPlan), refreshGeneration });
-    }
+	    } else {
+	      const refreshGeneration = ++planRefreshGeneration;
+	      void refreshPlanFrameContent(latestVersionId, { clearSelection: true, forceReloadPlan: Boolean(options.forceReloadPlan), refreshGeneration });
+	    }
   } else if (!versionId) {
     versionId = latestVersionId;
   }
@@ -406,6 +418,30 @@ async function loadMeta(options = {}){
   }
   renderSyncWarning(json.data.plan);
   renderComments(json.data.comments || []);
+}
+function scheduleMetaLoad(options = {}){
+  pendingMetaOptions = mergeMetaOptions(pendingMetaOptions || {}, options);
+  if (metadataLoadPromise) {
+    return metadataLoadPromise;
+  }
+  metadataLoadPromise = new Promise(resolve => {
+    metadataLoadTimer = setTimeout(resolve, 50);
+  }).then(async () => {
+    metadataLoadTimer = null;
+    const optionsToLoad = pendingMetaOptions || {};
+    pendingMetaOptions = null;
+    try {
+      await loadMeta(optionsToLoad);
+    } finally {
+      metadataLoadPromise = null;
+      if (pendingMetaOptions) {
+        const nextOptions = pendingMetaOptions;
+        pendingMetaOptions = null;
+        void scheduleMetaLoad(nextOptions);
+      }
+    }
+  });
+  return metadataLoadPromise;
 }
 function replaceAttributes(target, source){
   for (const attr of [...target.attributes]) target.removeAttribute(attr.name);
@@ -483,7 +519,7 @@ async function applyDeferredPlanRefreshIfIdle(){
   const refresh = deferredPlanRefresh;
   deferredPlanRefresh = null;
   updateDeferredRefreshNotice();
-  await loadMeta({ reloadPlan: true, forceReloadPlan: refresh.forceReloadPlan, bypassDialogDefer: true });
+  await scheduleMetaLoad({ reloadPlan: true, forceReloadPlan: refresh.forceReloadPlan, bypassDialogDefer: true });
   return true;
 }
 function renderSyncWarning(plan){
@@ -503,7 +539,7 @@ function handlePlanVersionEvent(event){
     // call loadMeta with forceReloadPlan because asset-only changes can reuse versionId.
     if (event.type !== 'plan.version.synced' && data.versionId && data.versionId === versionId) return;
   } catch {}
-  loadMeta({ reloadPlan: true, forceReloadPlan: event.type === 'plan.version.synced' });
+  scheduleMetaLoad({ reloadPlan: true, forceReloadPlan: event.type === 'plan.version.synced' });
 }
 function renderComments(items){
   renderMarkers(items);
@@ -1051,7 +1087,7 @@ async function submitPendingComment(){
   const json = await res.json();
   if (!json.ok) { marker.remove(); alert(json.error.message); }
   clearPendingSelection();
-  await loadMeta();
+  await scheduleMetaLoad();
   if (isMobileShell()) setMobileCommentsOpen(true);
   await applyDeferredPlanRefreshIfIdle();
 }
@@ -1066,16 +1102,18 @@ body.addEventListener('keydown', event => {
   submitPendingComment();
 });
 document.getElementById('submit-comment').addEventListener('click', submitPendingComment);
-const source = new EventSource('/api/plans/'+planId+'/events?mode=all');
-source.addEventListener('plan.version.registered', handlePlanVersionEvent);
-source.addEventListener('plan.version.synced', handlePlanVersionEvent);
-source.addEventListener('plan.sync.failed', () => loadMeta());
-source.addEventListener('comment.created', () => loadMeta());
-source.addEventListener('comment.claimed', () => loadMeta());
-source.addEventListener('comment.acknowledged', () => loadMeta());
-source.addEventListener('comment.resolved', () => loadMeta());
-source.addEventListener('comment.released', () => loadMeta());
-loadMeta();
+function startEventStream(){
+  const source = new EventSource('/api/plans/'+planId+'/events?mode=all&afterSequence='+encodeURIComponent(String(latestEventSequence)));
+  source.addEventListener('plan.version.registered', handlePlanVersionEvent);
+  source.addEventListener('plan.version.synced', handlePlanVersionEvent);
+  source.addEventListener('plan.sync.failed', () => scheduleMetaLoad());
+  source.addEventListener('comment.created', () => scheduleMetaLoad());
+  source.addEventListener('comment.claimed', () => scheduleMetaLoad());
+  source.addEventListener('comment.acknowledged', () => scheduleMetaLoad());
+  source.addEventListener('comment.resolved', () => scheduleMetaLoad());
+  source.addEventListener('comment.released', () => scheduleMetaLoad());
+}
+loadMeta().then(startEventStream).catch(error => console.warn('Unable to load plan metadata', error));
 `;
 
 function sendError(reply: FastifyReply, error: unknown) {
@@ -1215,14 +1253,15 @@ export function createApp(options: AppOptions): FastifyInstance {
 	      emitExpired(plan.id);
 	      return ok({
         plan,
-        latestVersion: version,
-        assets: store.listPlanAssets(version.id),
-        versions: [version],
-        counts: store.listPlans({ includeArchived: true }).find(item => item.plan.id === plan.id)?.counts ?? { pending: 0, claimed: 0, acknowledged: 0, resolved: 0 },
-        progress: store.listPlans({ includeArchived: true }).find(item => item.plan.id === plan.id)?.progress ?? { totalPhases: 0, completedPhases: 0, phases: [] },
-        comments: store.listComments(plan.id),
-        reviewUrl: `/p/${plan.id}`
-      });
+	        latestVersion: version,
+	        assets: store.listPlanAssets(version.id),
+	        versions: [version],
+	        counts: store.getPlanCounts(plan.id),
+	        progress: store.getPlanProgress(plan.id),
+	        comments: store.listComments(plan.id),
+        latestEventSequence: store.latestEventSequence(plan.id, 'all'),
+	        reviewUrl: `/p/${plan.id}`
+	      });
     } catch (error) {
       sendError(reply, error);
     }
@@ -1376,7 +1415,7 @@ export function createApp(options: AppOptions): FastifyInstance {
 	      emitExpired(plan.id);
 	      return ok({
         events: store.eventsAfter(plan.id, Number(query.afterSequence ?? 0), query.mode ?? 'queue', Number(query.limit ?? 200)),
-        latestSequence: store.eventsAfter(plan.id, 0, 'all', 10000).at(-1)?.sequence ?? 0,
+        latestSequence: store.latestEventSequence(plan.id, 'all'),
         retryAfterMs: 10000
       });
     } catch (error) {
@@ -1386,11 +1425,16 @@ export function createApp(options: AppOptions): FastifyInstance {
 
   app.get('/api/plans/:planId/events', async (request, reply) => {
     const { planId } = request.params as { planId: string };
-    const query = request.query as { mode?: 'all' | 'queue' };
+    const query = request.query as { mode?: 'all' | 'queue'; afterSequence?: string };
     try {
 	      const { plan } = store.getPlan(planId);
 	      emitExpired(plan.id);
 	      const lastEventId = Number(request.headers['last-event-id'] ?? 0);
+      const queryAfterSequence = Number(query.afterSequence ?? 0);
+      const afterSequence = Math.max(
+        Number.isFinite(lastEventId) ? lastEventId : 0,
+        Number.isFinite(queryAfterSequence) ? queryAfterSequence : 0
+      );
       reply.hijack();
       reply.raw.writeHead(200, {
         'content-type': 'text/event-stream',
@@ -1398,7 +1442,7 @@ export function createApp(options: AppOptions): FastifyInstance {
         connection: 'keep-alive'
       });
       reply.raw.write(`event: connected\ndata: ${JSON.stringify({ serverTime: new Date().toISOString() })}\n\n`);
-      for (const event of store.eventsAfter(plan.id, lastEventId, query.mode ?? 'queue')) {
+      for (const event of store.eventsAfter(plan.id, afterSequence, query.mode ?? 'queue')) {
         reply.raw.write(eventForSse(event));
       }
       const off = bus.onEvent(plan.id, event => {
@@ -1407,7 +1451,7 @@ export function createApp(options: AppOptions): FastifyInstance {
       });
 	      const heartbeat = setInterval(() => {
 	        emitExpired(plan.id);
-	        reply.raw.write(`event: heartbeat\ndata: ${JSON.stringify({ latestSequence: store.eventsAfter(plan.id).at(-1)?.sequence ?? 0, serverTime: new Date().toISOString() })}\n\n`);
+	        reply.raw.write(`event: heartbeat\ndata: ${JSON.stringify({ latestSequence: store.latestEventSequence(plan.id, 'all'), serverTime: new Date().toISOString() })}\n\n`);
       }, 15000);
       request.raw.on('close', () => {
         clearInterval(heartbeat);

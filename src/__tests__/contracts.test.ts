@@ -1155,6 +1155,121 @@ test('HTTP API registers plans, creates comments, claims, acks, resolves, and po
   }
 });
 
+test('SSE cursor query skips historical events while default replay remains compatible', async () => {
+  const app = createApp({ dbPath: tempDbPath('sse-cursor') });
+  await app.listen({ host: '127.0.0.1', port: 0 });
+  const address = app.server.address();
+  assert(address && typeof address !== 'string');
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+  try {
+    const register = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload()
+    });
+    assert.equal(register.statusCode, 200);
+    const { planId, versionId } = register.json().data as { planId: string; versionId: string };
+    for (const body of ['first cursor event', 'second cursor event', 'third cursor event']) {
+      const comment = await app.inject({
+        method: 'POST',
+        url: `/api/plans/${planId}/comments`,
+        payload: { versionId, body, anchorType: 'dom', anchor: domAnchor() }
+      });
+      assert.equal(comment.statusCode, 200);
+    }
+
+    const defaultEvents = await app.inject({ method: 'GET', url: `/api/plans/${planId}/events/poll?mode=queue&afterSequence=0` });
+    assert.equal(defaultEvents.statusCode, 200);
+    assert.equal(defaultEvents.json().data.events.length, 3);
+    const firstCommentSequence = defaultEvents.json().data.events[0].sequence;
+
+    const controller = new AbortController();
+    const response = await fetch(`${baseUrl}/api/plans/${planId}/events?mode=queue&afterSequence=${firstCommentSequence}`, { signal: controller.signal });
+    assert.equal(response.status, 200);
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let text = '';
+    for (let i = 0; i < 4 && !text.includes('third cursor event'); i += 1) {
+      const result = await reader.read();
+      if (result.done) break;
+      text += decoder.decode(result.value, { stream: true });
+    }
+    await reader.cancel();
+    controller.abort();
+    assert.doesNotMatch(text, /first cursor event/);
+    assert.match(text, /second cursor event/);
+    assert.match(text, /third cursor event/);
+  } finally {
+    await app.close();
+  }
+});
+
+test('plan detail counts and progress match index values for the same plan', async () => {
+  const progressHtml = `<!doctype html><html><body><main>
+    <section><h2>Progress</h2><ul>
+      <li><input type="checkbox" checked> P1: Complete setup.</li>
+      <li><input type="checkbox"> P2: Finish review.</li>
+    </ul></section>
+    <section id="phase-p1"><h2>Phase 1</h2><p>Register the plan.</p></section>
+  </main></body></html>`;
+  const { app, planId } = await registeredApp('detail-parity');
+  try {
+    const register = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload({ html: progressHtml, fileHash: sha256(progressHtml) })
+    });
+    assert.equal(register.statusCode, 200);
+    const updatedVersionId = register.json().data.versionId as string;
+    for (const body of ['pending parity', 'claimed parity', 'acknowledged parity', 'resolved parity']) {
+      const comment = await app.inject({
+        method: 'POST',
+        url: `/api/plans/${planId}/comments`,
+        payload: { versionId: updatedVersionId, body, anchorType: 'dom', anchor: domAnchor() }
+      });
+      assert.equal(comment.statusCode, 200);
+    }
+    const pendingComments = await app.inject({ method: 'GET', url: `/api/plans/${planId}/comments` });
+    const comments = pendingComments.json().data.comments as Array<{ id: string }>;
+    const claim = await app.inject({
+      method: 'POST',
+      url: `/api/plans/${planId}/comments/claim`,
+      payload: { mode: 'selected', commentIds: [comments[1].id, comments[2].id] }
+    });
+    assert.equal(claim.statusCode, 200);
+    const claimed = claim.json().data.claimed as Array<{ id: string; claim: { id: string } }>;
+    const ack = await app.inject({
+      method: 'POST',
+      url: `/api/comments/${claimed[1].id}/ack`,
+      payload: { claimId: claimed[1].claim.id, action: { responseSummary: 'ack parity' } }
+    });
+    assert.equal(ack.statusCode, 200);
+    const release = await app.inject({
+      method: 'POST',
+      url: `/api/comments/${claimed[0].id}/release`,
+      payload: { claimId: claimed[0].claim.id }
+    });
+    assert.equal(release.statusCode, 200);
+    const resolve = await app.inject({
+      method: 'POST',
+      url: `/api/comments/${comments[3].id}/resolve`,
+      payload: { resolutionNote: 'resolve parity' }
+    });
+    assert.equal(resolve.statusCode, 200);
+
+    const index = await app.inject({ method: 'GET', url: '/api/plans?includeArchived=true' });
+    const detail = await app.inject({ method: 'GET', url: `/api/plans/${planId}` });
+    assert.equal(index.statusCode, 200);
+    assert.equal(detail.statusCode, 200);
+    const indexPlan = index.json().data.plans.find((item: { plan: { id: string } }) => item.plan.id === planId);
+    assert.ok(indexPlan);
+    assert.deepEqual(detail.json().data.counts, indexPlan.counts);
+    assert.deepEqual(detail.json().data.progress, indexPlan.progress);
+  } finally {
+    await app.close();
+  }
+});
+
 test('lease expiry emits a queue release event during polling', async () => {
   const { app, planId, versionId } = await registeredApp('lease-expiry');
   try {

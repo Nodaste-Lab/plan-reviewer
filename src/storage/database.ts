@@ -633,6 +633,40 @@ export class PlanReviewStore {
     }));
   }
 
+  latestEventSequence(planId: string, mode: 'all' | 'queue' = 'all'): number {
+    const eventFilter = mode === 'queue'
+      ? "AND event_type IN ('comment.created','comment.claimed','comment.acknowledged','comment.resolved','comment.released')"
+      : '';
+    const row = this.db
+      .prepare(`SELECT COALESCE(MAX(sequence), 0) AS latest FROM comment_events WHERE plan_id = ? ${eventFilter}`)
+      .get(planId) as { latest: number };
+    return Number(row.latest ?? 0);
+  }
+
+  getPlanCounts(planId: string): { pending: number; claimed: number; acknowledged: number; resolved: number } {
+    const row = this.db.prepare(`
+      SELECT
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
+        SUM(CASE WHEN status = 'claimed' THEN 1 ELSE 0 END) AS claimed,
+        SUM(CASE WHEN status = 'acknowledged' THEN 1 ELSE 0 END) AS acknowledged,
+        SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) AS resolved
+      FROM comments
+      WHERE plan_id = ?
+    `).get(planId) as Record<string, unknown> | undefined;
+    return {
+      pending: Number(row?.pending ?? 0),
+      claimed: Number(row?.claimed ?? 0),
+      acknowledged: Number(row?.acknowledged ?? 0),
+      resolved: Number(row?.resolved ?? 0)
+    };
+  }
+
+  getPlanProgress(planId: string): PlanProgress {
+    const { version } = this.getPlan(planId);
+    if (!version.htmlBlobPath) return { totalPhases: 0, completedPhases: 0, phases: [] };
+    return extractPlanProgress(fs.readFileSync(version.htmlBlobPath, 'utf8'));
+  }
+
   getPlan(identifier: string): { plan: PlanRecord; version: VersionRecord } {
     const row = this.db.prepare(`
       SELECT p.id, p.repo_id AS repoId, p.slug, p.plan_path AS planPath, p.source_path AS sourcePath,

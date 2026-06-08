@@ -142,9 +142,154 @@ try {
   });
   assert.equal(imageComment.ok(), true);
 
+  const stormHtml = '<!doctype html><html><body><main>' +
+    Array.from({ length: 40 }, (_, index) => `<section id="storm-${index}"><h2>Storm ${index}</h2><p>Event storm target ${index}</p></section>`).join('') +
+    '</main></body></html>';
+  const registerStormPlan = async (slug: string) => {
+    const response = await context.post('/api/plans/register', {
+      data: {
+        repoKey: `e2e-${slug}-repo`,
+        repoName: `e2e-${slug}`,
+        rootPath: `/tmp/e2e-${slug}`,
+        branch: 'main',
+        commitSha: `e2e-${slug}`,
+        planPath: `thoughts/plans/${slug}.html`,
+        slug,
+        html: stormHtml,
+        fileHash: sha256(stormHtml),
+        publicationMetadata: {
+          worktreePath: `/tmp/e2e-${slug}`,
+          branch: 'main',
+          executionReady: false,
+          executionReadyBasis: 'agent-review-results'
+        },
+        updateMode: 'upsert'
+      }
+    });
+    assert.equal(response.ok(), true);
+    return (await response.json()).data as { planId: string; versionId: string };
+  };
+  const createStormComment = (planId: string, versionId: string, index: number, bodyPrefix = 'Storm comment') => context.post(`/api/plans/${planId}/comments`, {
+    data: {
+      versionId,
+      body: `${bodyPrefix} ${index}`,
+      anchorType: 'dom',
+      anchor: {
+        planNodeId: `storm-${index % 40}`,
+        cssSelector: `#storm-${index % 40}`,
+        textPreview: `Event storm target ${index % 40}`,
+        rect: { x: 20, y: 30 + (index % 40) * 20, width: 240, height: 44 },
+        viewport: { width: 1280, height: 720 }
+      }
+    }
+  });
+  const installMetadataRequestCounter = async (page: import('playwright').Page) => {
+    await page.addInitScript(() => {
+      const stats = { count: 0, active: 0, maxActive: 0, durations: [] as number[] };
+      (window as typeof window & { __planMetaStats?: typeof stats }).__planMetaStats = stats;
+      const originalFetch = window.fetch.bind(window);
+      window.fetch = async (...args) => {
+        const rawUrl = String(args[0]);
+        let counts = false;
+        try {
+          const url = new URL(rawUrl, window.location.origin);
+          counts = /^\/api\/plans\/[^/]+$/.test(url.pathname);
+        } catch {}
+        if (!counts) return originalFetch(...args);
+        const started = performance.now();
+        stats.count += 1;
+        stats.active += 1;
+        stats.maxActive = Math.max(stats.maxActive, stats.active);
+        try {
+          return await originalFetch(...args);
+        } finally {
+          stats.active -= 1;
+          stats.durations.push(performance.now() - started);
+        }
+      };
+    });
+  };
+  const metadataStats = (page: import('playwright').Page) => page.evaluate(() => {
+    const stats = (window as typeof window & { __planMetaStats?: { count: number; active: number; maxActive: number; durations: number[] } }).__planMetaStats;
+    return {
+      count: stats?.count ?? 0,
+      active: stats?.active ?? 0,
+      maxActive: stats?.maxActive ?? 0,
+      maxDuration: Math.max(0, ...(stats?.durations ?? []))
+    };
+  });
+  const commentRows = (page: import('playwright').Page) => page.evaluate(() => document.querySelectorAll('.comment-row').length);
+
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage();
+    const historical = await registerStormPlan('event-storm-historical');
+    for (let index = 0; index < 350; index += 1) {
+      const response = await createStormComment(historical.planId, historical.versionId, index, 'Historical storm comment');
+      assert.equal(response.ok(), true);
+    }
+    const historicalPage = await browser.newPage();
+    await installMetadataRequestCounter(historicalPage);
+    await historicalPage.goto(`${baseUrl}/p/${historical.planId}`);
+    await historicalPage.waitForFunction(() => document.querySelectorAll('.comment-row').length === 350, undefined, { timeout: 20000 });
+    const historicalStats = await metadataStats(historicalPage);
+    assert.equal(await commentRows(historicalPage), 350);
+    assert.equal(historicalStats.maxActive <= 1, true, `historical metadata requests overlapped: ${JSON.stringify(historicalStats)}`);
+    assert.equal(historicalStats.count <= 3, true, `historical replay caused too many metadata requests: ${JSON.stringify(historicalStats)}`);
+    await historicalPage.close();
+
+    const burst = await registerStormPlan('event-storm-burst');
+    const burstPage = await browser.newPage();
+    await installMetadataRequestCounter(burstPage);
+    await burstPage.goto(`${baseUrl}/p/${burst.planId}`);
+    await burstPage.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('No comments yet'));
+    const beforeBurst = await metadataStats(burstPage);
+    await Promise.all(Array.from({ length: 120 }, (_, index) => createStormComment(burst.planId, burst.versionId, index, 'Burst storm comment')));
+    await burstPage.waitForFunction(() => document.querySelectorAll('.comment-row').length === 120, undefined, { timeout: 20000 });
+    const afterBurst = await metadataStats(burstPage);
+    assert.equal(await commentRows(burstPage), 120);
+    assert.equal(afterBurst.maxActive <= 1, true, `burst metadata requests overlapped: ${JSON.stringify(afterBurst)}`);
+    assert.equal(afterBurst.count - beforeBurst.count <= 4, true, `burst caused too many metadata requests: before=${JSON.stringify(beforeBurst)} after=${JSON.stringify(afterBurst)}`);
+
+    const trailing = await registerStormPlan('event-storm-trailing');
+    const trailingPage = await browser.newPage();
+    await installMetadataRequestCounter(trailingPage);
+    await trailingPage.goto(`${baseUrl}/p/${trailing.planId}`);
+    await trailingPage.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('No comments yet'));
+    let delayNextMeta = true;
+    let resumeMetadata: (() => void) | null = null;
+    const delayedMetadataSeen = new Promise<void>(resolve => {
+      trailingPage.route(`**/api/plans/${trailing.planId}`, async route => {
+        if (delayNextMeta) {
+          delayNextMeta = false;
+          resolve();
+          await new Promise<void>(resume => {
+            resumeMetadata = resume;
+          });
+        }
+        await route.continue();
+      });
+    });
+    const firstTrailing = await createStormComment(trailing.planId, trailing.versionId, 0, 'Trailing storm comment');
+    assert.equal(firstTrailing.ok(), true);
+    await delayedMetadataSeen;
+    const lastTrailing = await createStormComment(trailing.planId, trailing.versionId, 1, 'Trailing storm comment');
+    assert.equal(lastTrailing.ok(), true);
+    const resumeMeta = resumeMetadata as (() => void) | null;
+    assert.ok(resumeMeta);
+    resumeMeta();
+    await trailingPage.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('Trailing storm comment 1'), undefined, { timeout: 10000 });
+    const trailingStats = await metadataStats(trailingPage);
+    assert.equal(await commentRows(trailingPage), 2);
+	    assert.equal(trailingStats.maxActive <= 1, true, `trailing refresh metadata requests overlapped: ${JSON.stringify(trailingStats)}`);
+	    await trailingPage.unroute(`**/api/plans/${trailing.planId}`);
+	    await trailingPage.close();
+	    await burstPage.close();
+	    for (const stormPlan of [historical, burst, trailing]) {
+	      const archive = await context.post(`/api/plans/${stormPlan.planId}/archive`);
+	      assert.equal(archive.ok(), true);
+	    }
+
+	    const page = await browser.newPage();
     await page.goto(`${baseUrl}/`);
     await page.waitForSelector('[data-attention-filter]');
     assert.equal(await page.locator('.plan-card').count(), 2);
