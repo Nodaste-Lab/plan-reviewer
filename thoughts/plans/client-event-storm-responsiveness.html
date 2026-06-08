@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan Reviewer Client Event Storm Responsiveness Plan</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1020;
+      --panel: #111827;
+      --text: #e5e7eb;
+      --muted: #a7b0c0;
+      --accent: #38bdf8;
+      --border: #2b364d;
+      --warn: #f59e0b;
+      --ok: #22c55e;
+    }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.55;
+    }
+    main {
+      max-width: 1040px;
+      margin: 0 auto;
+      padding: 32px 20px 56px;
+    }
+    h1, h2, h3 {
+      line-height: 1.2;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 34px;
+    }
+    h2 {
+      margin-top: 32px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 6px;
+    }
+    h3 {
+      margin-top: 24px;
+    }
+    a {
+      color: var(--accent);
+    }
+    code, pre {
+      background: #0f172a;
+      color: #dbeafe;
+      border-radius: 6px;
+    }
+    code {
+      padding: 1px 5px;
+    }
+    pre {
+      padding: 12px;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+    }
+    section, article {
+      scroll-margin-top: 16px;
+    }
+    .status {
+      display: inline-block;
+      border: 1px solid var(--warn);
+      color: #fde68a;
+      border-radius: 999px;
+      padding: 3px 10px;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .note {
+      border: 1px solid var(--border);
+      background: var(--panel);
+      border-radius: 8px;
+      padding: 12px 14px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 8px;
+      vertical-align: top;
+    }
+    th {
+      background: #0f172a;
+      text-align: left;
+    }
+    .muted {
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header id="title">
+    <h1>Plan Reviewer Client Event Storm Responsiveness</h1>
+    <p class="status">Status: execution-ready</p>
+    <p class="muted">Created June 8, 2026. Revised after Codex and Claude plan-review feedback; both re-reviews returned PLAN_EXECUTION_READY. P1-P3 implementation and verification completed on June 8, 2026.</p>
+  </header>
+
+  <section id="goal">
+    <h2>Goal</h2>
+    <p>Stop a single plan-review browser client from becoming unresponsive when a plan has many comment events or when many comment lifecycle events arrive in a burst, while preserving live comment updates, source-sync refreshes, and agent queue behavior.</p>
+  </section>
+
+  <section id="why-this-plan-exists">
+    <h2>Why This Plan Exists</h2>
+    <p>Human reviewers need an open plan tab to stay responsive while comments and plan updates accumulate. The reported symptom is client-specific degradation: one browser stops responding over time, another browser can still work, and reopening the affected browser temporarily restores behavior.</p>
+  </section>
+
+  <section id="authority-and-inputs">
+    <h2>Authority and Inputs</h2>
+    <ul>
+      <li>User request: reproduce the client-specific responsiveness failure and propose a fix; investigate and plan only.</li>
+      <li>Repo guide: <code>AGENTS.md</code>, especially the browser-review and quality-gate requirements.</li>
+      <li>Product intent: <code>thoughts/specs/product_intent.md</code>, especially “Do not lose comments” and preserving a trustworthy browser review surface.</li>
+      <li>Code evidence: <code>src/server/app.ts</code> and <code>src/storage/database.ts</code>.</li>
+      <li>Reproduction evidence from temporary Playwright runs against isolated SQLite databases under <code>/tmp</code>.</li>
+    </ul>
+  </section>
+
+  <section id="current-implementation-reality">
+    <h2>Current Implementation Reality</h2>
+    <ul>
+      <li>The browser client calls <code>loadMeta()</code> for every comment lifecycle SSE event and once on page load.</li>
+      <li><code>loadMeta()</code> performs a full <code>GET /api/plans/:planId</code>, parses all comments, redraws markers, and rewrites the entire comment sidebar.</li>
+      <li>The browser opens <code>/api/plans/:planId/events?mode=all</code>. The server replays up to 200 stored events on connection before streaming new events.</li>
+      <li>The plan detail endpoint calls <code>store.listPlans({ includeArchived: true })</code> twice to derive counts and progress for one plan. That method scans all plans and reads plan HTML blobs to extract progress.</li>
+      <li><code>listComments()</code> returns all comments for the plan and remaps anchor state against the latest rendered HTML on every full metadata load.</li>
+    </ul>
+  </section>
+
+  <section id="reproduction-evidence">
+    <h2>Reproduction Evidence</h2>
+    <article id="repro-stored-events">
+      <h3>Stored Event Replay</h3>
+      <p>Seeded one plan with 350 comments before opening the review page. On fresh page load, the tab issued 200 full metadata requests, with 199 concurrent <code>/api/plans/:planId</code> fetches. The rendered UI eventually showed 350 comment rows and anchors, but the request storm consumed the client connection budget while settling.</p>
+    </article>
+    <article id="repro-burst-events">
+      <h3>Burst While Open</h3>
+      <p>Opened a healthy plan page, then created 120 comments through the API. The tab issued 122 full metadata requests, with 117 concurrent fetches. Request duration p50 was about 150 ms and p95 about 210 ms in the small synthetic dataset; larger real stores will amplify this because each request asks the server for global plan-derived metadata and all comments.</p>
+    </article>
+    <article id="root-cause-hypothesis">
+      <h3>Root Cause Hypothesis</h3>
+      <p>The client is not dead; it is self-saturating. Historical SSE replay and bursty live events trigger many uncoalesced full-state reloads. Because each reload performs an O(all comments) sidebar rewrite and anchor remap, the affected tab can saturate its own rendering work and network request queue. Another browser process can appear healthy because it has a separate page/runtime budget, and reopening the affected browser clears the tab-local backlog until event volume builds again.</p>
+    </article>
+  </section>
+
+  <section id="product-intent-alignment">
+    <h2>Product Intent Alignment</h2>
+    <p>This plan advances <code>thoughts/specs/product_intent.md</code> by keeping browser comments visible and reliable without requiring reviewers to reopen tabs as a manual recovery step. The queue-backed agent path remains the correctness-critical comment delivery mechanism; the browser SSE stream is treated as a UI freshness signal that must be bounded and recoverable.</p>
+  </section>
+
+  <section id="locked-decisions">
+    <h2>Locked Decisions</h2>
+    <ul>
+      <li>Do not change queue-backed agent delivery semantics.</li>
+      <li>Do not remove live browser updates; coalesce and bound them.</li>
+      <li>Keep the browser’s initial state source as <code>GET /api/plans/:planId</code>, then subscribe only to events newer than that snapshot.</li>
+      <li>Optimize the plan detail endpoint for the requested plan instead of deriving single-plan counts and progress through the global plan index path.</li>
+    </ul>
+  </section>
+
+  <section id="acceptance-criteria">
+    <h2>Acceptance Criteria</h2>
+    <ol>
+      <li id="ac-1">A fresh review page with 350 historical comment events renders the current comments from the initial snapshot with no more than three total <code>GET /api/plans/:planId</code> calls and no more than one in flight at any time.</li>
+      <li id="ac-2">A burst of 120 comment events while a page is open coalesces into no more than four additional full metadata refreshes, with no more than one full metadata request in flight per tab.</li>
+      <li id="ac-3">Comment creation, claim, ack, resolve, release, plan version registration, source sync, and sync failure still refresh the browser to the latest truthful state, including exact expected comment counts and status transitions after coalescing.</li>
+      <li id="ac-4">The plan detail endpoint computes counts and progress for the target plan without scanning and parsing every registered plan, and those target-plan values stay identical to the index/global list values for the same plan.</li>
+      <li id="ac-5">Existing API, CLI, queue listener, and e2e behavior remain aligned.</li>
+    </ol>
+  </section>
+
+  <section id="bdd-scenarios">
+    <h2>BDD Scenarios</h2>
+    <article id="bdd-historical-events">
+      <h3>Historical Events on Page Open</h3>
+      <p>Given a plan has 350 stored comment events, when a reviewer opens <code>/p/:planId</code>, then the page renders all 350 comments from the initial metadata snapshot, opens the browser SSE stream from a post-snapshot event sequence, and stays within the AC1 request and concurrency ceilings.</p>
+    </article>
+    <article id="bdd-live-burst">
+      <h3>Live Comment Burst</h3>
+      <p>Given a reviewer has a plan page open, when 120 comment events arrive rapidly, then the client schedules at most one active metadata load and one queued follow-up refresh, stays within the AC2 ceilings, and the final sidebar contains all 120 new comments.</p>
+    </article>
+    <article id="bdd-trailing-refresh">
+      <h3>Trailing Refresh After In-Flight Event</h3>
+      <p>Given a metadata refresh is already in flight, when the newest comment or lifecycle status event arrives before that refresh completes, then the client records a trailing refresh and the final UI reflects the last event rather than dropping it.</p>
+    </article>
+    <article id="bdd-plan-sync">
+      <h3>Source Sync Refresh</h3>
+      <p>Given a plan source sync event arrives while no comment draft is open, when the event is processed, then the iframe updates to the latest render without losing marker state. If a draft is open, the refresh remains deferred until the draft is submitted or cancelled.</p>
+    </article>
+    <article id="bdd-agent-queue">
+      <h3>Agent Queue Unchanged</h3>
+      <p>Given an agent uses <code>plan-review agent next</code>, when browser comments are created and claimed, then queue delivery remains at-least-once and independent from browser UI event coalescing.</p>
+    </article>
+    <article id="bdd-default-event-replay">
+      <h3>Default Event Replay Unchanged</h3>
+      <p>Given a CLI or watch consumer connects to the existing event endpoints without a browser-only post-snapshot cursor, when stored queue events exist, then default replay and poll behavior remain compatible with current agent and watch flows.</p>
+    </article>
+    <article id="bdd-index-detail-parity">
+      <h3>Index and Detail Parity</h3>
+      <p>Given a plan has mixed pending, claimed, acknowledged, and resolved comments plus phase progress markers, when the index and detail APIs are read, then both surfaces report matching counts and progress for the same plan.</p>
+    </article>
+  </section>
+
+  <section id="progress">
+    <h2>Progress</h2>
+    <ul>
+      <li><input type="checkbox" checked disabled> P1: Add regression coverage for client event storms and single-plan detail cost.</li>
+      <li><input type="checkbox" checked disabled> P2: Bound browser event replay and coalesce client metadata refreshes.</li>
+      <li><input type="checkbox" checked disabled> P3: Optimize single-plan detail retrieval and verify cross-surface parity.</li>
+    </ul>
+  </section>
+
+  <section id="test-coverage-matrix">
+    <h2>Test Coverage Matrix</h2>
+    <table>
+      <thead>
+        <tr><th>Acceptance</th><th>Scenarios</th><th>Planned Coverage</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>AC1, AC2</td><td>Historical events, live burst, trailing refresh</td><td>E2E harness with Playwright network counters, max-in-flight tracking, seeded comments, and final row/status assertions.</td></tr>
+        <tr><td>AC3</td><td>Source sync, comment lifecycle, trailing refresh</td><td>Existing e2e plus new assertions around deferred refresh, final state, exact counts, and status transitions after coalescing.</td></tr>
+        <tr><td>AC4</td><td>Single-plan detail, index/detail parity</td><td>Contract or unit coverage proving detail uses target-plan counts/progress and produces the same values as the existing index/global path for the same plan.</td></tr>
+        <tr><td>AC5</td><td>Agent queue unchanged, default event replay unchanged</td><td>Existing queue fixture smoke, seeded-comment-stream fixture, and contract tests proving default replay/poll behavior remains compatible.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="phase-plan">
+    <h2>Phase-by-Phase Execution Plan</h2>
+    <article id="phase-p1-regressions">
+      <h3>P1: Regressions First</h3>
+      <h4>End State</h4>
+      <p>Tests fail against the current implementation by detecting redundant metadata request storms.</p>
+      <h4>Tests first</h4>
+      <p>Add focused e2e scenarios that fail today: seed 350 historical comments and assert at most three total <code>GET /api/plans/:planId</code> calls with max in-flight equal to one; create a 120-comment burst while open and assert at most four additional metadata refreshes with max in-flight equal to one. Add a trailing-refresh regression where the last event arrives during an in-flight load and must still appear in the final UI.</p>
+      <h4>Expected files</h4>
+      <p><code>src/test-fixtures/e2e-run.ts</code> and possibly <code>src/__tests__/contracts.test.ts</code>.</p>
+      <h4>Work</h4>
+      <p>Encode the two reproduction shapes captured during investigation with the AC1/AC2 thresholds. Instrument Playwright to record request counts, max in-flight requests, final comment row counts, final comment statuses, and an approximate render-settle duration so future work can distinguish request storms from remaining large-DOM render cost.</p>
+      <h4>Verify</h4>
+      <pre><code>bun run test:e2e</code></pre>
+      <p class="muted">The current e2e runner is monolithic and does not implement <code>--grep</code>; use the bare command unless P1 explicitly adds real scenario filtering.</p>
+    </article>
+
+    <article id="phase-p2-client-events">
+      <h3>P2: Browser Event Coalescing and Replay Boundaries</h3>
+      <h4>End State</h4>
+      <p>The review page uses initial metadata as the current snapshot, subscribes only to newer browser events, and coalesces event-triggered metadata refreshes.</p>
+      <h4>Tests first</h4>
+      <p>Use the P1 failing e2e tests as the RED signal.</p>
+      <h4>Expected files</h4>
+      <p><code>src/server/app.ts</code> and any contract tests needed for event endpoint query behavior.</p>
+      <h4>Work</h4>
+      <ul>
+        <li>Add a latest event sequence to the plan metadata response or a lightweight event cursor endpoint.</li>
+        <li>Have the browser pass that initial sequence as an SSE query parameter, because <code>EventSource</code> cannot set <code>Last-Event-ID</code> on first connect.</li>
+        <li>On reconnect, treat a present <code>Last-Event-ID</code> header as newer authority than the initial query cursor so the browser does not replay events already seen since the first snapshot.</li>
+        <li>Allow the browser SSE endpoint to start after the supplied sequence, while preserving existing default replay behavior for CLI/watch/poll compatibility when the parameter is absent.</li>
+        <li>Replace direct event-handler calls to <code>loadMeta()</code> with a scheduler that keeps at most one request active and one merged follow-up pending.</li>
+        <li>Merge refresh options conservatively so source-sync refreshes still force iframe updates and draft-safe deferral still works.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run test
+bun run test:e2e</code></pre>
+    </article>
+
+    <article id="phase-p3-plan-detail">
+      <h3>P3: Single-Plan Detail Cost</h3>
+      <h4>End State</h4>
+      <p><code>GET /api/plans/:planId</code> derives counts and progress for the requested plan without using the full index path twice.</p>
+      <h4>Tests first</h4>
+      <p>Add focused store or contract coverage for single-plan counts/progress, assert parity with the current <code>listPlans()</code>-derived values for the same plan, and ensure the response shape remains unchanged except for any additive event cursor.</p>
+      <h4>Expected files</h4>
+      <p><code>src/storage/database.ts</code>, <code>src/server/app.ts</code>, and <code>src/__tests__/contracts.test.ts</code>.</p>
+      <h4>Work</h4>
+      <ul>
+        <li>Add a store method for target-plan comment counts.</li>
+        <li>Add a store method for target-plan progress using the current version HTML blob only.</li>
+        <li>Use those methods in the plan detail route.</li>
+        <li>Keep the index route behavior unchanged and prove index/detail counts and progress stay identical for the same plan.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run test
+bun run test:e2e
+bun run test:fixtures -- --scenario seeded-comment-stream
+bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated</code></pre>
+    </article>
+  </section>
+
+  <section id="verification-strategy">
+    <h2>Verification Strategy</h2>
+    <p>Use tests as evidence for the failure mode and the fix. The most important new evidence is a browser-network assertion: historical or burst comment events must stay within the AC1/AC2 request ceilings and max one in-flight metadata request. Final verification should include the full repo gate plus e2e and queue fixture smoke because this touches browser, API, and agent queue-adjacent surfaces. Record render-settle timing in the new e2e evidence so large-comment DOM cost can be revisited only if bounded fetches still leave visible jank.</p>
+  </section>
+
+  <section id="delivery-order">
+    <h2>Delivery Order</h2>
+    <ol>
+      <li>P1 proves the failure with tests.</li>
+      <li>P2 makes the browser resilient to replay and bursts.</li>
+      <li>P3 reduces server-side amplification and protects larger plan stores.</li>
+    </ol>
+  </section>
+
+  <section id="non-goals">
+    <h2>Non-Goals</h2>
+    <ul>
+      <li>No authentication or trusted-network behavior changes.</li>
+      <li>No rewrite of the comment sidebar into a virtualized UI unless bounded fetches still leave unacceptable rendering cost.</li>
+      <li>No change to agent queue claim, ack, release, or resolve semantics.</li>
+      <li>No compatibility break for current CLI watch and poll flows.</li>
+    </ul>
+  </section>
+
+  <section id="resume-instructions">
+    <h2>Resume Instructions</h2>
+    <p>P1-P3 are implemented and verified. Resume from scoped implementation review and PR handoff if this thread is interrupted. Preserve the reproduction evidence and update this log for any review-driven follow-up changes.</p>
+  </section>
+
+  <section id="decisions-deviations-log">
+    <h2>Decisions / Deviations Log</h2>
+    <ul>
+      <li>2026-06-08: Investigation found a reproducible uncoalesced metadata request storm. Proposed fix is bounded browser event replay, client refresh coalescing, and single-plan detail optimization.</li>
+      <li>2026-06-08: Initial plan remained research-ready rather than execution-ready because browser feedback and independent plan-review gates had not run.</li>
+      <li>2026-06-08: Codex and Claude plan reviews found the root-cause direction sound but requested concrete thresholds, cursor/default replay contract tests, trailing-refresh coverage, index/detail parity coverage, and honest e2e verify commands. Plan revised accordingly.</li>
+      <li>2026-06-08: Codex and Claude re-reviews both returned <code>VERDICT: PLAN_EXECUTION_READY</code>. Final administrative update set status to execution-ready and added the SSE reconnect rule that <code>Last-Event-ID</code> wins over the initial browser cursor when present.</li>
+      <li>2026-06-08: P1 RED evidence captured: <code>bun run test</code> failed because the SSE cursor query replayed historical events, and <code>bun run test:e2e</code> failed because the historical scenario produced 200 metadata requests with 199 concurrent requests.</li>
+      <li>2026-06-08: P2 implemented browser post-snapshot SSE cursors, server-side <code>afterSequence</code> support, and coalesced metadata scheduling. A first scheduler version kept max in-flight at one but allowed too many burst refreshes, so a short debounce was added. A later e2e race showed render refreshes must not hold the metadata scheduler; render refresh now runs independently under the existing generation guard.</li>
+      <li>2026-06-08: P3 implemented target-plan counts, progress, and latest event sequence helpers so <code>GET /api/plans/:planId</code> no longer derives detail metadata through the global plan index path.</li>
+      <li>2026-06-08: GREEN evidence captured: <code>bun run test</code>, <code>bun run test:e2e</code>, <code>bun run test:fixtures -- --scenario seeded-comment-stream</code>, and <code>bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated</code> all passed.</li>
+      <li>2026-06-08: Scoped implementation reviews returned <code>VERDICT: PASS_SCOPED</code>. Claude noted a theoretical target-plan progress fallback divergence; <code>getPlanProgress()</code> now mirrors the index path's empty-progress fallback for an absent HTML blob path.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>
