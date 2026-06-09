@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Build Plan Button Plan</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0b1020; --panel:#111827; --panel2:#0f172a; --text:#e5e7eb; --muted:#a7b0c0; --accent:#7dd3fc; --border:#2b364d; --good:#86efac; --warn:#fde68a; }
+    body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; line-height:1.55; }
+    main { max-width:980px; margin:0 auto; padding:40px 22px 80px; }
+    h1,h2,h3 { line-height:1.2; }
+    h1 { font-size:2.2rem; margin:0 0 10px; }
+    h2 { margin-top:34px; padding-top:16px; border-top:1px solid var(--border); }
+    a { color:var(--accent); }
+    code, pre { background:#020617; border:1px solid var(--border); border-radius:6px; }
+    code { padding:1px 5px; }
+    pre { padding:14px; overflow:auto; }
+    section, article { scroll-margin-top:72px; }
+    .card { background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:18px; margin:16px 0; }
+    .pill { display:inline-block; margin:4px 8px 4px 0; padding:4px 10px; border:1px solid var(--border); border-radius:999px; background:var(--panel2); color:var(--muted); font-size:.9rem; font-weight:700; }
+    .muted { color:var(--muted); }
+    table { width:100%; border-collapse:collapse; margin:12px 0; }
+    th,td { border:1px solid var(--border); padding:10px; vertical-align:top; }
+    th { background:var(--panel2); text-align:left; }
+    li { margin:6px 0; }
+  </style>
+</head>
+<body>
+<main>
+  <header id="title">
+    <h1>Add Build Plan Button</h1>
+    <p class="muted">Execution-ready plan for adding a top-nav plan action and improving progress visibility while plans are being executed.</p>
+    <p><span class="pill">Status: execution-ready</span><span class="pill">Scope: plan action + progress monitoring</span><span class="pill">Risk: medium-low</span></p>
+  </header>
+
+  <section id="progress" class="card">
+    <h2>Progress</h2>
+    <ul>
+      <li><label><input type="checkbox" checked> P1 - Add button and progress-order contract tests</label></li>
+      <li><label><input type="checkbox" checked> P2 - Implement build request action</label></li>
+      <li><label><input type="checkbox" checked> P3 - Implement active-progress index ordering</label></li>
+      <li><label><input type="checkbox" checked> P4 - Verify queue behavior and regressions</label></li>
+    </ul>
+  </section>
+
+  <section id="goal" class="card">
+    <h2>Goal</h2>
+    <p>Add a <strong>Build Plan</strong> button to the top of every plan review page and make active execution progress easier to monitor from both the HTML plan and the plan index. The button should work like the existing <strong>Request execution-ready review</strong> button: clicking it creates one pending, agent-visible comment in the plan queue. The comment body must be:</p>
+    <pre><code>/skill:scoped-plan-run thoughts/plans/&lt;plan filename&gt;</code></pre>
+    <p>Once execution starts, reviewers should be able to see plan progress immediately: the plan document should keep <strong>Progress</strong> at the top, and the active index should prioritize plans with started progress, sorted from most complete to least complete.</p>
+  </section>
+
+  <section id="why-this-plan-exists" class="card">
+    <h2>Why this plan exists</h2>
+    <p>The plan-review UI already supports queuing agent work through the execution-ready review button. This feature adds the adjacent golden path for the operator: once a plan is ready, they can request implementation directly from the review page without copying a command out of band. Reviewer feedback also clarified that the reviewer should remain useful after execution starts, so progress needs to be prominent in the plan document and active execution should rise to the top of the index.</p>
+  </section>
+
+  <section id="authority-and-inputs" class="card">
+    <h2>Authority and inputs</h2>
+    <ul>
+      <li>User request: add a button labeled <strong>Build Plan</strong> that executes <code>/skill:scoped-plan-run thoughts/plans/&lt;plan filename&gt;</code>.</li>
+      <li>Existing implementation: <code>src/server/app.ts</code> renders the review shell, client JS, and plan action endpoints.</li>
+      <li>Existing test precedent: <code>src/__tests__/contracts.test.ts</code> has coverage for the execution-ready review button and queue event.</li>
+      <li>Registered plan metadata source: <code>PlanReviewStore.getPlan()</code> exposes <code>plan.planPath</code>.</li>
+      <li>Reviewer comment on this plan: move plan progress to the top of the document and sort actively executing plans first in the index, from most complete to least complete.</li>
+    </ul>
+  </section>
+
+  <section id="current-implementation-reality" class="card">
+    <h2>Current implementation reality</h2>
+    <table>
+      <thead><tr><th>Surface</th><th>Current behavior</th><th>Needed change</th></tr></thead>
+      <tbody>
+        <tr><td><code>reviewShell()</code></td><td>Renders <code>Request execution-ready review</code>, archive, and restore controls in <code>#plan-navbar</code>.</td><td>Add a second stable button with <code>id="build-plan"</code>.</td></tr>
+        <tr><td><code>clientJs</code></td><td>Binds <code>#request-execution-review</code> to a POST endpoint, disables during request, refreshes metadata, and restores text.</td><td>Mirror this pattern for <code>#build-plan</code>.</td></tr>
+        <tr><td><code>POST /api/plans/:planId/request-execution-review</code></td><td>Creates an agent-visible pending comment anchored to <code>body</code> and emits <code>comment.created</code>.</td><td>Add an analogous build endpoint using a scoped-plan-run body.</td></tr>
+        <tr><td><code>contracts.test.ts</code></td><td>Asserts button presence, comment body, pending status, browser payload, and queue event for review requests.</td><td>Add matching contract coverage for the build request and index ordering.</td></tr>
+        <tr><td><code>indexHtml()</code> / <code>listPlans()</code></td><td>The index currently groups plans by repo and the store sorts primarily by activity time.</td><td>Prioritize active plans with started progress above not-started plans and sort them by completion ratio descending.</td></tr>
+        <tr><td>HTML plan artifact</td><td>Progress can appear below background sections.</td><td>Keep <code>Progress</code> immediately after the title/header so the reviewer page is a useful execution monitor.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="resume-instructions" class="card">
+    <h2>Resume instructions (agent)</h2>
+    <p>Read this plan fully, then execute the first unchecked progress item. Keep the change scoped to the Build Plan button, its API endpoint, progress placement in this plan artifact, active-progress index ordering, and tests. Do not implement unrelated direct process launching or broader workflow automation.</p>
+  </section>
+
+  <section id="product-intent-alignment" class="card">
+    <h2>Product intent alignment</h2>
+    <p>The obvious operator action should be available in the normal review page. The service should not launch a local process directly from browser state; it should preserve the established safe queue contract by creating an agent-visible comment that an authenticated agent harness claims and executes. Once that work starts, the normal monitoring surfaces should highlight progress without requiring the operator to hunt through a long plan or manually filter the index.</p>
+  </section>
+
+  <section id="locked-decisions" class="card">
+    <h2>Locked decisions</h2>
+    <ul>
+      <li id="decision-queue-comment"><strong>Queue, not direct shell execution:</strong> the button creates a pending comment, matching the execution-ready review button and avoiding browser-triggered process execution.</li>
+      <li id="decision-command-body"><strong>Command body:</strong> the exact body format is <code>/skill:scoped-plan-run thoughts/plans/&lt;plan filename&gt;</code>.</li>
+      <li id="decision-filename"><strong>Filename source:</strong> derive <code>&lt;plan filename&gt;</code> from <code>path.basename(plan.planPath)</code>, then prefix <code>thoughts/plans/</code>. This matches the user-specified command shape even if the registered path includes repo-relative directories.</li>
+      <li id="decision-anchor"><strong>Anchor:</strong> use a body-level DOM anchor with <code>textPreview: "Plan build request"</code>, paralleling the review request endpoint.</li>
+      <li id="decision-progress-top"><strong>Progress placement:</strong> keep <code>Progress</code> directly after the plan header in this plan artifact so execution status is visible without scrolling.</li>
+      <li id="decision-index-active-sort"><strong>Index active-progress sort:</strong> treat a plan as actively executing when <code>progress.totalPhases &gt; 0</code> and <code>progress.completedPhases &gt; 0</code>. Sort those plans before not-started plans by completion ratio descending, with existing activity/name ordering as the tie-breaker.</li>
+    </ul>
+  </section>
+
+  <section id="acceptance-criteria" class="card">
+    <h2>Acceptance criteria</h2>
+    <ol>
+      <li id="ac-1">Every plan review page at <code>/p/:planId</code> includes a visible <strong>Build Plan</strong> button with <code>id="build-plan"</code>.</li>
+      <li id="ac-2">Clicking the button posts to a build-request endpoint and creates one pending comment.</li>
+      <li id="ac-3">The created comment body exactly equals <code>/skill:scoped-plan-run thoughts/plans/&lt;plan filename&gt;</code>.</li>
+      <li id="ac-4">The created comment has <code>conversationPayload.type === "browser.comment.v1"</code> and is visible to the queue-backed agent flow.</li>
+      <li id="ac-5">The queue poll emits a <code>comment.created</code> event for the build request.</li>
+      <li id="ac-6">Existing execution-ready review, archive, restore, comments, and mobile nav behavior remain intact.</li>
+      <li id="ac-7">This plan document has <code>Progress</code> immediately after the header so execution state is visible at the top of the reviewer page.</li>
+      <li id="ac-8">The active index lists plans with started progress before not-started plans and sorts started plans from most complete to least complete.</li>
+    </ol>
+  </section>
+
+  <section id="bdd-scenarios" class="card">
+    <h2>BDD scenarios</h2>
+    <article id="bdd-happy-path">
+      <h3>BDD-1 - Build request happy path</h3>
+      <p><strong>Given</strong> a registered plan whose path is <code>thoughts/plans/sample-plan.html</code>, <strong>When</strong> the user clicks <strong>Build Plan</strong>, <strong>Then</strong> the service creates a pending comment with body <code>/skill:scoped-plan-run thoughts/plans/sample-plan.html</code>.</p>
+    </article>
+    <article id="bdd-queue-visible">
+      <h3>BDD-2 - Agent queue visibility</h3>
+      <p><strong>Given</strong> the build request comment is created, <strong>When</strong> the agent queue is polled from sequence zero, <strong>Then</strong> a <code>comment.created</code> event is returned and the comment payload is a <code>browser.comment.v1</code> payload.</p>
+    </article>
+    <article id="bdd-request-failure">
+      <h3>BDD-3 - Request failure</h3>
+      <p><strong>Given</strong> the endpoint returns a non-OK response, <strong>When</strong> the user clicks <strong>Build Plan</strong>, <strong>Then</strong> the client re-enables the button and shows an actionable failure alert without changing page state.</p>
+    </article>
+    <article id="bdd-existing-actions">
+      <h3>BDD-4 - Existing action parity</h3>
+      <p><strong>Given</strong> the Build Plan button is present, <strong>When</strong> the existing execution-ready review and archive/restore actions are used, <strong>Then</strong> their previous endpoints, IDs, and behavior still work.</p>
+    </article>
+    <article id="bdd-active-progress-index">
+      <h3>BDD-5 - Active progress index priority</h3>
+      <p><strong>Given</strong> the active index contains one not-started plan, one 25% complete plan, and one 75% complete plan, <strong>When</strong> the index renders, <strong>Then</strong> the 75% plan appears first, the 25% plan appears second, and the not-started plan appears after started plans.</p>
+    </article>
+    <article id="bdd-complete-plan-index">
+      <h3>BDD-6 - Complete plan ordering</h3>
+      <p><strong>Given</strong> a complete plan has all phases checked, <strong>When</strong> the active index renders alongside partially complete plans, <strong>Then</strong> the complete plan appears above partially complete started plans because it is the most complete active plan.</p>
+    </article>
+  </section>
+
+  <section id="phase-p1-contract-test" class="card">
+    <h2>Phase P1 - Add button and progress-order contract tests</h2>
+    <h3>End State</h3>
+    <p>Failing contract tests prove the required button, queue-visible build request behavior, and active-progress index ordering.</p>
+    <h3>Tests first</h3>
+    <p>Add <code>build plan button creates an agent-visible scoped-plan-run comment</code> next to the execution-review request test in <code>src/__tests__/contracts.test.ts</code>. Add an index ordering test that registers multiple plans with different progress states and asserts the rendered card order.</p>
+    <h3>Work</h3>
+    <ul>
+      <li>Assert <code>GET /p/:planId</code> contains <code>id="build-plan"</code>.</li>
+      <li>Assert <code>POST /api/plans/:planId/request-build-plan</code> returns <code>200</code>.</li>
+      <li>Assert response comment body, pending status, payload type, and queue event.</li>
+      <li>Register or seed plans with 0%, partial, and complete progress; assert index order is most-complete started plans first, then not-started plans.</li>
+    </ul>
+    <h3>Expected files</h3>
+    <p><code>src/__tests__/contracts.test.ts</code></p>
+    <h3>Verify</h3>
+    <pre><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js --test-name-pattern "build plan|index.*progress"</code></pre>
+  </section>
+
+  <section id="phase-p2-implementation" class="card">
+    <h2>Phase P2 - Implement build request action</h2>
+    <h3>End State</h3>
+    <p>The review shell renders the button, the browser can request a build, and the server creates the correct pending comment.</p>
+    <h3>Tests first</h3>
+    <p>Use the P1 test as the RED contract. Do not weaken assertions.</p>
+    <h3>Work</h3>
+    <ul>
+      <li>In <code>src/server/app.ts</code>, add a small helper or constant that builds <code>/skill:scoped-plan-run thoughts/plans/${path.basename(plan.planPath)}</code>.</li>
+      <li>Add <code>buildButton</code> to <code>reviewShell()</code> and include it in archived and non-archived nav actions.</li>
+      <li>Bind <code>const buildPlanButton = document.getElementById('build-plan')</code> in client JS.</li>
+      <li>Add a click handler mirroring <code>executionReviewButton</code>, posting to <code>/api/plans/:planId/request-build-plan</code>, showing <code>Build requested</code> on success and a failure alert on error.</li>
+      <li>Add <code>POST /api/plans/:planId/request-build-plan</code> using <code>store.getPlan()</code>, <code>store.createComment()</code>, and <code>bus.emitEvent()</code> exactly like the execution-ready review endpoint.</li>
+    </ul>
+    <h3>Expected files</h3>
+    <p><code>src/server/app.ts</code></p>
+    <h3>Verify</h3>
+    <pre><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js --test-name-pattern "build plan|execution-review"</code></pre>
+  </section>
+
+  <section id="phase-p3-index-ordering" class="card">
+    <h2>Phase P3 - Implement active-progress index ordering</h2>
+    <h3>End State</h3>
+    <p>The active index is a useful execution monitor: plans with started progress appear before not-started plans, sorted from most complete to least complete.</p>
+    <h3>Tests first</h3>
+    <p>Use the P1 index ordering test as the RED contract. The test should fail if ordering remains repo-group/activity-only.</p>
+    <h3>Work</h3>
+    <ul>
+      <li>Add a small sorting helper near <code>indexHtml()</code> or in the store layer that computes active progress and completion ratio from <code>item.progress</code>.</li>
+      <li>Use that helper before rendering the active index. Preserve archive ordering unless tests show archive parity is required.</li>
+      <li>Keep existing tie-breakers deterministic: activity time, repo name, slug, then plan ID.</li>
+      <li>Keep progress cards and status labels unchanged except for their order.</li>
+    </ul>
+    <h3>Expected files</h3>
+    <p><code>src/server/app.ts</code>; <code>src/__tests__/contracts.test.ts</code></p>
+    <h3>Verify</h3>
+    <pre><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js --test-name-pattern "index.*progress"</code></pre>
+  </section>
+
+  <section id="phase-p4-verification" class="card">
+    <h2>Phase P4 - Verify queue behavior and regressions</h2>
+    <h3>End State</h3>
+    <p>The feature passes the full contract suite and has an optional live smoke path for the review UI.</p>
+    <h3>Tests first</h3>
+    <p>No new RED work; this phase is regression and smoke verification.</p>
+    <h3>Work</h3>
+    <ul>
+      <li>Run the full test suite.</li>
+      <li>Optionally run the local service, register a plan, click <strong>Build Plan</strong>, and confirm <code>plan-review agent next &lt;planId&gt; --no-wait --json</code> claims the scoped-plan-run command.</li>
+      <li>Optionally register multiple plans with different checkbox completion states and confirm the index sorts started plans by most complete first.</li>
+    </ul>
+    <h3>Expected files</h3>
+    <p>No additional files expected.</p>
+    <h3>Verify</h3>
+    <pre><code>bun run test</code></pre>
+    <pre><code>plan-review agent next &lt;planId&gt; --url http://mbp.braid-python.ts.net:4317 --no-wait --json</code></pre>
+  </section>
+
+  <section id="verification-strategy" class="card">
+    <h2>Verification strategy</h2>
+    <table>
+      <thead><tr><th>Acceptance</th><th>BDD</th><th>Test layer</th><th>Command</th></tr></thead>
+      <tbody>
+        <tr><td>AC-1</td><td>BDD-1</td><td>HTTP shell contract</td><td><code>node --test dist/__tests__/contracts.test.js --test-name-pattern "build plan"</code></td></tr>
+        <tr><td>AC-2, AC-3</td><td>BDD-1</td><td>API contract</td><td><code>node --test dist/__tests__/contracts.test.js --test-name-pattern "build plan"</code></td></tr>
+        <tr><td>AC-4, AC-5</td><td>BDD-2</td><td>Queue/event contract</td><td><code>node --test dist/__tests__/contracts.test.js --test-name-pattern "build plan"</code></td></tr>
+        <tr><td>AC-6</td><td>BDD-4</td><td>Regression suite</td><td><code>bun run test</code></td></tr>
+        <tr><td>AC-7</td><td>Reviewer-monitoring goal</td><td>Plan artifact review</td><td>Confirm <code>#progress</code> appears immediately after <code>#title</code></td></tr>
+        <tr><td>AC-8</td><td>BDD-5, BDD-6</td><td>Index HTTP contract</td><td><code>node --test dist/__tests__/contracts.test.js --test-name-pattern "index.*progress"</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="delivery-order" class="card">
+    <h2>Delivery order</h2>
+    <ol>
+      <li>Write the failing build-button and index-ordering contract tests.</li>
+      <li>Add the server endpoint and nav button.</li>
+      <li>Add client click handling.</li>
+      <li>Add active-progress index sorting.</li>
+      <li>Run focused contract verification.</li>
+      <li>Run full verification.</li>
+    </ol>
+  </section>
+
+  <section id="non-goals" class="card">
+    <h2>Non-goals</h2>
+    <ul>
+      <li>Do not execute shell commands directly from the browser or server.</li>
+      <li>Do not change <code>scoped-plan-run</code> itself.</li>
+      <li>Do not alter registration, archive, restore, or execution-ready review semantics beyond adding the adjacent button.</li>
+      <li>Do not change archive ordering unless a separate review asks for archive progress prioritization.</li>
+      <li>Do not add broad command templating or configurable actions unless requested later.</li>
+    </ul>
+  </section>
+
+  <section id="decisions-deviations-log" class="card">
+    <h2>Decisions / Deviations log</h2>
+    <article id="log-2026-06-08-created">
+      <h3>2026-06-08 - Plan created</h3>
+      <p>Created an execution-ready plan for the requested Build Plan button. No product code has been changed by this planning step.</p>
+    </article>
+    <article id="log-2026-06-08-progress-feedback">
+      <h3>2026-06-08 - Browser reviewer progress-monitoring feedback integrated</h3>
+      <p>Integrated reviewer feedback that the plan reviewer should remain a progress-monitoring surface after execution starts. The plan now keeps Progress at the top and includes active-progress index ordering from most complete to least complete.</p>
+    </article>
+  </section>
+</main>
+</body>
+</html>

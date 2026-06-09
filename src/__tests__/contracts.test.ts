@@ -351,6 +351,52 @@ test('index exposes phase progress and archive hides plans by default', async ()
   }
 });
 
+test('index prioritizes started plan progress from most complete to least complete', async () => {
+  const app = createApp({ dbPath: tempDbPath('index-progress-order') });
+  const progressPlan = (slug: string, completed: number, repoName = 'sample', total = 4) => {
+    const items = Array.from({ length: total }, (_, index) => {
+      const checked = index < completed ? ' checked' : '';
+      return `<li><input type="checkbox"${checked} /> P${index + 1} - ${checked ? 'Done' : 'Pending'}</li>`;
+    }).join('\n');
+    const html = `<!doctype html><html><body><section id="progress"><h2>Progress</h2><ul>${items}</ul></section></body></html>`;
+    return sampleRegisterPayload({
+      repoKey: `git@example.com:demo/${repoName}.git`,
+      repoName,
+      remoteUrl: `git@example.com:demo/${repoName}.git`,
+      rootPath: `/tmp/${repoName}`,
+      slug,
+      planPath: `thoughts/plans/${slug}.html`,
+      html,
+      fileHash: sha256(html)
+    });
+  };
+  try {
+    for (const payload of [
+      progressPlan('quarter-complete-plan', 1),
+      progressPlan('mostly-complete-plan', 3, 'other'),
+      progressPlan('done-plan', 4),
+      progressPlan('not-started-plan', 0, 'third')
+    ]) {
+      const registered = await app.inject({ method: 'POST', url: '/api/plans/register', payload });
+      assert.equal(registered.statusCode, 200);
+    }
+
+    const htmlIndex = await app.inject({ method: 'GET', url: '/' });
+    assert.equal(htmlIndex.statusCode, 200);
+    const positions = ['done-plan', 'mostly-complete-plan', 'quarter-complete-plan', 'not-started-plan'].map(slug => htmlIndex.body.indexOf(slug));
+    assert.deepEqual(positions.map(position => position >= 0), [true, true, true, true]);
+    assert.deepEqual([...positions].sort((a, b) => a - b), positions);
+
+    const apiIndex = await app.inject({ method: 'GET', url: '/api/plans' });
+    assert.deepEqual(
+      apiIndex.json().data.plans.map((item: { plan: { slug: string } }) => item.plan.slug),
+      ['done-plan', 'mostly-complete-plan', 'quarter-complete-plan', 'not-started-plan']
+    );
+  } finally {
+    await app.close();
+  }
+});
+
 test('index uses plan source modified time instead of comment activity', async () => {
   const app = createApp({ dbPath: tempDbPath('index-modified-time') });
   const olderMtime = Date.UTC(2024, 0, 2, 3, 4, 5);
@@ -573,6 +619,27 @@ test('execution-review request button creates an agent-visible comment', async (
     assert.equal(requested.statusCode, 200);
     assert.equal(requested.json().data.created, true);
     assert.equal(requested.json().data.comment.body, 'Review this plan with both codex and claude code, iterating on the plan until both agents agree it is execution ready');
+    assert.equal(requested.json().data.comment.status, 'pending');
+    assert.equal(requested.json().data.comment.conversationPayload.type, 'browser.comment.v1');
+
+    const queue = await app.inject({ method: 'GET', url: `/api/plans/${planId}/events/poll?afterSequence=0&mode=queue` });
+    assert.deepEqual(queue.json().data.events.map((event: { eventType: string }) => event.eventType), ['comment.created']);
+  } finally {
+    await app.close();
+  }
+});
+
+test('build plan button creates an agent-visible scoped-plan-run comment', async () => {
+  const { app, planId } = await registeredApp('build-plan-request');
+  try {
+    const shell = await app.inject({ method: 'GET', url: `/p/${planId}` });
+    assert.equal(shell.statusCode, 200);
+    assert.match(shell.body, /id="build-plan"/);
+
+    const requested = await app.inject({ method: 'POST', url: `/api/plans/${planId}/request-build-plan` });
+    assert.equal(requested.statusCode, 200);
+    assert.equal(requested.json().data.created, true);
+    assert.equal(requested.json().data.comment.body, '/skill:scoped-plan-run thoughts/plans/sample-plan.html');
     assert.equal(requested.json().data.comment.status, 'pending');
     assert.equal(requested.json().data.comment.conversationPayload.type, 'browser.comment.v1');
 
