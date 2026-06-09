@@ -18,6 +18,7 @@ import type {
 } from '../schemas.js';
 import { pullRequestStatus } from '../githubPr.js';
 import { ensureDir, PlanReviewError, sha256, shortHash, slugify } from '../util.js';
+import { planTitleFallback, renderedHtmlTitle } from '../planTitles.js';
 
 export interface PlanRecord {
   id: string;
@@ -465,6 +466,46 @@ export class PlanReviewStore {
     this.ensureColumn('plan_versions', 'source_mtime_ms', 'REAL');
     this.ensureColumn('plan_versions', 'source_size', 'INTEGER');
     this.ensureColumn('plan_versions', 'sync_origin', "TEXT NOT NULL DEFAULT 'manual_register'");
+    this.ensureColumn('plan_versions', 'display_title', 'TEXT');
+    this.ensureColumn('plan_versions', 'progress_json', 'TEXT');
+    this.ensureColumn('plan_versions', 'progress_total', 'INTEGER');
+    this.ensureColumn('plan_versions', 'progress_completed', 'INTEGER');
+    this.backfillPlanVersionMetadata();
+  }
+
+  private backfillPlanVersionMetadata(): void {
+    const rows = this.db.prepare(`
+      SELECT v.id, v.html_blob_path AS htmlBlobPath, p.id AS planId, p.slug, r.repo_name AS repoName
+      FROM plan_versions v
+      JOIN plans p ON p.id = v.plan_id
+      JOIN repos r ON r.id = p.repo_id
+      WHERE v.display_title IS NULL
+        OR v.progress_json IS NULL
+        OR v.progress_total IS NULL
+        OR v.progress_completed IS NULL
+    `).all() as Array<Record<string, unknown>>;
+    if (rows.length === 0) return;
+    const update = this.db.prepare(`
+      UPDATE plan_versions
+      SET display_title = ?, progress_json = ?, progress_total = ?, progress_completed = ?
+      WHERE id = ?
+    `);
+    const tx = this.db.transaction(() => {
+      for (const row of rows) {
+        const htmlBlobPath = optionalString(row.htmlBlobPath);
+        const html = htmlBlobPath && fs.existsSync(htmlBlobPath) ? fs.readFileSync(htmlBlobPath, 'utf8') : '';
+        const progress = html ? extractPlanProgress(html) : { totalPhases: 0, completedPhases: 0, phases: [] };
+        const displayTitle = html ? renderedHtmlTitle(html) : undefined;
+        update.run(
+          displayTitle ?? planTitleFallback({ id: row.planId, repoName: row.repoName, slug: row.slug }),
+          JSON.stringify(progress),
+          progress.totalPhases,
+          progress.completedPhases,
+          row.id
+        );
+      }
+    });
+    tx();
   }
 
   private ensureColumn(table: string, column: string, definition: string): void {
@@ -630,18 +671,22 @@ export class PlanReviewStore {
       const htmlBlobPath = this.writeBlob('html', htmlName, input.html);
       const renderedBlobPath = this.writeBlob('rendered', renderedName, renderedHtml);
       const commitSha = input.commitSha ?? '';
+      const progress = extractPlanProgress(input.html);
+      const displayTitle = renderedHtmlTitle(input.html) ?? planTitleFallback({ id: planId, repoName: input.repoName, slug });
       const existingVersion = this.db
         .prepare('SELECT id FROM plan_versions WHERE plan_id = ? AND file_hash = ? AND branch = ? AND commit_sha = ?')
         .get(planId, input.fileHash, input.branch, commitSha) as { id: string } | undefined;
       const versionId = existingVersion?.id || id('ver');
       this.db
         .prepare(`INSERT INTO plan_versions
-          (id, plan_id, file_hash, branch, commit_sha, html_blob_path, rendered_blob_path, render_warnings_json, source_mtime_ms, source_size, sync_origin, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (id, plan_id, file_hash, branch, commit_sha, html_blob_path, rendered_blob_path, render_warnings_json, source_mtime_ms, source_size, sync_origin, display_title, progress_json, progress_total, progress_completed, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(plan_id, file_hash, branch, commit_sha) DO UPDATE SET
             html_blob_path = excluded.html_blob_path, rendered_blob_path = excluded.rendered_blob_path,
             source_mtime_ms = excluded.source_mtime_ms, source_size = excluded.source_size,
-            sync_origin = excluded.sync_origin, created_at = excluded.created_at,
+            sync_origin = excluded.sync_origin, display_title = excluded.display_title,
+            progress_json = excluded.progress_json, progress_total = excluded.progress_total,
+            progress_completed = excluded.progress_completed, created_at = excluded.created_at,
             render_warnings_json = excluded.render_warnings_json`)
         .run(
           versionId,
@@ -655,6 +700,10 @@ export class PlanReviewStore {
           input.sourceMtimeMs ?? null,
           input.sourceSize ?? null,
           syncOrigin,
+          displayTitle,
+          JSON.stringify(progress),
+          progress.totalPhases,
+          progress.completedPhases,
           now
         );
 
@@ -699,7 +748,7 @@ export class PlanReviewStore {
     return tx();
   }
 
-  listPlans(options: { includeArchived?: boolean; includeDeferred?: boolean; lifecycleState?: PlanLifecycleState } = {}) {
+  listPlans(options: { includeArchived?: boolean; includeDeferred?: boolean; lifecycleState?: PlanLifecycleState; limit?: number; currentPlanId?: string } = {}) {
     const filters: string[] = [];
     if (options.lifecycleState) {
       if (options.lifecycleState === 'archived') filters.push('p.archived_at IS NOT NULL');
@@ -709,40 +758,63 @@ export class PlanReviewStore {
       if (!options.includeArchived) filters.push('p.archived_at IS NULL');
       if (!options.includeDeferred) filters.push("COALESCE(p.lifecycle_state, 'active') != 'deferred'");
     }
-    const archiveFilter = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
-    const rows = this.db.prepare(`
+    const baseWhere = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+    const boundedLimit = options.limit && options.limit > 0 ? Math.floor(options.limit) : undefined;
+    const orderBy = `ORDER BY
+      CASE
+        WHEN p.watch_mode = 'filesystem' AND p.last_sync_status = 'failed' THEN 3
+        WHEN COALESCE(v.progress_total, 0) > 0 AND COALESCE(v.progress_completed, 0) = COALESCE(v.progress_total, 0) THEN 0
+        WHEN COALESCE(json_extract(p.publication_metadata_json, '$.executionReady'), 0) = 1 THEN 1
+        ELSE 2
+      END ASC,
+      CASE WHEN COALESCE(v.progress_total, 0) > 0 THEN CAST(COALESCE(v.progress_completed, 0) AS REAL) / v.progress_total ELSE 0 END DESC,
+      activityAt DESC,
+      r.repo_name ASC,
+      p.slug ASC,
+      p.id ASC`;
+    const selectRows = (where: string, limit?: number, args: unknown[] = []) => this.db.prepare(`
       SELECT p.id, p.slug, p.plan_path AS planPath, p.source_path AS sourcePath, p.watch_mode AS watchMode,
         p.lifecycle_state AS lifecycleState, p.deferred_at AS deferredAt, p.deferred_note_id AS deferredNoteId,
         p.last_sync_at AS lastSyncAt, p.last_sync_status AS lastSyncStatus, p.last_sync_error_json AS lastSyncErrorJson,
         p.archived_at AS archivedAt, p.publication_metadata_json AS publicationMetadataJson,
         r.repo_name AS repoName, r.repo_key AS repoKey, r.remote_url AS remoteUrl, r.root_path AS rootPath,
         v.id AS versionId, v.branch, v.commit_sha AS commitSha, v.file_hash AS fileHash,
-        v.html_blob_path AS htmlBlobPath,
+        v.html_blob_path AS htmlBlobPath, v.display_title AS displayTitle, v.progress_json AS progressJson,
         v.source_mtime_ms AS sourceMtimeMs, v.source_size AS sourceSize, v.sync_origin AS syncOrigin,
         v.created_at AS versionCreatedAt, p.updated_at AS planUpdatedAt,
         SUM(CASE WHEN c.deleted_at IS NULL AND c.status = 'pending' THEN 1 ELSE 0 END) AS pending,
         SUM(CASE WHEN c.deleted_at IS NULL AND c.status = 'claimed' THEN 1 ELSE 0 END) AS claimed,
         SUM(CASE WHEN c.deleted_at IS NULL AND c.status = 'acknowledged' THEN 1 ELSE 0 END) AS acknowledged,
         SUM(CASE WHEN c.deleted_at IS NULL AND c.status = 'resolved' THEN 1 ELSE 0 END) AS resolved,
-        MAX(COALESCE(c.updated_at, c.created_at)) AS commentActivityAt
+        MAX(COALESCE(c.updated_at, c.created_at)) AS commentActivityAt,
+        CASE WHEN MAX(COALESCE(c.updated_at, c.created_at)) > p.updated_at THEN MAX(COALESCE(c.updated_at, c.created_at)) ELSE p.updated_at END AS activityAt
       FROM plans p
       JOIN repos r ON r.id = p.repo_id
       LEFT JOIN plan_versions v ON v.id = (
         SELECT id FROM plan_versions WHERE plan_id = p.id ORDER BY created_at DESC LIMIT 1
       )
       LEFT JOIN comments c ON c.plan_id = p.id
-      ${archiveFilter}
+      ${where}
       GROUP BY p.id
-    `).all() as Array<Record<string, unknown>>;
-    return rows.map(row => {
+      ${orderBy}
+      ${limit ? `LIMIT ${limit}` : ''}
+    `).all(...args) as Array<Record<string, unknown>>;
+    let rows = selectRows(baseWhere, boundedLimit);
+    if (boundedLimit && options.currentPlanId && !rows.some(row => String(row.id) === options.currentPlanId)) {
+      const currentWhere = baseWhere ? `${baseWhere} AND p.id = ?` : 'WHERE p.id = ?';
+      rows = [...rows, ...selectRows(currentWhere, undefined, [options.currentPlanId])];
+    }
+    const plans = rows.map(row => {
       const planUpdatedAt = String(row.planUpdatedAt ?? '');
       const commentActivityAt = row.commentActivityAt ? String(row.commentActivityAt) : '';
       const activityAt = commentActivityAt > planUpdatedAt ? commentActivityAt : planUpdatedAt;
       const htmlBlobPath = optionalString(row.htmlBlobPath);
       const sourceMtimeMs = optionalNumber(row.sourceMtimeMs);
       const modifiedAt = isoFromEpochMs(sourceMtimeMs) ?? String(row.versionCreatedAt ?? planUpdatedAt);
+      const storedProgress = parseJson<PlanProgress | null>(row.progressJson as string | null, null);
       const html = htmlBlobPath ? fs.readFileSync(htmlBlobPath, 'utf8') : '';
-      const progress = html ? extractPlanProgress(html) : { totalPhases: 0, completedPhases: 0, phases: [] };
+      const progress = storedProgress ?? (html ? extractPlanProgress(html) : { totalPhases: 0, completedPhases: 0, phases: [] });
+      const displayTitle = optionalString(row.displayTitle) ?? (html ? renderedHtmlTitle(html) : undefined) ?? planTitleFallback({ id: row.id, repoName: row.repoName, slug: row.slug });
       const latestNote = this.latestPlanNote(String(row.id));
       const publicationMetadata = metadataFromRow(row);
       const linearIssueKey = normalizeLinearIssueKey(publicationMetadata.linearIssue, searchablePlanTextForLinear(html));
@@ -790,9 +862,11 @@ export class PlanReviewStore {
       latestNote,
       activityAt,
       modifiedAt,
+      displayTitle,
       reviewUrl: `/p/${row.id}`
       };
-    }).sort((a, b) => {
+    });
+    return boundedLimit ? plans : plans.sort((a, b) => {
       const aStarted = a.progress.totalPhases > 0 && a.progress.completedPhases > 0;
       const bStarted = b.progress.totalPhases > 0 && b.progress.completedPhases > 0;
       if (aStarted !== bStarted) return bStarted ? 1 : -1;

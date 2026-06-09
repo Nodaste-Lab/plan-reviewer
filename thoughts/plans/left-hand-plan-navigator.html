@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Left-hand plan navigator and collapsible comments panel</title>
+  <style>
+    :root { color-scheme: dark; --bg:#070b16; --panel:#0f172a; --panel-2:#111827; --panel-3:#172033; --text:#e5e7eb; --muted:#a7b0c0; --soft:#cbd5e1; --accent:#7dd3fc; --accent-2:#a78bfa; --ok:#86efac; --warn:#fde68a; --danger:#fecaca; --border:#334155; --border-2:#475569; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:linear-gradient(135deg,#070b16 0%,#111827 58%,#1e1b4b 100%); color:var(--text); font:16px/1.6 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    main { max-width:1180px; margin:0 auto; padding:44px 24px 72px; }
+    header, section, article, figure { background:rgba(15,23,42,.9); border:1px solid var(--border); border-radius:18px; padding:24px; margin:18px 0; box-shadow:0 18px 50px rgba(0,0,0,.26); }
+    header { background:linear-gradient(135deg,rgba(14,165,233,.16),rgba(167,139,250,.16)); }
+    h1,h2,h3,h4 { line-height:1.2; margin:0 0 12px; }
+    h1 { font-size:clamp(2rem,4vw,3.35rem); }
+    h2 { color:#f8fafc; }
+    h3 { color:#dbeafe; }
+    h4 { color:#bae6fd; margin-top:18px; }
+    p { margin:8px 0 0; }
+    a { color:var(--accent); }
+    code { background:#020617; border:1px solid #1e293b; border-radius:6px; padding:1px 5px; color:#bae6fd; }
+    pre { overflow:auto; background:#020617; border:1px solid #1e293b; border-radius:12px; padding:14px; }
+    ul,ol { margin:8px 0 0; padding-left:22px; }
+    li { margin:6px 0; }
+    table { width:100%; border-collapse:collapse; margin-top:12px; }
+    th,td { border:1px solid var(--border); padding:10px; vertical-align:top; }
+    th { background:#0b1220; text-align:left; }
+    figcaption, .muted { color:var(--muted); }
+    .pill { display:inline-block; border:1px solid var(--border-2); border-radius:999px; padding:4px 10px; margin:4px 6px 0 0; color:#dbeafe; background:rgba(15,23,42,.8); }
+    .status { color:var(--warn); font-weight:800; }
+    .phase { border-color:#475569; }
+    .mockup { background:#050816; border:1px solid #273449; border-radius:16px; padding:14px; overflow:auto; }
+    .screen { width:100%; min-width:0; border:1px solid #334155; border-radius:14px; overflow:hidden; background:#0b1020; box-shadow:0 22px 48px rgba(0,0,0,.35); }
+    .topbar { min-height:86px; display:grid; grid-template-columns:190px minmax(220px,1fr); grid-template-areas:"brand actions" "plan plan"; align-items:center; gap:8px 12px; padding:10px 14px; background:#0f172a; border-bottom:1px solid #2b364d; }
+    .current-plan { grid-area:plan; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-top:8px; border-top:1px solid rgba(71,85,105,.55); }
+    .brand { grid-area:brand; font-weight:900; color:#e0f2fe; white-space:nowrap; }
+    .actions { grid-area:actions; display:flex; gap:8px; align-items:center; justify-content:flex-end; flex-wrap:wrap; min-width:0; }
+    .btn { display:inline-flex; align-items:center; gap:6px; border:1px solid #475569; border-radius:8px; padding:7px 10px; background:#172033; color:#e5e7eb; font-size:12px; font-weight:800; white-space:nowrap; }
+    .btn.primary { border-color:#38bdf8; color:#bae6fd; }
+    .btn.ready { border-color:#22c55e; color:#bbf7d0; }
+    .btn.icon { width:36px; height:36px; justify-content:center; padding:0; border-radius:10px; font-size:17px; flex:0 0 auto; }
+    .shell { display:grid; grid-template-columns:minmax(220px,260px) minmax(0,1fr) 48px; height:610px; }
+    .leftnav { background:#0b1220; border-right:1px solid #2b364d; padding:14px; overflow:hidden; }
+    .leftnav h3 { font-size:13px; text-transform:uppercase; letter-spacing:.08em; color:#a7b0c0; }
+    .search { height:34px; border:1px solid #334155; border-radius:8px; background:#050816; color:#94a3b8; display:flex; align-items:center; padding:0 10px; margin:8px 0 12px; font-size:13px; }
+    .plan-item { display:grid; gap:5px; padding:10px; margin:8px 0; border:1px solid #253248; border-radius:10px; background:#101827; }
+    .plan-item.active { border-color:#38bdf8; background:linear-gradient(135deg,rgba(14,165,233,.18),rgba(16,24,39,.95)); }
+    .plan-title { font-size:13px; font-weight:850; color:#f8fafc; line-height:1.25; }
+    .plan-meta { display:flex; gap:6px; align-items:center; flex-wrap:wrap; color:#a7b0c0; font-size:11px; }
+    .badge { border:1px solid #475569; border-radius:999px; padding:1px 6px; background:#0b1220; }
+    .badge.ready { border-color:#22c55e; color:#bbf7d0; }
+    .badge.not-ready { border-color:#f59e0b; color:#fde68a; }
+    .badge.complete { border-color:#22c55e; color:#bbf7d0; }
+    .badge.incomplete { border-color:#64748b; color:#cbd5e1; }
+    .content { background:#eef2f7; color:#0f172a; overflow:hidden; position:relative; }
+    .page { max-width:680px; margin:26px auto 80px; background:white; border-radius:12px; box-shadow:0 14px 32px rgba(15,23,42,.18); padding:28px; }
+    .page h3 { color:#0f172a; }
+    .comment-marker { position:absolute; left:52%; top:205px; border:2px dotted #38bdf8; border-radius:8px; width:180px; height:64px; }
+    .right-rail { background:#0f172a; border-left:1px solid #2b364d; }
+    .comments-expanded { grid-template-columns:280px minmax(0,1fr) 320px; }
+    .comments-panel { background:#111827; border-left:1px solid #2b364d; padding:14px; color:#e5e7eb; }
+    .comment-card { border:1px solid #334155; border-radius:10px; padding:10px; margin-top:10px; background:#0f172a; font-size:12px; }
+    .callout { border:1px solid rgba(125,211,252,.42); background:rgba(14,165,233,.08); border-radius:12px; padding:14px; margin-top:12px; }
+    .warning { border-color:rgba(245,158,11,.45); background:rgba(245,158,11,.10); color:#fde68a; }
+    .matrix td:first-child, .matrix th:first-child { width:22%; }
+    @media(max-width:760px){ main{padding:28px 14px 56px}.screen{min-width:760px} }
+  </style>
+</head>
+<body>
+<main id="plan-root">
+  <header id="title">
+    <div class="muted">Implementation plan</div>
+    <h1>Left-hand plan navigator and collapsible comments panel</h1>
+    <p>Create a plan-review page layout that keeps the user in one browser window: plans are selectable from a compact left navigator, the plan stays commentable in the center, and the comments panel is collapsed on the right by default with a top-right toggle.</p>
+    <p><span class="pill">Repo: plan-reviewer</span><span class="pill">Surface: browser review shell</span><span class="pill">Status: execution-ready</span><span class="pill">Ready for scoped implementation handoff</span></p>
+  </header>
+
+  <section id="status">
+    <h2>Status</h2>
+    <p><strong class="status">Execution-ready.</strong> Browser feedback and plan-review findings have been integrated. Service metadata has been registered with <code>--execution-ready true</code>, and the plan is ready for scoped implementation handoff.</p>
+  </section>
+
+  <section id="goal">
+    <h2>Goal</h2>
+    <p>When viewing any plan at <code>/p/:planId</code>, users should see a persistent left-hand list of active plans, switch plans by clicking that list, and continue using the existing plan review actions and comment/highlight workflow. The comments panel should no longer occupy the right side by default; it should be collapsed to a narrow right rail and expandable/collapsible from an icon button in the top-right toolbar.</p>
+  </section>
+
+  <section id="why-this-plan-exists">
+    <h2>Why this plan exists</h2>
+    <p>The current review shell optimizes for one plan at a time: the plan iframe fills the left side, and a full comments panel is always visible on desktop. That makes it harder to monitor many active plans, compare execution-ready/completion status, and move between plans without returning to the index or opening many tabs. The new layout makes plan navigation the default context and makes comments available on demand.</p>
+  </section>
+
+  <section id="authority-and-inputs">
+    <h2>Authority and inputs</h2>
+    <ul>
+      <li>User request: add a compressed left plan navigator; collapse comments right by default; provide a top-right comments expand/collapse icon; keep plan-specific review/status/build buttons at the top; keep highlighting and commenting working while switching plans.</li>
+      <li><code>thoughts/specs/product_intent.md</code>: the browser reviewer should let humans review local HTML plans, attach precise comments, and trust the plan index/status surfaces.</li>
+      <li><code>src/server/app.ts</code>: <code>reviewShell()</code> currently renders top actions, an iframe plan area, and an always-visible desktop comments sidebar.</li>
+      <li><code>src/server/app.ts</code>: <code>indexHtml()</code>, <code>planCardHtml()</code>, and <code>/api/plans</code> already expose plan metadata, progress, comment counts, execution readiness, archive state, and source-sync status.</li>
+      <li><code>src/storage/database.ts</code>: <code>listPlans()</code> derives progress from the latest HTML blob but does not currently return a human-readable plan title.</li>
+      <li><code>src/test-fixtures/e2e-run.ts</code>: browser e2e coverage already exercises plan comments, deletion, source-sync refresh, mobile comments drawer behavior, and multi-plan API access.</li>
+    </ul>
+  </section>
+
+  <section id="current-implementation-reality">
+    <h2>Current implementation reality</h2>
+    <table>
+      <thead><tr><th>Area</th><th>Current behavior</th><th>Planning implication</th></tr></thead>
+      <tbody>
+        <tr><td>Review shell layout</td><td><code>#app</code> is a two-column grid: plan iframe then a 320px comments sidebar. The sidebar is always present on desktop and only becomes a bottom drawer on mobile.</td><td>Desktop needs a three-region layout: left plan nav, center iframe, right collapsed/expanded comments rail.</td></tr>
+        <tr><td>Top buttons</td><td><code>Request execution-ready review</code>, <code>Build Plan</code>, Archive/Restore, and index/archive links are rendered in <code>#plan-navbar</code>.</td><td>Keep these as plan-specific actions in the top toolbar's primary row, then show current plan title/status in a second row directly below the buttons so scope is clear without crowding the controls.</td></tr>
+        <tr><td>Plan list data</td><td><code>/api/plans</code> returns listed plans with progress, counts, source-sync status, execution-ready metadata, and review URLs. HTML index cards render repo/slug but not full plan titles, and <code>listPlans()</code> already has index/API ordering covered by existing tests.</td><td>Add a derived display title to listed plan data, but apply the monitoring-usefulness sort only in the left navigator so existing index/API ordering contracts remain stable.</td></tr>
+        <tr><td>Commenting</td><td>The iframe selection overlays, comment markers, composer, screenshot capture, and comment list all key off the active <code>planId</code> loaded in the page.</td><td>Switching plans should navigate to the selected plan's <code>/p/:planId</code> route or fully reinitialize all plan-scoped client state before reuse. Navigation is the safer first slice.</td></tr>
+        <tr><td>Live refresh</td><td>The current page listens/polls for the active plan and reloads the iframe when source sync registers a new version.</td><td>Do not expand this plan into cross-plan event streams. Refresh the left navigator opportunistically through <code>/api/plans</code> polling and after active-plan metadata updates.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="visual-renderings">
+    <h2>Visual renderings</h2>
+
+    <figure id="mock-left-nav">
+      <h3>Left nav panel</h3>
+      <div class="mockup" role="img" aria-label="Left navigation mockup with compact plan cards">
+        <div class="screen" style="width:360px; min-width:360px;">
+          <div class="leftnav" style="height:560px; border-right:0;">
+            <h3>Active plans</h3>
+            <div class="search">⌕ Filter plans</div>
+            <div class="plan-item">
+              <div class="plan-title">Queue-backed agent next comment delivery</div>
+              <div class="plan-meta"><span class="badge ready">Execution ready</span><span class="badge complete">Complete</span></div>
+              <div class="plan-meta">resolved 8 · updated Yesterday</div>
+            </div>
+            <div class="plan-item">
+              <div class="plan-title">Browser tab plan title</div>
+              <div class="plan-meta"><span class="badge ready">Execution ready</span><span class="badge complete">Complete</span></div>
+              <div class="plan-meta">resolved 1 · updated Jun 8</div>
+            </div>
+            <div class="plan-item active">
+              <div class="plan-title">Left-hand plan navigator and collapsible comments panel</div>
+              <div class="plan-meta"><span class="badge not-ready">Execution not ready</span><span class="badge incomplete">P0/4</span></div>
+              <div class="plan-meta">pending 2 · updated 9:41 AM</div>
+            </div>
+            <div class="plan-item">
+              <div class="plan-title">Source sync missing-file recovery</div>
+              <div class="plan-meta"><span class="badge not-ready">Needs attention</span><span class="badge incomplete">P2/5</span></div>
+              <div class="plan-meta">pending 1 · source missing</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <figcaption>The left navigator uses full plan titles, a compact execution-readiness badge, completion/progress state, and comment/source attention signals. Items are sorted by useful monitoring state: complete plans first, then execution-ready incomplete plans, then active in-progress/not-ready plans, then source-attention items. The active plan is highlighted wherever it lands in that sorted list. Clicking an item opens that plan in the same review window.</figcaption>
+    </figure>
+
+    <figure id="mock-whole-screen-collapsed">
+      <h3>Whole screen with plan and comments collapsed by default</h3>
+      <div class="mockup" role="img" aria-label="Whole plan review screen with left nav, plan content, and collapsed right comments rail">
+        <div class="screen">
+          <div class="topbar">
+            <div class="brand">Plan Review</div>
+            <div class="current-plan"><strong>Left-hand plan navigator…</strong> <span class="badge not-ready">Execution not ready</span> <span class="badge incomplete">Incomplete P0/4</span></div>
+            <div class="actions"><span class="btn primary">Review</span><span class="btn ready">Build</span><span class="btn">Archive</span><span class="btn icon" title="Open comments">☰</span></div>
+          </div>
+          <div class="shell">
+            <aside class="leftnav">
+              <h3>Active plans</h3><div class="search">⌕ Filter plans</div>
+              <div class="plan-item"><div class="plan-title">Queue-backed agent next comment delivery</div><div class="plan-meta"><span class="badge ready">Ready</span><span class="badge complete">Complete</span></div></div>
+              <div class="plan-item"><div class="plan-title">Browser tab plan title</div><div class="plan-meta"><span class="badge ready">Ready</span><span class="badge complete">Complete</span></div></div>
+              <div class="plan-item active"><div class="plan-title">Left-hand plan navigator and collapsible comments panel</div><div class="plan-meta"><span class="badge not-ready">Not ready</span><span class="badge incomplete">P0/4</span></div></div>
+            </aside>
+            <main class="content">
+              <div class="page"><h3>Implementation plan</h3><h2>Left-hand plan navigator…</h2><p>The plan content remains in the same iframe review surface. Users can click text or images to create precise comments.</p><p style="height:220px; background:#eef2ff; border-radius:10px; padding:18px;">Scrollable plan body and rendered visual artifacts.</p></div>
+              <div class="comment-marker" aria-hidden="true"></div>
+            </main>
+            <aside class="right-rail" aria-label="Comments collapsed"></aside>
+          </div>
+        </div>
+      </div>
+      <figcaption>The default desktop layout mirrors the current plan-review shell: dark top toolbar, left and right dark chrome, and a white rendered-plan canvas in the center. The mockup intentionally avoids overlapping labels by using shorter action labels in tight space; implementation should keep the full accessible labels while wrapping or truncating visually when needed.</figcaption>
+    </figure>
+
+    <figure id="mock-buttons-placement">
+      <h3>Button placement and plan-specific actions</h3>
+      <div class="mockup" role="img" aria-label="Top toolbar button placement mockup">
+        <div class="screen" style="min-height:150px; min-width:760px;">
+          <div class="topbar">
+            <div class="brand">← Index</div>
+            <div class="current-plan"><strong>Current plan title</strong> <span class="badge ready">Execution ready</span> <span class="badge incomplete">P2/4</span></div>
+            <div class="actions"><span class="btn primary">Request review</span><span class="btn ready">Build Plan</span><span class="btn">Archive</span><span class="btn icon">☰</span></div>
+          </div>
+          <div style="padding:12px 16px; color:#a7b0c0;">Top bar reads as: navigation/home + plan-scoped actions + comments toggle, then a second row for current plan identity and status.</div>
+        </div>
+      </div>
+      <figcaption>The primary top row holds navigation plus review/build/archive/comment controls. The selected plan title and status move to a second row directly below those buttons, keeping actions uncluttered while still making button scope clear.</figcaption>
+    </figure>
+
+    <figure id="mock-comments-expanded">
+      <h3>Right comments collapse/expand button only</h3>
+      <div class="mockup" role="img" aria-label="Comments panel expanded and collapsed using only top right button">
+        <div class="screen">
+          <div class="topbar">
+            <div class="brand">Plan Review</div>
+            <div class="current-plan"><strong>Current plan title</strong> <span class="badge not-ready">Execution not ready</span></div>
+            <div class="actions"><span class="btn primary">Review</span><span class="btn ready">Build</span><span class="btn icon" title="Collapse comments">×</span></div>
+          </div>
+          <div class="shell comments-expanded">
+            <aside class="leftnav"><h3>Active plans</h3><div class="search">⌕ Filter plans</div><div class="plan-item active"><div class="plan-title">Current plan title</div><div class="plan-meta"><span class="badge not-ready">Not ready</span><span class="badge incomplete">P0/4</span></div></div></aside>
+            <main class="content"><div class="page"><h3>Plan content</h3><p>Highlighting and comment anchoring continue in the center iframe.</p></div></main>
+            <aside class="comments-panel"><h3>Comments</h3><div class="comment-card"><strong>#4 pending</strong><p>Clarify acceptance criteria around plan switching.</p></div><div class="comment-card"><strong>#5 resolved</strong><p>Button placement updated.</p></div></aside>
+          </div>
+        </div>
+      </div>
+      <figcaption>The same top-right control toggles the comments panel. Collapsed state keeps only a narrow right edge/gutter with no duplicate icon; expanded state shows the existing comment list, sync warning, and delete actions in the right panel.</figcaption>
+    </figure>
+  </section>
+
+  <section id="progress">
+    <h2>Progress</h2>
+    <ul>
+      <li><label><input type="checkbox" checked disabled> P1: Lock plan-list data contracts</label></li>
+      <li><label><input type="checkbox" checked disabled> P2: Build shell layout and navigation</label></li>
+      <li><label><input type="checkbox" checked disabled> P3: Make comments collapsed and toggleable</label></li>
+      <li><label><input type="checkbox" checked disabled> P4: Verify commenting, switching, and responsive behavior</label></li>
+    </ul>
+  </section>
+
+  <section id="resume-instructions">
+    <h2>Resume instructions (agent)</h2>
+    <p>Read this plan fully before executing. Start at the first unchecked Progress item and complete phases in order. Keep scope limited to the review-page navigator, layout, right comments toggle, status/title data needed for that navigator, and verification of plan switching/commenting behavior.</p>
+  </section>
+
+  <section id="product-intent-alignment">
+    <h2>Product intent alignment</h2>
+    <ul>
+      <li><strong>Desired outcome advanced:</strong> the plan index truthfully reports plan status, source sync state, comment counts, repository metadata, and execution-readiness state; this change brings the same status into the plan review workspace.</li>
+      <li><strong>Reviewer golden path:</strong> a reviewer opens one browser window, chooses a plan from the left, reviews the center plan content, and opens comments only when needed.</li>
+      <li><strong>Safe default:</strong> comments are collapsed by default on desktop to maximize reviewable plan area, while the toggle remains visible and accessible.</li>
+      <li><strong>Self-healing/recovery:</strong> plan switching uses canonical <code>/p/:planId</code> navigation for the first slice so all plan-scoped comment and source-sync state reinitializes safely instead of carrying stale state across plans.</li>
+      <li><strong>Fail-closed boundary:</strong> if the plan list fails to load or a plan title cannot be derived, the current plan remains reviewable and the nav falls back to repo/slug labels or a small retry/error state rather than blocking commenting.</li>
+      <li><strong>Actionable status:</strong> source missing, execution not ready, pending comments, and complete/incomplete progress are visible in the left nav so reviewers do not need to return to the index for routine monitoring.</li>
+    </ul>
+  </section>
+
+  <section id="locked-decisions">
+    <h2>Locked decisions</h2>
+    <ul>
+      <li id="decision-comments-default"><strong>Comments default:</strong> desktop comments start collapsed to a 48px right rail; the only visible expand control is the top-right toolbar icon button. Existing mobile bottom-drawer behavior remains supported and can reuse the same expanded/collapsed state semantics.</li>
+      <li id="decision-nav-default"><strong>Left nav default:</strong> active, non-archived plans show in the left navigator by default. Archived plans remain accessible from the existing archive surface unless the user explicitly expands scope.</li>
+      <li id="decision-nav-sort"><strong>Left nav sort:</strong> sort active plans in the left navigator by monitoring usefulness, separate from the existing <code>listPlans()</code> index/API ordering: complete plans first, then execution-ready incomplete plans, then in-progress/not-ready plans by progress, then source-attention items. Preserve a visible active selection even when the selected plan is not at the top.</li>
+      <li id="decision-title-source"><strong>Plan title source:</strong> use the rendered HTML document title when available; fall back to <code>repoName / slug</code>. Do not add a persisted database title column for this first slice.</li>
+      <li id="decision-switching"><strong>Switching behavior:</strong> clicking a plan in the left nav navigates the current window to that plan's <code>/p/:planId</code> URL. This avoids stale iframe/comment/composer state and preserves browser history.</li>
+      <li id="decision-actions"><strong>Plan-specific actions:</strong> execution-ready review, build/run plan, archive/restore, and status badges remain in the top toolbar for the currently selected plan. The top row contains navigation and action buttons; the current plan title/status appears in a second row below those buttons. The toolbar must use current shell styling and avoid overlapping controls through wrapping, truncation, or compact visual labels with full accessible labels.</li>
+      <li id="decision-comments-button"><strong>Comments toggle:</strong> use a single top-right icon button with <code>aria-controls="sidebar"</code> and <code>aria-expanded</code>. The collapsed right rail is only a narrow edge/gutter and must not duplicate the icon or create a second comments control.</li>
+      <li id="decision-execution-boundary"><strong>Execution boundary:</strong> the plan-review service coordinates review artifacts and request events only; implementation agents execute this plan through the repo's normal execution workflow, not inside the service runtime.</li>
+    </ul>
+  </section>
+
+  <section id="acceptance-criteria">
+    <h2>Acceptance criteria</h2>
+    <ul>
+      <li id="ac-left-nav"><strong>AC1:</strong> Opening <code>/p/:planId</code> on desktop shows a left-hand navigator listing active plans with full display title, execution-ready state, completion/progress state, and comment/source attention indicators, sorted complete first, then execution-ready, then in-progress/not-ready, then source-attention items.</li>
+      <li id="ac-current-plan"><strong>AC2:</strong> The current plan is visibly selected in the left nav, and clicking another plan navigates the same browser window to that plan's review page.</li>
+      <li id="ac-plan-actions"><strong>AC3:</strong> The top toolbar shows navigation and plan-specific <code>Request execution-ready review</code>, <code>Build Plan</code>, and Archive/Restore actions in the top row, with the current plan title/status in a second row below the buttons; those actions continue to target only the currently selected plan and never visually overlap at common desktop widths.</li>
+      <li id="ac-comments-default"><strong>AC4:</strong> On desktop, the comments panel is collapsed by default and the center plan area uses the released space.</li>
+      <li id="ac-comments-toggle"><strong>AC5:</strong> A single top-right icon button expands and collapses the right comments panel, updates accessible state and a visible comment-count/attention badge, and preserves existing comments list, sync warning, delete, and empty-state behavior; the collapsed right rail does not show a duplicate comments button.</li>
+      <li id="ac-commenting"><strong>AC6:</strong> Highlighting, selecting text/images, opening the composer, submitting comments, and rendering markers still work with the left nav present and with comments either collapsed or expanded.</li>
+      <li id="ac-nav-refresh"><strong>AC7:</strong> The left navigator refreshes status through the existing <code>/api/plans</code> surface on initial load, after current-plan metadata changes, and on a bounded periodic interval without causing request storms.</li>
+      <li id="ac-responsive"><strong>AC8:</strong> On small screens, existing mobile comments behavior remains usable and the left navigator does not make the plan iframe unreachable; if necessary, the left nav becomes a drawer or horizontally accessible list in the implementation phase.</li>
+    </ul>
+  </section>
+
+  <section id="bdd-scenarios">
+    <h2>BDD scenarios</h2>
+    <article id="bdd-open-plan">
+      <h3>BDD1: reviewer opens a plan with the navigator visible</h3>
+      <p><strong>Given</strong> multiple active plans are registered, <strong>when</strong> the reviewer opens one plan's review URL, <strong>then</strong> the page shows the selected plan in the center, a left nav with all active plans, and a collapsed comments rail on the right.</p>
+    </article>
+    <article id="bdd-switch-plan">
+      <h3>BDD2: reviewer switches plans in one browser window</h3>
+      <p><strong>Given</strong> the reviewer is viewing Plan A, <strong>when</strong> they click Plan B in the left nav, <strong>then</strong> the current window navigates to Plan B's <code>/p/:planId</code>, Plan B becomes selected in the nav, and Plan B's toolbar actions target Plan B.</p>
+    </article>
+    <article id="bdd-comment-collapsed">
+      <h3>BDD3: reviewer creates a comment while comments are collapsed</h3>
+      <p><strong>Given</strong> the comments panel is collapsed, <strong>when</strong> the reviewer selects content in the plan and submits a comment, <strong>then</strong> the comment is created for the current plan, the comments panel remains collapsed by default, and the top-right comments button updates its passive count/attention badge without losing selection context or adding any right-rail control.</p>
+    </article>
+    <article id="bdd-comments-expanded">
+      <h3>BDD4: reviewer expands and collapses comments</h3>
+      <p><strong>Given</strong> comments exist on the current plan, <strong>when</strong> the reviewer uses the top-right comments icon, <strong>then</strong> the right panel expands to show the existing comments list; <strong>when</strong> they use it again, <strong>then</strong> the panel collapses back to a narrow right rail with no duplicate icon.</p>
+    </article>
+    <article id="bdd-nav-sort">
+      <h3>BDD5: navigator is sorted by plan usefulness</h3>
+      <p><strong>Given</strong> active plans include complete, execution-ready incomplete, in-progress not-ready, and source-attention plans, <strong>when</strong> the reviewer opens the left navigator, <strong>then</strong> complete plans appear first, execution-ready incomplete plans appear before not-ready plans, and source-attention items stay visible after normal progress states.</p>
+    </article>
+    <article id="bdd-status-refresh">
+      <h3>BDD6: navigator status stays current enough for monitoring</h3>
+      <p><strong>Given</strong> plan progress or comment counts change while the page is open, <strong>when</strong> the next navigator refresh runs, <strong>then</strong> the left nav updates the affected plan's status and sorted position without reloading the center iframe or disrupting an open comment composer.</p>
+    </article>
+    <article id="bdd-list-fallback">
+      <h3>BDD7: plan list failure does not block review</h3>
+      <p><strong>Given</strong> <code>/api/plans</code> temporarily fails, <strong>when</strong> the review shell loads, <strong>then</strong> the current plan remains reviewable and commentable, and the left nav shows a retryable failure state instead of breaking the page.</p>
+    </article>
+    <article id="bdd-mobile-preserved">
+      <h3>BDD8: mobile comments remain reachable</h3>
+      <p><strong>Given</strong> a reviewer opens a plan on a narrow viewport, <strong>when</strong> they need comments, <strong>then</strong> the existing mobile comments drawer/toggle remains usable and the left plan navigation does not cover the composer or prevent plan selection.</p>
+    </article>
+  </section>
+
+  <section id="test-coverage-matrix">
+    <h2>Test coverage matrix</h2>
+    <table class="matrix">
+      <thead><tr><th>Acceptance</th><th>BDD scenarios</th><th>Planned coverage</th><th>Verification command</th></tr></thead>
+      <tbody>
+        <tr><td>AC1, AC2</td><td>BDD1, BDD2, BDD5</td><td>Contract tests for <code>/api/plans</code> title/status fields and shell HTML containing left nav/current selection; e2e click from left nav to another plan and left-nav-only sorted-order assertions for complete, execution-ready, not-ready, and source-attention plans. Existing index/API ordering tests remain unchanged.</td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></td></tr>
+        <tr><td>AC3</td><td>BDD2</td><td>Contract test that request-review/build endpoints still enqueue plan-specific events; e2e test buttons on selected plan after navigation.</td><td><code>bun run test:e2e</code></td></tr>
+        <tr><td>AC4, AC5</td><td>BDD3, BDD4</td><td>CSS/HTML contract checks for collapsed default and accessible toggle; e2e expand/collapse assertions.</td><td><code>bun run test:e2e</code></td></tr>
+        <tr><td>AC6</td><td>BDD3, BDD4</td><td>Existing comment selection/submit/delete e2e coverage updated to run with nav present and comments collapsed by default.</td><td><code>bun run test:e2e</code></td></tr>
+        <tr><td>AC7</td><td>BDD6, BDD7</td><td>E2E bounded-fetch test reuses event storm principles to ensure navigator refresh does not create metadata request storms and has a retry/error state.</td><td><code>bun run test:e2e</code></td></tr>
+        <tr><td>AC8</td><td>BDD8</td><td>Mobile viewport e2e assertions that comments drawer/toggle and composer still work; responsive CSS inspection.</td><td><code>bun run test:e2e</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="phase-by-phase-execution-plan">
+    <h2>Phase-by-phase execution plan</h2>
+
+    <article id="phase-p1" class="phase">
+      <h3>P1: Lock plan-list data contracts</h3>
+      <h4>End State</h4>
+      <p>The service can provide every field the left navigator needs without client-side scraping: display title, review URL, execution-ready state, completion/progress state, comment counts, source attention state, updated time, and active/archived status. Existing <code>/api/plans</code> and index ordering remains stable; the monitoring-usefulness sort is applied only when rendering or refreshing the left navigator.</p>
+      <h4>Tests first</h4>
+      <p>Add contract tests in <code>src/__tests__/contracts.test.ts</code> for <code>/api/plans</code> and the HTML shell. Cover title extraction from rendered HTML, fallback to <code>repoName / slug</code>, execution-ready badge data, complete/incomplete progress, left-nav-only sorted ordering across complete/execution-ready/not-ready/source-attention states, and source-missing attention. Preserve existing index/API ordering tests that cover <code>listPlans()</code>.</p>
+      <h4>Expected files</h4>
+      <ul>
+        <li><code>src/storage/database.ts</code></li>
+        <li><code>src/server/app.ts</code></li>
+        <li><code>src/__tests__/contracts.test.ts</code></li>
+      </ul>
+      <h4>Work</h4>
+      <ul>
+        <li>Reuse the existing server-side title helpers, <code>renderedHtmlTitle()</code> and <code>planTitleFallback()</code>, against the latest stored/rendered HTML instead of creating a duplicate title derivation path.</li>
+        <li>When deriving list titles, reuse the same latest HTML blob read already needed for progress extraction rather than issuing per-plan <code>getRenderedHtml()</code> calls during navigator refresh.</li>
+        <li>Expose the derived title in listed plan responses and server-rendered nav items without adding a database column.</li>
+        <li>Keep archive filtering consistent with the current active index: the left nav defaults to non-archived plans only.</li>
+        <li>Implement a left-nav-only sort key outside <code>listPlans()</code>: complete plans first, then execution-ready incomplete plans, then in-progress/not-ready plans by progress, then source-attention items, with recency/title as tie-breakers. Do not change index/API ordering unless existing ordering contract tests are intentionally updated in the same phase.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build
+node --test dist/__tests__/contracts.test.js --test-name-pattern "plans|navigator|title|archive"</code></pre>
+    </article>
+
+    <article id="phase-p2" class="phase">
+      <h3>P2: Build shell layout and navigation</h3>
+      <h4>End State</h4>
+      <p>The review shell has a left navigator, a center plan iframe, and a right comments rail/panel. The current plan is selected in the left nav, and clicking another plan navigates the current window to that plan's review URL.</p>
+      <h4>Tests first</h4>
+      <p>Add e2e coverage that registers at least three plans, opens one review page, asserts the left nav contains all active plans with titles/statuses, clicks another plan, verifies URL/title/current selection/toolbar state update for the new plan, and checks the toolbar/nav regions do not overlap at a representative desktop viewport.</p>
+      <h4>Expected files</h4>
+      <ul>
+        <li><code>src/server/app.ts</code></li>
+        <li><code>src/test-fixtures/e2e-run.ts</code></li>
+      </ul>
+      <h4>Work</h4>
+      <ul>
+        <li>Change <code>reviewShell()</code> to render or host <code>&lt;aside id="plan-list-nav"&gt;</code> before the center review area.</li>
+        <li>Move current plan title/status into a second toolbar row directly below the navigation/action buttons, so plan identity remains visible without crowding the primary action row.</li>
+        <li>Style the desktop shell as a three-region layout that matches the current plan-review chrome: dark top toolbar, dark left navigator, white rendered-plan iframe, and dark right comments rail/panel.</li>
+        <li>Prevent visual overlap by using bounded grid columns, <code>min-width:0</code>, title truncation, and wrapping/compact labels for toolbar actions at realistic desktop widths.</li>
+        <li>Use normal anchor navigation for plan switching to fully reinitialize plan-scoped client state and preserve browser history.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build
+bun run test:e2e</code></pre>
+    </article>
+
+    <article id="phase-p3" class="phase">
+      <h3>P3: Make comments collapsed and toggleable</h3>
+      <h4>End State</h4>
+      <p>Desktop comments are collapsed by default. A top-right accessible icon expands/collapses the right panel. Existing comments rendering, sync warning, delete controls, empty state, and composer behavior remain intact.</p>
+      <h4>Tests first</h4>
+      <p>Add e2e assertions that the desktop page initially has <code>aria-expanded="false"</code>, the sidebar is visually collapsed, clicking the top-right comments button opens the panel with existing comments, and clicking again collapses it. Keep existing comment submit/delete tests running with the new default.</p>
+      <h4>Expected files</h4>
+      <ul>
+        <li><code>src/server/app.ts</code></li>
+        <li><code>src/test-fixtures/e2e-run.ts</code></li>
+      </ul>
+      <h4>Work</h4>
+      <ul>
+        <li>Add a desktop comments toggle button in the top-right toolbar with clear accessible label, <code>aria-controls="sidebar"</code>, and a comment-count/attention badge that updates while the panel is collapsed.</li>
+        <li>Replace desktop always-visible <code>#sidebar</code> CSS with collapsed and expanded states, keeping mobile drawer behavior coherent.</li>
+        <li>Update client state helpers so desktop and mobile comments controls share one source of truth for <code>body.comments-open</code>, <code>aria-expanded</code>, and visible count/attention state.</li>
+        <li>Ensure the composer, lightbox, image-selection overlay, and other fixed overlays use the collapsed/expanded sidebar width so they do not render off-screen, leave stale 320px gutters, or sit under the comments rail.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build
+bun run test:e2e</code></pre>
+    </article>
+
+    <article id="phase-p4" class="phase">
+      <h3>P4: Verify commenting, switching, and responsive behavior</h3>
+      <h4>End State</h4>
+      <p>The final shipped surface supports the requested workflow end-to-end: switch plans in one browser window, request plan-specific review/build actions, keep comments collapsed by default, expand comments when needed, and create/read/delete comments without regressions.</p>
+      <h4>Tests first</h4>
+      <p>Before final implementation adjustments, run the expanded e2e suite and identify failing user-flow assertions. Add only targeted missing assertions for status refresh or responsive behavior gaps discovered during the run.</p>
+      <h4>Expected files</h4>
+      <ul>
+        <li><code>src/test-fixtures/e2e-run.ts</code></li>
+        <li><code>src/__tests__/contracts.test.ts</code></li>
+        <li><code>src/server/app.ts</code></li>
+      </ul>
+      <h4>Work</h4>
+      <ul>
+        <li>Refresh the navigator after current-plan metadata loads and on a bounded interval, reusing <code>/api/plans</code> without creating parallel per-plan event streams.</li>
+        <li>Add a retryable left-nav error state for <code>/api/plans</code> failures.</li>
+        <li>Run a small responsive pass for narrow viewports so the left nav and comments controls do not block the plan or composer.</li>
+        <li>Run a scoped implementation review before marking the phase complete.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build
+bun run test
+bun run test:e2e</code></pre>
+    </article>
+  </section>
+
+  <section id="verification-strategy">
+    <h2>Verification strategy</h2>
+    <ul>
+      <li><strong>Contract verification:</strong> prove <code>/api/plans</code> and <code>/p/:planId</code> expose/render navigator fields without breaking existing registration, archive, source-sync, request-review, or request-build contracts.</li>
+      <li><strong>Browser verification:</strong> use Playwright e2e to exercise the actual shipped review UI, not just helper functions: open plan, switch plan, toggle comments, select/comment, delete pending comment, and verify mobile behavior.</li>
+      <li><strong>Regression gate:</strong> run <code>bun run build</code>, <code>bun run test</code>, and <code>bun run test:e2e</code> before final handoff because this change touches the browser shell and comment workflow.</li>
+      <li><strong>Request-storm guard:</strong> keep navigator refresh bounded and covered by e2e stats similar to existing metadata request storm checks.</li>
+    </ul>
+  </section>
+
+  <section id="delivery-order">
+    <h2>Delivery order</h2>
+    <ol>
+      <li>Lock data/title/status contracts first so visual work has stable inputs.</li>
+      <li>Introduce the left navigator and plan-specific top toolbar layout.</li>
+      <li>Collapse and toggle the comments panel without changing comment lifecycle semantics.</li>
+      <li>Run full browser-flow verification and implementation review.</li>
+    </ol>
+  </section>
+
+  <section id="non-goals">
+    <h2>Non-goals</h2>
+    <ul>
+      <li>No changes to implementation execution semantics beyond the existing request-review/build event buttons.</li>
+      <li>No database schema migration for persisted plan titles.</li>
+      <li>No cross-plan real-time SSE subscription or queue aggregation in the first implementation slice.</li>
+      <li>No changes to comment creation, claim, ack, resolve, release, or delete semantics.</li>
+      <li>No implementation execution from the plan-review service; the <code>Build Plan</code> request behavior remains the existing event request path.</li>
+      <li>No archived-plan management redesign beyond preserving existing archive access.</li>
+    </ul>
+  </section>
+
+  <section id="decisions-deviations-log">
+    <h2>Decisions / Deviations log</h2>
+    <ul>
+      <li id="log-2026-06-09-created"><strong>2026-06-09:</strong> Created browser-review draft plan from user request. Locked default desktop comments collapsed, left active-plan navigator, plan switching via same-window navigation, and no code changes in the planning pass.</li>
+      <li id="log-2026-06-09-sort-feedback"><strong>2026-06-09:</strong> Integrated browser feedback to sort the left navigator by monitoring usefulness: complete plans first, then execution-ready incomplete plans, then not-ready/in-progress plans, then source-attention items.</li>
+      <li id="log-2026-06-09-visual-feedback"><strong>2026-06-09:</strong> Integrated browser feedback on the whole-screen mockup: adjusted visual rendering to match current plan-review shell styling, removed overlapping toolbar/action layout, and added implementation requirements/tests to prevent overlap.</li>
+      <li id="log-2026-06-09-title-row-feedback"><strong>2026-06-09:</strong> Integrated browser feedback to move the current plan title/status out of the primary action row and into a second row below the top buttons.</li>
+      <li id="log-2026-06-09-rail-icon-feedback"><strong>2026-06-09:</strong> Integrated browser feedback to remove the duplicate comments icon from the collapsed right rail; the top-right toolbar button is the only comments toggle.</li>
+      <li id="log-2026-06-09-pm-review"><strong>2026-06-09:</strong> PM review tightened ambiguous collapsed-comment behavior: submitting comments keeps the panel collapsed by default and updates the top-right comments count/attention badge.</li>
+      <li id="log-2026-06-09-ai-review-round-1"><strong>2026-06-09:</strong> Integrated first Codex/Claude plan-review findings: removed planning-only blockers, clarified that title derivation reuses existing helpers, made left-nav sorting explicitly nav-only so existing index/API ordering contracts stay stable, and pinned collapsed-comment indicators to the top-right passive badge only.</li>
+      <li id="log-2026-06-09-ai-review-round-2"><strong>2026-06-09:</strong> Integrated second Codex plan-review finding by updating status/header language from review-in-progress to execution-ready handoff wording.</li>
+      <li id="log-2026-06-09-claude-review"><strong>2026-06-09:</strong> Claude plan review returned execution-ready with non-blocking notes; integrated clarity on fixed overlays, shared comments-toggle state, and bounded title derivation I/O.</li>
+      <li id="log-2026-06-09-implementation"><strong>2026-06-09:</strong> Implemented all four phases: list display titles, left navigator with nav-only sort, two-row toolbar, collapsed desktop comments panel, shared comments-toggle state, bounded navigator refresh, and e2e/contract coverage. Verification passed with <code>bun run test</code> and <code>bun run test:e2e</code>.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>

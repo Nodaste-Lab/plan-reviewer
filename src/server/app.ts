@@ -3,8 +3,7 @@ import { EventEmitter } from 'node:events';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
-import { parse } from 'parse5';
-import type { DefaultTreeAdapterMap } from 'parse5';
+
 import { ZodError } from 'zod';
 import {
   ackCommentSchema,
@@ -23,6 +22,7 @@ import { buildRegistrationAgentInstructions } from '../registrationInstructions.
 import { PlanReviewStore, type StoredEvent } from '../storage/database.js';
 import { SourceSyncService } from './sourceSync.js';
 import { fail, ok, PlanReviewError } from '../util.js';
+import { planTitleFallback, renderedHtmlTitle, reviewShellTitle } from '../planTitles.js';
 
 export interface AppOptions {
   dbPath: string;
@@ -34,8 +34,6 @@ interface EventBus {
 }
 
 type ListedPlan = ReturnType<PlanReviewStore['listPlans']>[number];
-type HtmlElement = DefaultTreeAdapterMap['element'];
-type HtmlNode = DefaultTreeAdapterMap['node'];
 
 function createEventBus(): EventBus {
   const emitter = new EventEmitter();
@@ -57,41 +55,6 @@ function eventForSse(event: StoredEvent): string {
 
 function escapeHtml(value: unknown): string {
   return String(value ?? '').replace(/[&<>"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[char]!));
-}
-
-function normalizePlanTitle(value: unknown): string {
-  return String(value ?? '').replace(/\s+/g, ' ').trim();
-}
-
-function htmlTextContent(node: HtmlNode): string {
-  if ('value' in node && typeof node.value === 'string') return node.value;
-  if ('childNodes' in node && Array.isArray(node.childNodes)) return node.childNodes.map(htmlTextContent).join('');
-  return '';
-}
-
-function childElement(node: HtmlNode, tagName: string): HtmlElement | undefined {
-  if ('childNodes' in node && Array.isArray(node.childNodes)) {
-    return node.childNodes.find((child): child is HtmlElement => 'tagName' in child && child.tagName === tagName);
-  }
-  return undefined;
-}
-
-function renderedHtmlTitle(renderedHtml: string): string | undefined {
-  const document = parse(renderedHtml) as DefaultTreeAdapterMap['document'];
-  const htmlElement = childElement(document as unknown as HtmlNode, 'html');
-  const headElement = childElement(htmlElement ?? (document as unknown as HtmlNode), 'head');
-  const titleElement = headElement ? childElement(headElement, 'title') : undefined;
-  const normalized = normalizePlanTitle(titleElement ? htmlTextContent(titleElement) : '');
-  return normalized || undefined;
-}
-
-function planTitleFallback(plan: ReturnType<PlanReviewStore['getPlan']>['plan']): string {
-  return normalizePlanTitle(`${plan.repoName} / ${plan.slug}`) || `Plan ${plan.id}`;
-}
-
-function reviewShellTitle(title: string): string {
-  const normalized = normalizePlanTitle(title);
-  return /(?:^|\s)Plan Review$/i.test(normalized) ? normalized : `${normalized} · Plan Review`;
 }
 
 function encodeClientData(value: string): string {
@@ -197,8 +160,62 @@ function hasStartedPlanProgress(item: ListedPlan): boolean {
   return item.progress.totalPhases > 0 && item.progress.completedPhases > 0;
 }
 
+function planComplete(item: ListedPlan): boolean {
+  return item.progress.totalPhases > 0 && item.progress.completedPhases === item.progress.totalPhases;
+}
+
+function planProgressRatio(item: ListedPlan): number {
+  return item.progress.totalPhases > 0 ? item.progress.completedPhases / item.progress.totalPhases : 0;
+}
+
+function displayTitle(item: ListedPlan): string {
+  return String(item.displayTitle || `${item.plan.repoName} / ${item.plan.slug}`);
+}
+
+function planNavigatorRank(item: ListedPlan): number {
+  if (planNeedsAttention(item)) return 3;
+  if (planComplete(item)) return 0;
+  if (item.plan.publicationMetadata.executionReady) return 1;
+  return 2;
+}
+
+function sortPlansForNavigator(plans: ListedPlan[]): ListedPlan[] {
+  return [...plans].sort((a, b) => planNavigatorRank(a) - planNavigatorRank(b)
+    || planProgressRatio(b) - planProgressRatio(a)
+    || String(b.activityAt).localeCompare(String(a.activityAt))
+    || displayTitle(a).localeCompare(displayTitle(b))
+    || String(a.plan.id).localeCompare(String(b.plan.id)));
+}
+
+function planNavigatorStatus(item: ListedPlan): string {
+  if (planNeedsAttention(item)) return 'Needs attention';
+  if (planComplete(item)) return 'Complete';
+  if (item.plan.publicationMetadata.executionReady) return 'Execution ready';
+  return 'Execution not ready';
+}
+
+function planNavigatorProgress(item: ListedPlan): string {
+  if (!item.progress.totalPhases) return 'No phases';
+  return `${item.progress.completedPhases}/${item.progress.totalPhases}`;
+}
+
+function planNavigatorItemHtml(item: ListedPlan, currentPlanId: string): string {
+  const active = item.plan.id === currentPlanId;
+  const status = planNavigatorStatus(item);
+  return `<a class="plan-nav-item${active ? ' active' : ''}${planNeedsAttention(item) ? ' attention' : ''}" href="/p/${escapeHtml(item.plan.id)}" data-plan-nav-item data-plan-id="${escapeHtml(item.plan.id)}" aria-current="${active ? 'page' : 'false'}">
+    <span class="plan-nav-title">${escapeHtml(displayTitle(item))}</span>
+    <span class="plan-nav-meta"><span class="plan-nav-pill ${item.plan.publicationMetadata.executionReady ? 'ready' : 'not-ready'}">${escapeHtml(status)}</span><span>${escapeHtml(planNavigatorProgress(item))}</span></span>
+    <span class="plan-nav-submeta">pending ${item.counts.pending} · updated <time datetime="${escapeHtml(item.modifiedAt)}" data-local-timestamp>${escapeHtml(item.modifiedAt)}</time></span>
+  </a>`;
+}
+
+function planNavigatorHtml(plans: ListedPlan[], currentPlanId: string): string {
+  const items = sortPlansForNavigator(plans).map(item => planNavigatorItemHtml(item, currentPlanId)).join('');
+  return `<aside id="plan-list-nav" aria-label="Active plans"><div class="plan-list-header"><h2>Active plans</h2><button id="plan-list-retry" type="button" hidden>Retry</button></div><div class="plan-list-error" id="plan-list-error" hidden>Unable to load plans.</div><div id="plan-list-items">${items || '<p class="plan-list-empty">No active plans.</p>'}</div></aside>`;
+}
+
 function planCardHtml(item: ListedPlan): string {
-  const complete = item.progress.totalPhases > 0 && item.progress.completedPhases === item.progress.totalPhases;
+  const complete = planComplete(item);
   const needsAttention = planNeedsAttention(item);
   const statusLabel = needsAttention ? 'Source missing' : complete ? 'Complete' : 'Incomplete';
   const cardClass = needsAttention ? 'needs-attention' : complete ? 'complete' : 'incomplete';
@@ -330,7 +347,7 @@ function deferredHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedC
   </script></main></body></html>`;
 }
 
-function filterPlans(plans: ReturnType<PlanReviewStore['listPlans']>, query: { q?: string; repoKey?: string; status?: string; limit?: string; cursor?: string }) {
+function filterPlans(plans: ReturnType<PlanReviewStore['listPlans']>, query: { q?: string; repoKey?: string; status?: string; limit?: string; cursor?: string; currentPlanId?: string }) {
   const parseInteger = (value: string | undefined, name: string, min: number, max?: number): number | undefined => {
     if (value === undefined) return undefined;
     if (!/^\d+$/.test(value)) {
@@ -356,8 +373,10 @@ function filterPlans(plans: ReturnType<PlanReviewStore['listPlans']>, query: { q
   const offset = parseInteger(query.cursor, 'cursor', 0) ?? 0;
   const limit = parseInteger(query.limit, 'limit', 1, 200);
   const page = limit ? filtered.slice(offset, offset + limit) : filtered.slice(offset);
+  const currentPlan = query.currentPlanId ? filtered.find(item => item.plan.id === query.currentPlanId) : undefined;
+  const pagePlans = currentPlan && !page.some(item => item.plan.id === currentPlan.plan.id) ? [...page, currentPlan] : page;
   return {
-    plans: page,
+    plans: pagePlans,
     nextCursor: limit && offset + limit < filtered.length ? String(offset + limit) : undefined
   };
 }
@@ -368,26 +387,30 @@ function buildPlanRequestBody(planPath: string): string {
   return `/skill:scoped-plan-run thoughts/plans/${path.basename(planPath)}`;
 }
 
-function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], shellTitle: string): string {
+function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], currentTitle: string, shellTitle: string, plans: ListedPlan[]): string {
   const escapedPlanId = escapeHtml(plan.id);
   const escapedShellTitle = escapeHtml(shellTitle);
+  const escapedCurrentTitle = escapeHtml(currentTitle);
+  const readyLabel = plan.publicationMetadata.executionReady ? 'Execution ready' : 'Execution not ready';
   const encodedTitleFallback = escapeHtml(encodeClientData(reviewShellTitle(planTitleFallback(plan))));
   const reviewButton = '<button id="request-execution-review" type="button">Request execution-ready review</button>';
   const buildButton = '<button id="build-plan" type="button">Build Plan</button>';
+  const commentsButton = '<button id="desktop-comments-toggle" class="comments-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Open comments">Comments <span id="desktop-comments-count" class="comments-count" hidden></span></button>';
   const navActions = plan.archivedAt
-    ? `<a href="/archive">← Archive</a>${reviewButton}${buildButton}<span id="archive-status" class="archive-status">Archived</span><button id="restore-plan" type="button">Restore plan</button>`
+    ? `<a href="/archive">← Archive</a>${reviewButton}${buildButton}<span id="archive-status" class="archive-status">Archived</span><button id="restore-plan" type="button">Restore plan</button>${commentsButton}`
     : plan.lifecycleState === 'deferred'
-      ? `<a href="/deferred">← Deferred</a>${reviewButton}${buildButton}<span id="archive-status" class="archive-status">Deferred</span><button id="resume-plan" type="button">Resume plan</button><button id="archive-plan" type="button">Archive plan</button>`
-      : `<a href="/">← Plan index</a>${reviewButton}${buildButton}<span id="archive-status" class="archive-status" hidden></span><button id="defer-plan" type="button">Defer plan</button><button id="archive-plan" type="button">Archive plan</button>`;
+      ? `<a href="/deferred">← Deferred</a>${reviewButton}${buildButton}<span id="archive-status" class="archive-status">Deferred</span><button id="resume-plan" type="button">Resume plan</button><button id="archive-plan" type="button">Archive plan</button>${commentsButton}`
+      : `<a href="/">← Plan index</a>${reviewButton}${buildButton}<span id="archive-status" class="archive-status" hidden></span><button id="defer-plan" type="button">Defer plan</button><button id="archive-plan" type="button">Archive plan</button>${commentsButton}`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapedShellTitle}</title>
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="stylesheet" href="/client.css">
   </head><body data-plan-id="${escapedPlanId}" data-plan-title-fallback="${encodedTitleFallback}">
-    <nav id="plan-navbar" aria-label="Plan actions">${navActions}</nav>
+    <nav id="plan-navbar" aria-label="Plan actions"><div id="plan-navbar-actions">${navActions}</div><div id="current-plan-bar"><strong id="current-plan-title">${escapedCurrentTitle}</strong><span class="ready-pill ${plan.publicationMetadata.executionReady ? 'ready' : 'not-ready'}">${escapeHtml(readyLabel)}</span></div></nav>
     <div id="app">
+      ${planNavigatorHtml(plans, plan.id)}
+      <main id="review"><iframe id="plan-frame" sandbox="allow-same-origin allow-popups" src="/render/${escapedPlanId}"></iframe><button id="mobile-comments-toggle" class="comments-toggle" type="button" aria-controls="sidebar" aria-expanded="false">Comments</button><div id="hover-selection-box" class="selection-box hover" hidden></div><div id="active-selection-box" class="selection-box active" hidden></div></main>
       <aside id="sidebar"><h1>Comments</h1><div id="sync-warning" hidden></div><section id="plan-notes-panel"><h2>Plan notes</h2><div id="plan-notes"></div><textarea id="plan-note-body" placeholder="Add a plan note for agents"></textarea><button id="add-plan-note" type="button">Add note</button></section><div id="deferred-refresh-notice" hidden>Plan updated in the background. Finish or cancel this comment to refresh.</div><div id="comments"></div></aside>
-      <main id="review"><iframe id="plan-frame" sandbox="allow-same-origin allow-popups" src="/render/${escapedPlanId}"></iframe><button id="mobile-comments-toggle" type="button" aria-controls="sidebar" aria-expanded="false">Comments</button><div id="hover-selection-box" class="selection-box hover" hidden></div><div id="active-selection-box" class="selection-box active" hidden></div></main>
     </div>
     <div id="lightbox" class="lightbox" hidden><header><button id="zoom-out">-</button><button id="zoom-reset">Reset</button><button id="zoom-in">+</button><button id="pan-toggle">Pan</button><button id="close-lightbox">Close</button></header><div id="lightbox-stage" class="lightbox-stage"><img id="lightbox-image" alt=""><div id="image-selection-box" hidden></div></div></div>
     <div id="composer" hidden><textarea id="comment-body" placeholder="Comment on selection"></textarea><div id="comment-discard-warning" hidden>Your comment would be lost. Use Cancel to discard it.</div><button id="submit-comment">Submit</button><button id="cancel-comment">Cancel</button></div>
@@ -415,17 +438,18 @@ const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" 
 </svg>`;
 
 const clientCss = `
-body{margin:0;background:#0b1020;color:#e5e7eb;font-family:system-ui,sans-serif}
-#plan-navbar{height:52px;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 16px;border-bottom:1px solid #2b364d;background:#0f172a}#plan-navbar a{color:#7dd3fc;text-decoration:none;font-weight:700}#plan-navbar button{background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px 10px;cursor:pointer}#plan-navbar button:hover{border-color:#93c5fd}.archive-status{color:#cbd5e1;border:1px solid #475569;background:#1e293b;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:800;margin-left:auto}#restore-plan{border-color:#22c55e;color:#bbf7d0}
-#app{display:grid;grid-template-columns:minmax(0,1fr) 320px;min-height:calc(100vh - 52px)}
-#review{grid-column:1;position:relative}#sidebar{grid-column:2;grid-row:1;border-left:1px solid #2b364d;padding:16px;background:#111827}
-#plan-frame{width:100%;height:calc(100vh - 52px);border:0;background:white}.selection-box,.comment-anchor{position:fixed;pointer-events:none;border-radius:6px;transition:left .22s cubic-bezier(.2,0,.2,1),top .22s cubic-bezier(.2,0,.2,1),width .22s cubic-bezier(.2,0,.2,1),height .22s cubic-bezier(.2,0,.2,1),opacity .14s ease}.selection-box{z-index:8;box-sizing:border-box;background:transparent;box-shadow:none}.selection-box.hover{border:2px dotted rgba(56,189,248,.82)}.selection-box.active{z-index:9;border:2px dotted #38bdf8;box-shadow:0 0 0 1px rgba(255,255,255,.72)}.comment-anchor{z-index:7}.comment-anchor.pending{border:2px dotted rgba(192,132,252,.95);background:transparent;box-shadow:0 0 0 3px rgba(168,85,247,.08)}.comment-anchor.addressed{border:2px dotted rgba(216,180,254,.9);background:transparent;box-shadow:none}.comment-anchor-label{position:absolute;right:-10px;top:-12px;min-width:24px;height:24px;border-radius:999px;display:grid;place-items:center;padding:0 6px;background:#7e22ce;color:white;border:2px solid #f3e8ff;font-weight:800;font-size:12px;box-shadow:0 8px 18px rgba(0,0,0,.35)}.comment-anchor.addressed .comment-anchor-label{display:none}.comment-row{border:1px solid #2b364d;padding:10px;margin:8px 0;border-radius:8px;background:#0f172a}.comment-row small{color:#a7b0c0}.marker{position:absolute;z-index:9;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#0ea5e9;color:white;border:2px solid #dbeafe;font-weight:700;box-shadow:0 8px 18px rgba(0,0,0,.35);pointer-events:none}
-#sync-warning{border:1px solid #f59e0b;background:rgba(245,158,11,.12);color:#fde68a;border-radius:8px;padding:10px;margin:8px 0 14px;font-size:13px}#deferred-refresh-notice{border:1px solid #38bdf8;background:rgba(56,189,248,.12);color:#bae6fd;border-radius:8px;padding:10px;margin:8px 0 14px;font-size:13px}#composer{position:fixed;right:340px;top:80px;background:#0f172a;border:1px solid #38bdf8;padding:12px;border-radius:8px;z-index:20;box-shadow:0 12px 32px rgba(0,0,0,.4)}#composer.discard-warning{border-color:#ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.22),0 12px 32px rgba(0,0,0,.4)}
+body{--comments-width:48px;margin:0;background:#0b1020;color:#e5e7eb;font-family:system-ui,sans-serif}body.comments-open{--comments-width:320px}
+#plan-navbar{min-height:86px;box-sizing:border-box;display:grid;grid-template-rows:auto auto;gap:8px;padding:10px 16px;border-bottom:1px solid #2b364d;background:#0f172a}#plan-navbar-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}#plan-navbar a{color:#7dd3fc;text-decoration:none;font-weight:700;margin-right:auto}#plan-navbar button{background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px 10px;cursor:pointer}#plan-navbar button:hover{border-color:#93c5fd}#current-plan-bar{display:flex;align-items:center;gap:8px;min-width:0;border-top:1px solid rgba(71,85,105,.55);padding-top:8px;color:#cbd5e1}#current-plan-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f8fafc}.archive-status{color:#cbd5e1;border:1px solid #475569;background:#1e293b;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:800}#restore-plan{border-color:#22c55e;color:#bbf7d0}.comments-toggle{display:inline-flex;align-items:center;gap:6px}.comments-count{min-width:18px;height:18px;border-radius:999px;background:#7e22ce;color:white;display:inline-grid;place-items:center;padding:0 5px;font-size:11px;font-weight:900}
+#app{display:grid;grid-template-columns:260px minmax(0,1fr) var(--comments-width);min-height:calc(100vh - 86px);transition:grid-template-columns .18s ease}
+#plan-list-nav{grid-column:1;border-right:1px solid #2b364d;background:#0b1220;padding:14px;overflow:auto}#plan-list-nav h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#a7b0c0;margin:0}.plan-list-header{display:flex;align-items:center;justify-content:space-between;gap:8px}.plan-list-error{border:1px solid #f59e0b;background:rgba(245,158,11,.12);color:#fde68a;border-radius:8px;padding:8px;margin:10px 0;font-size:13px}.plan-list-empty{color:#a7b0c0;font-size:13px}.plan-nav-item{display:grid;gap:5px;padding:10px;margin:8px 0;border:1px solid #253248;border-radius:10px;background:#101827;color:#cbd5e1;text-decoration:none}.plan-nav-item:hover{border-color:#64748b}.plan-nav-item.active{border-color:#38bdf8;background:linear-gradient(135deg,rgba(14,165,233,.18),rgba(16,24,39,.95))}.plan-nav-item.attention{border-color:#f59e0b}.plan-nav-title{font-size:13px;font-weight:850;color:#f8fafc;line-height:1.25}.plan-nav-meta{display:flex;gap:6px;align-items:center;flex-wrap:wrap;color:#a7b0c0;font-size:11px}.plan-nav-submeta{color:#8fa0b8;font-size:11px}.plan-nav-pill{border:1px solid #475569;border-radius:999px;padding:1px 6px;background:#0b1220}.plan-nav-pill.ready{border-color:#22c55e;color:#bbf7d0}.plan-nav-pill.not-ready{border-color:#f59e0b;color:#fde68a}
+#review{grid-column:2;position:relative;min-width:0}#sidebar{grid-column:3;grid-row:1;border-left:1px solid #2b364d;padding:0;background:#111827;overflow:hidden}#sidebar>h1,#sidebar>#sync-warning,#sidebar>#plan-notes-panel,#sidebar>#deferred-refresh-notice,#sidebar>#comments{display:none}body.comments-open #sidebar{padding:16px;overflow:auto}body.comments-open #sidebar>h1,body.comments-open #sidebar>#sync-warning,body.comments-open #sidebar>#plan-notes-panel,body.comments-open #sidebar>#deferred-refresh-notice,body.comments-open #sidebar>#comments{display:block}
+#plan-frame{width:100%;height:calc(100vh - 86px);border:0;background:white}.selection-box,.comment-anchor{position:fixed;pointer-events:none;border-radius:6px;transition:left .22s cubic-bezier(.2,0,.2,1),top .22s cubic-bezier(.2,0,.2,1),width .22s cubic-bezier(.2,0,.2,1),height .22s cubic-bezier(.2,0,.2,1),opacity .14s ease}.selection-box{z-index:8;box-sizing:border-box;background:transparent;box-shadow:none}.selection-box.hover{border:2px dotted rgba(56,189,248,.82)}.selection-box.active{z-index:9;border:2px dotted #38bdf8;box-shadow:0 0 0 1px rgba(255,255,255,.72)}.comment-anchor{z-index:7}.comment-anchor.pending{border:2px dotted rgba(192,132,252,.95);background:transparent;box-shadow:0 0 0 3px rgba(168,85,247,.08)}.comment-anchor.addressed{border:2px dotted rgba(216,180,254,.9);background:transparent;box-shadow:none}.comment-anchor-label{position:absolute;right:-10px;top:-12px;min-width:24px;height:24px;border-radius:999px;display:grid;place-items:center;padding:0 6px;background:#7e22ce;color:white;border:2px solid #f3e8ff;font-weight:800;font-size:12px;box-shadow:0 8px 18px rgba(0,0,0,.35)}.comment-anchor.addressed .comment-anchor-label{display:none}.comment-row{border:1px solid #2b364d;padding:10px;margin:8px 0;border-radius:8px;background:#0f172a}.comment-row small{color:#a7b0c0}.marker{position:absolute;z-index:9;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#0ea5e9;color:white;border:2px solid #dbeafe;font-weight:700;box-shadow:0 8px 18px rgba(0,0,0,.35);pointer-events:none}
+#sync-warning{border:1px solid #f59e0b;background:rgba(245,158,11,.12);color:#fde68a;border-radius:8px;padding:10px;margin:8px 0 14px;font-size:13px}#deferred-refresh-notice{border:1px solid #38bdf8;background:rgba(56,189,248,.12);color:#bae6fd;border-radius:8px;padding:10px;margin:8px 0 14px;font-size:13px}#composer{position:fixed;right:calc(var(--comments-width) + 20px);top:112px;background:#0f172a;border:1px solid #38bdf8;padding:12px;border-radius:8px;z-index:20;box-shadow:0 12px 32px rgba(0,0,0,.4)}#composer.discard-warning{border-color:#ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.22),0 12px 32px rgba(0,0,0,.4)}
 #comment-discard-warning{margin-top:8px;color:#fecaca;font-size:13px;font-weight:700}#composer.discard-warning textarea{border-color:#ef4444}
 #composer textarea{width:260px;height:90px;background:#020617;color:#e5e7eb;border:1px solid #2b364d;border-radius:6px;padding:8px;display:block}
-#composer button{margin-top:8px;margin-right:8px}#plan-notes-panel{border:1px solid #2b364d;border-radius:10px;background:#0f172a;padding:10px;margin:0 0 14px}#plan-notes-panel h2{font-size:15px;margin:0 0 8px}#plan-notes .note-row{border-top:1px solid #263246;padding:8px 0}#plan-notes .note-row:first-child{border-top:0}#plan-note-body{width:100%;min-height:70px;box-sizing:border-box;background:#020617;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px}#add-plan-note{margin-top:8px;background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px 10px;cursor:pointer}.plan-review-selected{outline:2px dotted #38bdf8!important;box-shadow:none!important}.lightbox{position:fixed;inset:36px 360px 36px 36px;background:#020617;border:1px solid #38bdf8;z-index:12;display:grid;grid-template-rows:auto 1fr}.lightbox[hidden]{display:none}.lightbox header{display:flex;gap:8px;padding:10px;border-bottom:1px solid #2b364d}.lightbox img{max-width:100%;max-height:100%;place-self:center;transform-origin:center}.lightbox-stage{display:grid;overflow:hidden;position:relative}#image-selection-box{position:absolute;border:2px solid #38bdf8;background:rgba(56,189,248,.2);pointer-events:none}#mobile-comments-toggle{display:none}
+#composer button{margin-top:8px;margin-right:8px}#plan-notes-panel{border:1px solid #2b364d;border-radius:10px;background:#0f172a;padding:10px;margin:0 0 14px}#plan-notes-panel h2{font-size:15px;margin:0 0 8px}#plan-notes .note-row{border-top:1px solid #263246;padding:8px 0}#plan-notes .note-row:first-child{border-top:0}#plan-note-body{width:100%;min-height:70px;box-sizing:border-box;background:#020617;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px}#add-plan-note{margin-top:8px;background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px 10px;cursor:pointer}.plan-review-selected{outline:2px dotted #38bdf8!important;box-shadow:none!important}.lightbox{position:fixed;inset:36px calc(var(--comments-width) + 40px) 36px 36px;background:#020617;border:1px solid #38bdf8;z-index:12;display:grid;grid-template-rows:auto 1fr}.lightbox[hidden]{display:none}.lightbox header{display:flex;gap:8px;padding:10px;border-bottom:1px solid #2b364d}.lightbox img{max-width:100%;max-height:100%;place-self:center;transform-origin:center}.lightbox-stage{display:grid;overflow:hidden;position:relative}#image-selection-box{position:absolute;border:2px solid #38bdf8;background:rgba(56,189,248,.2);pointer-events:none}#mobile-comments-toggle{display:none}
 @media(prefers-reduced-motion:reduce){.selection-box{transition:none}}
-@media(max-width:760px){body{overflow:hidden}#plan-navbar{position:sticky;top:0;z-index:30;height:56px;box-sizing:border-box;justify-content:flex-start;gap:8px;padding:8px;overflow-x:auto;overscroll-behavior-x:contain}#plan-navbar a,#plan-navbar button{flex:0 0 auto;min-height:40px;padding:8px 10px;font-size:13px;line-height:1.15;white-space:normal}#request-execution-review{max-width:170px}#build-plan{max-width:120px}#app{display:block;min-height:calc(100dvh - 56px)}#review{height:calc(100dvh - 56px);overflow:hidden}#plan-frame{width:100%;height:100%;border:0}#sidebar{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:24;max-height:min(72dvh,620px);box-sizing:border-box;border-left:0;border-top:1px solid #2b364d;border-radius:18px 18px 0 0;padding:12px 16px calc(16px + env(safe-area-inset-bottom));background:#111827;box-shadow:0 -16px 40px rgba(0,0,0,.45);overflow:auto;transform:translateY(100%);transition:transform .18s ease}body.comments-open #sidebar{transform:translateY(0)}#sidebar h1{position:sticky;top:-12px;margin:0 0 12px;padding:8px 0 10px;background:#111827;font-size:20px;z-index:1}.comment-row{padding:12px;margin:10px 0}.comment-row p{margin:.55rem 0}.comments-empty{margin:0;color:#a7b0c0;font-size:14px}#mobile-comments-toggle{display:flex;position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:25;min-height:44px;align-items:center;gap:6px;border:1px solid #38bdf8;border-radius:999px;background:#075985;color:#e0f2fe;padding:0 14px;font-weight:800;box-shadow:0 12px 28px rgba(0,0,0,.35)}body.comments-open #mobile-comments-toggle{background:#0f172a;border-color:#64748b}#composer{left:0;right:0;bottom:0;top:auto;z-index:60;box-sizing:border-box;border-left:0;border-right:0;border-bottom:0;border-radius:18px 18px 0 0;padding:14px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -16px 40px rgba(0,0,0,.48)}#composer textarea{width:100%;height:122px;box-sizing:border-box;font-size:16px}#composer button{min-height:44px;padding:8px 12px}.lightbox{inset:0;z-index:50;border:0}.lightbox header{flex-wrap:wrap}.selection-box{border-radius:4px}.marker{width:28px;height:28px}}
+@media(max-width:760px){body{overflow:hidden;--comments-width:0}#plan-navbar{position:sticky;top:0;z-index:30;min-height:88px;box-sizing:border-box;gap:6px;padding:8px;overflow-x:auto;overscroll-behavior-x:contain}#plan-navbar-actions{justify-content:flex-start;gap:8px}#plan-navbar a,#plan-navbar button{flex:0 0 auto;min-height:40px;padding:8px 10px;font-size:13px;line-height:1.15;white-space:normal}#current-plan-bar{font-size:13px}#request-execution-review{max-width:170px}#build-plan{max-width:120px}#desktop-comments-toggle{display:none}#app{display:block;min-height:calc(100dvh - 88px)}#plan-list-nav{display:none}#review{height:calc(100dvh - 88px);overflow:hidden}#plan-frame{width:100%;height:100%;border:0}#sidebar{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:24;max-height:min(72dvh,620px);box-sizing:border-box;border-left:0;border-top:1px solid #2b364d;border-radius:18px 18px 0 0;padding:12px 16px calc(16px + env(safe-area-inset-bottom));background:#111827;box-shadow:0 -16px 40px rgba(0,0,0,.45);overflow:auto;transform:translateY(100%);transition:transform .18s ease}#sidebar>h1,#sidebar>#sync-warning,#sidebar>#plan-notes-panel,#sidebar>#deferred-refresh-notice,#sidebar>#comments{display:block}body.comments-open #sidebar{transform:translateY(0)}#sidebar h1{position:sticky;top:-12px;margin:0 0 12px;padding:8px 0 10px;background:#111827;font-size:20px;z-index:1}.comment-row{padding:12px;margin:10px 0}.comment-row p{margin:.55rem 0}.comments-empty{margin:0;color:#a7b0c0;font-size:14px}#mobile-comments-toggle{display:flex;position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:25;min-height:44px;align-items:center;gap:6px;border:1px solid #38bdf8;border-radius:999px;background:#075985;color:#e0f2fe;padding:0 14px;font-weight:800;box-shadow:0 12px 28px rgba(0,0,0,.35)}body.comments-open #mobile-comments-toggle{background:#0f172a;border-color:#64748b}#composer{left:0;right:0;bottom:0;top:auto;z-index:60;box-sizing:border-box;border-left:0;border-right:0;border-bottom:0;border-radius:18px 18px 0 0;padding:14px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -16px 40px rgba(0,0,0,.48)}#composer textarea{width:100%;height:122px;box-sizing:border-box;font-size:16px}#composer button{min-height:44px;padding:8px 12px}.lightbox{inset:0;z-index:50;border:0}.lightbox header{flex-wrap:wrap}.selection-box{border-radius:4px}.marker{width:28px;height:28px}}
 `;
 
 const clientJs = `
@@ -436,7 +460,8 @@ const planId = document.body.dataset.planId;
 let planTitleFallback = 'Plan Review';
 try {
   const bytes = Uint8Array.from(atob(document.body.dataset.planTitleFallback || ''), char => char.charCodeAt(0));
-  planTitleFallback = new TextDecoder().decode(bytes) || planTitleFallback;
+  const decodedTitleFallback = new TextDecoder().decode(bytes) || planTitleFallback;
+  planTitleFallback = decodedTitleFallback.replace(/\s+·\s+Plan Review$/i, '').trim() || decodedTitleFallback;
 } catch {}
 const frame = document.getElementById('plan-frame');
 const archivePlanButton = document.getElementById('archive-plan');
@@ -454,6 +479,11 @@ const discardWarning = document.getElementById('comment-discard-warning');
 const submitCommentButton = document.getElementById('submit-comment');
 const comments = document.getElementById('comments');
 const mobileCommentsToggle = document.getElementById('mobile-comments-toggle');
+const desktopCommentsToggle = document.getElementById('desktop-comments-toggle');
+const desktopCommentsCount = document.getElementById('desktop-comments-count');
+const planListItems = document.getElementById('plan-list-items');
+const planListError = document.getElementById('plan-list-error');
+const planListRetry = document.getElementById('plan-list-retry');
 const syncWarning = document.getElementById('sync-warning');
 const deferredRefreshNotice = document.getElementById('deferred-refresh-notice');
 const hoverSelectionBox = document.getElementById('hover-selection-box');
@@ -497,16 +527,25 @@ let touchStart = null;
 let suppressSyntheticClickUntil = 0;
 let washi = null;
 function isMobileShell(){ return window.matchMedia('(max-width: 760px)').matches; }
-function updateMobileCommentsToggle(){
-  if (!mobileCommentsToggle) return;
-  const count = Number(mobileCommentsToggle.dataset.commentCount || '0');
+function updateCommentsToggles(){
+  const count = Number(mobileCommentsToggle?.dataset.commentCount || desktopCommentsToggle?.dataset.commentCount || '0');
   const open = document.body.classList.contains('comments-open');
-  mobileCommentsToggle.textContent = open ? 'Close' : count ? 'Comments (' + count + ')' : 'Comments';
+  if (mobileCommentsToggle) {
+    mobileCommentsToggle.textContent = open ? 'Close' : count ? 'Comments (' + count + ')' : 'Comments';
+    mobileCommentsToggle.setAttribute('aria-expanded', String(open));
+  }
+  if (desktopCommentsToggle) {
+    desktopCommentsToggle.setAttribute('aria-expanded', String(open));
+    desktopCommentsToggle.setAttribute('aria-label', open ? 'Close comments' : 'Open comments');
+    if (desktopCommentsCount) {
+      desktopCommentsCount.hidden = count === 0;
+      desktopCommentsCount.textContent = String(count);
+    }
+  }
 }
-function setMobileCommentsOpen(open){
+function setCommentsOpen(open){
   document.body.classList.toggle('comments-open', open);
-  mobileCommentsToggle?.setAttribute('aria-expanded', String(open));
-  updateMobileCommentsToggle();
+  updateCommentsToggles();
 }
 function newCommentMutationId(){
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
@@ -522,12 +561,15 @@ function setSubmitInFlight(value){
 }
 function showComposer(){
   if (pendingAnchor) ensurePendingCommentMutationId();
-  setMobileCommentsOpen(false);
+  if (isMobileShell()) setCommentsOpen(false);
   composer.hidden = false;
   body.focus();
 }
 mobileCommentsToggle?.addEventListener('click', () => {
-  setMobileCommentsOpen(!document.body.classList.contains('comments-open'));
+  setCommentsOpen(!document.body.classList.contains('comments-open'));
+});
+desktopCommentsToggle?.addEventListener('click', () => {
+  setCommentsOpen(!document.body.classList.contains('comments-open'));
 });
 archivePlanButton?.addEventListener('click', async () => {
   if (!confirm('Archive this plan?')) return;
@@ -653,6 +695,7 @@ async function loadMeta(options = {}){
   renderSyncWarning(json.data.plan);
   renderPlanNotes(json.data.notes || []);
   renderComments(json.data.comments || []);
+  void loadPlanNavigator();
 }
 function scheduleMetaLoad(options = {}){
   pendingMetaOptions = mergeMetaOptions(pendingMetaOptions || {}, options);
@@ -687,8 +730,17 @@ function planReviewTitle(title){
   const normalized = normalizePlanTitle(title) || planTitleFallback;
   return /(?:^|\\s)Plan Review$/i.test(normalized) ? normalized : normalized + ' · Plan Review';
 }
+function toolbarTitleFallback(){
+  const normalized = normalizePlanTitle(planTitleFallback);
+  return normalized.replace(/(?:\s+·)?\s+Plan Review$/i, '').trim() || normalized;
+}
+function renderedPlanTitleFromDocument(doc){
+  return normalizePlanTitle(doc?.head?.querySelector?.('title')?.textContent || '') || toolbarTitleFallback();
+}
 function updateShellTitleFromRenderedDocument(doc){
-  document.title = planReviewTitle(doc?.head?.querySelector?.('title')?.textContent || '');
+  const title = renderedPlanTitleFromDocument(doc);
+  document.title = planReviewTitle(title);
+  document.getElementById('current-plan-title').textContent = title;
 }
 async function refreshPlanFrameContent(nextVersionId, options = {}){
   if (options.clearSelection) clearPendingSelection();
@@ -816,10 +868,9 @@ function renderPlanNotes(items){
 }
 function renderComments(items){
   renderMarkers(items);
-  if (mobileCommentsToggle) {
-    mobileCommentsToggle.dataset.commentCount = String(items.length);
-    updateMobileCommentsToggle();
-  }
+  if (mobileCommentsToggle) mobileCommentsToggle.dataset.commentCount = String(items.length);
+  if (desktopCommentsToggle) desktopCommentsToggle.dataset.commentCount = String(items.length);
+  updateCommentsToggles();
   const rows = items.map(c => {
     const response = c.agentResponse || {};
     const changed = Array.isArray(response.changedFiles) ? response.changedFiles.join(', ') : '';
@@ -863,6 +914,40 @@ comments.addEventListener('click', event => {
   deleteComment(button.dataset.deleteComment, button);
 });
 function escapeHtml(value){ return String(value).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])); }
+function planItemComplete(item){ return item?.progress?.totalPhases > 0 && item.progress.completedPhases === item.progress.totalPhases; }
+function planItemAttention(item){ return item?.plan?.watchMode === 'filesystem' && item?.plan?.lastSyncStatus === 'failed'; }
+function planItemRatio(item){ return item?.progress?.totalPhases > 0 ? item.progress.completedPhases / item.progress.totalPhases : 0; }
+function planItemRank(item){ if (planItemAttention(item)) return 3; if (planItemComplete(item)) return 0; if (item?.plan?.publicationMetadata?.executionReady) return 1; return 2; }
+function planItemTitle(item){ return String(item?.displayTitle || item?.plan?.repoName + ' / ' + item?.plan?.slug); }
+function sortPlanNavItems(items){ return [...items].sort((a,b)=>planItemRank(a)-planItemRank(b)||planItemRatio(b)-planItemRatio(a)||String(b.activityAt||'').localeCompare(String(a.activityAt||''))||planItemTitle(a).localeCompare(planItemTitle(b))||String(a?.plan?.id||'').localeCompare(String(b?.plan?.id||''))); }
+function planItemStatus(item){ if (planItemAttention(item)) return 'Needs attention'; if (planItemComplete(item)) return 'Complete'; if (item?.plan?.publicationMetadata?.executionReady) return 'Execution ready'; return 'Execution not ready'; }
+function planItemProgress(item){ return item?.progress?.totalPhases ? item.progress.completedPhases + '/' + item.progress.totalPhases : 'No phases'; }
+function renderPlanNavigatorItems(items){
+  if (!planListItems) return;
+  const html = sortPlanNavItems(items).map(item => {
+    const id = String(item?.plan?.id || '');
+    const active = id === planId;
+    const status = planItemStatus(item);
+    return '<a class="plan-nav-item'+(active ? ' active' : '')+(planItemAttention(item) ? ' attention' : '')+'" href="/p/'+encodeURIComponent(id)+'" data-plan-nav-item data-plan-id="'+escapeHtml(id)+'" aria-current="'+(active ? 'page' : 'false')+'"><span class="plan-nav-title">'+escapeHtml(planItemTitle(item))+'</span><span class="plan-nav-meta"><span class="plan-nav-pill '+(item?.plan?.publicationMetadata?.executionReady ? 'ready' : 'not-ready')+'">'+escapeHtml(status)+'</span><span>'+escapeHtml(planItemProgress(item))+'</span></span><span class="plan-nav-submeta">pending '+Number(item?.counts?.pending || 0)+' · updated '+escapeHtml(String(item?.modifiedAt || ''))+'</span></a>';
+  }).join('');
+  planListItems.innerHTML = html || '<p class="plan-list-empty">No active plans.</p>';
+}
+async function loadPlanNavigator(){
+  if (!planListItems) return;
+  try {
+    const res = await fetch('/api/plans/navigator?limit=200&currentPlanId=' + encodeURIComponent(planId), { cache: 'no-store' });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error?.message || 'Unable to load plans');
+    renderPlanNavigatorItems(json.data.plans || []);
+    if (planListError) planListError.hidden = true;
+    if (planListRetry) planListRetry.hidden = true;
+  } catch (error) {
+    if (planListError) { planListError.hidden = false; planListError.textContent = 'Unable to load plans. The current plan remains reviewable.'; }
+    if (planListRetry) planListRetry.hidden = false;
+  }
+}
+planListRetry?.addEventListener('click', () => { void loadPlanNavigator(); });
+setInterval(() => { void loadPlanNavigator(); }, 30000);
 function renderMarkers(items){
   markerComments = items.filter(comment => comment.anchor?.rect);
   redrawMarkers();
@@ -1443,7 +1528,7 @@ async function submitPendingComment(){
     }
     clearPendingSelection();
     await loadMeta();
-    if (isMobileShell()) setMobileCommentsOpen(true);
+    if (isMobileShell()) setCommentsOpen(true);
     await applyDeferredPlanRefreshIfIdle();
   } catch (error) {
     marker.remove();
@@ -1623,9 +1708,25 @@ export function createApp(options: AppOptions): FastifyInstance {
 
   app.get('/api/plans', async (request, reply) => {
     try {
-      const query = request.query as { q?: string; repoKey?: string; status?: string; lifecycle?: 'active' | 'deferred' | 'archived'; limit?: string; cursor?: string; includeArchived?: string; includeDeferred?: string };
+      const query = request.query as { q?: string; repoKey?: string; status?: string; lifecycle?: 'active' | 'deferred' | 'archived'; limit?: string; cursor?: string; currentPlanId?: string; includeArchived?: string; includeDeferred?: string };
       const { plans, nextCursor } = filterPlans(store.listPlans({ includeArchived: query.includeArchived === 'true', includeDeferred: query.includeDeferred === 'true', lifecycleState: query.lifecycle }), query);
       return ok({ plans, nextCursor });
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.get('/api/plans/navigator', async (request, reply) => {
+    try {
+      const query = request.query as { limit?: string; currentPlanId?: string };
+      if (query.limit && !/^\d+$/.test(query.limit)) {
+        throw new PlanReviewError('validation_failed', 'limit must be a non-negative integer', 400, { limit: query.limit });
+      }
+      const limit = query.limit ? Number(query.limit) : 200;
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) {
+        throw new PlanReviewError('validation_failed', 'limit must be between 1 and 200', 400, { limit: query.limit });
+      }
+      return ok({ plans: store.listPlans({ limit, currentPlanId: query.currentPlanId }) });
     } catch (error) {
       sendError(reply, error);
     }
@@ -1670,7 +1771,7 @@ export function createApp(options: AppOptions): FastifyInstance {
       try {
         title = renderedHtmlTitle(store.getRenderedHtml(plan.id)) ?? title;
       } catch {}
-      reply.header('Cache-Control', 'no-store').type('text/html').send(reviewShell(plan, reviewShellTitle(title)));
+      reply.header('Cache-Control', 'no-store').type('text/html').send(reviewShell(plan, title, reviewShellTitle(title), store.listPlans({ limit: 200, currentPlanId: plan.id })));
     } catch (error) {
       sendError(reply, error);
     }
