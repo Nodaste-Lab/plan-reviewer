@@ -1295,20 +1295,30 @@ function stopEventPolling(){
   clearEventPollTimer();
   abortEventPoll();
 }
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) {
-    clearEventPollTimer();
-    abortEventPoll();
-    return;
-  }
+function refreshAfterVisibilityRestore(){
   void scheduleMetaLoad({ reloadPlan: true, forceReloadPlan: true, advanceEventSequence: true }).catch(error => {
     console.warn('Unable to refresh plan after visibility restore', error);
   }).finally(() => {
     eventPollBackoffMs = 1000;
     scheduleEventPoll(0);
   });
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    clearEventPollTimer();
+    abortEventPoll();
+    return;
+  }
+  eventPollStopped = false;
+  refreshAfterVisibilityRestore();
 });
 window.addEventListener('pagehide', stopEventPolling);
+window.addEventListener('pageshow', event => {
+  if (!event.persisted) return;
+  eventPollStopped = false;
+  if (document.hidden) return;
+  refreshAfterVisibilityRestore();
+});
 loadMeta({ advanceEventSequence: true }).then(startEventPolling).catch(error => console.warn('Unable to load plan metadata', error));
 `;
 

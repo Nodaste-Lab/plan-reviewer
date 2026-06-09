@@ -1210,6 +1210,29 @@ try {
     });
     await syncPage.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.body?.textContent?.includes('Source sync v5'), undefined, { timeout: 5000 });
     assert.equal(failedVisibleCatchup, true);
+
+    await syncPage.evaluate(() => {
+      const event = new Event('pagehide');
+      Object.defineProperty(event, 'persisted', { value: true });
+      window.dispatchEvent(event);
+    });
+    const syncHtmlV6 = syncHtmlV5.replace('Source sync v5', 'Source sync v6');
+    fs.writeFileSync(syncPath, syncHtmlV6);
+    await syncPage.waitForTimeout(1000);
+    assert.equal(await syncPage.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.body?.textContent?.includes('Source sync v6')), false);
+    await syncPage.evaluate(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+      const event = new Event('pageshow');
+      Object.defineProperty(event, 'persisted', { value: true });
+      window.dispatchEvent(event);
+    });
+    await syncPage.waitForTimeout(1000);
+    assert.equal(await syncPage.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.body?.textContent?.includes('Source sync v6')), false);
+    await syncPage.evaluate(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await syncPage.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.body?.textContent?.includes('Source sync v6'), undefined, { timeout: 5000 });
   } finally {
     await syncBrowser.close();
     fs.rmSync(syncDir, { recursive: true, force: true });
