@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Browser Polling for Plan Reviewer Connection Exhaustion</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1020;
+      --panel: #111827;
+      --text: #e5e7eb;
+      --muted: #a7b0c0;
+      --accent: #38bdf8;
+      --border: #2b364d;
+      --warn: #f59e0b;
+      --ok: #22c55e;
+    }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.55;
+    }
+    main {
+      max-width: 1040px;
+      margin: 0 auto;
+      padding: 32px 20px 56px;
+    }
+    h1, h2, h3 {
+      line-height: 1.2;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 34px;
+    }
+    h2 {
+      margin-top: 32px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 6px;
+    }
+    h3 {
+      margin-top: 24px;
+    }
+    a {
+      color: var(--accent);
+    }
+    code, pre {
+      background: #0f172a;
+      color: #dbeafe;
+      border-radius: 6px;
+    }
+    code {
+      padding: 1px 5px;
+    }
+    pre {
+      padding: 12px;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 8px;
+      vertical-align: top;
+    }
+    th {
+      background: #0f172a;
+      text-align: left;
+    }
+    section, article {
+      scroll-margin-top: 16px;
+    }
+    .status {
+      display: inline-block;
+      border: 1px solid var(--warn);
+      color: #fde68a;
+      border-radius: 999px;
+      padding: 3px 10px;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .status.ready {
+      border-color: var(--ok);
+      color: #bbf7d0;
+    }
+    .note {
+      border: 1px solid var(--border);
+      background: var(--panel);
+      border-radius: 8px;
+      padding: 12px 14px;
+    }
+    .muted {
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header id="title">
+    <h1>Browser Polling for Plan Reviewer Connection Exhaustion</h1>
+    <p class="status ready">Status: implementation-complete</p>
+    <p class="muted">Created June 8, 2026. Browser feedback, product-intent review, Codex plan review, Claude plan review, scoped implementation, and local verification are complete.</p>
+  </header>
+
+  <section id="goal">
+    <h2>Goal</h2>
+    <p>Stop Brave/Chromium review tabs from hanging when many plan pages are open by removing persistent browser-side SSE connections from the review shell and replacing them with bounded, finite polling that still keeps visible plans fresh.</p>
+  </section>
+
+  <section id="why-this-plan-exists">
+    <h2>Why This Plan Exists</h2>
+    <p>The prior event-storm fix bounded metadata refreshes after events, but it did not change the fact that every open review tab owns a long-lived <code>EventSource</code> connection. Chromium-family browsers have a per-origin HTTP/1 connection pool. Once enough review tabs are open, new navigations and ordinary <code>fetch()</code> requests to the same plan-reviewer origin can queue or fail even while the server itself is responsive to other clients.</p>
+  </section>
+
+  <section id="authority-and-inputs">
+    <h2>Authority and Inputs</h2>
+    <ul>
+      <li>User report: Brave times out while interacting with plan-review pages from the shared plan-reviewer origin.</li>
+      <li>Live diagnostic evidence: the plan-reviewer service had multiple established inbound browser connections from the same client, and each open Brave/Chromium review tab held a persistent <code>:4317</code> connection.</li>
+      <li>Reproduction evidence: a Chromium context against the shared plan-reviewer origin opened the first six review pages quickly, then pages seven through ten timed out, and a same-origin probe <code>fetch('/api/plans')</code> failed.</li>
+      <li>Code evidence: browser review shell currently starts <code>new EventSource('/api/plans/'+planId+'/events?mode=all&amp;afterSequence=...')</code> in <code>src/server/app.ts</code>.</li>
+      <li>Existing API support: <code>GET /api/plans/:planId/events/poll?mode=all&amp;afterSequence=...</code> already returns finite event batches plus <code>latestSequence</code>.</li>
+      <li>Repo guide: <code>AGENTS.md</code> and <code>thoughts/plans/AGENTS.md</code>.</li>
+      <li>Product intent: <code>thoughts/specs/product_intent.md</code>, especially preserving browser review reliability and not losing comments.</li>
+    </ul>
+  </section>
+
+  <section id="current-implementation-reality">
+    <h2>Current Implementation Reality</h2>
+    <ul>
+      <li>The browser shell loads initial metadata with <code>GET /api/plans/:planId</code>, stores <code>latestEventSequence</code>, then opens one persistent browser <code>EventSource</code> per plan tab.</li>
+      <li>The browser <code>EventSource</code> listens for plan version, sync failure, and comment lifecycle events and schedules full metadata refreshes.</li>
+      <li>The prior implementation already coalesces metadata refreshes and avoids historical SSE replay with <code>afterSequence</code>, but each tab still consumes a long-lived connection.</li>
+      <li>The CLI <code>plan-review watch</code> and <code>plan-review agent next --wait</code> flows also use SSE, but those are intentional process-level listeners and must not be changed as part of this browser-only fix.</li>
+      <li>The finite poll endpoint already supports both <code>mode=queue</code> and <code>mode=all</code>, and existing tests cover poll compatibility for agent/CLI behavior.</li>
+    </ul>
+  </section>
+
+  <section id="product-intent-alignment">
+    <h2>Product Intent Alignment</h2>
+    <p>This plan advances <code>thoughts/specs/product_intent.md</code> by keeping the browser review surface trustworthy under realistic multi-plan usage. It preserves queue-backed agent delivery as the correctness-critical path, keeps comments recoverable through full-state metadata snapshots, and avoids requiring users to restart Brave as a manual recovery step.</p>
+  </section>
+
+  <section id="locked-decisions">
+    <h2>Locked Decisions</h2>
+    <ul>
+      <li>Remove persistent browser-side <code>EventSource</code> from the review page.</li>
+      <li>Keep server SSE routes and CLI/agent SSE behavior intact for intentional listener workflows.</li>
+      <li>Use finite browser polling against the existing <code>/events/poll</code> endpoint rather than adding a new transport.</li>
+      <li>Visible review tabs should poll on a concrete short cadence, initially one request about every 1000ms with at most one in-flight poll. Hidden tabs should pause polling, or fall back to a much slower cadence of at least 30000ms only if pause behavior proves unreliable, and should catch up from a full metadata snapshot when revisited.</li>
+      <li>Preserve metadata refresh coalescing so bursts do not reintroduce request storms.</li>
+    </ul>
+  </section>
+
+  <section id="acceptance-criteria">
+    <h2>Acceptance Criteria</h2>
+    <ol>
+      <li id="ac-1">Opening ten review pages from one Chromium/Brave browser context against the same plan-reviewer origin does not cause page seven or later to time out waiting for the review shell, and a same-origin <code>fetch('/api/plans?limit=1')</code> succeeds within two seconds after all pages are open.</li>
+      <li id="ac-2">A browser review page does not construct <code>EventSource</code> and does not request <code>/api/plans/:planId/events</code>; browser freshness uses finite <code>/events/poll</code> requests only.</li>
+      <li id="ac-3">A visible review page receives comment creation, claim, acknowledgement, resolution, release, plan version registration, source sync, and sync failure updates through polling and renders the latest truthful state within a bounded interval.</li>
+      <li id="ac-4">Hidden or background review pages do not keep a tight polling loop or a long-lived connection; when a tab becomes visible again, it catches up from the latest metadata snapshot and resumes finite polling.</li>
+      <li id="ac-5">The previous event-storm guarantees remain true: historical stored events and live bursts do not create overlapping full metadata loads or excessive refreshes.</li>
+      <li id="ac-6">CLI and agent listener behavior remains compatible: <code>plan-review watch</code>, <code>plan-review agent next --wait</code>, queue polling, seeded-comment-stream fixtures, and harness smoke still pass.</li>
+    </ol>
+  </section>
+
+  <section id="bdd-scenarios">
+    <h2>BDD Scenarios</h2>
+    <article id="bdd-many-open-tabs">
+      <h3>Many Review Tabs</h3>
+      <p>Given ten registered plans and one Chromium browser context, when each plan review page is opened from that same context with <code>context.newPage()</code>, then every page reaches the review shell and a final same-origin fetch succeeds promptly because no page holds a persistent browser SSE connection.</p>
+    </article>
+    <article id="bdd-visible-poll-update">
+      <h3>Visible Poll Update</h3>
+      <p>Given a reviewer has one visible plan page open, when a browser comment is created through the API, then a finite poll observes the event, schedules one coalesced metadata refresh, and the sidebar shows the new comment.</p>
+    </article>
+    <article id="bdd-plan-sync-update">
+      <h3>Plan Sync Update</h3>
+      <p>Given a plan source changes while no comment draft is open, when polling sees a plan version or source-sync event, then the iframe refreshes to the latest render. If a draft is open, the refresh remains deferred until the draft is submitted or cancelled.</p>
+    </article>
+    <article id="bdd-hidden-catch-up">
+      <h3>Hidden Tab Catch-Up</h3>
+      <p>Given a review page is hidden or backgrounded, when events accumulate, then the tab does not hold a persistent connection or tight poll loop. When it becomes visible again, it loads current metadata and resumes from the latest sequence without replaying old work.</p>
+    </article>
+    <article id="bdd-agent-listener-unchanged">
+      <h3>Agent Listener Unchanged</h3>
+      <p>Given an agent uses <code>plan-review agent next --wait</code>, when a browser comment is created, then the agent queue listener still wakes, claims one comment, and preserves at-least-once queue semantics independent from browser polling.</p>
+    </article>
+  </section>
+
+  <section id="progress">
+    <h2>Progress</h2>
+    <ul>
+      <li><input type="checkbox" checked disabled> P1: Add regression coverage for browser connection exhaustion and transport boundaries.</li>
+      <li><input type="checkbox" checked disabled> P2: Replace browser EventSource with finite visibility-aware polling.</li>
+      <li><input type="checkbox" checked disabled> P3: Preserve live update, source-sync, and event-storm behavior through focused e2e coverage.</li>
+      <li><input type="checkbox" checked disabled> P4: Verify CLI/agent listener compatibility and update public guidance if needed.</li>
+    </ul>
+  </section>
+
+  <section id="test-coverage-matrix">
+    <h2>Test Coverage Matrix</h2>
+    <table>
+      <thead>
+        <tr><th>Acceptance</th><th>Scenarios</th><th>Planned Coverage</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>AC1, AC2</td><td>Many review tabs, browser transport boundary</td><td>New Playwright e2e scenario that opens ten review pages in one context, asserts every shell loads, asserts a final same-origin fetch succeeds within two seconds, and asserts no browser page constructs <code>EventSource</code> or requests <code>/events</code>.</td></tr>
+        <tr><td>AC3, AC4</td><td>Visible poll update, hidden catch-up, source sync</td><td>E2E scenarios that count finite <code>/events/poll</code> requests, create comments and plan updates while pages are visible/hidden, and assert final sidebar/iframe state.</td></tr>
+        <tr><td>AC5</td><td>Historical event storm, live burst, trailing refresh</td><td>Retain and adapt existing event-storm e2e scenarios so they prove polling does not reintroduce overlapping metadata loads or excessive full refreshes.</td></tr>
+        <tr><td>AC6</td><td>Agent queue unchanged</td><td>Existing contract tests, seeded-comment-stream fixture, and agent-listener-harness-smoke fixture.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="phase-plan">
+    <h2>Phase-by-Phase Execution Plan</h2>
+
+    <article id="phase-p1-regressions">
+      <h3>P1: Regressions First</h3>
+      <h4>End State</h4>
+      <p>Tests fail against the current implementation by reproducing browser connection exhaustion and by proving the browser review shell still constructs <code>EventSource</code>.</p>
+      <h4>Tests first</h4>
+      <p>Add a focused e2e scenario that registers ten lightweight plans, opens ten review pages with <code>context.newPage()</code> from one Chromium context, waits for the review shell on every page, and then runs a same-origin <code>fetch('/api/plans?limit=1')</code> from a page with a two-second timeout. The current implementation should fail around page seven or fail the final fetch. Add an assertion that a browser page creates no <code>EventSource</code> instances after the fix.</p>
+      <h4>Expected files</h4>
+      <p><code>src/test-fixtures/e2e-run.ts</code> and possibly <code>src/__tests__/contracts.test.ts</code> if route contract assertions need tightening.</p>
+      <h4>Work</h4>
+      <ul>
+        <li>Build a reusable e2e helper for registering many tiny plans.</li>
+        <li>For the starvation regression, install a pass-through counting wrapper around <code>window.EventSource</code> so the current implementation still opens real long-lived connections and can exhaust same-origin capacity.</li>
+        <li>For the post-fix transport-boundary assertion, use a separate no-<code>EventSource</code> sentinel or request assertion so the test proves the review shell no longer constructs browser SSE connections.</li>
+        <li>Track requests to <code>/api/plans/:planId/events</code> and <code>/events/poll</code> so transport usage is explicit.</li>
+        <li>Preserve the existing event-storm tests; do not weaken their request-count and max-in-flight assertions.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run test:e2e</code></pre>
+    </article>
+
+    <article id="phase-p2-browser-poller">
+      <h3>P2: Browser Poller</h3>
+      <h4>End State</h4>
+      <p>The review shell no longer creates a browser <code>EventSource</code>. It starts a finite poll loop after the initial metadata snapshot and uses existing event handling logic to schedule coalesced metadata refreshes.</p>
+      <h4>Tests first</h4>
+      <p>Use the P1 failing e2e scenario as the RED signal.</p>
+      <h4>Expected files</h4>
+      <p><code>src/server/app.ts</code>.</p>
+      <h4>Work</h4>
+      <ul>
+        <li>Replace <code>startEventStream()</code> with <code>startEventPolling()</code> in the browser client script.</li>
+        <li>Fetch <code>/api/plans/:planId/events/poll?mode=all&amp;afterSequence=&lt;latestEventSequence&gt;&amp;limit=200</code> as a finite request.</li>
+        <li>Normalize each poll event before reusing existing handlers: poll rows expose <code>eventType</code> and parsed <code>payload</code>, while the current SSE handler expects <code>type</code> and stringified <code>data</code>.</li>
+        <li>For each normalized event, update <code>latestEventSequence</code>, route plan version events through <code>handlePlanVersionEvent</code>, and route comment/sync events through <code>scheduleMetaLoad()</code>.</li>
+        <li>If a poll batch reaches the limit, immediately poll again until caught up; otherwise wait for the normal interval.</li>
+        <li>Use approximately 1000ms visible polling with a single in-flight poll, plus bounded retry backoff capped around 10000ms after transient failures.</li>
+        <li>Pause hidden polling by default, or use a fallback cadence of at least 30000ms if full pause behavior proves flaky. On <code>visibilitychange</code> to visible, call <code>scheduleMetaLoad()</code> once and resume polling from the latest sequence.</li>
+        <li>Abort any in-flight browser poll on <code>pagehide</code> or when the document becomes hidden if the chosen strategy pauses hidden tabs.</li>
+        <li>Keep metadata refresh coalescing unchanged.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run test:e2e</code></pre>
+    </article>
+
+    <article id="phase-p3-update-semantics">
+      <h3>P3: Update Semantics</h3>
+      <h4>End State</h4>
+      <p>Browser polling preserves user-visible live update behavior for comments and plan sync without persistent connections.</p>
+      <h4>Tests first</h4>
+      <p>Add or adapt e2e coverage for visible comment creation, plan version refresh, source sync failure, deferred refresh while a draft is open, and hidden-tab catch-up.</p>
+      <h4>Expected files</h4>
+      <p><code>src/test-fixtures/e2e-run.ts</code> and <code>src/server/app.ts</code>.</p>
+      <h4>Work</h4>
+      <ul>
+        <li>Ensure comment lifecycle events trigger one coalesced metadata refresh after poll delivery.</li>
+        <li>Ensure <code>plan.version.registered</code> and <code>plan.version.synced</code> preserve iframe refresh and draft-safe deferral behavior.</li>
+        <li>Ensure <code>plan.sync.failed</code> still updates the sync warning.</li>
+        <li>Ensure polling errors are non-fatal and use bounded backoff rather than tight retry loops.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run test
+bun run test:e2e</code></pre>
+    </article>
+
+    <article id="phase-p4-compatibility">
+      <h3>P4: Compatibility and Public Guidance</h3>
+      <h4>End State</h4>
+      <p>CLI, agent queue, and public route behavior remain aligned. Documentation is updated only if browser transport behavior is described publicly.</p>
+      <h4>Tests first</h4>
+      <p>Run existing contract and fixture smoke tests that exercise SSE for CLI/watch and queue listeners.</p>
+      <h4>Expected files</h4>
+      <p><code>README.md</code> only if needed; otherwise no docs change. No changes to queue semantics.</p>
+      <h4>Work</h4>
+      <ul>
+        <li>Confirm <code>/api/plans/:planId/events</code> remains available for CLI/debug consumers.</li>
+        <li>Confirm <code>plan-review agent next --wait</code> still uses queue-backed delivery and wakes on browser comments.</li>
+        <li>Update README only if it currently claims the browser shell uses SSE or if a transport distinction would prevent future regressions.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run test
+bun run test:e2e
+bun run test:fixtures -- --scenario seeded-comment-stream
+bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated</code></pre>
+    </article>
+  </section>
+
+  <section id="verification-strategy">
+    <h2>Verification Strategy</h2>
+    <p>The most important proof is browser-level: a single Chromium context must be able to keep many review pages open and still perform a same-origin metadata fetch. The second proof is transport-specific: browser pages must not create <code>EventSource</code> or call the SSE route. The final proof is behavioral: visible browser pages still converge to truthful comment and plan-sync state, and CLI/agent listeners retain their existing SSE-backed behavior.</p>
+  </section>
+
+  <section id="delivery-order">
+    <h2>Delivery Order</h2>
+    <ol>
+      <li>P1 proves the browser connection-pool failure with a failing e2e regression.</li>
+      <li>P2 removes persistent browser SSE and introduces finite polling.</li>
+      <li>P3 proves comments, source sync, and event-storm behavior still converge.</li>
+      <li>P4 proves CLI/agent compatibility and updates guidance only if necessary.</li>
+    </ol>
+  </section>
+
+  <section id="non-goals">
+    <h2>Non-Goals</h2>
+    <ul>
+      <li>No authentication or trusted-network behavior changes.</li>
+      <li>No changes to queue-backed comment delivery semantics.</li>
+      <li>No removal of the server SSE route or CLI/debug watch support.</li>
+      <li>No broad rewrite of the comment sidebar, rendering pipeline, or source-sync service.</li>
+      <li>No HTTP/2 migration as the primary fix; the browser shell should be robust on the existing HTTP/1 service.</li>
+    </ul>
+  </section>
+
+  <section id="resume-instructions">
+    <h2>Resume Instructions</h2>
+    <p>Implementation is complete locally. Continue with scoped implementation review, final diff audit, commit, push, PR creation, and post-PR monitoring.</p>
+  </section>
+
+  <section id="decisions-deviations-log">
+    <h2>Decisions / Deviations Log</h2>
+    <ul>
+      <li>2026-06-08: Live diagnostics corrected the root cause from metadata event storms to browser per-origin connection exhaustion from one persistent browser <code>EventSource</code> per open review page.</li>
+      <li>2026-06-08: User clarified the client host is not relevant to the plan; the failure is same-origin browser connection exhaustion against the shared plan-reviewer service.</li>
+      <li>2026-06-08: Recommended solution is browser-only finite polling while preserving SSE for CLI and agent listener workflows.</li>
+      <li>2026-06-08: Browser review comments processed. The plan now removes host-specific wording and incorporates Codex/Claude clarity findings on pass-through <code>EventSource</code> regression instrumentation, single-context Playwright reproduction, poll-event normalization, and visible/hidden polling cadence.</li>
+      <li>2026-06-08: Product-intent check found the plan aligned with reliable browser review, queue-backed delivery, and cross-surface parity. Codex and Claude both returned <code>VERDICT: PLAN_EXECUTION_READY</code> with no blocking readiness gaps.</li>
+      <li>2026-06-08: P1 RED evidence captured: after adding the many-tabs e2e regression, <code>bun run test:e2e</code> failed on current code with <code>page.goto: Timeout 10000ms exceeded</code> while opening the shared-context review pages.</li>
+      <li>2026-06-08: P2/P3 GREEN evidence captured after replacing browser <code>EventSource</code> with finite <code>/events/poll</code>: <code>bun run test:e2e</code> passed and preserved plan index, annotation, image annotation, event-storm, many-tab, and source-sync scenarios.</li>
+      <li>2026-06-08: P4 compatibility evidence captured: <code>bun run test</code> passed, <code>bun run test:fixtures -- --scenario seeded-comment-stream</code> passed, and <code>bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated</code> passed on rerun after one transient Node/Undici socket error during server restart.</li>
+      <li>2026-06-08: Final verification on the completed diff passed: <code>bun run test</code>, <code>bun run test:e2e</code>, <code>bun run test:fixtures -- --scenario seeded-comment-stream</code>, and <code>bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated</code>.</li>
+      <li>2026-06-08: Rebased scoped work onto <code>origin/main</code>, preserving upstream comment-deletion behavior. Post-rebase verification passed <code>bun run test</code>, <code>bun run test:e2e</code>, <code>bun run test:fixtures -- --scenario seeded-comment-stream</code>, and a single-scenario rerun of <code>bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated</code>. The combined fixture sequence hit a repeat Node 26/Undici <code>setTypeOfService EINVAL</code> during simulated server restart before the isolated rerun passed.</li>
+      <li>2026-06-08: Scoped implementation reviews completed. Codex returned <code>VERDICT: PASS_SCOPED</code> with no findings. Claude returned <code>VERDICT: PASS_SCOPED</code>; deferred out-of-scope follow-ups are bfcache restore behavior after <code>pagehide</code> and the Node 26/Undici simulated-restart fixture flake.</li>
+      <li>2026-06-08: PR review feedback classified as <code>IN_PLAN</code>: hidden tabs could advance the event cursor on visibility restore without forcing a missed source-sync plan reload. Fixed by making visibility catch-up request <code>reloadPlan</code> and <code>forceReloadPlan</code> while advancing the sequence, and added e2e coverage for hidden source-sync catch-up. Verification passed <code>bun run test:e2e</code>, <code>bun run test</code>, <code>bun run test:fixtures -- --scenario seeded-comment-stream</code>, and <code>bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated</code>.</li>
+      <li>2026-06-08: Post-feedback scoped review rerun completed. Codex returned <code>VERDICT: PASS_SCOPED</code> with no findings. Claude returned <code>VERDICT: PASS_WITH_DEFERRED_FOLLOW_UPS</code>, limited to the already-deferred bfcache restore and Node 26/Undici fixture flake follow-ups.</li>
+      <li>2026-06-08: Second PR review feedback classified as <code>REGRESSION_FROM_THIS_DIFF</code>: a transient visibility catch-up metadata failure could prevent polling from resuming. Fixed by resuming polling in the visibility handler's completion path and added e2e coverage that fails the first visible catch-up request while requiring source-sync catch-up through the poller.</li>
+      <li>2026-06-08: Second feedback fix verification passed <code>bun run test:e2e</code>. Scoped review rerun passed: Codex returned <code>VERDICT: PASS_SCOPED</code> with no findings; Claude returned <code>VERDICT: PASS_WITH_DEFERRED_FOLLOW_UPS</code> limited to already-deferred out-of-scope follow-ups.</li>
+      <li>2026-06-08: Third PR review feedback classified as <code>REGRESSION_FROM_THIS_DIFF</code>: a persisted bfcache restore after <code>pagehide</code> could leave browser polling permanently stopped. Fixed by restarting polling on persisted <code>pageshow</code> and added e2e coverage for source-sync catch-up after a simulated bfcache restore.</li>
+      <li>2026-06-08: Third feedback Codex rerun found one remaining <code>REGRESSION_FROM_THIS_DIFF</code>: persisted <code>pageshow</code> while still hidden could leave the later visible path unable to schedule polling. Fixed by clearing the stopped flag before hidden checks on restored/visible paths and extended e2e coverage to restore while hidden before becoming visible. Verification passed <code>bun run test:e2e</code>.</li>
+      <li>2026-06-08: Corrected hidden bfcache restore verification passed <code>bun run test:e2e</code> and <code>bun run test</code>. Final bfcache feedback scoped reviews passed: Codex returned <code>VERDICT: PASS_SCOPED</code> with no findings; Claude returned <code>VERDICT: PASS_SCOPED</code> with no in-scope defects and only the already-deferred Node 26/Undici fixture flake noted.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>

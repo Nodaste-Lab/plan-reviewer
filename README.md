@@ -73,7 +73,7 @@ Accept: text/event-stream
 Last-Event-ID: <last-seen-sequence>
 ```
 
-SSE frames use `id: <sequence>`, `event: comment.created|comment.claimed|comment.acknowledged|comment.resolved|comment.released|comment.deleted`, and JSON `data`. Non-queue event streams also include `plan.version.registered`, `plan.version.synced`, and `plan.sync.failed` for browser refresh/status updates. On reconnect, `Last-Event-ID` replays later events. Heartbeats are sent every 15 seconds. If SSE is unavailable, agents poll:
+SSE frames use `id: <sequence>`, `event: comment.created|comment.claimed|comment.acknowledged|comment.resolved|comment.released|comment.deleted`, and JSON `data`. Non-queue event streams also include `plan.version.registered`, `plan.version.synced`, and `plan.sync.failed` for debug consumers; the browser review shell uses finite `/events/poll` requests for freshness instead of persistent SSE. On reconnect, `Last-Event-ID` replays later events. Heartbeats are sent every 15 seconds. If SSE is unavailable, agents poll:
 
 ```http
 GET /api/plans/:planId/events/poll?afterSequence=<last-seen-sequence>&mode=queue
