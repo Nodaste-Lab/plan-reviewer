@@ -728,6 +728,51 @@ async function releaseComment(commentId: string, options: { url?: string; claim?
   else process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
 }
 
+async function deferPlan(planId: string, options: { url?: string; note?: string; json?: boolean }) {
+  if (!options.note?.trim()) throw new PlanReviewError('validation_failed', 'defer requires --note <reason>', 1, { planId }, 'Retry with --note "why paused and next step".');
+  const serviceUrl = resolveServiceUrl(options.url);
+  const data = await requestJson<unknown>(`${serviceUrl}/api/plans/${planId}/defer`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ note: options.note })
+  });
+  if (options.json) printJson(data);
+  else process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
+}
+
+async function resumePlan(planId: string, options: { url?: string; note?: string; json?: boolean }) {
+  const serviceUrl = resolveServiceUrl(options.url);
+  const data = await requestJson<unknown>(`${serviceUrl}/api/plans/${planId}/resume`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(options.note?.trim() ? { note: options.note } : {})
+  });
+  if (options.json) printJson(data);
+  else process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
+}
+
+async function addPlanNote(planId: string, options: { url?: string; note?: string; json?: boolean }) {
+  if (!options.note?.trim()) throw new PlanReviewError('validation_failed', 'notes add requires --note <text>', 1, { planId }, 'Retry with --note "current status or next step".');
+  const serviceUrl = resolveServiceUrl(options.url);
+  const data = await requestJson<unknown>(`${serviceUrl}/api/plans/${planId}/notes`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ body: options.note })
+  });
+  if (options.json) printJson(data);
+  else process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
+}
+
+async function listPlanNotes(planId: string, options: { url?: string; json?: boolean; limit?: string }) {
+  const serviceUrl = resolveServiceUrl(options.url);
+  const params = new URLSearchParams();
+  if (options.limit) params.set('limit', options.limit);
+  const query = params.toString();
+  const data = await requestJson<unknown>(`${serviceUrl}/api/plans/${planId}/notes${query ? `?${query}` : ''}`);
+  if (options.json) printJson(data);
+  else process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
+}
+
 export async function main(argv: string[] = process.argv.slice(2)) {
   const program = new Command();
   program.name('plan-review').description('Local HTML plan review daemon and CLI');
@@ -849,6 +894,30 @@ export async function main(argv: string[] = process.argv.slice(2)) {
     .option('--reason <reason>')
     .option('--json')
     .action(releaseComment);
+
+  program.command('defer <planId>')
+    .option('--url <url>')
+    .option('--note <text>', 'required reason/status note for later pickup')
+    .option('--json')
+    .action(deferPlan);
+
+  program.command('resume <planId>')
+    .option('--url <url>')
+    .option('--note <text>', 'optional resume note for agents')
+    .option('--json')
+    .action(resumePlan);
+
+  const notes = program.command('notes');
+  notes.command('add <planId>')
+    .option('--url <url>')
+    .option('--note <text>', 'required plan note text')
+    .option('--json')
+    .action(addPlanNote);
+  notes.command('list <planId>')
+    .option('--url <url>')
+    .option('--limit <limit>')
+    .option('--json')
+    .action(listPlanNotes);
 
   try {
     await program.parseAsync(argv, { from: 'user' });

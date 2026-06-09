@@ -41,6 +41,26 @@ plan-review register thoughts/plans/my-plan.html --snapshot --execution-ready fa
 
 The browser shell renders sanitized HTML in a no-script iframe and keeps the comment UI in the parent page. Selecting a DOM element opens the composer; image and text comments use the same comment API with `anchorType: "image"` or `anchorType: "text_range"`. Each open select → comment composer gets one browser-generated `clientMutationId`; retries from that same composer reuse the identifier, so repeated Submit clicks, keyboard submit, or network retries create at most one comment. If the service cannot read a live-linked source file, it keeps serving the last good rendered version and exposes the sync failure in the API and sidebar.
 
+## Deferred Plans and Plan Notes
+
+Use deferred state when a plan should leave the active queue but remain easy to pick up later. Deferring requires a durable note so operators and agents can see why work paused and what should happen next:
+
+```bash
+plan-review defer plan_123 --note "Blocked on PM review; resume at P3" --json
+plan-review resume plan_123 --note "PM review complete" --json
+```
+
+Deferred filesystem-backed plans stop source watching while paused. Resuming registers the watcher again and runs a manual sync so the review page either catches up to current source or shows a truthful source-sync warning.
+
+Plan notes are append-only plan-scoped records, separate from reviewer comments and queue claims. They stay with active, deferred, and archived plans and are available to agents without browser scraping:
+
+```bash
+plan-review notes add plan_123 --note "Current status: tests need AC-4 coverage" --json
+plan-review notes list plan_123 --json
+```
+
+Browser navigation keeps lifecycle buckets separate: `/` shows active plans, `/deferred` shows paused plans with resume controls and latest notes, and `/archive` shows archived plans. Plan detail pages expose notes plus lifecycle actions: active plans can be deferred, deferred plans can be resumed or archived, and archived plans can be restored.
+
 ## Agent Listener Contract
 
 Agents should use the queue-backed `agent next` command as the primary browser-comment delivery path. Prefer the `agentInstructions.preferredCommand` returned by registration; API command templates are service-local and adapters should render them with `--url <registration service URL>` before execution. CLI human output already renders copy-paste commands with the resolved `--url`.

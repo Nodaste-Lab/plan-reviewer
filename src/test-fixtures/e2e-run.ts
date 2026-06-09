@@ -1270,6 +1270,92 @@ try {
     fs.rmSync(syncDir, { recursive: true, force: true });
   }
 
+  const deferredSyncDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-review-e2e-deferred-sync-'));
+  try {
+    const deferredSyncPath = path.join(deferredSyncDir, 'deferred-live-plan.html');
+    const deferredSyncHtmlV1 = '<!doctype html><html><body><main><section id="deferred-sync-target"><h1>Deferred sync</h1><p>Deferred sync v1</p></section></main></body></html>';
+    fs.writeFileSync(deferredSyncPath, deferredSyncHtmlV1);
+    const deferredSyncStat = fs.statSync(deferredSyncPath);
+    const deferredRegister = await context.post('/api/plans/register', {
+      data: {
+        repoKey: 'e2e-deferred-sync-repo',
+        repoName: 'e2e-deferred-sync',
+        rootPath: deferredSyncDir,
+        branch: 'main',
+        commitSha: 'e2e-deferred-sync',
+        planPath: 'deferred-live-plan.html',
+        slug: 'e2e-deferred-sync',
+        html: deferredSyncHtmlV1,
+        fileHash: sha256(deferredSyncHtmlV1),
+        publicationMetadata: {
+          worktreePath: deferredSyncDir,
+          branch: 'main',
+          executionReady: false,
+          executionReadyBasis: 'agent-review-results'
+        },
+        sourcePath: deferredSyncPath,
+        sourceMtimeMs: deferredSyncStat.mtimeMs,
+        sourceSize: deferredSyncStat.size,
+        watchMode: 'filesystem',
+        updateMode: 'upsert'
+      }
+    });
+    assert.equal(deferredRegister.ok(), true);
+    const deferredRegistered = (await deferredRegister.json()).data as { planId: string; versionId: string };
+
+    const addedNote = await context.post(`/api/plans/${deferredRegistered.planId}/notes`, { data: { body: 'E2E note before defer.' } });
+    assert.equal(addedNote.ok(), true);
+    const pendingComment = await context.post(`/api/plans/${deferredRegistered.planId}/comments`, {
+      data: {
+        versionId: deferredRegistered.versionId,
+        body: 'Pending comment should wait while deferred.',
+        anchorType: 'dom',
+        anchor: { planNodeId: 'deferred-sync-target', cssSelector: '#deferred-sync-target', textPreview: 'Deferred sync' }
+      }
+    });
+    assert.equal(pendingComment.ok(), true);
+
+    const deferred = await context.post(`/api/plans/${deferredRegistered.planId}/defer`, { data: { note: 'E2E pause before source sync catches up.' } });
+    assert.equal(deferred.ok(), true);
+    assert.equal((await deferred.json()).data.plan.lifecycleState, 'deferred');
+    const deferredQueue = await context.get(`/api/agent/queue?planId=${deferredRegistered.planId}`);
+    assert.equal(deferredQueue.ok(), true);
+    assert.deepEqual((await deferredQueue.json()).data.items, []);
+    const deferredPageResponse = await context.get('/deferred');
+    assert.equal(deferredPageResponse.ok(), true);
+    assert.match(await deferredPageResponse.text(), /E2E pause before source sync catches up/);
+    const deferredNotes = await context.get(`/api/plans/${deferredRegistered.planId}/notes`);
+    assert.equal(deferredNotes.ok(), true);
+    assert.equal(((await deferredNotes.json()).data.notes as Array<unknown>).length, 2);
+
+    const deferredSyncHtmlV2 = deferredSyncHtmlV1.replace('Deferred sync v1', 'Deferred sync v2');
+    fs.writeFileSync(deferredSyncPath, deferredSyncHtmlV2);
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    const stillDeferredRender = await context.get(`/render/${deferredRegistered.planId}`);
+    assert.equal(stillDeferredRender.ok(), true);
+    const stillDeferredHtml = await stillDeferredRender.text();
+    assert.match(stillDeferredHtml, /Deferred sync v1/);
+    assert.doesNotMatch(stillDeferredHtml, /Deferred sync v2/);
+
+    const resumed = await context.post(`/api/plans/${deferredRegistered.planId}/resume`, { data: { note: 'E2E resume after pause.' } });
+    assert.equal(resumed.ok(), true);
+    assert.equal((await resumed.json()).data.plan.lifecycleState, 'active');
+    let resumedHtml = '';
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const resumedRender = await context.get(`/render/${deferredRegistered.planId}`);
+      assert.equal(resumedRender.ok(), true);
+      resumedHtml = await resumedRender.text();
+      if (/Deferred sync v2/.test(resumedHtml)) break;
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+    assert.match(resumedHtml, /Deferred sync v2/);
+    const resumedQueue = await context.get(`/api/agent/queue?planId=${deferredRegistered.planId}`);
+    assert.equal(resumedQueue.ok(), true);
+    assert.equal(((await resumedQueue.json()).data.items as Array<unknown>).length, 1);
+  } finally {
+    fs.rmSync(deferredSyncDir, { recursive: true, force: true });
+  }
+
   const comments = await context.get(`/api/plans/${registered.planId}/comments`);
   const commentData = (await comments.json()).data.comments as Array<{ body: string; screenshotAssetId?: string; anchor?: { selectedText?: string; planNodeId?: string; domPath?: string; xpath?: string; textQuote?: unknown; normalizedPoint?: { x?: number; y?: number }; normalizedRect?: { width: number; height: number }; displayedRect?: unknown; zoomState?: { scale: number; panX?: number; panY?: number }; imageHash?: string } }>;
   const uiComment = commentData.find(comment => comment.body === 'Browser DOM annotation comment\nsecond line');
@@ -1304,7 +1390,7 @@ try {
   assert.ok(assetBody.length > 100, `expected non-trivial marker screenshot, got ${assetBody.length} bytes`);
 
   await context.dispose();
-  console.log('e2e scenarios passed: plan index, dom annotation, image annotation, plan sync');
+  console.log('e2e scenarios passed: plan index, dom annotation, image annotation, plan sync, deferred notes resume sync');
 } finally {
   await app.close();
 }

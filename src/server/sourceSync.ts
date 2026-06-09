@@ -115,7 +115,7 @@ export class SourceSyncService {
   async register(planId: string): Promise<void> {
     await this.unregister(planId);
     const { plan } = this.store.getPlan(planId);
-    if (plan.archivedAt || plan.watchMode !== 'filesystem' || !plan.sourcePath) return;
+    if (plan.archivedAt || plan.lifecycleState === 'deferred' || plan.watchMode !== 'filesystem' || !plan.sourcePath) return;
     const watchPaths = [plan.sourcePath];
     try {
       const html = fs.readFileSync(plan.sourcePath, 'utf8');
@@ -191,7 +191,7 @@ export class SourceSyncService {
 
   private async performSync(planId: string, reason: string): Promise<void> {
     const { plan, version } = this.store.getPlan(planId);
-    if (plan.archivedAt || plan.watchMode !== 'filesystem' || !plan.sourcePath) return;
+    if (plan.archivedAt || plan.lifecycleState === 'deferred' || plan.watchMode !== 'filesystem' || !plan.sourcePath) return;
     try {
       const stat = fs.statSync(plan.sourcePath);
       if (!stat.isFile()) throw new Error(`Source path is not a file: ${plan.sourcePath}`);
@@ -222,12 +222,12 @@ export class SourceSyncService {
       };
       const rendered = renderPlan(payload);
       if (fileHash === version.fileHash && sha256(rendered.renderedHtml) === sha256(this.store.getRenderedHtml(plan.id, version.id))) {
-        if (this.store.getPlan(plan.id).plan.archivedAt) return;
+        if (this.store.getPlan(plan.id).plan.lifecycleState !== 'active') return;
         this.bus.emitEvent(this.store.markPlanSyncSucceeded(plan.id, version.id));
         if (needsWatcherRefresh) await this.register(plan.id);
         return;
       }
-      if (this.store.getPlan(plan.id).plan.archivedAt) return;
+      if (this.store.getPlan(plan.id).plan.lifecycleState !== 'active') return;
       const result = this.store.registerPlan(payload, rendered.renderedHtml, rendered.warnings, 'filesystem_watch');
       this.bus.emitEvent(result.event);
       if (htmlChanged || needsWatcherRefresh) await this.register(plan.id);
@@ -237,6 +237,7 @@ export class SourceSyncService {
   }
 
   private fail(planId: string, error: unknown, reason = 'filesystem_watch'): void {
+    if (this.store.getPlan(planId).plan.lifecycleState !== 'active') return;
     const message = error instanceof Error ? error.message : String(error);
     const code = error && typeof error === 'object' && 'code' in error ? String((error as { code?: unknown }).code) : undefined;
     const nextAction = code === 'incomplete_source_write'
