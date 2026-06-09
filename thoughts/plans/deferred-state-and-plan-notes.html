@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan Reviewer: Deferred plans and persistent notes</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #08111f;
+      --panel: #111827;
+      --panel-2: #0f172a;
+      --text: #e5e7eb;
+      --muted: #a7b0c0;
+      --accent: #38bdf8;
+      --accent-2: #a78bfa;
+      --good: #22c55e;
+      --warn: #f59e0b;
+      --danger: #fb7185;
+      --border: #2b364d;
+      --code: #020617;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.16), transparent 28rem), var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.56;
+    }
+    main { max-width: 1180px; margin: 0 auto; padding: 40px 24px 72px; }
+    header, section, article { border: 1px solid var(--border); background: rgba(17, 24, 39, 0.92); border-radius: 18px; }
+    header { padding: 30px; margin-bottom: 18px; }
+    section { padding: 24px; margin: 18px 0; }
+    article { padding: 18px; margin: 14px 0; background: rgba(15, 23, 42, 0.88); }
+    h1, h2, h3 { line-height: 1.15; margin: 0 0 12px; }
+    h1 { font-size: clamp(2rem, 4vw, 3.3rem); letter-spacing: -0.04em; }
+    h2 { font-size: 1.5rem; color: #f8fafc; }
+    h3 { font-size: 1.06rem; color: #dbeafe; }
+    p { margin: 0 0 12px; }
+    a { color: #7dd3fc; }
+    ul, ol { margin: 10px 0 0 1.2rem; padding: 0; }
+    li { margin: 7px 0; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+    code { background: rgba(2, 6, 23, 0.9); color: #dbeafe; border: 1px solid #1e293b; border-radius: 6px; padding: 0.1rem 0.35rem; }
+    pre { overflow: auto; background: var(--code); color: #dbeafe; border: 1px solid #1e293b; border-radius: 12px; padding: 14px; margin: 12px 0 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { border: 1px solid var(--border); padding: 10px; text-align: left; vertical-align: top; }
+    th { background: #172033; color: #f8fafc; }
+    .eyebrow { color: var(--accent); text-transform: uppercase; font-size: 0.78rem; font-weight: 800; letter-spacing: 0.12em; }
+    .muted { color: var(--muted); }
+    .pill { display: inline-block; border: 1px solid var(--border); background: #172033; border-radius: 999px; padding: 0.25rem 0.6rem; margin: 0.2rem 0.25rem 0.2rem 0; color: #cbd5e1; font-weight: 700; font-size: 0.82rem; }
+    .decision { border-left: 4px solid var(--accent); }
+    .warning { border-left: 4px solid var(--warn); }
+    .success { border-left: 4px solid var(--good); }
+    .danger { border-left: 4px solid var(--danger); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+    .phase-list { list-style: none; margin-left: 0; }
+    .phase-list li.phase { display: block; margin: 14px 0; }
+    .phase-title { display: flex; gap: 10px; align-items: flex-start; }
+    .phase-title input { margin-top: 0.35rem; accent-color: var(--accent); }
+  </style>
+</head>
+<body>
+  <main id="plan-root">
+    <header id="title">
+      <div class="eyebrow">Implementation plan</div>
+      <h1>Add deferred plan state and persistent agent-accessible plan notes</h1>
+      <p class="muted">Planning artifact only. No product code has been changed for this request.</p>
+      <p><span class="pill">Status: execution-ready</span><span class="pill">Scope: plan lifecycle + notes</span><span class="pill">Risk: medium data model change</span><span class="pill">Branch: add-deferred-state-and-notes</span></p>
+    </header>
+
+    <section id="status">
+      <h2>Status</h2>
+      <article id="status-ready" class="success">
+        <h3>Execution-ready planning state</h3>
+        <p>The repo already has active and archived plan behavior, source sync, comments, queue delivery, CLI commands, and an index/review shell. This plan locks a small lifecycle extension: add a reversible <code>deferred</code> state for plans that should leave the active queue without becoming archive/history, and add first-class notes that stay with the plan and are readable by agents through CLI and API surfaces.</p>
+      </article>
+    </section>
+
+    <section id="goal">
+      <h2>Goal</h2>
+      <p>Let operators defer a plan with a reason/status note, find deferred plans later, resume them back into the active workflow, and attach persistent plan-scoped notes that agents can read before acting on the plan.</p>
+    </section>
+
+    <section id="why">
+      <h2>Why this plan exists</h2>
+      <p>Archive currently hides plans as historical/quiet items. It is not the right product concept for “pause this because I need to pick it up later.” A deferred plan needs to be out of the active index, visible in a follow-up inbox, and carry durable context such as why it was paused, current state, or the next agent action.</p>
+    </section>
+
+    <section id="authority-inputs">
+      <h2>Authority and inputs</h2>
+      <ul>
+        <li><strong>User request:</strong> add a deferred state to plans for later pickup, and add notes that stay with a plan and are agent accessible.</li>
+        <li><strong>Repo reality:</strong> <code>README.md</code>, <code>src/schemas.ts</code>, <code>src/storage/database.ts</code>, <code>src/server/app.ts</code>, <code>src/cli.ts</code>, <code>src/server/sourceSync.ts</code>, <code>src/__tests__/contracts.test.ts</code>.</li>
+        <li><strong>Planning doctrine:</strong> the correct recovery/pickup path should be obvious; routine resume context should be embedded in the normal plan surfaces, not hidden in conversation memory.</li>
+      </ul>
+    </section>
+
+    <section id="current-reality">
+      <h2>Current implementation reality</h2>
+      <table id="reality-table">
+        <thead><tr><th>Surface</th><th>Current behavior</th><th>Implication</th></tr></thead>
+        <tbody>
+          <tr><td><code>plans</code> table</td><td>Stores source/watch metadata, publication metadata, and <code>archived_at</code>. There is no plan lifecycle enum and no plan notes table.</td><td>Add lifecycle columns without breaking existing archives; derive legacy rows as active unless <code>archived_at</code> is set.</td></tr>
+          <tr><td>Index and archive UI</td><td><code>/</code> shows active plans by filtering out archived plans. <code>/archive</code> lists archived plans and supports restore.</td><td>Add a separate deferred inbox so deferred plans are not confused with long-term archived history.</td></tr>
+          <tr><td>Review shell</td><td>Plan page has archive/restore buttons and a comments sidebar. Comments are reviewer annotations, not durable operator notes.</td><td>Add note visibility and note creation near the plan shell without overloading browser comments or the agent queue.</td></tr>
+          <tr><td>API</td><td>Exposes register, plan list/detail, archive/unarchive, comments, queue, and events.</td><td>Add explicit defer/resume and notes endpoints; include lifecycle and latest note summaries in existing list/detail payloads.</td></tr>
+          <tr><td>CLI</td><td>Supports register/index/watch/agent-next/queue/ack/resolve/release. No lifecycle or notes commands exist.</td><td>Add small operator/agent commands for defer, resume, notes list, and notes add.</td></tr>
+          <tr><td>Source sync</td><td>Archived filesystem plans stop watching and do not update until restored.</td><td>Deferred plans should follow the same quiet behavior: unregister watchers while deferred, then re-register and sync on resume.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="progress">
+      <h2>Progress</h2>
+      <ul class="phase-list">
+        <li class="phase" id="progress-p1"><span class="phase-title"><input type="checkbox" checked disabled> <strong>P1 - Lock lifecycle and notes contracts</strong></span></li>
+        <li class="phase" id="progress-p2"><span class="phase-title"><input type="checkbox" checked disabled> <strong>P2 - Add storage and API behavior</strong></span></li>
+        <li class="phase" id="progress-p3"><span class="phase-title"><input type="checkbox" checked disabled> <strong>P3 - Add CLI and agent surfaces</strong></span></li>
+        <li class="phase" id="progress-p4"><span class="phase-title"><input type="checkbox" checked disabled> <strong>P4 - Add browser plan UI</strong></span></li>
+        <li class="phase" id="progress-p5"><span class="phase-title"><input type="checkbox" disabled> <strong>P5 - Docs and end-to-end verification</strong></span></li>
+      </ul>
+    </section>
+
+    <section id="resume-instructions">
+      <h2>Resume instructions (agent)</h2>
+      <p>Read this plan fully, then start at the first unchecked item in <code>#progress</code>. Implement phases sequentially. Keep scope limited to deferred lifecycle state and persistent plan notes. Do not redesign comments, authentication, plan review queues, or the HTML authoring workflow. If implementation discovers that archive and deferred cannot share a quiet-source-sync path safely, record the deviation and keep deferred fail-closed rather than leaving stale active watchers running.</p>
+    </section>
+
+    <section id="product-intent-alignment">
+      <h2>Product intent alignment</h2>
+      <article id="default-workflow" class="decision">
+        <h3>Golden path</h3>
+        <p>An operator can pause with one action: <code>plan-review defer &lt;planId&gt; --note "why and next step"</code> or the browser “Defer” action. The plan disappears from the active index, appears in a deferred inbox with the note and timestamp, stops source-sync work while paused, and can be resumed with one action. Agents can inspect <code>plan-review notes list &lt;planId&gt; --json</code> or <code>GET /api/plans/:planId</code> and receive the same durable context.</p>
+      </article>
+      <article id="state-model" class="decision">
+        <h3>Locked lifecycle model</h3>
+        <p>Use a single lifecycle source of truth with states <code>active</code>, <code>deferred</code>, and <code>archived</code>. Keep existing <code>archived_at</code> for compatibility and add deferred metadata rather than treating notes as state. Archive remains long-term/historical; deferred means paused-but-expected-to-resume.</p>
+      </article>
+      <article id="notes-model" class="decision">
+        <h3>Locked notes model</h3>
+        <p>Plan notes are append-only records tied to <code>plan_id</code>, independent of plan versions and reviewer comments. They are not queue events requiring agent ack. Defer may create a note atomically, and regular notes may be added while active, deferred, or archived.</p>
+      </article>
+      <article id="source-sync-behavior" class="decision">
+        <h3>Source sync behavior</h3>
+        <p>Deferred filesystem plans should unregister watchers and skip queued/in-flight source sync the same way archived plans do. Resuming a deferred plan should register the watcher and run a manual sync so the browser opens with current source content or a truthful sync warning.</p>
+      </article>
+      <article id="fail-closed" class="warning">
+        <h3>Fail-closed boundaries</h3>
+        <p>Do not auto-resume on source changes, comment activity, or reregistration. Reregistration may refresh metadata and latest content but must preserve the deferred state until the user or agent explicitly resumes it. Ambiguous slug errors should keep the existing “use plan ID” guidance.</p>
+      </article>
+    </section>
+
+    <section id="locked-decisions">
+      <h2>Locked decisions</h2>
+      <ol>
+        <li id="decision-1"><strong>Deferred is first-class lifecycle, not archive:</strong> active index excludes deferred and archived plans; <code>/deferred</code> lists deferred plans; <code>/archive</code> remains archive-only. The HTML planner must add navigation buttons between Active, Deferred, and Archived views in the same style as the current archive navigation, and plan/review pages must expose explicit Defer and Resume controls for moving plans in and out of deferred status.</li>
+        <li id="decision-2"><strong>Notes are append-only:</strong> no edit/delete is required for this scope. A future task can add note editing if needed.</li>
+        <li id="decision-3"><strong>Defer requires human/agent-readable context:</strong> browser and CLI defer flows require a non-empty note/reason. Direct API should validate this too.</li>
+        <li id="decision-4"><strong>Resume preserves notes:</strong> resuming clears deferred state but leaves every note attached to the plan.</li>
+        <li id="decision-5"><strong>Agent access is API/CLI first:</strong> agents should not need browser scraping to read notes or deferred reasons.</li>
+      </ol>
+    </section>
+
+    <section id="acceptance-criteria">
+      <h2>Acceptance criteria</h2>
+      <ol>
+        <li id="ac-1">A registered active plan can be deferred with a required note/reason through API, CLI, and browser UI, including a visible browser Defer control on active plan pages.</li>
+        <li id="ac-2">Deferred plans are hidden from the active index, shown in a deferred inbox, excluded from the archive page, and included by API only when requested or addressed directly. Active, deferred, and archived HTML pages include clear navigation buttons to the other lifecycle views.</li>
+        <li id="ac-3">A deferred plan can be resumed through API, CLI, and browser UI, including a visible browser Resume control on deferred plan pages; it returns to active index visibility and source sync resumes safely.</li>
+        <li id="ac-4">Plan notes can be added and listed for active, deferred, and archived plans through API and CLI; plan detail payloads include recent notes and latest-note summary.</li>
+        <li id="ac-5">Defer creates or records the defer reason as plan-scoped note data so agents can understand why work paused and what to do next.</li>
+        <li id="ac-6">Reregistering, filesystem sync, service restart rehydration, and source changes preserve deferred state until explicit resume.</li>
+        <li id="ac-7">Errors are actionable: missing note, ambiguous plan identifier, not found plan, and invalid lifecycle transition explain the exact next action.</li>
+      </ol>
+    </section>
+
+    <section id="bdd-scenarios">
+      <h2>BDD scenarios</h2>
+      <article id="bdd-defer-active">
+        <h3>BDD-1: Defer an active plan</h3>
+        <p><strong>Given</strong> a filesystem-backed active plan is registered, <strong>when</strong> the operator defers it with “Blocked on PM review; next agent should revisit AC-3”, <strong>then</strong> the plan has lifecycle <code>deferred</code>, the note is stored with the plan, source watching stops, the active index omits it, and the deferred inbox displays the reason.</p>
+      </article>
+      <article id="bdd-resume-deferred">
+        <h3>BDD-2: Resume a deferred plan</h3>
+        <p><strong>Given</strong> a deferred filesystem-backed plan with notes, <strong>when</strong> the operator resumes it, <strong>then</strong> lifecycle becomes <code>active</code>, notes remain visible, the plan reappears on the active index, the watcher is registered, and manual source sync is attempted once.</p>
+      </article>
+      <article id="bdd-agent-notes">
+        <h3>BDD-3: Agent reads durable plan context</h3>
+        <p><strong>Given</strong> a plan has multiple notes and a deferred reason, <strong>when</strong> an agent calls <code>GET /api/plans/:planId</code> or <code>plan-review notes list :planId --json</code>, <strong>then</strong> the response includes note IDs, bodies, authors, timestamps, and the latest note summary without requiring browser access.</p>
+      </article>
+      <article id="bdd-reregister-preserves-defer">
+        <h3>BDD-4: Reregister preserves deferred state</h3>
+        <p><strong>Given</strong> a plan is deferred, <strong>when</strong> the source file is edited or <code>plan-review register</code> runs again for the same plan, <strong>then</strong> the plan remains deferred and quiet until explicit resume.</p>
+      </article>
+      <article id="bdd-missing-note">
+        <h3>BDD-5: Missing defer reason fails clearly</h3>
+        <p><strong>Given</strong> an operator tries to defer without a note, <strong>when</strong> the API or CLI validates the request, <strong>then</strong> it rejects the transition and says to retry with <code>--note "why paused and next step"</code>.</p>
+      </article>
+      <article id="bdd-archived-notes">
+        <h3>BDD-6: Notes stay with archived plans</h3>
+        <p><strong>Given</strong> a plan has notes, <strong>when</strong> it is archived and later restored or inspected, <strong>then</strong> those notes remain attached and visible through detail API and CLI note list.</p>
+      </article>
+    </section>
+
+    <section id="phase-plan">
+      <h2>Phase-by-phase execution plan</h2>
+
+      <article id="phase-p1-contracts">
+        <h3>P1 - Lock lifecycle and notes contracts</h3>
+        <h4>End State</h4>
+        <p>Schemas, types, and tests define lifecycle state, defer/resume inputs, and plan-note payloads before implementation code relies on them.</p>
+        <h4>Tests first</h4>
+        <ul>
+          <li>Add schema tests in <code>src/__tests__/contracts.test.ts</code> for lifecycle enum, required defer note, note creation/list payload shape, and legacy archive derivation.</li>
+          <li>Add failing store-level tests for active/deferred/archived list filtering and append-only notes.</li>
+        </ul>
+        <h4>Work</h4>
+        <ul>
+          <li>Add schemas for <code>planLifecycleState</code>, <code>deferPlan</code>, <code>resumePlan</code>, <code>createPlanNote</code>, and note records in <code>src/schemas.ts</code>.</li>
+          <li>Define the public response shape: <code>plan.lifecycleState</code>, <code>plan.deferredAt</code>, <code>plan.deferredNoteId</code>, <code>notes</code>, <code>latestNote</code>, and note counts where needed.</li>
+          <li>Add event names for <code>plan.deferred</code>, <code>plan.resumed</code>, and <code>plan.note.created</code> where event typing is used.</li>
+        </ul>
+        <h4>Expected files</h4>
+        <ul><li><code>src/schemas.ts</code></li><li><code>src/storage/database.ts</code></li><li><code>src/__tests__/contracts.test.ts</code></li></ul>
+        <h4>Verify</h4>
+        <pre><code>bun run build
+node --test dist/__tests__/contracts.test.js --test-name-pattern "lifecycle|note|defer"</code></pre>
+      </article>
+
+      <article id="phase-p2-storage-api">
+        <h3>P2 - Add storage and API behavior</h3>
+        <h4>End State</h4>
+        <p>The SQLite store can persist lifecycle state and notes, API routes expose defer/resume/notes behavior, and source sync respects deferred quieting.</p>
+        <h4>Tests first</h4>
+        <ul>
+          <li>Add API contract tests for <code>POST /api/plans/:planId/defer</code>, <code>POST /api/plans/:planId/resume</code>, <code>POST /api/plans/:planId/notes</code>, and <code>GET /api/plans/:planId/notes</code>.</li>
+          <li>Add source-sync tests mirroring archive behavior: deferred plans are not rehydrated, registered, or synced until resume.</li>
+        </ul>
+        <h4>Work</h4>
+        <ul>
+          <li>Add migration columns: <code>plans.lifecycle_state</code>, <code>plans.deferred_at</code>, <code>plans.deferred_note_id</code>; preserve <code>archived_at</code> and derive state defensively for legacy rows.</li>
+          <li>Add <code>plan_notes</code> table with <code>id</code>, <code>plan_id</code>, <code>body</code>, <code>created_by_json</code>, <code>created_at</code>, and optional <code>client_mutation_id</code> for idempotent UI/API retries.</li>
+          <li>Add store methods for <code>deferPlan</code>, <code>resumePlan</code>, <code>createPlanNote</code>, <code>listPlanNotes</code>, and note summary hydration in plan list/detail results.</li>
+          <li>Add API routes and emit lifecycle/note events after successful transitions.</li>
+          <li>Update <code>SourceSyncService</code> and <code>listFilesystemPlans()</code> so deferred plans are quiet and resume triggers watcher registration plus manual sync.</li>
+        </ul>
+        <h4>Expected files</h4>
+        <ul><li><code>src/storage/database.ts</code></li><li><code>src/server/app.ts</code></li><li><code>src/server/sourceSync.ts</code></li><li><code>src/__tests__/contracts.test.ts</code></li></ul>
+        <h4>Verify</h4>
+        <pre><code>bun run build
+node --test dist/__tests__/contracts.test.js --test-name-pattern "defer|resume|notes|source sync"</code></pre>
+      </article>
+
+      <article id="phase-p3-cli-agent">
+        <h3>P3 - Add CLI and agent surfaces</h3>
+        <h4>End State</h4>
+        <p>Operators and agents can defer, resume, and inspect/add plan notes without browser interaction.</p>
+        <h4>Tests first</h4>
+        <ul>
+          <li>Add CLI tests for <code>plan-review defer</code>, <code>plan-review resume</code>, <code>plan-review notes add</code>, and <code>plan-review notes list --json</code>.</li>
+          <li>Add error-output tests for missing <code>--note</code>, ambiguous slugs, and service/API failures.</li>
+        </ul>
+        <h4>Work</h4>
+        <ul>
+          <li>Add <code>plan-review defer &lt;planId&gt; --note &lt;text&gt; [--json]</code>.</li>
+          <li>Add <code>plan-review resume &lt;planId&gt; [--note &lt;text&gt;] [--json]</code>; optional resume note records why work resumed.</li>
+          <li>Add <code>plan-review notes add &lt;planId&gt; --note &lt;text&gt; [--json]</code> and <code>plan-review notes list &lt;planId&gt; [--json]</code>.</li>
+          <li>Update <code>plan-review index --json</code> payloads to include lifecycle/deferred/latest-note fields for agent triage.</li>
+        </ul>
+        <h4>Expected files</h4>
+        <ul><li><code>src/cli.ts</code></li><li><code>src/client/api.ts</code></li><li><code>src/__tests__/contracts.test.ts</code></li></ul>
+        <h4>Verify</h4>
+        <pre><code>bun run build
+node --test dist/__tests__/contracts.test.js --test-name-pattern "CLI.*defer|CLI.*notes|CLI.*resume"</code></pre>
+      </article>
+
+      <article id="phase-p4-browser-ui">
+        <h3>P4 - Add browser plan UI</h3>
+        <h4>End State</h4>
+        <p>The review browser exposes deferred plans and notes clearly without weakening the existing comments workflow.</p>
+        <h4>Tests first</h4>
+        <ul>
+          <li>Add server-rendered HTML tests for active index exclusion, deferred inbox rendering, deferred card note summary, cross-view navigation buttons, and review shell Defer/Resume controls.</li>
+          <li>Add API/browser-shell tests for posting notes and defer/resume actions from the plan page, including moving a plan into deferred status and back to active status from browser controls.</li>
+        </ul>
+        <h4>Work</h4>
+        <ul>
+          <li>Add <code>/deferred</code> page modeled on archive page, with resume controls, filters, latest note, deferred age, source-sync warning if applicable, and navigation buttons back to Active index and Archived plans.</li>
+          <li>Update active index header to show a “Deferred (N) →” navigation button next to the existing “Archived (N) →” button, and update archive header to include a matching “Deferred (N) →” path so users can move between all lifecycle buckets without URL knowledge.</li>
+          <li>Update plan cards and detail shell to show lifecycle status, latest note, and note count.</li>
+          <li>Add a simple note composer in the review shell sidebar or nav area, separate from reviewer comments, plus “Defer plan” and “Resume plan” controls as appropriate. Active plan shells show Defer; deferred plan shells show Resume and still allow Archive; archived plan shells keep Restore and should not offer Resume unless restored first.</li>
+          <li>Keep reviewer comments queue unchanged; notes should not appear as pending comments.</li>
+        </ul>
+        <h4>Expected files</h4>
+        <ul><li><code>src/server/app.ts</code></li><li><code>src/__tests__/contracts.test.ts</code></li></ul>
+        <h4>Verify</h4>
+        <pre><code>bun run build
+node --test dist/__tests__/contracts.test.js --test-name-pattern "deferred page|note composer|plan lifecycle"</code></pre>
+      </article>
+
+      <article id="phase-p5-docs-e2e">
+        <h3>P5 - Docs and end-to-end verification</h3>
+        <h4>End State</h4>
+        <p>README and tests document the operator and agent workflows, and the full suite proves deferred state and notes work with existing registration, archive, source-sync, and comment behavior.</p>
+        <h4>Tests first</h4>
+        <ul>
+          <li>Add an end-to-end contract test that registers a live-linked plan, adds notes, defers it, confirms it is quiet, resumes it, and confirms source sync catches up.</li>
+        </ul>
+        <h4>Work</h4>
+        <ul>
+          <li>Update <code>README.md</code> with deferred plan workflow, note commands, and agent-access guidance.</li>
+          <li>Update any CLI help assertions so new commands remain discoverable.</li>
+          <li>Run the full build/test suite and one targeted fixture if the browser/index behavior changed enough to warrant it.</li>
+        </ul>
+        <h4>Expected files</h4>
+        <ul><li><code>README.md</code></li><li><code>src/__tests__/contracts.test.ts</code></li></ul>
+        <h4>Verify</h4>
+        <pre><code>bun run test
+bun run test:e2e -- --grep "plan index|source sync"</code></pre>
+      </article>
+    </section>
+
+    <section id="verification-strategy">
+      <h2>Verification strategy</h2>
+      <table id="coverage-matrix">
+        <thead><tr><th>Acceptance</th><th>Scenarios</th><th>Test layer</th><th>Verification</th></tr></thead>
+        <tbody>
+          <tr><td><a href="#ac-1">AC-1</a></td><td>BDD-1, BDD-5</td><td>Schema, API, CLI, browser-shell HTML</td><td><code>bun run test</code></td></tr>
+          <tr><td><a href="#ac-2">AC-2</a></td><td>BDD-1</td><td>Store list filters, index/deferred/archive HTML</td><td><code>node --test dist/__tests__/contracts.test.js --test-name-pattern "deferred"</code></td></tr>
+          <tr><td><a href="#ac-3">AC-3</a></td><td>BDD-2</td><td>API, CLI, source-sync service</td><td><code>bun run test</code></td></tr>
+          <tr><td><a href="#ac-4">AC-4</a></td><td>BDD-3, BDD-6</td><td>API detail/list, CLI notes commands</td><td><code>bun run build && node --test dist/**/*.test.js</code></td></tr>
+          <tr><td><a href="#ac-5">AC-5</a></td><td>BDD-1, BDD-3</td><td>Store transaction and API response assertions</td><td><code>bun run test</code></td></tr>
+          <tr><td><a href="#ac-6">AC-6</a></td><td>BDD-4</td><td>Source-sync and reregister regression tests</td><td><code>bun run test</code></td></tr>
+          <tr><td><a href="#ac-7">AC-7</a></td><td>BDD-5</td><td>Schema/API/CLI error tests</td><td><code>bun run test</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="delivery-order">
+      <h2>Delivery order</h2>
+      <ol>
+        <li>Merge schema/store/API behavior first so the source of truth exists.</li>
+        <li>Add CLI commands next so agents can use notes and deferred state without UI dependency.</li>
+        <li>Add browser surfaces after API contracts settle.</li>
+        <li>Update README and run full verification last.</li>
+      </ol>
+    </section>
+
+    <section id="non-goals">
+      <h2>Non-goals</h2>
+      <ul>
+        <li>No note editing/deletion, rich text, tagging, or attachments.</li>
+        <li>No changes to browser reviewer comments, queue claiming, ack/resolve semantics, or agent-next behavior.</li>
+        <li>No auth/permissions model for notes beyond the existing unauthenticated MVP boundary.</li>
+        <li>No automatic defer/resume rules based on comments, source file changes, or elapsed time.</li>
+        <li>No migration of existing reviewer comments into notes.</li>
+      </ul>
+    </section>
+
+    <section id="decisions-deviations-log">
+      <h2>Decisions / Deviations log</h2>
+      <ul>
+        <li><strong>2026-06-08:</strong> Chose separate deferred lifecycle over reusing archive because the user intent is paused/resumable work, not historical cleanup.</li>
+        <li><strong>2026-06-08:</strong> Chose append-only notes as the MVP because they satisfy persistent context and agent access without introducing note conflict/edit semantics.</li>
+        <li><strong>2026-06-08:</strong> Implemented P1-P4 with lifecycle state, plan notes, defer/resume API and CLI commands, deferred inbox navigation, browser Defer/Resume controls, and source-sync quieting for deferred plans.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

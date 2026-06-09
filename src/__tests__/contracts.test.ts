@@ -351,6 +351,89 @@ test('index exposes phase progress and archive hides plans by default', async ()
   }
 });
 
+test('deferred lifecycle hides plans from active index and preserves agent-visible notes', async () => {
+  const app = createApp({ dbPath: tempDbPath('deferred-lifecycle') });
+  try {
+    const registered = await app.inject({ method: 'POST', url: '/api/plans/register', payload: sampleRegisterPayload() });
+    assert.equal(registered.statusCode, 200);
+    const planId = registered.json().data.planId;
+
+    const activeResume = await app.inject({ method: 'POST', url: `/api/plans/${planId}/resume`, payload: {} });
+    assert.equal(activeResume.statusCode, 409);
+    assert.equal(activeResume.json().error.code, 'invalid_state');
+    assert.match(activeResume.json().error.nextAction, /Defer the plan first/);
+
+    const missingReason = await app.inject({ method: 'POST', url: `/api/plans/${planId}/defer`, payload: { note: '' } });
+    assert.equal(missingReason.statusCode, 400);
+    assert.equal(missingReason.json().error.code, 'validation_failed');
+    assert.match(missingReason.json().error.message, /requires a non-empty note/);
+    assert.match(missingReason.json().error.nextAction, /--note "why paused and next step"/);
+
+    const note = await app.inject({ method: 'POST', url: `/api/plans/${planId}/notes`, payload: { body: 'Agent should check AC-4 before resuming.' } });
+    assert.equal(note.statusCode, 200);
+    assert.equal(note.json().data.note.body, 'Agent should check AC-4 before resuming.');
+
+    const activeShell = await app.inject({ method: 'GET', url: `/p/${planId}` });
+    assert.match(activeShell.body, /id="defer-plan"/);
+    assert.match(activeShell.body, /id="plan-notes-panel"/);
+    assert.doesNotMatch(activeShell.body, /id="resume-plan"/);
+
+    const deferred = await app.inject({ method: 'POST', url: `/api/plans/${planId}/defer`, payload: { note: 'Blocked on PM review; resume at P3.' } });
+    assert.equal(deferred.statusCode, 200);
+    assert.equal(deferred.json().data.plan.lifecycleState, 'deferred');
+    assert.equal(deferred.json().data.note.body, 'Blocked on PM review; resume at P3.');
+    assert.ok(deferred.json().data.plan.deferredAt);
+    assert.equal(deferred.json().data.plan.deferredNoteId, deferred.json().data.note.id);
+
+    const duplicateDefer = await app.inject({ method: 'POST', url: `/api/plans/${planId}/defer`, payload: { note: 'Still blocked.' } });
+    assert.equal(duplicateDefer.statusCode, 409);
+    assert.equal(duplicateDefer.json().error.code, 'invalid_state');
+    assert.match(duplicateDefer.json().error.nextAction, /Resume the plan before deferring it again/);
+
+    const activeApi = await app.inject({ method: 'GET', url: '/api/plans' });
+    assert.equal(activeApi.statusCode, 200);
+    assert.equal(activeApi.json().data.plans.length, 0);
+
+    const deferredApi = await app.inject({ method: 'GET', url: '/api/plans?lifecycle=deferred' });
+    assert.equal(deferredApi.json().data.plans.length, 1);
+    assert.equal(deferredApi.json().data.plans[0].plan.lifecycleState, 'deferred');
+    assert.equal(deferredApi.json().data.plans[0].latestNote.body, 'Blocked on PM review; resume at P3.');
+    assert.equal(deferredApi.json().data.plans[0].noteCount, 2);
+
+    const detail = await app.inject({ method: 'GET', url: `/api/plans/${planId}` });
+    assert.equal(detail.statusCode, 200);
+    assert.equal(detail.json().data.notes.length, 2);
+    assert.equal(detail.json().data.latestNote.body, 'Blocked on PM review; resume at P3.');
+
+    const deferredPage = await app.inject({ method: 'GET', url: '/deferred' });
+    assert.equal(deferredPage.statusCode, 200);
+    assert.match(deferredPage.body, /Deferred Plans/);
+    assert.match(deferredPage.body, /Blocked on PM review; resume at P3/);
+    assert.match(deferredPage.body, /data-resume-plan=/);
+    assert.match(deferredPage.body, /href="\/archive">Archived/);
+
+    const deferredShell = await app.inject({ method: 'GET', url: `/p/${planId}` });
+    assert.match(deferredShell.body, /id="resume-plan"/);
+    assert.match(deferredShell.body, /id="archive-plan"/);
+    assert.doesNotMatch(deferredShell.body, /id="defer-plan"/);
+
+    const activeIndex = await app.inject({ method: 'GET', url: '/' });
+    assert.match(activeIndex.body, /Deferred \(1\) →/);
+    assert.doesNotMatch(activeIndex.body, /sample-plan<\/a>/);
+
+    const resumed = await app.inject({ method: 'POST', url: `/api/plans/${planId}/resume`, payload: { note: 'Resuming after review.' } });
+    assert.equal(resumed.statusCode, 200);
+    assert.equal(resumed.json().data.plan.lifecycleState, 'active');
+    assert.equal(resumed.json().data.plan.deferredAt, undefined);
+
+    const visibleAgain = await app.inject({ method: 'GET', url: '/api/plans' });
+    assert.equal(visibleAgain.json().data.plans.length, 1);
+    assert.equal(visibleAgain.json().data.plans[0].noteCount, 3);
+  } finally {
+    await app.close();
+  }
+});
+
 test('index prioritizes started plan progress from most complete to least complete', async () => {
   const app = createApp({ dbPath: tempDbPath('index-progress-order') });
   const progressPlan = (slug: string, completed: number, repoName = 'sample', total = 4) => {
@@ -943,6 +1026,47 @@ test('queued filesystem sync does not update archived plans', async () => {
     assert.ok(store.getPlan(registered.planId).plan.archivedAt);
     assert.match(store.getRenderedHtml(registered.planId), /Before queued sync/);
     assert.doesNotMatch(store.getRenderedHtml(registered.planId), /Queued sync should not update/);
+  } finally {
+    await sourceSync.close();
+    store.close();
+    fs.rmSync(sourceDir, { recursive: true, force: true });
+  }
+});
+
+test('queued filesystem sync does not update deferred plans until resume', async () => {
+  const store = new PlanReviewStore(tempDbPath('deferred-queued-sync'));
+  const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-review-deferred-queued-sync-'));
+  const sourcePath = path.join(sourceDir, 'deferred-queued-sync.html');
+  const html = '<!doctype html><html><body><main><p>Before queued deferred sync.</p></main></body></html>';
+  fs.writeFileSync(sourcePath, html);
+  const stat = fs.statSync(sourcePath);
+  const sourceSync = new SourceSyncService(store, { emitEvent() {} });
+  try {
+    const payload = sampleRegisterPayload({
+      planPath: 'deferred-queued-sync.html',
+      slug: 'deferred-queued-sync',
+      html,
+      fileHash: sha256(html),
+      sourcePath,
+      sourceMtimeMs: stat.mtimeMs,
+      sourceSize: stat.size,
+      watchMode: 'filesystem',
+      assets: []
+    });
+    const rendered = renderPlan(payload);
+    const registered = store.registerPlan(payload, rendered.renderedHtml, rendered.warnings);
+    store.deferPlan(registered.planId, { note: 'Pause filesystem updates.' });
+
+    fs.writeFileSync(sourcePath, '<!doctype html><html><body><main><p>Deferred sync should wait for resume.</p></main></body></html>');
+    await sourceSync.syncNow(registered.planId, 'manual');
+
+    assert.equal(store.getPlan(registered.planId).plan.lifecycleState, 'deferred');
+    assert.match(store.getRenderedHtml(registered.planId), /Before queued deferred sync/);
+    assert.doesNotMatch(store.getRenderedHtml(registered.planId), /Deferred sync should wait/);
+
+    store.resumePlan(registered.planId);
+    await sourceSync.syncNow(registered.planId, 'manual');
+    assert.match(store.getRenderedHtml(registered.planId), /Deferred sync should wait for resume/);
   } finally {
     await sourceSync.close();
     store.close();
@@ -2149,6 +2273,68 @@ test('CLI release maps to the REST release endpoint', async () => {
     assert.equal(JSON.parse(captured.body ?? '{}').claimId, 'claim_1');
     assert.equal(JSON.parse(captured.body ?? '{}').reason, 'needs-retry');
     assert.equal(JSON.parse(result.stdout).comment.status, 'pending');
+  } finally {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
+
+test('CLI defer resume and notes commands map to REST endpoints', async () => {
+  const captures: Array<{ method?: string; url?: string; body?: string }> = [];
+  const server = http.createServer((request, response) => {
+    const capture = { method: request.method, url: request.url, body: '' };
+    request.on('data', chunk => { capture.body += chunk; });
+    request.on('end', () => {
+      captures.push(capture);
+      response.setHeader('content-type', 'application/json');
+      if (request.method === 'POST' && request.url === '/api/plans/plan_1/defer') {
+        response.end(JSON.stringify({ ok: true, data: { plan: { id: 'plan_1', lifecycleState: 'deferred' }, note: { id: 'note_1' } } }));
+        return;
+      }
+      if (request.method === 'POST' && request.url === '/api/plans/plan_1/resume') {
+        response.end(JSON.stringify({ ok: true, data: { plan: { id: 'plan_1', lifecycleState: 'active' } } }));
+        return;
+      }
+      if (request.method === 'POST' && request.url === '/api/plans/plan_1/notes') {
+        response.end(JSON.stringify({ ok: true, data: { note: { id: 'note_2' } } }));
+        return;
+      }
+      if (request.method === 'GET' && request.url === '/api/plans/plan_1/notes?limit=2') {
+        response.end(JSON.stringify({ ok: true, data: { notes: [{ id: 'note_1' }, { id: 'note_2' }] } }));
+        return;
+      }
+      response.statusCode = 404;
+      response.end(JSON.stringify({ ok: false, error: { code: 'not_found', message: 'not found' } }));
+    });
+  });
+
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address();
+    assert(address && typeof address !== 'string');
+    const url = `http://127.0.0.1:${address.port}`;
+
+    const missingDeferNote = await runCli(['defer', 'plan_1', '--url', url]);
+    assert.notEqual(missingDeferNote.code, 0);
+    assert.match(missingDeferNote.stderr, /defer requires --note/);
+    assert.equal(captures.length, 0);
+
+    assert.equal((await runCli(['defer', 'plan_1', '--url', url, '--note', 'Pause at P2.', '--json'])).code, 0);
+    assert.equal((await runCli(['resume', 'plan_1', '--url', url, '--note', 'Ready again.', '--json'])).code, 0);
+    const missingNoteAdd = await runCli(['notes', 'add', 'plan_1', '--url', url]);
+    assert.notEqual(missingNoteAdd.code, 0);
+    assert.match(missingNoteAdd.stderr, /notes add requires --note/);
+    assert.equal((await runCli(['notes', 'add', 'plan_1', '--url', url, '--note', 'Status update.', '--json'])).code, 0);
+    assert.equal((await runCli(['notes', 'list', 'plan_1', '--url', url, '--limit', '2', '--json'])).code, 0);
+
+    assert.deepEqual(captures.map(capture => `${capture.method} ${capture.url}`), [
+      'POST /api/plans/plan_1/defer',
+      'POST /api/plans/plan_1/resume',
+      'POST /api/plans/plan_1/notes',
+      'GET /api/plans/plan_1/notes?limit=2'
+    ]);
+    assert.deepEqual(JSON.parse(captures[0].body ?? '{}'), { note: 'Pause at P2.' });
+    assert.deepEqual(JSON.parse(captures[1].body ?? '{}'), { note: 'Ready again.' });
+    assert.deepEqual(JSON.parse(captures[2].body ?? '{}'), { body: 'Status update.' });
   } finally {
     await new Promise<void>(resolve => server.close(() => resolve()));
   }
