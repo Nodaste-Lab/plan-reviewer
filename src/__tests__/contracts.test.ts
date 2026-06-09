@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import http from 'node:http';
+import Database from 'better-sqlite3';
 import { spawn, spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -448,6 +449,153 @@ test('deferred lifecycle hides plans from active index and preserves agent-visib
     assert.equal(visibleAgain.json().data.plans[0].noteCount, 3);
   } finally {
     await app.close();
+  }
+});
+
+test('review shell exposes titled left navigator with nav-only monitoring sort', async () => {
+  const app = createApp({ dbPath: tempDbPath('left-navigator') });
+  const progressPlan = (slug: string, title: string, completed: number, options: Record<string, unknown> = {}) => {
+    const total = 4;
+    const items = Array.from({ length: total }, (_value, index) => `<li><input type="checkbox"${index < completed ? ' checked' : ''} /> P${index + 1}</li>`).join('\n');
+    const html = `<!doctype html><html><head><title>${title}</title></head><body><section id="progress"><h2>Progress</h2><ul>${items}</ul></section></body></html>`;
+    return sampleRegisterPayload({
+      repoKey: `git@example.com:demo/${slug}.git`,
+      repoName: slug,
+      remoteUrl: `git@example.com:demo/${slug}.git`,
+      rootPath: `/tmp/${slug}`,
+      slug,
+      planPath: `thoughts/plans/${slug}.html`,
+      html,
+      fileHash: sha256(html),
+      publicationMetadata: {
+        worktreePath: `/tmp/${slug}`,
+        branch: 'main',
+        executionReady: false,
+        executionReadyBasis: 'agent-review-results' as const
+      },
+      ...options
+    });
+  };
+  try {
+    const notReady = await app.inject({ method: 'POST', url: '/api/plans/register', payload: progressPlan('not-ready-nav', 'Not ready plan title', 1) });
+    const ready = await app.inject({ method: 'POST', url: '/api/plans/register', payload: progressPlan('ready-nav', 'Execution ready plan title', 2, { publicationMetadata: { worktreePath: '/tmp/ready-nav', branch: 'main', executionReady: true, executionReadyBasis: 'agent-review-results' as const } }) });
+    const complete = await app.inject({ method: 'POST', url: '/api/plans/register', payload: progressPlan('complete-nav', 'Complete plan title', 4) });
+    assert.equal(notReady.statusCode, 200);
+    assert.equal(ready.statusCode, 200);
+    assert.equal(complete.statusCode, 200);
+
+    const apiIndex = await app.inject({ method: 'GET', url: '/api/plans' });
+    assert.equal(apiIndex.statusCode, 200);
+    assert.equal(apiIndex.json().data.plans.some((item: { displayTitle?: string }) => item.displayTitle === 'Complete plan title'), true);
+    const pagedIndex = await app.inject({ method: 'GET', url: `/api/plans?limit=1&currentPlanId=${notReady.json().data.planId}` });
+    assert.equal(pagedIndex.statusCode, 200);
+    assert.equal(pagedIndex.json().data.nextCursor, '1');
+    const boundedNavPage = await app.inject({ method: 'GET', url: `/api/plans/navigator?limit=1&currentPlanId=${notReady.json().data.planId}` });
+    assert.equal(boundedNavPage.statusCode, 200);
+    assert.equal(boundedNavPage.json().data.plans[0].displayTitle, 'Complete plan title');
+    assert.equal(boundedNavPage.json().data.plans.some((item: { plan: { id: string } }) => item.plan.id === notReady.json().data.planId), true);
+    const oversizedNavPage = await app.inject({ method: 'GET', url: '/api/plans/navigator?limit=999' });
+    assert.equal(oversizedNavPage.statusCode, 400);
+    assert.equal(oversizedNavPage.json().error.code, 'validation_failed');
+
+    const shell = await app.inject({ method: 'GET', url: `/p/${notReady.json().data.planId}` });
+    assert.equal(shell.statusCode, 200);
+    assert.match(shell.body, /id="plan-list-nav"/);
+    assert.match(shell.body, /id="desktop-comments-toggle"[^>]*aria-controls="sidebar"[^>]*aria-expanded="false"/);
+    assert.match(shell.body, /id="current-plan-bar"/);
+    const navHtml = shell.body.slice(shell.body.indexOf('id="plan-list-nav"'), shell.body.indexOf('<main id="review"'));
+    const positions = ['Complete plan title', 'Execution ready plan title', 'Not ready plan title'].map(title => navHtml.indexOf(title));
+    assert.deepEqual(positions.map(position => position >= 0), [true, true, true]);
+    assert.deepEqual([...positions].sort((a, b) => a - b), positions);
+    assert.match(shell.body, /aria-current="page"/);
+  } finally {
+    await app.close();
+  }
+});
+
+test('navigator applies execution-ready rank before bounded ordering', async () => {
+  const app = createApp({ dbPath: tempDbPath('left-navigator-ready-bound') });
+  const progressPlan = (slug: string, title: string, completed: number, executionReady = false) => {
+    const items = Array.from({ length: 4 }, (_value, index) => `<li><input type="checkbox"${index < completed ? ' checked' : ''} /> P${index + 1}</li>`).join('\n');
+    const html = `<!doctype html><html><head><title>${title}</title></head><body><section id="progress"><h2>Progress</h2><ul>${items}</ul></section></body></html>`;
+    return sampleRegisterPayload({
+      repoKey: `git@example.com:demo/${slug}.git`,
+      repoName: slug,
+      remoteUrl: `git@example.com:demo/${slug}.git`,
+      rootPath: `/tmp/${slug}`,
+      slug,
+      planPath: `thoughts/plans/${slug}.html`,
+      html,
+      fileHash: sha256(html),
+      publicationMetadata: {
+        worktreePath: `/tmp/${slug}`,
+        branch: 'main',
+        executionReady,
+        executionReadyBasis: 'agent-review-results' as const
+      }
+    });
+  };
+  try {
+    const ready = await app.inject({ method: 'POST', url: '/api/plans/register', payload: progressPlan('ready-zero-progress-nav', 'Ready zero progress title', 0, true) });
+    const started = await app.inject({ method: 'POST', url: '/api/plans/register', payload: progressPlan('started-incomplete-nav', 'Started incomplete title', 1) });
+    assert.equal(ready.statusCode, 200);
+    assert.equal(started.statusCode, 200);
+
+    const boundedNavPage = await app.inject({ method: 'GET', url: `/api/plans/navigator?limit=1&currentPlanId=${started.json().data.planId}` });
+    assert.equal(boundedNavPage.statusCode, 200);
+    assert.equal(boundedNavPage.json().data.plans[0].displayTitle, 'Ready zero progress title');
+    assert.equal(boundedNavPage.json().data.plans.some((item: { plan: { id: string } }) => item.plan.id === started.json().data.planId), true);
+  } finally {
+    await app.close();
+  }
+});
+
+test('navigator backfills legacy progress metadata before bounded ordering', async () => {
+  const dbPath = tempDbPath('left-navigator-legacy-metadata');
+  const progressPlan = (slug: string, title: string, completed: number) => {
+    const items = Array.from({ length: 4 }, (_value, index) => `<li><input type="checkbox"${index < completed ? ' checked' : ''} /> P${index + 1}</li>`).join('\n');
+    const html = `<!doctype html><html><head><title>${title}</title></head><body><section id="progress"><h2>Progress</h2><ul>${items}</ul></section></body></html>`;
+    return sampleRegisterPayload({
+      repoKey: `git@example.com:demo/${slug}.git`,
+      repoName: slug,
+      remoteUrl: `git@example.com:demo/${slug}.git`,
+      rootPath: `/tmp/${slug}`,
+      slug,
+      planPath: `thoughts/plans/${slug}.html`,
+      html,
+      fileHash: sha256(html),
+      publicationMetadata: {
+        worktreePath: `/tmp/${slug}`,
+        branch: 'main',
+        executionReady: false,
+        executionReadyBasis: 'agent-review-results' as const
+      }
+    });
+  };
+
+  const seedApp = createApp({ dbPath });
+  try {
+    assert.equal((await seedApp.inject({ method: 'POST', url: '/api/plans/register', payload: progressPlan('legacy-complete-nav', 'Legacy complete title', 4) })).statusCode, 200);
+    assert.equal((await seedApp.inject({ method: 'POST', url: '/api/plans/register', payload: progressPlan('legacy-ready-nav', 'Legacy ready title', 2) })).statusCode, 200);
+    const current = await seedApp.inject({ method: 'POST', url: '/api/plans/register', payload: progressPlan('legacy-current-nav', 'Legacy current title', 1) });
+    assert.equal(current.statusCode, 200);
+    await seedApp.close();
+
+    const db = new Database(dbPath);
+    db.prepare('UPDATE plan_versions SET display_title = NULL, progress_json = NULL, progress_total = NULL, progress_completed = NULL').run();
+    db.close();
+
+    const app = createApp({ dbPath });
+    try {
+      const boundedNavPage = await app.inject({ method: 'GET', url: `/api/plans/navigator?limit=1&currentPlanId=${current.json().data.planId}` });
+      assert.equal(boundedNavPage.statusCode, 200);
+      assert.equal(boundedNavPage.json().data.plans[0].displayTitle, 'Legacy complete title');
+      assert.equal(boundedNavPage.json().data.plans.some((item: { plan: { id: string } }) => item.plan.id === current.json().data.planId), true);
+    } finally {
+      await app.close();
+    }
+  } finally {
+    await seedApp.close().catch(() => undefined);
   }
 });
 
