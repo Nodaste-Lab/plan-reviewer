@@ -3,6 +3,8 @@ import { EventEmitter } from 'node:events';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
+import { parse } from 'parse5';
+import type { DefaultTreeAdapterMap } from 'parse5';
 import { ZodError } from 'zod';
 import {
   ackCommentSchema,
@@ -28,6 +30,8 @@ interface EventBus {
 }
 
 type ListedPlan = ReturnType<PlanReviewStore['listPlans']>[number];
+type HtmlElement = DefaultTreeAdapterMap['element'];
+type HtmlNode = DefaultTreeAdapterMap['node'];
 
 function createEventBus(): EventBus {
   const emitter = new EventEmitter();
@@ -49,6 +53,45 @@ function eventForSse(event: StoredEvent): string {
 
 function escapeHtml(value: unknown): string {
   return String(value ?? '').replace(/[&<>"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[char]!));
+}
+
+function normalizePlanTitle(value: unknown): string {
+  return String(value ?? '').replace(/\s+/g, ' ').trim();
+}
+
+function htmlTextContent(node: HtmlNode): string {
+  if ('value' in node && typeof node.value === 'string') return node.value;
+  if ('childNodes' in node && Array.isArray(node.childNodes)) return node.childNodes.map(htmlTextContent).join('');
+  return '';
+}
+
+function childElement(node: HtmlNode, tagName: string): HtmlElement | undefined {
+  if ('childNodes' in node && Array.isArray(node.childNodes)) {
+    return node.childNodes.find((child): child is HtmlElement => 'tagName' in child && child.tagName === tagName);
+  }
+  return undefined;
+}
+
+function renderedHtmlTitle(renderedHtml: string): string | undefined {
+  const document = parse(renderedHtml) as DefaultTreeAdapterMap['document'];
+  const htmlElement = childElement(document as unknown as HtmlNode, 'html');
+  const headElement = childElement(htmlElement ?? (document as unknown as HtmlNode), 'head');
+  const titleElement = headElement ? childElement(headElement, 'title') : undefined;
+  const normalized = normalizePlanTitle(titleElement ? htmlTextContent(titleElement) : '');
+  return normalized || undefined;
+}
+
+function planTitleFallback(plan: ReturnType<PlanReviewStore['getPlan']>['plan']): string {
+  return normalizePlanTitle(`${plan.repoName} / ${plan.slug}`) || `Plan ${plan.id}`;
+}
+
+function reviewShellTitle(title: string): string {
+  const normalized = normalizePlanTitle(title);
+  return /(?:^|\s)Plan Review$/i.test(normalized) ? normalized : `${normalized} · Plan Review`;
+}
+
+function encodeClientData(value: string): string {
+  return Buffer.from(value, 'utf8').toString('base64');
 }
 
 function progressHtml(progress: ReturnType<PlanReviewStore['listPlans']>[number]['progress']): string {
@@ -256,18 +299,20 @@ function buildPlanRequestBody(planPath: string): string {
   return `/skill:scoped-plan-run thoughts/plans/${path.basename(planPath)}`;
 }
 
-function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan']): string {
+function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], shellTitle: string): string {
   const escapedPlanId = escapeHtml(plan.id);
+  const escapedShellTitle = escapeHtml(shellTitle);
+  const encodedTitleFallback = escapeHtml(encodeClientData(reviewShellTitle(planTitleFallback(plan))));
   const reviewButton = '<button id="request-execution-review" type="button">Request execution-ready review</button>';
   const buildButton = '<button id="build-plan" type="button">Build Plan</button>';
   const navActions = plan.archivedAt
     ? `<a href="/archive">← Archive</a>${reviewButton}${buildButton}<span id="archive-status" class="archive-status">Archived</span><button id="restore-plan" type="button">Restore plan</button>`
     : `<a href="/">← Plan index</a>${reviewButton}${buildButton}<span id="archive-status" class="archive-status" hidden></span><button id="archive-plan" type="button">Archive plan</button>`;
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Plan ${escapedPlanId}</title>
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapedShellTitle}</title>
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="stylesheet" href="/client.css">
-  </head><body data-plan-id="${escapedPlanId}">
+  </head><body data-plan-id="${escapedPlanId}" data-plan-title-fallback="${encodedTitleFallback}">
     <nav id="plan-navbar" aria-label="Plan actions">${navActions}</nav>
     <div id="app">
       <aside id="sidebar"><h1>Comments</h1><div id="sync-warning" hidden></div><div id="deferred-refresh-notice" hidden>Plan updated in the background. Finish or cancel this comment to refresh.</div><div id="comments"></div></aside>
@@ -317,6 +362,11 @@ import { finder } from '/vendor/finder.js';
 import { Washi } from '/vendor/washi.js';
 
 const planId = document.body.dataset.planId;
+let planTitleFallback = 'Plan Review';
+try {
+  const bytes = Uint8Array.from(atob(document.body.dataset.planTitleFallback || ''), char => char.charCodeAt(0));
+  planTitleFallback = new TextDecoder().decode(bytes) || planTitleFallback;
+} catch {}
 const frame = document.getElementById('plan-frame');
 const archivePlanButton = document.getElementById('archive-plan');
 const restorePlanButton = document.getElementById('restore-plan');
@@ -518,6 +568,14 @@ function replaceAttributes(target, source){
   for (const attr of [...target.attributes]) target.removeAttribute(attr.name);
   for (const attr of [...source.attributes]) target.setAttribute(attr.name, attr.value);
 }
+function normalizePlanTitle(value){ return String(value || '').replace(/\\s+/g, ' ').trim(); }
+function planReviewTitle(title){
+  const normalized = normalizePlanTitle(title) || planTitleFallback;
+  return /(?:^|\\s)Plan Review$/i.test(normalized) ? normalized : normalized + ' · Plan Review';
+}
+function updateShellTitleFromRenderedDocument(doc){
+  document.title = planReviewTitle(doc?.head?.querySelector?.('title')?.textContent || '');
+}
 async function refreshPlanFrameContent(nextVersionId, options = {}){
   if (options.clearSelection) clearPendingSelection();
   const doc = frame.contentDocument;
@@ -539,6 +597,7 @@ async function refreshPlanFrameContent(nextVersionId, options = {}){
     queueDeferredPlanRefresh({ versionId: nextVersionId, forceReloadPlan: Boolean(options.forceReloadPlan) });
     return;
   }
+  updateShellTitleFromRenderedDocument(parsed);
   replaceAttributes(doc.documentElement, parsed.documentElement);
   replaceAttributes(doc.head, parsed.head);
   replaceAttributes(doc.body, parsed.body);
@@ -1478,7 +1537,11 @@ export function createApp(options: AppOptions): FastifyInstance {
     try {
       const { planId } = request.params as { planId: string };
       const { plan } = store.getPlan(planId);
-      reply.header('Cache-Control', 'no-store').type('text/html').send(reviewShell(plan));
+      let title = planTitleFallback(plan);
+      try {
+        title = renderedHtmlTitle(store.getRenderedHtml(plan.id)) ?? title;
+      } catch {}
+      reply.header('Cache-Control', 'no-store').type('text/html').send(reviewShell(plan, reviewShellTitle(title)));
     } catch (error) {
       sendError(reply, error);
     }

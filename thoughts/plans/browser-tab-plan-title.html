@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Browser tab plan title</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0f172a; --panel:#111827; --panel-2:#1f2937; --text:#e5e7eb; --muted:#9ca3af; --accent:#7dd3fc; --accent-2:#a78bfa; --border:#334155; --ok:#86efac; --warn:#fde68a; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:linear-gradient(135deg,#0f172a 0%,#111827 52%,#1e1b4b 100%); color:var(--text); font:16px/1.6 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    main { max-width:1100px; margin:0 auto; padding:48px 24px 72px; }
+    header, section, article { background:rgba(17,24,39,.88); border:1px solid var(--border); border-radius:18px; padding:24px; margin:18px 0; box-shadow:0 18px 50px rgba(0,0,0,.25); }
+    header { background:linear-gradient(135deg,rgba(14,165,233,.16),rgba(167,139,250,.16)); }
+    h1,h2,h3 { line-height:1.2; margin:0 0 12px; }
+    h1 { font-size:clamp(2rem,4vw,3.5rem); }
+    h2 { color:#f8fafc; margin-top:0; }
+    h3 { color:#dbeafe; }
+    p { margin:8px 0 0; }
+    a { color:var(--accent); }
+    code { background:#020617; border:1px solid #1e293b; border-radius:6px; padding:1px 5px; color:#bae6fd; }
+    pre { overflow:auto; background:#020617; border:1px solid #1e293b; border-radius:12px; padding:14px; }
+    ul,ol { margin:8px 0 0; padding-left:22px; }
+    li { margin:6px 0; }
+    table { width:100%; border-collapse:collapse; margin-top:12px; }
+    th,td { border:1px solid var(--border); padding:10px; vertical-align:top; }
+    th { background:#0f172a; text-align:left; }
+    .muted { color:var(--muted); }
+    .pill { display:inline-block; border:1px solid var(--border); border-radius:999px; padding:4px 10px; margin:4px 6px 0 0; color:#dbeafe; background:rgba(15,23,42,.8); }
+    .status { color:var(--ok); font-weight:700; }
+    .phase { border-color:#475569; }
+    .matrix td:first-child, .matrix th:first-child { width:22%; }
+  </style>
+</head>
+<body>
+<main id="plan-root">
+  <header id="title">
+    <div class="muted">Implementation plan</div>
+    <h1>Show the plan name in browser tab titles</h1>
+    <p>Make each plan review tab identify the plan being viewed, so users can distinguish multiple open review tabs without selecting them one by one.</p>
+    <p><span class="pill">Repo: plan-reviewer</span><span class="pill">Surface: browser review shell</span><span class="pill">Status: implemented, verification passed</span><span class="pill">Product code changed per plan scope</span></p>
+  </header>
+
+  <section id="status">
+    <h2>Status</h2>
+    <p><strong class="status">Implemented; verification passed.</strong> The title path, rendered HTML preservation, refresh path, and test surfaces were updated according to this plan. Scoped implementation review is in progress.</p>
+  </section>
+
+  <section id="goal">
+    <h2>Goal</h2>
+    <p>When a user opens <code>/p/:planId</code>, the browser tab title should show the viewed plan's human-readable title/name instead of an opaque internal ID such as <code>Plan plan_abc123</code>. If the plan source title changes through live source sync, the already-open tab title should update with the refreshed plan content.</p>
+  </section>
+
+  <section id="why-this-plan-exists">
+    <h2>Why this plan exists</h2>
+    <p>Plan reviewer users often keep several plan tabs open. The current parent review shell title is based on the generated plan ID, which makes tab switching harder because browser tabs do not expose the plan's title or slug.</p>
+  </section>
+
+  <section id="authority-and-inputs">
+    <h2>Authority and inputs</h2>
+    <ul>
+      <li>User request: show the name/title of the plan in the browser title when viewing a plan.</li>
+      <li><code>README.md</code>: review pages render sanitized plan HTML in a no-script iframe, and open pages reload the iframe after source sync.</li>
+      <li><code>src/server/app.ts</code>: <code>reviewShell()</code> currently emits <code>&lt;title&gt;Plan ${planId}&lt;/title&gt;</code>; <code>/p/:planId</code> calls that shell; client refresh code parses new rendered HTML but does not update the parent document title.</li>
+      <li><code>src/render/render.ts</code>: the sanitizer allows <code>&lt;title&gt;</code> and preserves plan-authored titles in rendered HTML.</li>
+      <li><code>src/__tests__/contracts.test.ts</code> and <code>src/__tests__/helpers.ts</code>: sample fixture title is <code>Sample Plan</code>, and renderer contract coverage already asserts it survives rendering.</li>
+    </ul>
+  </section>
+
+  <section id="current-implementation-reality">
+    <h2>Current implementation reality</h2>
+    <table>
+      <thead><tr><th>Area</th><th>Current behavior</th><th>Implication</th></tr></thead>
+      <tbody>
+        <tr><td><code>GET /p/:planId</code></td><td>Loads plan metadata, then renders the parent review shell with <code>&lt;title&gt;Plan ${planId}&lt;/title&gt;</code>.</td><td>The tab title is stable but not human-readable.</td></tr>
+        <tr><td><code>GET /render/:planId</code></td><td>Returns the latest sanitized rendered HTML for the plan, including any preserved <code>&lt;title&gt;</code>.</td><td>The plan title is already available without adding schema or storage columns.</td></tr>
+        <tr><td>Client refresh</td><td><code>refreshPlanFrameContent()</code> fetches and parses the rendered plan, replaces the iframe document, and updates <code>versionId</code>.</td><td>The refreshed parsed document is the right source for updating <code>document.title</code> in open tabs.</td></tr>
+        <tr><td>Index/archive pages</td><td>Cards use <code>repoName / slug</code>.</td><td>Fallback naming can reuse the same metadata users already see in the index.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="progress">
+    <h2>Progress</h2>
+    <ul>
+      <li><label><input type="checkbox" checked disabled> P1: Lock title derivation behavior</label></li>
+      <li><label><input type="checkbox" checked disabled> P2: Apply title to initial review shell</label></li>
+      <li><label><input type="checkbox" checked disabled> P3: Keep title current after live refresh</label></li>
+      <li><label><input type="checkbox" checked disabled> P4: Verify contracts and browser behavior</label></li>
+    </ul>
+  </section>
+
+  <section id="resume-instructions">
+    <h2>Resume instructions (agent)</h2>
+    <p>Read this plan fully, then execute the first unchecked Progress item. Keep scope limited to browser tab title behavior for plan review pages. Do not change database schema, registration payload shape, index card copy, comment behavior, or plan rendering semantics unless a failing test proves it is necessary for the tab-title goal.</p>
+  </section>
+
+  <section id="product-intent-alignment">
+    <h2>Product intent alignment</h2>
+    <ul>
+      <li><strong>Golden path:</strong> users open plan review URLs exactly as they do today; the tab title is automatically useful with no extra flags or manual naming.</li>
+      <li><strong>Safe default:</strong> prefer the authored plan <code>&lt;title&gt;</code> because it is already part of the reviewed artifact; fallback to <code>repoName / slug</code> when title is missing or blank.</li>
+      <li><strong>Self-healing:</strong> if the plan source title changes and source sync publishes a new version, the open tab updates during the normal iframe refresh path.</li>
+      <li><strong>Fail closed boundary:</strong> if rendered HTML cannot be read or title extraction fails, keep the page usable and fall back to metadata instead of failing the review page.</li>
+      <li><strong>Actionable errors:</strong> no new user-facing error path is needed; this is display metadata only.</li>
+    </ul>
+  </section>
+
+  <section id="locked-decisions">
+    <h2>Locked decisions</h2>
+    <ul>
+      <li id="decision-source"><strong>Title source:</strong> use the latest rendered HTML document title when it is non-empty after whitespace normalization.</li>
+      <li id="decision-fallback"><strong>Fallback:</strong> use <code>${repoName} / ${slug}</code> when the rendered title is unavailable, blank, or extraction fails.</li>
+      <li id="decision-format"><strong>Tab format:</strong> format the parent shell title as <code>&lt;plan title&gt; · Plan Review</code>, avoiding a duplicate suffix if the title already ends with <code>Plan Review</code>.</li>
+      <li id="decision-no-schema"><strong>No persistence change:</strong> do not add a plan title column or expand registration API contracts; this can be derived from already-stored rendered HTML.</li>
+      <li id="decision-render-preserve"><strong>Rendering contract:</strong> do not change sanitizer title preservation except through tests if a bug is discovered.</li>
+    </ul>
+  </section>
+
+  <section id="acceptance-criteria">
+    <h2>Acceptance criteria</h2>
+    <ul>
+      <li id="ac-initial-title"><strong>AC1:</strong> Loading <code>/p/:planId</code> for a plan whose HTML contains <code>&lt;title&gt;Sample Plan&lt;/title&gt;</code> returns a shell whose parent <code>&lt;title&gt;</code> is <code>Sample Plan · Plan Review</code>.</li>
+      <li id="ac-fallback-title"><strong>AC2:</strong> Loading <code>/p/:planId</code> for a plan without a usable HTML title returns a shell title based on <code>repoName / slug</code>, suffixed with <code> · Plan Review</code>.</li>
+      <li id="ac-live-refresh-title"><strong>AC3:</strong> When a live-linked plan syncs a new version with a different HTML title, an already-open review tab updates the parent browser title during the existing refresh flow.</li>
+      <li id="ac-no-regression"><strong>AC4:</strong> Existing rendering, comments, archive/restore, source-sync warning, and registration contracts continue to pass without API or schema changes.</li>
+      <li id="ac-escaping"><strong>AC5:</strong> Special characters in plan titles are escaped in server-rendered shell HTML and do not create markup or script execution.</li>
+    </ul>
+  </section>
+
+  <section id="bdd-scenarios">
+    <h2>BDD scenarios</h2>
+    <article id="bdd-authored-title">
+      <h3>BDD1: authored title appears in tab</h3>
+      <p><strong>Given</strong> a registered plan HTML document has <code>&lt;title&gt;Sample Plan&lt;/title&gt;</code>, <strong>when</strong> the reviewer opens <code>/p/:planId</code>, <strong>then</strong> the browser tab title reads <code>Sample Plan · Plan Review</code>.</p>
+    </article>
+    <article id="bdd-title-fallback">
+      <h3>BDD2: missing title falls back to known metadata</h3>
+      <p><strong>Given</strong> a registered plan has no title or a blank title, <strong>when</strong> the reviewer opens <code>/p/:planId</code>, <strong>then</strong> the tab title uses <code>repoName / slug · Plan Review</code> so the tab is still distinguishable.</p>
+    </article>
+    <article id="bdd-escaped-title">
+      <h3>BDD3: title text is safe</h3>
+      <p><strong>Given</strong> a registered plan title contains characters such as <code>&lt;</code>, <code>&amp;</code>, or quotes, <strong>when</strong> the parent shell is rendered, <strong>then</strong> the title is escaped as text and cannot inject shell markup.</p>
+    </article>
+    <article id="bdd-live-title-change">
+      <h3>BDD4: live refresh updates tab title</h3>
+      <p><strong>Given</strong> a live-linked plan tab is open, <strong>when</strong> source sync publishes a new rendered version whose document title changed, <strong>then</strong> the iframe refresh completes and the parent <code>document.title</code> updates to the new title without requiring a full page reload.</p>
+    </article>
+    <article id="bdd-unreadable-render-fallback">
+      <h3>BDD5: render read failure does not block review shell</h3>
+      <p><strong>Given</strong> title extraction cannot read or parse rendered HTML for an otherwise valid plan, <strong>when</strong> <code>/p/:planId</code> renders, <strong>then</strong> the shell still opens with the metadata fallback title.</p>
+    </article>
+  </section>
+
+  <section id="phase-by-phase-execution-plan">
+    <h2>Phase-by-phase execution plan</h2>
+
+    <article id="phase-p1" class="phase">
+      <h3>P1: Lock title derivation behavior</h3>
+      <h4>End State</h4>
+      <p>A small title-formatting helper has explicit coverage for authored titles, blank titles, missing titles, suffix handling, fallback metadata, and HTML escaping expectations.</p>
+      <h4>Tests first</h4>
+      <p>Add focused contract tests in <code>src/__tests__/contracts.test.ts</code> for title derivation through the public <code>/p/:planId</code> shell response. If extracting the helper directly is cleaner, export only a narrow pure helper from <code>src/server/app.ts</code> or a small server-local utility and cover it without broadening public API.</p>
+      <h4>Work</h4>
+      <p>Implement a helper that normalizes title whitespace, picks rendered HTML title first, falls back to <code>repoName / slug</code>, appends <code> · Plan Review</code>, and leaves escaping to the existing shell HTML escaping boundary.</p>
+      <h4>Expected files</h4>
+      <ul><li><code>src/server/app.ts</code></li><li><code>src/__tests__/contracts.test.ts</code></li></ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build
+node --test dist/__tests__/contracts.test.js --test-name-pattern "title"</code></pre>
+    </article>
+
+    <article id="phase-p2" class="phase">
+      <h3>P2: Apply title to initial review shell</h3>
+      <h4>End State</h4>
+      <p>The first HTML response for <code>/p/:planId</code> has the human-readable title before client JavaScript runs.</p>
+      <h4>Tests first</h4>
+      <p>Extend the registered-app shell test to assert the response body contains <code>&lt;title&gt;Sample Plan · Plan Review&lt;/title&gt;</code>. Add a second registration payload with missing/blank plan title and assert fallback output.</p>
+      <h4>Work</h4>
+      <p>In the <code>/p/:planId</code> route, derive the shell title from <code>store.getRenderedHtml(plan.id)</code> and pass it into <code>reviewShell()</code>. Keep the catch/fallback local so title extraction failure does not prevent the review shell from rendering.</p>
+      <h4>Expected files</h4>
+      <ul><li><code>src/server/app.ts</code></li><li><code>src/__tests__/contracts.test.ts</code></li></ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build
+node --test dist/__tests__/contracts.test.js --test-name-pattern "review shell"</code></pre>
+    </article>
+
+    <article id="phase-p3" class="phase">
+      <h3>P3: Keep title current after live refresh</h3>
+      <h4>End State</h4>
+      <p>Already-open review tabs update their parent <code>document.title</code> when <code>refreshPlanFrameContent()</code> successfully applies a new rendered plan document.</p>
+      <h4>Tests first</h4>
+      <p>Add the narrowest practical automated coverage. Prefer a contract/helper test for the client title-formatting function if the client remains inline in <code>src/server/app.ts</code>; otherwise add a browser fixture only if existing tests already support that path. Do not add a heavyweight browser test solely for this small behavior unless the helper approach cannot catch regressions.</p>
+      <h4>Work</h4>
+      <p>After parsing refreshed HTML and before or after replacing iframe DOM nodes, read <code>parsed.title</code> or <code>parsed.querySelector('title')?.textContent</code>, format it with the same suffix/fallback rules, and assign it to the parent <code>document.title</code>. Use existing metadata already available in the client, or add minimal <code>data-plan-title-fallback</code> metadata to the shell body if needed for fallback during refresh.</p>
+      <h4>Expected files</h4>
+      <ul><li><code>src/server/app.ts</code></li><li><code>src/__tests__/contracts.test.ts</code></li></ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build
+bun run test:e2e -- --grep "dom annotation|plan index"</code></pre>
+    </article>
+
+    <article id="phase-p4" class="phase">
+      <h3>P4: Verify contracts and browser behavior</h3>
+      <h4>End State</h4>
+      <p>The full automated suite passes, and a manual smoke confirms browser tabs show distinct plan names.</p>
+      <h4>Tests first</h4>
+      <p>No additional RED work in this phase unless earlier phases reveal a missed regression surface.</p>
+      <h4>Work</h4>
+      <p>Run full verification and manually open two differently titled registered plans. Confirm the tab strip identifies each plan by title/name and that archive/restore/comment UI remains unaffected.</p>
+      <h4>Expected files</h4>
+      <ul><li>No new production files expected beyond earlier phases.</li></ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build
+bun run test
+# Optional manual smoke
+bun run dev -- serve --host 127.0.0.1 --port 4317
+bun run dev -- register thoughts/plans/browser-tab-plan-title.html --url http://127.0.0.1:4317 --execution-ready false</code></pre>
+    </article>
+  </section>
+
+  <section id="verification-strategy">
+    <h2>Verification strategy</h2>
+    <table class="matrix">
+      <thead><tr><th>Coverage</th><th>Acceptance / BDD</th><th>Test layer</th><th>Commands</th></tr></thead>
+      <tbody>
+        <tr><td>Initial title</td><td>AC1, BDD1</td><td>HTTP contract test against <code>/p/:planId</code></td><td><code>bun run test</code></td></tr>
+        <tr><td>Fallback title</td><td>AC2, BDD2, BDD5</td><td>HTTP contract/helper test</td><td><code>bun run test</code></td></tr>
+        <tr><td>Escaping</td><td>AC5, BDD3</td><td>HTTP contract test with special-character title</td><td><code>bun run test</code></td></tr>
+        <tr><td>Live refresh</td><td>AC3, BDD4</td><td>Client helper or existing browser/e2e fixture plus manual smoke</td><td><code>bun run test:e2e -- --grep "dom annotation|plan index"</code></td></tr>
+        <tr><td>No regression</td><td>AC4</td><td>Full suite</td><td><code>bun run build && bun run test</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="delivery-order">
+    <h2>Delivery order</h2>
+    <ol>
+      <li>Land server-side title derivation tests and helper.</li>
+      <li>Wire initial <code>/p/:planId</code> shell title.</li>
+      <li>Wire client title update on refreshed rendered HTML.</li>
+      <li>Run full verification and perform the two-tab smoke.</li>
+    </ol>
+  </section>
+
+  <section id="non-goals">
+    <h2>Non-goals</h2>
+    <ul>
+      <li>No database migration or stored plan-title column.</li>
+      <li>No change to plan registration input/output contracts.</li>
+      <li>No change to the plan index or archive card labels.</li>
+      <li>No change to iframe sandboxing, sanitizer policy, comments, source-sync semantics, or queue behavior.</li>
+      <li>No attempt to infer titles from headings if both HTML title and metadata fallback are available.</li>
+    </ul>
+  </section>
+
+  <section id="decisions-deviations-log">
+    <h2>Decisions / Deviations log</h2>
+    <ul>
+      <li>2026-06-08: Initial execution-ready plan created after inspecting repo title rendering, sanitized render preservation, client refresh, and existing test surfaces.</li>
+      <li>2026-06-08: P1-P3 implemented. Targeted contract verification passed with <code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js --test-name-pattern "title"</code>; browser refresh verification passed with <code>bun run test:e2e -- --grep "dom annotation|plan index"</code>.</li>
+      <li>2026-06-08: P4 verification passed with <code>bun run test</code> and <code>bun run test:e2e</code>.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>
