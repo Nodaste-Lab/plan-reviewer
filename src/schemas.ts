@@ -34,6 +34,37 @@ export const planPublicationMetadataSchema = z.object({
   executionReadyBasis: z.literal('agent-review-results')
 });
 
+export const planPullRequestSchema = z.object({
+  provider: z.literal('github'),
+  url: z.string().url().refine(value => /^https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+$/.test(value), {
+    message: 'url must be a canonical GitHub PR URL: https://github.com/<owner>/<repo>/pull/<number>'
+  }),
+  owner: z.string().trim().min(1),
+  repo: z.string().trim().min(1),
+  number: z.number().int().positive(),
+  headRef: z.string().trim().min(1),
+  headRepo: z.string().trim().min(1).optional(),
+  baseRef: z.string().trim().min(1),
+  state: z.enum(['open', 'closed', 'unknown']),
+  merged: z.boolean(),
+  mergedAt: z.string().datetime().optional(),
+  lastCheckedAt: z.string().datetime().optional(),
+  source: z.enum(['explicit', 'auto-discovered', 'refreshed']),
+  lastRefreshError: z.string().trim().min(1).optional(),
+  status: z.enum(['unlinked', 'open', 'merged', 'closed', 'unknown', 'stale']).optional()
+}).superRefine((input, context) => {
+  const urlMatch = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)$/.exec(input.url);
+  if (urlMatch && (urlMatch[1] !== input.owner || urlMatch[2] !== input.repo || Number(urlMatch[3]) !== input.number)) {
+    context.addIssue({ code: 'custom', path: ['url'], message: 'url owner/repo/number must match pull request fields' });
+  }
+  if (input.merged && !input.mergedAt) {
+    context.addIssue({ code: 'custom', path: ['mergedAt'], message: 'mergedAt is required when merged is true' });
+  }
+  if (!input.merged && input.mergedAt) {
+    context.addIssue({ code: 'custom', path: ['mergedAt'], message: 'mergedAt requires merged to be true' });
+  }
+});
+
 export const registerPlanSchema = z.object({
   repoKey: z.string().optional(),
   repoName: z.string().min(1),
@@ -119,6 +150,7 @@ export const releaseCommentSchema = z.object({
 });
 
 export type PlanPublicationMetadata = z.infer<typeof planPublicationMetadataSchema>;
+export type PlanPullRequest = z.infer<typeof planPullRequestSchema>;
 export type RegisterPlanInput = z.infer<typeof registerPlanSchema>;
 export type CreateCommentInput = z.infer<typeof createCommentSchema>;
 export type ClaimCommentsInput = z.infer<typeof claimCommentsSchema>;

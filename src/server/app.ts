@@ -10,6 +10,7 @@ import {
   ackCommentSchema,
   claimCommentsSchema,
   createCommentSchema,
+  planPullRequestSchema,
   registerPlanSchema,
   releaseCommentSchema,
   resolveCommentSchema
@@ -122,7 +123,9 @@ function fullyQualifiedPlanPath(item: ReturnType<PlanReviewStore['listPlans']>[n
 
 function publicationMetadataHtml(item: ReturnType<PlanReviewStore['listPlans']>[number]): string {
   const metadata = item.plan.publicationMetadata;
-  const linear = metadata.linearIssue ? `<code>${escapeHtml(metadata.linearIssue)}</code>` : '<span class="muted">None</span>';
+  const linear = item.plan.linearIssueKey
+    ? `<a href="${escapeHtml(item.plan.linearIssueUrl)}" target="_blank" rel="noreferrer"><code>${escapeHtml(item.plan.linearIssueKey)}</code></a>`
+    : metadata.linearIssue ? `<code>${escapeHtml(metadata.linearIssue)}</code>` : '<span class="muted">None</span>';
   const readyLabel = metadata.executionReady ? 'Yes' : 'No';
   return `<dl class="plan-metadata">
     <div><dt>Worktree</dt><dd><code>${escapeHtml(metadata.worktreePath)}</code></dd></div>
@@ -132,8 +135,19 @@ function publicationMetadataHtml(item: ReturnType<PlanReviewStore['listPlans']>[
   </dl>`;
 }
 
+function pullRequestHtml(item: ListedPlan): string {
+  const pr = item.plan.pullRequest;
+  if (!pr) return '<p class="pr-status"><span class="row-label">PR</span> <span class="pr-pill unlinked">No PR</span></p>';
+  const status = pr.status ?? 'unknown';
+  const label = status === 'stale' ? 'PR stale' : status === 'merged' ? 'PR merged' : status === 'closed' ? 'PR closed' : status === 'open' ? 'PR open' : 'PR unknown';
+  const checked = pr.lastCheckedAt ? ` · last checked <time datetime="${escapeHtml(pr.lastCheckedAt)}" data-local-timestamp>${escapeHtml(pr.lastCheckedAt)}</time>` : '';
+  const error = pr.lastRefreshError ? ` · <span class="pr-error">${escapeHtml(pr.lastRefreshError)}</span>` : '';
+  const refresh = status === 'stale' || status === 'unknown' ? ` <span class="muted">Refresh with <code>plan-review pr refresh ${escapeHtml(item.plan.id)}</code></span>` : '';
+  return `<p class="pr-status"><span class="row-label">PR</span> <a class="pr-pill ${escapeHtml(status)}" href="${escapeHtml(pr.url)}" target="_blank" rel="noreferrer">${escapeHtml(label)} #${escapeHtml(pr.number)}</a>${checked}${error}${refresh}</p>`;
+}
+
 function baseIndexStyles(): string {
-  return `body{margin:0;background:#0b1020;color:#e5e7eb;font-family:system-ui,sans-serif}main{max-width:1100px;margin:0 auto;padding:32px}a{color:#7dd3fc}.page-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.page-header h1{margin:0 0 8px}.nav-link,.restore-plan,.archive-plan{background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px 10px;cursor:pointer;text-decoration:none;font-weight:700}.nav-link.primary,.restore-plan{border-color:#38bdf8;color:#bae6fd}.restore-plan{border-color:#22c55e;color:#bbf7d0}.toolbar{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:10px;margin:18px 0}.toolbar input,.toolbar select{background:#0f172a;color:#e5e7eb;border:1px solid #2b364d;border-radius:6px;padding:10px}.plan-card{border:1px solid #2563eb;border-left:5px solid #2563eb;background:#111827;border-radius:8px;padding:16px;margin:12px 0}.plan-card.complete{border-color:#16a34a;border-left-color:#16a34a}.plan-card.needs-attention{border-color:#f59e0b;border-left-color:#f59e0b;background:linear-gradient(180deg,rgba(245,158,11,.10),#111827 42%)}.plan-card.archived{border-color:#64748b;border-left-color:#64748b}.plan-card-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.plan-card-header h2{margin-top:0}.plan-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:flex-end}.archive-plan:hover,.restore-plan:hover,.nav-link:hover{border-color:#93c5fd}.plan-metadata{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 14px;margin:12px 0}.plan-metadata div{min-width:0}.plan-metadata dt{color:#a7b0c0;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.03em}.plan-metadata dd{margin:3px 0 0;overflow-wrap:anywhere}.ready-pill{display:inline-block;border-radius:999px;padding:2px 8px;font-size:12px;font-weight:800}.ready-pill.ready{background:#166534;color:#dcfce7}.ready-pill.not-ready{background:#7f1d1d;color:#fecaca}.progress-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;margin:12px 0}.progress-bar{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:5px}.progress-segment{height:14px;border:1px solid #64748b;border-radius:3px;background:transparent}.progress-segment.complete{background:#22c55e;border-color:#22c55e}.progress-count,.progress-empty,.muted,.comment-counts,.timestamp-row{color:#a7b0c0;font-size:13px}.comment-counts,.timestamp-row{margin:6px 0}.row-label{color:#e5e7eb;font-weight:800}.status-pill{display:inline-block;border-radius:999px;padding:2px 8px;background:#1d4ed8;color:#dbeafe;font-size:12px;font-weight:700}.complete .status-pill{background:#166534;color:#dcfce7}.status-pill.attention{background:#fbbf24;color:#1c1206}.archived .status-pill{background:#334155;color:#cbd5e1}.attention-summary,.sync-warning-card{border:1px solid rgba(245,158,11,.45);border-radius:8px;background:rgba(245,158,11,.10);padding:12px;margin:12px 0;color:#fde68a}.attention-summary{display:flex;align-items:center;justify-content:space-between;gap:12px}.attention-summary button{background:#92400e;color:#ffedd5;border:1px solid rgba(245,158,11,.65);border-radius:999px;padding:6px 10px;cursor:pointer;font-weight:800}.sync-warning-card.archived-source{border-color:#475569;background:#0f172a;color:#cbd5e1}.sync-warning-card p{margin:.35rem 0 0}.sync-warning-card code{display:inline-block;max-width:100%;overflow-wrap:anywhere}.repair-command code{display:block;margin-top:.25rem;padding:.35rem .5rem}.empty-state,.restore-error{border:1px solid #475569;border-radius:8px;background:#0f172a;padding:14px;margin:12px 0;color:#cbd5e1}.restore-error{border-color:#fb7185;color:#fecdd3}code{background:#0f172a;color:#dbeafe;padding:.1rem .25rem;border-radius:4px}@media(max-width:680px){.page-header,.toolbar,.progress-row,.plan-metadata{grid-template-columns:1fr;display:grid}.plan-card-header{display:block}.plan-actions{justify-content:flex-start;margin-bottom:8px}}`;
+  return `body{margin:0;background:#0b1020;color:#e5e7eb;font-family:system-ui,sans-serif}main{max-width:1100px;margin:0 auto;padding:32px}a{color:#7dd3fc}.page-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.page-header h1{margin:0 0 8px}.nav-link,.restore-plan,.archive-plan{background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px 10px;cursor:pointer;text-decoration:none;font-weight:700}.nav-link.primary,.restore-plan{border-color:#38bdf8;color:#bae6fd}.restore-plan{border-color:#22c55e;color:#bbf7d0}.toolbar{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:10px;margin:18px 0}.toolbar input,.toolbar select{background:#0f172a;color:#e5e7eb;border:1px solid #2b364d;border-radius:6px;padding:10px}.plan-card{border:1px solid #2563eb;border-left:5px solid #2563eb;background:#111827;border-radius:8px;padding:16px;margin:12px 0}.plan-card.complete{border-color:#16a34a;border-left-color:#16a34a}.plan-card.needs-attention{border-color:#f59e0b;border-left-color:#f59e0b;background:linear-gradient(180deg,rgba(245,158,11,.10),#111827 42%)}.plan-card.archived{border-color:#64748b;border-left-color:#64748b}.plan-card-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.plan-card-header h2{margin-top:0}.plan-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:flex-end}.archive-plan:hover,.restore-plan:hover,.nav-link:hover{border-color:#93c5fd}.plan-metadata{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 14px;margin:12px 0}.plan-metadata div{min-width:0}.plan-metadata dt{color:#a7b0c0;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.03em}.plan-metadata dd{margin:3px 0 0;overflow-wrap:anywhere}.ready-pill{display:inline-block;border-radius:999px;padding:2px 8px;font-size:12px;font-weight:800}.ready-pill.ready{background:#166534;color:#dcfce7}.ready-pill.not-ready{background:#7f1d1d;color:#fecaca}.pr-status{margin:6px 0}.pr-pill{display:inline-block;border-radius:999px;padding:2px 8px;font-size:12px;font-weight:800;text-decoration:none;background:#334155;color:#e2e8f0}.pr-pill.open{background:#1d4ed8;color:#dbeafe}.pr-pill.merged{background:#166534;color:#dcfce7}.pr-pill.closed{background:#7f1d1d;color:#fecaca}.pr-pill.unknown,.pr-pill.stale{background:#92400e;color:#ffedd5}.pr-error{color:#fecaca}.progress-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;margin:12px 0}.progress-bar{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:5px}.progress-segment{height:14px;border:1px solid #64748b;border-radius:3px;background:transparent}.progress-segment.complete{background:#22c55e;border-color:#22c55e}.progress-count,.progress-empty,.muted,.comment-counts,.timestamp-row{color:#a7b0c0;font-size:13px}.comment-counts,.timestamp-row{margin:6px 0}.row-label{color:#e5e7eb;font-weight:800}.status-pill{display:inline-block;border-radius:999px;padding:2px 8px;background:#1d4ed8;color:#dbeafe;font-size:12px;font-weight:700}.complete .status-pill{background:#166534;color:#dcfce7}.status-pill.attention{background:#fbbf24;color:#1c1206}.archived .status-pill{background:#334155;color:#cbd5e1}.attention-summary,.sync-warning-card{border:1px solid rgba(245,158,11,.45);border-radius:8px;background:rgba(245,158,11,.10);padding:12px;margin:12px 0;color:#fde68a}.attention-summary{display:flex;align-items:center;justify-content:space-between;gap:12px}.attention-summary button{background:#92400e;color:#ffedd5;border:1px solid rgba(245,158,11,.65);border-radius:999px;padding:6px 10px;cursor:pointer;font-weight:800}.sync-warning-card.archived-source{border-color:#475569;background:#0f172a;color:#cbd5e1}.sync-warning-card p{margin:.35rem 0 0}.sync-warning-card code{display:inline-block;max-width:100%;overflow-wrap:anywhere}.repair-command code{display:block;margin-top:.25rem;padding:.35rem .5rem}.empty-state,.restore-error{border:1px solid #475569;border-radius:8px;background:#0f172a;padding:14px;margin:12px 0;color:#cbd5e1}.restore-error{border-color:#fb7185;color:#fecdd3}code{background:#0f172a;color:#dbeafe;padding:.1rem .25rem;border-radius:4px}@media(max-width:680px){.page-header,.toolbar,.progress-row,.plan-metadata{grid-template-columns:1fr;display:grid}.plan-card-header{display:block}.plan-actions{justify-content:flex-start;margin-bottom:8px}}`;
 }
 
 function planNeedsAttention(item: ListedPlan): boolean {
@@ -164,8 +178,11 @@ function syncWarningHtml(item: ListedPlan, options: { archived?: boolean } = {})
 
 function planCardSearch(item: ListedPlan): string {
   const metadata = item.plan.publicationMetadata;
+  const pr = item.plan.pullRequest;
+  const prTerms = pr ? ` ${pr.url} ${pr.number} ${pr.state} ${pr.status ?? ''} ${pr.merged ? 'merged' : ''} pr ${pr.status ?? pr.state} pr ${pr.state} pull request pr` : ' no pr unlinked';
+  const linearTerms = ` ${metadata.linearIssue ?? ''} ${item.plan.linearIssueKey ?? ''} ${item.plan.linearIssueUrl ?? ''}`;
   const attentionTerms = planNeedsAttention(item) ? ' needs attention source missing source unavailable failed cached copy' : '';
-  return `${item.plan.repoName} ${item.plan.repoKey} ${item.plan.slug} ${fullyQualifiedPlanPath(item)} ${metadata.worktreePath} ${metadata.branch} ${metadata.linearIssue ?? ''}${attentionTerms}`.toLowerCase();
+  return `${item.plan.repoName} ${item.plan.repoKey} ${item.plan.slug} ${fullyQualifiedPlanPath(item)} ${metadata.worktreePath} ${metadata.branch}${linearTerms}${prTerms}${attentionTerms}`.toLowerCase();
 }
 
 function hasStartedPlanProgress(item: ListedPlan): boolean {
@@ -177,10 +194,12 @@ function planCardHtml(item: ListedPlan): string {
   const needsAttention = planNeedsAttention(item);
   const statusLabel = needsAttention ? 'Source missing' : complete ? 'Complete' : 'Incomplete';
   const cardClass = needsAttention ? 'needs-attention' : complete ? 'complete' : 'incomplete';
-  return `<article class="plan-card ${cardClass}" data-plan-id="${escapeHtml(item.plan.id)}" data-repo="${escapeHtml(item.plan.repoName)}" data-search="${escapeHtml(planCardSearch(item))}" data-needs-attention="${needsAttention ? 'true' : 'false'}" aria-label="${escapeHtml(`${item.plan.repoName} / ${item.plan.slug}: ${statusLabel}`)}">
+  const prStatus = item.plan.pullRequest?.status ?? item.plan.pullRequest?.state ?? 'unlinked';
+  return `<article class="plan-card ${cardClass}" data-plan-id="${escapeHtml(item.plan.id)}" data-repo="${escapeHtml(item.plan.repoName)}" data-pr-status="${escapeHtml(prStatus)}" data-search="${escapeHtml(planCardSearch(item))}" data-needs-attention="${needsAttention ? 'true' : 'false'}" aria-label="${escapeHtml(`${item.plan.repoName} / ${item.plan.slug}: ${statusLabel}`)}">
       <div class="plan-card-header"><h2><a href="/p/${escapeHtml(item.plan.id)}">${escapeHtml(item.plan.repoName)} / ${escapeHtml(item.plan.slug)}</a></h2><div class="plan-actions"><span class="status-pill${needsAttention ? ' attention' : ''}">${escapeHtml(statusLabel)}</span><button class="archive-plan" type="button" data-archive-plan="${escapeHtml(item.plan.id)}">Archive</button></div></div>
       <p><code>${escapeHtml(fullyQualifiedPlanPath(item))}</code></p>
       ${publicationMetadataHtml(item)}
+      ${pullRequestHtml(item)}
       ${needsAttention ? syncWarningHtml(item) : ''}
       ${progressHtml(item.progress)}
       ${commentCountsHtml(item)}
@@ -223,7 +242,7 @@ function indexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCoun
   </head><body><main><div class="page-header"><div><h1>Plan Review Index</h1><p class="muted">Active plans are shown by default.</p></div><a class="nav-link primary" href="/archive">Archived (${archivedCount}) →</a></div>${attentionSummary}<div class="toolbar"><input id="q" placeholder="Filter plans" aria-label="Filter plans"><select id="repo" aria-label="Filter by repo"><option value="">All repos</option>${repos.map(repo => `<option value="${escapeHtml(repo)}">${escapeHtml(repo)}</option>`).join('')}</select></div><div id="plans">${rows || '<p>No plans registered.</p>'}</div><script>
   const q=document.getElementById('q'), repo=document.getElementById('repo'), attentionFilter=document.querySelector('[data-attention-filter]'), cards=[...document.querySelectorAll('.plan-card')];
   let attentionOnly=false;
-  function apply(){const text=q.value.toLowerCase(), r=repo.value; cards.forEach(card=>{card.hidden=!!((r&&card.dataset.repo!==r)||(text&&!card.dataset.search.includes(text))||(attentionOnly&&card.dataset.needsAttention!=='true'));}); document.querySelectorAll('.repo-group').forEach(group=>{group.hidden=!group.querySelector('.plan-card:not([hidden])');});}
+  function matchesSearch(card,text){if(!text)return true; const status=card.dataset.prStatus; if(text==='merged')return status==='merged'; if(text==='unmerged')return !!status&&status!=='merged'&&status!=='unlinked'; return card.dataset.search.includes(text);}  function apply(){const text=q.value.toLowerCase().trim(), r=repo.value; cards.forEach(card=>{card.hidden=!!((r&&card.dataset.repo!==r)||(text&&!matchesSearch(card,text))||(attentionOnly&&card.dataset.needsAttention!=='true'));}); document.querySelectorAll('.repo-group').forEach(group=>{group.hidden=!group.querySelector('.plan-card:not([hidden])');});}
   ${localTimestampScript()}
   q.addEventListener('input',apply); repo.addEventListener('change',apply); attentionFilter?.addEventListener('click',()=>{attentionOnly=!attentionOnly; attentionFilter.setAttribute('aria-pressed', String(attentionOnly)); apply();});
   document.addEventListener('click',async event=>{const target=event.target; const button=target instanceof Element ? target.closest('[data-archive-plan]') : null; if(!button) return; if(!confirm('Archive this plan?')) return; button.disabled=true; const planId=button.dataset.archivePlan; const res=await fetch('/api/plans/'+encodeURIComponent(planId)+'/archive',{method:'POST'}); if(!res.ok){button.disabled=false; alert('Unable to archive plan.'); return;} button.closest('.plan-card')?.remove(); const index=cards.findIndex(card=>card.dataset.planId===planId); if(index>=0) cards.splice(index,1); apply();});
@@ -239,10 +258,12 @@ function archiveHtml(plans: ReturnType<PlanReviewStore['listPlans']>): string {
     const complete = item.progress.totalPhases > 0 && item.progress.completedPhases === item.progress.totalPhases;
     const statusLabel = complete ? 'Complete' : 'Incomplete';
     const sourceWarning = planNeedsAttention(item) ? syncWarningHtml(item, { archived: true }) : '';
-    return `<article class="plan-card archived ${complete ? 'complete' : 'incomplete'}" data-plan-id="${escapeHtml(item.plan.id)}" data-repo="${escapeHtml(item.plan.repoName)}" data-search="${escapeHtml(planCardSearch(item))}">
+    const prStatus = item.plan.pullRequest?.status ?? item.plan.pullRequest?.state ?? 'unlinked';
+    return `<article class="plan-card archived ${complete ? 'complete' : 'incomplete'}" data-plan-id="${escapeHtml(item.plan.id)}" data-repo="${escapeHtml(item.plan.repoName)}" data-pr-status="${escapeHtml(prStatus)}" data-search="${escapeHtml(planCardSearch(item))}">
       <div class="plan-card-header"><h2>${escapeHtml(item.plan.repoName)} / ${escapeHtml(item.plan.slug)}</h2><div class="plan-actions"><span class="status-pill">${escapeHtml(statusLabel)}</span><span class="status-pill">Archived</span><a class="nav-link primary" href="/p/${escapeHtml(item.plan.id)}">Open</a><button class="restore-plan" type="button" data-restore-plan="${escapeHtml(item.plan.id)}">Restore</button></div></div>
       <p><code>${escapeHtml(fullyQualifiedPlanPath(item))}</code></p>
       ${publicationMetadataHtml(item)}
+      ${pullRequestHtml(item)}
       ${sourceWarning}
       ${progressHtml(item.progress)}
       ${commentCountsHtml(item)}
@@ -257,7 +278,7 @@ function archiveHtml(plans: ReturnType<PlanReviewStore['listPlans']>): string {
     <style>${baseIndexStyles()}</style>
   </head><body><main><div class="page-header"><div><h1>Archived Plans</h1><p class="muted">Archived plans stay out of the active index but remain inspectable and restorable.</p></div><a class="nav-link primary" href="/">← Active index</a></div><div class="toolbar"><input id="q" placeholder="Filter archived plans" aria-label="Filter archived plans"><select id="repo" aria-label="Filter by repo"><option value="">All repos</option>${repos.map(repo => `<option value="${escapeHtml(repo)}">${escapeHtml(repo)}</option>`).join('')}</select></div><p class="muted" id="archive-count">${archivedPlans.length} archived</p><div id="plans">${rows || empty}</div>${rows ? filteredEmpty : ''}<script>
   const q=document.getElementById('q'), repo=document.getElementById('repo'), cards=[...document.querySelectorAll('.plan-card')], filteredEmpty=document.getElementById('archive-filter-empty'), count=document.getElementById('archive-count');
-  function apply(){const text=q.value.toLowerCase(), r=repo.value; let visible=0; cards.forEach(card=>{card.hidden=!!((r&&card.dataset.repo!==r)||(text&&!card.dataset.search.includes(text))); if(!card.hidden) visible++;}); if(filteredEmpty) filteredEmpty.hidden=visible>0||cards.length===0; if(count) count.textContent=visible+' archived';}
+  function matchesSearch(card,text){if(!text)return true; const status=card.dataset.prStatus; if(text==='merged')return status==='merged'; if(text==='unmerged')return !!status&&status!=='merged'&&status!=='unlinked'; return card.dataset.search.includes(text);}  function apply(){const text=q.value.toLowerCase().trim(), r=repo.value; let visible=0; cards.forEach(card=>{card.hidden=!!((r&&card.dataset.repo!==r)||(text&&!matchesSearch(card,text))); if(!card.hidden) visible++;}); if(filteredEmpty) filteredEmpty.hidden=visible>0||cards.length===0; if(count) count.textContent=visible+' archived';}
   ${localTimestampScript()}
   q?.addEventListener('input',apply); repo?.addEventListener('change',apply); document.getElementById('clear-filters')?.addEventListener('click',()=>{q.value=''; repo.value=''; apply();});
   document.addEventListener('click',async event=>{const target=event.target; const button=target instanceof Element ? target.closest('[data-restore-plan]') : null; if(!button) return; button.disabled=true; const card=button.closest('.plan-card'); const error=card?.querySelector('.restore-error'); if(error) error.hidden=true; const planId=button.dataset.restorePlan; let res; try{res=await fetch('/api/plans/'+encodeURIComponent(planId)+'/unarchive',{method:'POST'});}catch{button.disabled=false; if(error) error.hidden=false; return;} if(!res.ok){button.disabled=false; if(error) error.hidden=false; return;} card?.remove(); const index=cards.findIndex(item=>item.dataset.planId===planId); if(index>=0) cards.splice(index,1); apply();});
@@ -280,8 +301,11 @@ function filterPlans(plans: ReturnType<PlanReviewStore['listPlans']>, query: { q
   const filtered = plans.filter(item => {
     const matchesRepo = !query.repoKey || item.plan.repoKey === query.repoKey;
     const matchesStatus = !query.status || Number(item.counts[query.status as keyof typeof item.counts] ?? 0) > 0;
-    const haystack = `${item.plan.repoName} ${item.plan.repoKey} ${item.plan.slug} ${fullyQualifiedPlanPath(item)}`.toLowerCase();
-    const matchesText = !text || haystack.includes(text);
+    const haystack = planCardSearch(item);
+    const trimmedText = text?.trim();
+    const prStatus = item.plan.pullRequest?.status ?? item.plan.pullRequest?.state;
+    const matchesText = !trimmedText
+      || (trimmedText === 'merged' ? prStatus === 'merged' : trimmedText === 'unmerged' ? Boolean(item.plan.pullRequest && prStatus !== 'merged') : haystack.includes(trimmedText));
     return matchesRepo && matchesStatus && matchesText;
   });
   const offset = parseInteger(query.cursor, 'cursor', 0) ?? 0;
@@ -1576,6 +1600,28 @@ export function createApp(options: AppOptions): FastifyInstance {
         latestEventSequence: store.latestEventSequence(plan.id, 'all'),
 	        reviewUrl: `/p/${plan.id}`
 	      });
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.put('/api/plans/:planId/pull-request', async (request, reply) => {
+    try {
+      const { planId } = request.params as { planId: string };
+      const { plan } = store.getPlan(planId);
+      const pullRequest = planPullRequestSchema.parse(request.body);
+      return ok({ planId: plan.id, pullRequest: store.upsertPullRequest(plan.id, pullRequest) });
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.delete('/api/plans/:planId/pull-request', async (request, reply) => {
+    try {
+      const { planId } = request.params as { planId: string };
+      const { plan } = store.getPlan(planId);
+      store.clearPullRequest(plan.id);
+      return ok({ planId: plan.id, pullRequest: null });
     } catch (error) {
       sendError(reply, error);
     }

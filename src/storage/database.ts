@@ -9,8 +9,10 @@ import type {
   CreateCommentInput,
   RegisterPlanInput,
   ResolveCommentInput,
-  PlanPublicationMetadata
+  PlanPublicationMetadata,
+  PlanPullRequest
 } from '../schemas.js';
+import { pullRequestStatus } from '../githubPr.js';
 import { ensureDir, PlanReviewError, sha256, shortHash, slugify } from '../util.js';
 
 export interface PlanRecord {
@@ -20,11 +22,16 @@ export interface PlanRecord {
   planPath: string;
   repoName: string;
   repoKey: string;
+  remoteUrl?: string;
+  rootPath?: string;
   branch: string;
   commitSha?: string;
   sourcePath?: string;
   watchMode: 'filesystem' | 'snapshot';
   publicationMetadata: PlanPublicationMetadata;
+  linearIssueKey?: string;
+  linearIssueUrl?: string;
+  pullRequest?: PlanPullRequest | null;
   lastSyncAt?: string;
   lastSyncStatus?: string;
   lastSyncError?: Record<string, unknown> | null;
@@ -165,6 +172,27 @@ function isoFromEpochMs(value: number | undefined): string | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
+function pullRequestFromRow(row: Record<string, unknown> | undefined): PlanPullRequest | null {
+  if (!row) return null;
+  const pr: PlanPullRequest = {
+    provider: 'github',
+    url: String(row.pr_url),
+    owner: String(row.owner),
+    repo: String(row.repo),
+    number: Number(row.number),
+    headRef: String(row.head_ref),
+    headRepo: optionalString(row.head_repo),
+    baseRef: String(row.base_ref),
+    state: (row.state ?? 'unknown') as PlanPullRequest['state'],
+    merged: Boolean(Number(row.merged ?? 0)),
+    mergedAt: optionalString(row.merged_at),
+    lastCheckedAt: optionalString(row.last_checked_at),
+    source: (row.source ?? 'explicit') as PlanPullRequest['source'],
+    lastRefreshError: optionalString(row.last_refresh_error)
+  };
+  return { ...pr, status: pullRequestStatus(pr) };
+}
+
 function stripHtml(value: string): string {
   return value
     .replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
@@ -194,6 +222,22 @@ function progressScope(html: string): string {
     return nextHeading >= 0 ? afterHeading.slice(0, nextHeading) : afterHeading;
   }
   return html;
+}
+
+export function normalizeLinearIssueKey(...values: Array<string | undefined>): string | undefined {
+  for (const value of values) {
+    const match = /(?<![A-Z0-9])NOD-\d+\b/i.exec(value ?? '');
+    if (match) return match[0].toUpperCase();
+  }
+  return undefined;
+}
+
+export function linearIssueUrl(issueKey: string): string {
+  return `https://linear.app/nodaste/issue/${issueKey}`;
+}
+
+function searchablePlanTextForLinear(html: string): string {
+  return stripHtml(html.replace(/<(code|pre)\b[\s\S]*?<\/\1>/gi, ' '));
 }
 
 function extractPlanProgress(html: string): PlanProgress {
@@ -278,6 +322,25 @@ export class PlanReviewStore {
         sync_origin TEXT NOT NULL DEFAULT 'manual_register',
         created_at TEXT NOT NULL,
         UNIQUE(plan_id, file_hash, branch, commit_sha)
+      );
+      CREATE TABLE IF NOT EXISTS plan_pull_requests (
+        plan_id TEXT PRIMARY KEY REFERENCES plans(id) ON DELETE CASCADE,
+        provider TEXT NOT NULL,
+        pr_url TEXT NOT NULL,
+        owner TEXT NOT NULL,
+        repo TEXT NOT NULL,
+        number INTEGER NOT NULL,
+        head_ref TEXT NOT NULL,
+        head_repo TEXT,
+        base_ref TEXT NOT NULL,
+        state TEXT NOT NULL,
+        merged INTEGER NOT NULL DEFAULT 0,
+        merged_at TEXT,
+        last_checked_at TEXT,
+        source TEXT NOT NULL,
+        last_refresh_error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
       );
       CREATE TABLE IF NOT EXISTS plan_assets (
         id TEXT PRIMARY KEY,
@@ -450,6 +513,36 @@ export class PlanReviewStore {
     return file;
   }
 
+  getPullRequest(planId: string): PlanPullRequest | null {
+    const row = this.db.prepare('SELECT * FROM plan_pull_requests WHERE plan_id = ?').get(planId) as Record<string, unknown> | undefined;
+    return pullRequestFromRow(row);
+  }
+
+  upsertPullRequest(planId: string, pullRequest: PlanPullRequest): PlanPullRequest {
+    this.getPlan(planId);
+    const now = nowIso();
+    this.db.prepare(`INSERT INTO plan_pull_requests
+      (plan_id, provider, pr_url, owner, repo, number, head_ref, head_repo, base_ref, state, merged, merged_at, last_checked_at, source, last_refresh_error, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(plan_id) DO UPDATE SET provider = excluded.provider, pr_url = excluded.pr_url, owner = excluded.owner,
+        repo = excluded.repo, number = excluded.number, head_ref = excluded.head_ref, head_repo = excluded.head_repo,
+        base_ref = excluded.base_ref, state = excluded.state, merged = excluded.merged, merged_at = excluded.merged_at,
+        last_checked_at = excluded.last_checked_at, source = excluded.source, last_refresh_error = excluded.last_refresh_error,
+        updated_at = excluded.updated_at`)
+      .run(planId, pullRequest.provider, pullRequest.url, pullRequest.owner, pullRequest.repo, pullRequest.number,
+        pullRequest.headRef, pullRequest.headRepo ?? null, pullRequest.baseRef, pullRequest.state, pullRequest.merged ? 1 : 0,
+        pullRequest.mergedAt ?? null, pullRequest.lastCheckedAt ?? null, pullRequest.source, pullRequest.lastRefreshError ?? null, now, now);
+    this.db.prepare('UPDATE plans SET updated_at = ? WHERE id = ?').run(now, planId);
+    return this.getPullRequest(planId)!;
+  }
+
+  clearPullRequest(planId: string): void {
+    this.getPlan(planId);
+    const now = nowIso();
+    this.db.prepare('DELETE FROM plan_pull_requests WHERE plan_id = ?').run(planId);
+    this.db.prepare('UPDATE plans SET updated_at = ? WHERE id = ?').run(now, planId);
+  }
+
   registerPlan(input: RegisterPlanInput, renderedHtml: string, renderWarnings: unknown[], syncOrigin: 'manual_register' | 'filesystem_watch' = 'manual_register') {
     const tx = this.db.transaction(() => {
       const now = nowIso();
@@ -569,7 +662,7 @@ export class PlanReviewStore {
       SELECT p.id, p.slug, p.plan_path AS planPath, p.source_path AS sourcePath, p.watch_mode AS watchMode,
         p.last_sync_at AS lastSyncAt, p.last_sync_status AS lastSyncStatus, p.last_sync_error_json AS lastSyncErrorJson,
         p.archived_at AS archivedAt, p.publication_metadata_json AS publicationMetadataJson,
-        r.repo_name AS repoName, r.repo_key AS repoKey, r.root_path AS rootPath,
+        r.repo_name AS repoName, r.repo_key AS repoKey, r.remote_url AS remoteUrl, r.root_path AS rootPath,
         v.id AS versionId, v.branch, v.commit_sha AS commitSha, v.file_hash AS fileHash,
         v.html_blob_path AS htmlBlobPath,
         v.source_mtime_ms AS sourceMtimeMs, v.source_size AS sourceSize, v.sync_origin AS syncOrigin,
@@ -595,7 +688,11 @@ export class PlanReviewStore {
       const htmlBlobPath = optionalString(row.htmlBlobPath);
       const sourceMtimeMs = optionalNumber(row.sourceMtimeMs);
       const modifiedAt = isoFromEpochMs(sourceMtimeMs) ?? String(row.versionCreatedAt ?? planUpdatedAt);
-      const progress = htmlBlobPath ? extractPlanProgress(fs.readFileSync(htmlBlobPath, 'utf8')) : { totalPhases: 0, completedPhases: 0, phases: [] };
+      const html = htmlBlobPath ? fs.readFileSync(htmlBlobPath, 'utf8') : '';
+      const progress = html ? extractPlanProgress(html) : { totalPhases: 0, completedPhases: 0, phases: [] };
+      const publicationMetadata = metadataFromRow(row);
+      const linearIssueKey = normalizeLinearIssueKey(publicationMetadata.linearIssue, searchablePlanTextForLinear(html));
+      const planId = String(row.id);
       return {
       plan: {
         id: row.id,
@@ -603,13 +700,18 @@ export class PlanReviewStore {
         planPath: row.planPath,
         repoName: row.repoName,
         repoKey: row.repoKey,
+        remoteUrl: optionalString(row.remoteUrl),
+        rootPath: optionalString(row.rootPath),
         sourcePath: optionalString(row.sourcePath),
         watchMode: (row.watchMode ?? 'snapshot') as 'filesystem' | 'snapshot',
         lastSyncAt: optionalString(row.lastSyncAt),
         lastSyncStatus: optionalString(row.lastSyncStatus),
         lastSyncError: parseJson(row.lastSyncErrorJson as string | null, null),
         archivedAt: optionalString(row.archivedAt),
-        publicationMetadata: metadataFromRow(row)
+        publicationMetadata,
+        linearIssueKey,
+        linearIssueUrl: linearIssueKey ? linearIssueUrl(linearIssueKey) : undefined,
+        pullRequest: this.getPullRequest(planId)
       },
       latestVersion: {
         id: row.versionId,
@@ -704,7 +806,7 @@ export class PlanReviewStore {
       SELECT p.id, p.repo_id AS repoId, p.slug, p.plan_path AS planPath, p.source_path AS sourcePath,
         p.watch_mode AS watchMode, p.last_sync_at AS lastSyncAt, p.last_sync_status AS lastSyncStatus,
         p.last_sync_error_json AS lastSyncErrorJson, p.archived_at AS archivedAt, p.publication_metadata_json AS publicationMetadataJson,
-        r.repo_name AS repoName, r.repo_key AS repoKey, r.root_path AS rootPath,
+        r.repo_name AS repoName, r.repo_key AS repoKey, r.remote_url AS remoteUrl, r.root_path AS rootPath,
         v.id AS versionId, v.file_hash AS fileHash, v.branch, v.commit_sha AS commitSha,
         v.html_blob_path AS htmlBlobPath, v.rendered_blob_path AS renderedBlobPath,
         v.render_warnings_json AS renderWarningsJson, v.source_mtime_ms AS sourceMtimeMs,
@@ -721,7 +823,7 @@ export class PlanReviewStore {
       SELECT p.id, p.repo_id AS repoId, p.slug, p.plan_path AS planPath, p.source_path AS sourcePath,
         p.watch_mode AS watchMode, p.last_sync_at AS lastSyncAt, p.last_sync_status AS lastSyncStatus,
         p.last_sync_error_json AS lastSyncErrorJson, p.archived_at AS archivedAt, p.publication_metadata_json AS publicationMetadataJson,
-        r.repo_name AS repoName, r.repo_key AS repoKey, r.root_path AS rootPath,
+        r.repo_name AS repoName, r.repo_key AS repoKey, r.remote_url AS remoteUrl, r.root_path AS rootPath,
         v.id AS versionId, v.file_hash AS fileHash, v.branch, v.commit_sha AS commitSha,
         v.html_blob_path AS htmlBlobPath, v.rendered_blob_path AS renderedBlobPath,
         v.render_warnings_json AS renderWarningsJson, v.source_mtime_ms AS sourceMtimeMs,
@@ -744,6 +846,9 @@ export class PlanReviewStore {
     if (!selectedRow) {
       throw new PlanReviewError('not_found', `Plan '${identifier}' was not found`, 404, {}, 'Register the plan first.');
     }
+    const publicationMetadata = metadataFromRow(selectedRow);
+    const html = fs.readFileSync(selectedRow.htmlBlobPath, 'utf8');
+    const linearIssueKey = normalizeLinearIssueKey(publicationMetadata.linearIssue, searchablePlanTextForLinear(html));
     return {
       plan: {
         id: selectedRow.id,
@@ -752,6 +857,8 @@ export class PlanReviewStore {
         planPath: selectedRow.planPath,
         repoName: selectedRow.repoName,
         repoKey: selectedRow.repoKey,
+        remoteUrl: optionalString(selectedRow.remoteUrl),
+        rootPath: optionalString(selectedRow.rootPath),
         branch: selectedRow.branch,
         commitSha: selectedRow.commitSha ?? undefined,
         sourcePath: optionalString(selectedRow.sourcePath),
@@ -760,7 +867,10 @@ export class PlanReviewStore {
         lastSyncStatus: optionalString(selectedRow.lastSyncStatus),
         lastSyncError: parseJson(selectedRow.lastSyncErrorJson, null),
         archivedAt: optionalString(selectedRow.archivedAt),
-        publicationMetadata: metadataFromRow(selectedRow)
+        publicationMetadata,
+        linearIssueKey,
+        linearIssueUrl: linearIssueKey ? linearIssueUrl(linearIssueKey) : undefined,
+        pullRequest: this.getPullRequest(selectedRow.id)
       },
       version: {
         id: selectedRow.versionId,

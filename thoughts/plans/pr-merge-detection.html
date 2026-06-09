@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PR Merge Detection Plan</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0b1020; --panel:#111827; --panel2:#0f172a; --text:#e5e7eb; --muted:#a7b0c0; --accent:#7dd3fc; --border:#2b364d; --good:#86efac; --warn:#fde68a; --bad:#fecaca; --info:#bfdbfe; }
+    body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; line-height:1.55; }
+    main { max-width:1060px; margin:0 auto; padding:40px 22px 80px; }
+    h1,h2,h3 { line-height:1.2; }
+    h1 { font-size:2.25rem; margin:0 0 10px; }
+    h2 { margin-top:34px; padding-top:16px; border-top:1px solid var(--border); }
+    a { color:var(--accent); }
+    code, pre { background:#020617; border:1px solid var(--border); border-radius:6px; }
+    code { padding:1px 5px; }
+    pre { padding:14px; overflow:auto; }
+    section, article { scroll-margin-top:72px; }
+    .card { background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:18px; margin:16px 0; }
+    .pill { display:inline-block; margin:4px 8px 4px 0; padding:4px 10px; border:1px solid var(--border); border-radius:999px; background:var(--panel2); color:var(--muted); font-size:.9rem; font-weight:700; }
+    .ok { color:var(--good); } .warn { color:var(--warn); } .bad { color:var(--bad); } .muted { color:var(--muted); }
+    table { width:100%; border-collapse:collapse; margin:12px 0; }
+    th,td { border:1px solid var(--border); padding:10px; vertical-align:top; }
+    th { background:var(--panel2); text-align:left; }
+    li { margin:6px 0; }
+  </style>
+</head>
+<body>
+<main>
+  <header id="title">
+    <h1>PR Merge Detection for Plan Index</h1>
+    <p class="muted">Execution-ready implementation plan for persistently linking plans to pull requests, linking Linear issues, and surfacing merged/open/unlinked PR state in the plan index.</p>
+    <p><span class="pill">Status: execution-ready</span><span class="pill">Scope: PR + Linear metadata, index status, planning guidance</span><span class="pill">Risk: medium</span></p>
+  </header>
+
+  <section id="progress" class="card">
+    <h2>Progress</h2>
+    <ul>
+      <li><label><input type="checkbox" checked> P1 - Persist PR metadata contract</label></li>
+      <li><label><input type="checkbox" checked> P2 - Add PR link and refresh CLI</label></li>
+      <li><label><input type="checkbox" checked> P3 - Surface PR state in APIs and index</label></li>
+      <li><label><input type="checkbox" checked> P4 - Wire Linear links and planning guidance</label></li>
+      <li><label><input type="checkbox" checked> P5 - Wire agent-facing handoff guidance</label></li>
+      <li><label><input type="checkbox" checked> P6 - Verify end-to-end and docs parity</label></li>
+    </ul>
+  </section>
+
+  <section id="goal" class="card">
+    <h2>Goal</h2>
+    <p>Make the active and archived plan indexes truthfully show whether each plan has an associated PR, whether that PR is open, merged, closed-unmerged, unknown, or stale, and whether the plan is linked to its Linear issue. The associations must be reliable and programmatic: agents can explicitly link a PR when they create it, the CLI can infer or refresh PR state from GitHub using registered repo and branch metadata, and registration/source sync can detect <code>NOD-NNN</code>-style Linear references without treating plan prose as the only source of truth.</p>
+  </section>
+
+  <section id="why-this-plan-exists" class="card">
+    <h2>Why this plan exists</h2>
+    <p>Plan progress currently tells reviewers whether phases are complete, but it does not answer the operational question that matters after execution: did the implementation PR merge? The index also only displays Linear issue text when registration metadata already has it, so plans with a <code>NOD-NNN</code> reference can miss the direct Linear link reviewers need. Relying on agents to manually edit plan text is fragile because the index cannot trust or query that text. The product needs first-class PR association, refreshable merge status, Linear issue linking, and planning guidance that makes both the solution narrative and Linear issue presence part of the normal plan contract.</p>
+  </section>
+
+  <section id="solution-narrative" class="card">
+    <h2>Solution narrative</h2>
+    <p>The proposed solution adds a small, explicit PR-tracking layer to plan-reviewer. Each plan can have one current GitHub pull request record stored beside the existing plan metadata. That record contains the PR URL, owner/repo, number, head and base refs, open/closed state, merged timestamp when present, last checked time, and any refresh error. The plan HTML can still mention a PR for human context, but the plan index and API trust only this structured record.</p>
+    <p>For agents, the normal workflow becomes deterministic: after creating a PR, run <code>plan-review pr link &lt;plan&gt; --url &lt;github-pr-url&gt; --json</code>, then run <code>plan-review pr refresh &lt;plan&gt; --json</code> before final handoff. If the agent forgets the explicit link, refresh can safely try to connect the dots from the registered GitHub remote and branch. It links only when GitHub returns exactly one plausible PR; no matches or multiple matches fail closed with the exact link command to run.</p>
+    <p>For users, the plan index gains a PR status pill and link on every card plus a clickable Linear issue link when a <code>NOD-NNN</code>-style issue is known or detected. A reviewer scanning active or archived plans sees <strong>No PR</strong>, <strong>PR open</strong>, <strong>PR merged</strong>, <strong>PR closed</strong>, <strong>PR unknown</strong>, or <strong>PR stale</strong> without opening each plan, and can jump directly to the Linear issue when available. Unknown or stale cards explain when status was last checked and how to refresh it. API and CLI index output expose the same state so scripts can answer the same question programmatically.</p>
+    <table id="solution-pros-cons">
+      <thead><tr><th>Pros</th><th>Cons / tradeoffs</th></tr></thead>
+      <tbody>
+        <tr><td>Reliable index state because PR data is structured and queryable.</td><td>Requires a new persistence contract and migration.</td></tr>
+        <tr><td>Agent workflow is explicit but still recoverable through safe branch discovery.</td><td>Agents must add one post-PR command to their handoff discipline.</td></tr>
+        <tr><td>Index rendering stays fast because GitHub network calls happen in CLI refresh commands, not page loads.</td><td>Status can become stale until an agent/operator refreshes it.</td></tr>
+        <tr><td>Fails closed for ambiguous PR matches, avoiding false merged/open signals.</td><td>Ambiguous branches require manual linking instead of automatic convenience.</td></tr>
+        <tr><td>Keeps scope small by supporting GitHub only for the current repo need.</td><td>Other forge providers need future provider-specific work.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="authority-and-inputs" class="card">
+    <h2>Authority and inputs</h2>
+    <ul>
+      <li>User request: add PR merge detection so the plan index clearly shows merged versus unmerged plans; the PR connection must be reliable and programmatic.</li>
+      <li>Product intent: <code>thoughts/specs/product_intent.md</code> says the plan index must truthfully report plan status, metadata, and readiness state, and routine workflows should not depend on tribal knowledge.</li>
+      <li>Repo guidance: <code>AGENTS.md</code> requires API, CLI, README, browser UI, and fixtures to stay aligned for public contracts.</li>
+      <li>Current metadata: registration already captures <code>repoName</code>, <code>remoteUrl</code>, <code>branch</code>, <code>commitSha</code>, <code>worktreePath</code>, and optional <code>linearIssue</code>.</li>
+      <li>Current index: <code>src/server/app.ts</code> renders plan cards from <code>PlanReviewStore.listPlans()</code> and already displays progress, comments, Linear issue, branch, source sync, and execution readiness.</li>
+    </ul>
+  </section>
+
+  <section id="current-implementation-reality" class="card">
+    <h2>Current implementation reality</h2>
+    <table>
+      <thead><tr><th>Surface</th><th>Current behavior</th><th>Needed change</th></tr></thead>
+      <tbody>
+        <tr><td><code>planPublicationMetadataSchema</code></td><td>Stores worktree, branch, optional Linear issue text, and execution readiness.</td><td>Add a separate PR metadata contract and normalize Linear issue IDs/URLs instead of overloading plan HTML text.</td></tr>
+        <tr><td><code>PlanReviewStore</code></td><td><code>plans</code> has no PR fields/table; <code>listPlans()</code> cannot report merge state.</td><td>Persist a normalized per-plan pull request record and expose it in <code>getPlan()</code>/<code>listPlans()</code>.</td></tr>
+        <tr><td><code>register</code> CLI</td><td>Infers repo/branch/commit from git and sends metadata to the service.</td><td>Opportunistically discover an associated GitHub PR for the registered branch when safe, and preserve explicit links.</td></tr>
+        <tr><td>CLI command set</td><td>No command exists for an agent to attach a PR after creation.</td><td>Add <code>plan-review pr link</code> and <code>plan-review pr refresh</code> commands with JSON output.</td></tr>
+        <tr><td>HTTP API</td><td><code>GET /api/plans</code> and <code>GET /api/plans/:planId</code> return plan/progress/comment metadata only.</td><td>Return <code>pullRequest</code> metadata and add a narrow server endpoint for CLI-submitted PR state updates.</td></tr>
+        <tr><td>Index UI</td><td>Cards show complete/incomplete/source-missing, progress, comments, plain Linear issue text, and execution readiness.</td><td>Add a PR status pill/link, clickable Linear issue link, filter/search terms, stale indication, and an actionable refresh command when status is unknown or stale.</td></tr>
+        <tr><td>Planning guidance</td><td><code>thoughts/plans/AGENTS.md</code> requires core plan sections but not a top solution narrative or a Linear issue reference.</td><td>Update guidance so new plans include a solution narrative near the top and require a Linear issue reference or an explicit no-Linear-issue rationale.</td></tr>
+        <tr><td>Agent workflow</td><td>The Build Plan button queues <code>/skill:scoped-plan-run thoughts/plans/&lt;file&gt;</code>; nothing tells the executing agent how to link its PR.</td><td>Include PR-linking instructions in agent-visible build handoff guidance and CLI registration output without changing comment queue semantics.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="resume-instructions" class="card">
+    <h2>Resume instructions (agent)</h2>
+    <p>Read this plan fully, then execute the first unchecked progress item. Keep the change scoped to GitHub PR association, Linear issue linking/detection, planning guidance for solution narratives and Linear references, refresh, and index display for plans. Do not implement generic multi-provider VCS, background merge monitoring, authentication UX, direct PR creation, or Linear API synchronization.</p>
+  </section>
+
+  <section id="product-intent-alignment" class="card">
+    <h2>Product intent alignment</h2>
+    <p>This advances the product intent outcome that the plan index truthfully reports plan status and repository metadata. It preserves the repo HTML plan as the plan source of truth while making PR status and normalized Linear links service-owned metadata facts that APIs and UI can query. The golden path is: create a plan with a solution narrative and Linear issue reference, register/build the plan, create a PR, link or auto-discover it, refresh status, and scan the index. Routine missing data is self-healed through safe branch-based GitHub discovery and <code>NOD-NNN</code> Linear reference detection; ambiguous matches fail closed with an exact command for explicit linking.</p>
+  </section>
+
+  <section id="locked-decisions" class="card">
+    <h2>Locked decisions</h2>
+    <ul>
+      <li id="decision-source-of-truth"><strong>Source of truth:</strong> PR association and merge state live in structured service metadata, not in plan HTML text. Plan HTML may mention the PR, but the index does not parse it for truth.</li>
+      <li id="decision-provider"><strong>Provider scope:</strong> this plan supports GitHub only. Other providers are non-goals until there is a concrete repo need.</li>
+      <li id="decision-explicit-link"><strong>Agent update path:</strong> agents that create a PR must run <code>plan-review pr link &lt;planId-or-slug&gt; --url &lt;pr-url&gt;</code> or <code>--number &lt;n&gt;</code> from the repo, then refresh status before handoff.</li>
+      <li id="decision-auto-discovery"><strong>Connect-the-dots fallback:</strong> <code>plan-review register</code> and <code>plan-review pr refresh</code> may infer one GitHub PR by matching the registered remote owner/repo and branch head. Zero or multiple matches do not guess.</li>
+      <li id="decision-gh-data"><strong>GitHub data source:</strong> use GitHub REST from the CLI with <code>GITHUB_TOKEN</code> or a token from <code>gh auth token</code> when available; unauthenticated public repo lookup is allowed as a best effort. Do not add Octokit for this narrow slice.</li>
+      <li id="decision-refresh-location"><strong>External refresh location:</strong> GitHub network calls happen in CLI commands, not during normal index rendering, so page loads remain fast and deterministic. The index shows <code>lastCheckedAt</code> and stale/unknown guidance.</li>
+      <li id="decision-pr-api"><strong>PR persistence API:</strong> CLI PR commands persist through <code>PUT /api/plans/:planId/pull-request</code> with a validated PR metadata payload and clear through <code>DELETE /api/plans/:planId/pull-request</code>. These routes are local-service metadata updates only; they do not call GitHub.</li>
+      <li id="decision-statuses"><strong>Status vocabulary:</strong> UI/API status is one of <code>unlinked</code>, <code>open</code>, <code>merged</code>, <code>closed</code>, <code>unknown</code>, or <code>stale</code>. <code>merged</code> requires GitHub <code>merged_at</code> or equivalent merged signal. <code>closed</code> means closed without a merged signal and is terminal. <code>stale</code> is derived, not persisted, only when a linked PR's last known state is <code>open</code> or <code>unknown</code> and it has no successful <code>lastCheckedAt</code> or the last successful check is older than 24 hours; stale never masks terminal <code>closed</code> or <code>merged</code> states.</li>
+      <li id="decision-linear-detection"><strong>Linear detection:</strong> detect canonical <code>NOD-NNN</code>-style issue keys case-insensitively from registration metadata and plan HTML text, normalize to uppercase, and render a Linear URL as <code>https://linear.app/nodaste/issue/&lt;ISSUE_KEY&gt;</code> unless a future config surface explicitly overrides it. Do not call Linear APIs in this slice.</li>
+      <li id="decision-planning-guidance"><strong>Planning guidance:</strong> new HTML plans in this repo should include a top-level Solution narrative section and a Linear issue reference, or explicitly state why no Linear issue exists.</li>
+    </ul>
+  </section>
+
+  <section id="acceptance-criteria" class="card">
+    <h2>Acceptance criteria</h2>
+    <ol>
+      <li id="ac-1">A plan can store at most one current GitHub PR association with URL, owner, repo, number, head branch, base branch, state, merged flag, merged timestamp, last checked timestamp, source, and last refresh error.</li>
+      <li id="ac-2"><code>GET /api/plans</code>, <code>GET /api/plans/:planId</code>, and <code>plan-review index --json</code> include the PR metadata without breaking existing fields.</li>
+      <li id="ac-2a"><code>PUT /api/plans/:planId/pull-request</code> validates and persists PR metadata submitted by the CLI, and <code>DELETE /api/plans/:planId/pull-request</code> clears the current association without touching comments or plan versions.</li>
+      <li id="ac-3"><code>plan-review pr link &lt;plan&gt; --url &lt;github-pr-url&gt; --json</code> validates the URL, fetches the current GitHub PR state when possible, persists it, and returns the stored association.</li>
+      <li id="ac-4"><code>plan-review pr refresh &lt;plan&gt; --json</code> updates an existing link or safely infers exactly one PR from registered repo/branch metadata.</li>
+      <li id="ac-5">Auto-discovery fails closed with an actionable error when no PR or multiple plausible PRs exist; it does not mark the plan merged or open by guess.</li>
+      <li id="ac-6">The active and archived HTML indexes show a visible PR pill/link for each plan: <strong>No PR</strong>, <strong>PR open</strong>, <strong>PR merged</strong>, <strong>PR closed</strong>, <strong>PR unknown</strong>, or <strong>PR stale</strong>.</li>
+      <li id="ac-7">The index search/filter haystack includes PR URL, number, state, and merged/open terms so users can find merged or unmerged plans.</li>
+      <li id="ac-8">Agent-facing build/review handoff guidance tells agents the exact <code>plan-review pr link</code> and <code>plan-review pr refresh</code> commands to run after PR creation and before final handoff.</li>
+      <li id="ac-9">Existing registration, source sync, archive, queue, comment, execution readiness, and Build Plan behavior remain intact.</li>
+      <li id="ac-10">Failures from GitHub lookup explain what was attempted, why automation stopped, and the next safe command to link or refresh manually.</li>
+      <li id="ac-11">Registration/source sync detects <code>NOD-NNN</code>-style Linear references from metadata or plan HTML, normalizes them, and the active/archive indexes render them as links.</li>
+      <li id="ac-12">Repo planning guidance requires new plans to include a near-top Solution narrative section and a Linear issue reference or explicit no-issue rationale.</li>
+    </ol>
+  </section>
+
+  <section id="bdd-scenarios" class="card">
+    <h2>BDD scenarios</h2>
+    <article id="bdd-link-happy-path">
+      <h3>BDD-1 - Explicit link happy path</h3>
+      <p><strong>Given</strong> a registered plan and a GitHub PR URL, <strong>When</strong> an agent runs <code>plan-review pr link &lt;plan&gt; --url &lt;url&gt; --json</code>, <strong>Then</strong> the service stores the PR association and the index shows a linked PR pill with the fetched state.</p>
+    </article>
+    <article id="bdd-merged-refresh">
+      <h3>BDD-2 - Merged PR refresh</h3>
+      <p><strong>Given</strong> a plan already linked to PR #12, <strong>When</strong> <code>plan-review pr refresh &lt;plan&gt;</code> receives GitHub state <code>closed</code> with <code>merged_at</code>, <strong>Then</strong> the plan index shows <strong>PR merged</strong> and includes the merged timestamp.</p>
+    </article>
+    <article id="bdd-auto-discover-one">
+      <h3>BDD-3 - Safe branch auto-discovery</h3>
+      <p><strong>Given</strong> a registered GitHub remote and branch <code>feature/x</code>, <strong>When</strong> refresh finds exactly one PR with matching head repo owner and branch, <strong>Then</strong> the plan is linked with source <code>auto-discovered</code>.</p>
+    </article>
+    <article id="bdd-auto-discover-ambiguous">
+      <h3>BDD-4 - Ambiguous auto-discovery fails closed</h3>
+      <p><strong>Given</strong> refresh finds two plausible PRs for a branch, <strong>When</strong> the CLI cannot prove which PR belongs to the plan, <strong>Then</strong> it stores no new association, keeps the index at <strong>PR unknown</strong> or <strong>No PR</strong>, and prints the exact <code>plan-review pr link</code> command format.</p>
+    </article>
+    <article id="bdd-no-token-public-private">
+      <h3>BDD-5 - Missing or insufficient GitHub auth</h3>
+      <p><strong>Given</strong> GitHub lookup returns authentication or not-found errors, <strong>When</strong> refresh runs, <strong>Then</strong> the CLI records a refresh error, marks the displayed state unknown/stale, and tells the agent to set <code>GITHUB_TOKEN</code>, run <code>gh auth login</code>, or explicitly link a URL if lookup is otherwise impossible.</p>
+    </article>
+    <article id="bdd-index-parity">
+      <h3>BDD-6 - API/CLI/UI parity</h3>
+      <p><strong>Given</strong> plans with no PR, open PR, merged PR, and closed-unmerged PR states, <strong>When</strong> the API, CLI index, active index, and archive index render, <strong>Then</strong> all surfaces report the same state vocabulary and PR URL/number.</p>
+    </article>
+    <article id="bdd-agent-handoff">
+      <h3>BDD-7 - Agent handoff includes PR update</h3>
+      <p><strong>Given</strong> an executing agent creates a PR, <strong>When</strong> it follows plan-review handoff guidance, <strong>Then</strong> it has a deterministic command to attach the PR to the plan and the index no longer depends on manual plan edits.</p>
+    </article>
+    <article id="bdd-existing-flow-intact">
+      <h3>BDD-8 - Existing workflows remain intact</h3>
+      <p><strong>Given</strong> existing comment queue, archive, source sync, and Build Plan flows, <strong>When</strong> PR metadata is absent, <strong>Then</strong> those workflows still behave as before and display <strong>No PR</strong> without errors.</p>
+    </article>
+    <article id="bdd-linear-link-detected">
+      <h3>BDD-9 - Linear link detection</h3>
+      <p><strong>Given</strong> a registered plan contains <code>nod-123</code> in its plan text or registration metadata, <strong>When</strong> the index renders, <strong>Then</strong> the card shows a normalized <code>NOD-123</code> Linear link and includes the issue key in search/filter terms.</p>
+    </article>
+    <article id="bdd-plan-guidance-contract">
+      <h3>BDD-10 - Planning guidance contract</h3>
+      <p><strong>Given</strong> an agent creates a new repo HTML plan, <strong>When</strong> it follows <code>thoughts/plans/AGENTS.md</code>, <strong>Then</strong> the plan includes a top Solution narrative and either a Linear issue reference or an explicit no-issue rationale.</p>
+    </article>
+    <article id="bdd-adversarial-wrong-repo-branch">
+      <h3>BDD-11 - Adversarial same branch in wrong repository</h3>
+      <p><strong>Given</strong> GitHub returns a PR with the same branch name from a fork or different repository owner than the registered plan remote, <strong>When</strong> auto-discovery runs, <strong>Then</strong> it does not link that PR unless the head repo and registered remote match the locked matching rules.</p>
+    </article>
+    <article id="bdd-adversarial-spoofed-url">
+      <h3>BDD-12 - Adversarial spoofed PR URL</h3>
+      <p><strong>Given</strong> an agent passes a URL that looks similar to GitHub but is not a canonical <code>https://github.com/&lt;owner&gt;/&lt;repo&gt;/pull/&lt;number&gt;</code> URL, <strong>When</strong> <code>plan-review pr link</code> validates it, <strong>Then</strong> it rejects the URL, stores nothing, and prints the accepted URL shape.</p>
+    </article>
+    <article id="bdd-adversarial-closed-unmerged">
+      <h3>BDD-13 - Adversarial closed but unmerged PR</h3>
+      <p><strong>Given</strong> GitHub returns <code>state: closed</code> with no <code>merged_at</code>, <strong>When</strong> refresh maps state, <strong>Then</strong> the plan displays <strong>PR closed</strong>, not <strong>PR merged</strong>, even if the plan phases are complete.</p>
+    </article>
+    <article id="bdd-adversarial-linear-false-positive">
+      <h3>BDD-14 - Adversarial Linear false positive</h3>
+      <p><strong>Given</strong> plan text contains a non-issue token such as <code>NOD-ABC</code>, <code>NOD-</code>, or a code sample that should not be treated as a canonical issue key, <strong>When</strong> Linear detection runs, <strong>Then</strong> only valid <code>NOD-\d+</code> keys are normalized and linked.</p>
+    </article>
+    <article id="bdd-adversarial-cross-plan-update">
+      <h3>BDD-15 - Adversarial cross-plan update</h3>
+      <p><strong>Given</strong> two plans in different repositories share a slug or branch name, <strong>When</strong> an agent links or refreshes one plan, <strong>Then</strong> only the resolved plan ID is updated and the command fails with the existing ambiguous-slug guidance if the identifier is not unique.</p>
+    </article>
+  </section>
+
+  <section id="test-coverage-matrix" class="card">
+    <h2>Test coverage matrix</h2>
+    <table>
+      <thead><tr><th>Acceptance / scenario</th><th>Test layer</th><th>Planned files</th><th>Verification</th></tr></thead>
+      <tbody>
+        <tr><td>AC-1, BDD-1</td><td>Schema/store contract</td><td><code>src/schemas.ts</code>, <code>src/storage/database.ts</code>, <code>src/__tests__/contracts.test.ts</code></td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></td></tr>
+        <tr><td>AC-2, AC-6, AC-7, BDD-6</td><td>API/CLI/UI contract</td><td><code>src/server/app.ts</code>, <code>src/cli.ts</code>, <code>src/__tests__/contracts.test.ts</code></td><td><code>bun run test</code></td></tr>
+        <tr><td>AC-3, AC-4, AC-5, AC-10, BDD-2-5</td><td>CLI GitHub client contract with mocked fetch/token discovery</td><td><code>src/cli.ts</code> or focused helper, <code>src/__tests__/contracts.test.ts</code></td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></td></tr>
+        <tr><td>AC-8, BDD-7</td><td>Instruction/agent guidance contract</td><td><code>src/registrationInstructions.ts</code>, <code>src/server/app.ts</code>, contract tests</td><td><code>bun run test</code></td></tr>
+        <tr><td>AC-9, BDD-8</td><td>Regression/e2e fixtures</td><td><code>src/test-fixtures/e2e-run.ts</code>, <code>src/test-fixtures/run.ts</code></td><td><code>bun run test:e2e</code> and fixture smoke if queue guidance changes</td></tr>
+        <tr><td>AC-11, BDD-9</td><td>Linear detection/index contract</td><td><code>src/schemas.ts</code>, <code>src/storage/database.ts</code>, <code>src/server/app.ts</code>, <code>src/__tests__/contracts.test.ts</code></td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></td></tr>
+        <tr><td>AC-12, BDD-10</td><td>Planning guidance inspection</td><td><code>thoughts/plans/AGENTS.md</code>, possibly <code>AGENTS.md</code></td><td>Targeted inspection plus <code>bun run test</code> if guidance text is reflected in tests/help</td></tr>
+        <tr><td>BDD-11 through BDD-15</td><td>Adversarial contract tests</td><td><code>src/cli.ts</code> or PR helper, <code>src/storage/database.ts</code>, <code>src/server/app.ts</code>, <code>src/__tests__/contracts.test.ts</code></td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="phase-p1-contract" class="card">
+    <h2>Phase P1 - Persist PR metadata contract</h2>
+    <h3>End State</h3>
+    <p>The service has a tested internal contract for one current PR association per plan and can expose it from store reads without changing user-facing UI yet.</p>
+    <h3>Tests first</h3>
+    <p>Add failing contract tests for PR metadata validation, migration/backfill on existing DBs, store upsert/read behavior, and list/get API shape using in-memory fixture payloads.</p>
+    <h3>Expected files</h3>
+    <ul>
+      <li><code>src/schemas.ts</code></li>
+      <li><code>src/storage/database.ts</code></li>
+      <li><code>src/server/app.ts</code></li>
+      <li><code>src/__tests__/contracts.test.ts</code></li>
+    </ul>
+    <h3>Work</h3>
+    <ul>
+      <li>Add a <code>planPullRequestSchema</code> with URL, provider, owner, repo, number, head/base refs, state, merged flag, timestamps, source, and optional refresh error.</li>
+      <li>Add SQLite migration for a <code>plan_pull_requests</code> table keyed by <code>plan_id</code>, or an equivalent normalized plan-level table with a unique current association.</li>
+      <li>Add store methods to upsert, clear, and read PR metadata by plan ID.</li>
+      <li>Add <code>PUT /api/plans/:planId/pull-request</code> and <code>DELETE /api/plans/:planId/pull-request</code> routes that use the schema and store methods, returning agent-legible validation errors.</li>
+      <li>Extend <code>PlanRecord</code>, <code>getPlan()</code>, and <code>listPlans()</code> return values with optional <code>pullRequest</code>.</li>
+    </ul>
+    <h3>Verify</h3>
+    <pre><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></pre>
+  </section>
+
+  <section id="phase-p2-cli" class="card">
+    <h2>Phase P2 - Add PR link and refresh CLI</h2>
+    <h3>End State</h3>
+    <p>Agents and operators have deterministic commands to link a PR explicitly or refresh/infer it safely from GitHub.</p>
+    <h3>Tests first</h3>
+    <p>Add tests for GitHub URL parsing, branch-head query construction, merged/open/closed mapping, ambiguous discovery, auth failure guidance, and CLI JSON output. Use mocked fetch/token behavior rather than real GitHub network calls.</p>
+    <h3>Expected files</h3>
+    <ul>
+      <li><code>src/cli.ts</code></li>
+      <li>Optional focused helper such as <code>src/githubPr.ts</code> if keeping CLI readable requires it</li>
+      <li><code>src/__tests__/contracts.test.ts</code></li>
+    </ul>
+    <h3>Work</h3>
+    <ul>
+      <li>Add <code>plan-review pr link &lt;plan&gt; --url &lt;url&gt; [--json]</code> and <code>--number</code>/<code>--repo</code> options only where they reduce ambiguity.</li>
+      <li>Add <code>plan-review pr refresh &lt;plan&gt; [--json]</code> and <code>plan-review pr refresh --all [--repo-key ...] [--json]</code>.</li>
+      <li>Resolve the plan through existing service APIs, discover GitHub owner/repo from registered <code>remoteUrl</code>/<code>repoKey</code>, and match branch from publication metadata.</li>
+      <li>Use <code>GITHUB_TOKEN</code> first, then <code>gh auth token</code> when available, then unauthenticated public lookup.</li>
+      <li>Map GitHub <code>state</code> plus <code>merged_at</code> to the locked status vocabulary and persist via the service endpoint from P1.</li>
+      <li>Return actionable <code>PlanReviewError</code> next actions for no match, multiple matches, auth failure, network failure, and non-GitHub remotes.</li>
+    </ul>
+    <h3>Verify</h3>
+    <pre><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></pre>
+  </section>
+
+  <section id="phase-p3-index" class="card">
+    <h2>Phase P3 - Surface PR state in APIs and index</h2>
+    <h3>End State</h3>
+    <p>Users can scan the active or archived index and immediately tell which plans have merged, open, closed, stale, unknown, or missing PR state.</p>
+    <h3>Tests first</h3>
+    <p>Add API and rendered HTML index tests with fixture plans covering no PR, open, merged, closed-unmerged, unknown, and stale states. Add CLI index text/JSON assertions for the same vocabulary.</p>
+    <h3>Expected files</h3>
+    <ul>
+      <li><code>src/server/app.ts</code></li>
+      <li><code>src/cli.ts</code></li>
+      <li><code>src/__tests__/contracts.test.ts</code></li>
+    </ul>
+    <h3>Work</h3>
+    <ul>
+      <li>Add a <code>pullRequestHtml()</code> renderer for plan cards with accessible pill labels and PR links.</li>
+      <li>Include PR terms in <code>planCardSearch()</code> and API filter behavior where appropriate.</li>
+      <li>Show <code>lastCheckedAt</code> and stale/error messaging when refresh is old or failed.</li>
+      <li>Update <code>plan-review index</code> text output to include a PR column while preserving JSON shape plus the new <code>pullRequest</code> object.</li>
+      <li>Keep archive and active index behavior parallel.</li>
+    </ul>
+    <h3>Verify</h3>
+    <pre><code>bun run test</code></pre>
+  </section>
+
+  <section id="phase-p4-linear-guidance" class="card">
+    <h2>Phase P4 - Wire Linear links and planning guidance</h2>
+    <h3>End State</h3>
+    <p>Plans with detected <code>NOD-NNN</code> references show clickable Linear links in the index, and repo planning guidance makes Solution narrative and Linear issue references part of the standard plan shape.</p>
+    <h3>Tests first</h3>
+    <p>Add contract tests for Linear key extraction from metadata and plan HTML, normalization, index/API/CLI display, and no-match behavior. Add targeted inspection expectations for planning guidance if automated tests do not cover prose-only guidance.</p>
+    <h3>Expected files</h3>
+    <ul>
+      <li><code>src/schemas.ts</code></li>
+      <li><code>src/storage/database.ts</code></li>
+      <li><code>src/server/app.ts</code></li>
+      <li><code>src/__tests__/contracts.test.ts</code></li>
+      <li><code>thoughts/plans/AGENTS.md</code></li>
+      <li><code>AGENTS.md</code> if root guidance also needs to name the new planning contract</li>
+    </ul>
+    <h3>Work</h3>
+    <ul>
+      <li>Normalize Linear issue keys from <code>publicationMetadata.linearIssue</code> and plan HTML text using a <code>NOD-\d+</code> pattern.</li>
+      <li>Derive a Linear URL from the normalized key using the locked default <code>https://linear.app/nodaste/issue/&lt;ISSUE_KEY&gt;</code> URL contract.</li>
+      <li>Render clickable Linear links in active and archived plan cards while preserving the existing plain issue display only when a key cannot be normalized.</li>
+      <li>Update planning guidance so new plans include a top Solution narrative and a Linear issue reference or an explicit no-issue rationale.</li>
+      <li>Keep Linear work limited to key detection/link rendering; do not add Linear API synchronization.</li>
+    </ul>
+    <h3>Verify</h3>
+    <pre><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></pre>
+  </section>
+
+  <section id="phase-p5-agent-guidance" class="card">
+    <h2>Phase P5 - Wire agent-facing handoff guidance</h2>
+    <h3>End State</h3>
+    <p>Agents that create PRs during plan execution are told exactly how to attach and refresh the PR association, making the programmatic path the obvious default.</p>
+    <h3>Tests first</h3>
+    <p>Add contract assertions that registration/build-related guidance includes PR link/refresh commands with the correct plan identifier and service URL behavior where relevant.</p>
+    <h3>Expected files</h3>
+    <ul>
+      <li><code>src/registrationInstructions.ts</code></li>
+      <li><code>src/server/app.ts</code></li>
+      <li><code>README.md</code> if public CLI examples already document execution handoff</li>
+      <li><code>src/__tests__/contracts.test.ts</code></li>
+    </ul>
+    <h3>Work</h3>
+    <ul>
+      <li>Extend agent instructions with a post-PR creation step: link the PR, refresh status, and verify the index shows the expected PR state.</li>
+      <li>Update the Build Plan queued comment or response metadata only if it can preserve the existing scoped-plan-run command contract; otherwise keep the comment body stable and add PR commands to the surrounding agent instructions.</li>
+      <li>Document the explicit link command as the required agent action after PR creation and before final handoff.</li>
+      <li>Make errors name the exact plan identifier and URL/number command to run when automatic discovery cannot proceed.</li>
+    </ul>
+    <h3>Verify</h3>
+    <pre><code>bun run test</code></pre>
+  </section>
+
+  <section id="phase-p6-e2e" class="card">
+    <h2>Phase P6 - Verify end-to-end and docs parity</h2>
+    <h3>End State</h3>
+    <p>The shipped CLI/API/UI contract is coherent, existing workflows still pass, and maintainers have copy-paste-ready commands for PR status upkeep.</p>
+    <h3>Tests first</h3>
+    <p>Add or extend e2e/fixture coverage only where contract tests cannot prove rendered index parity or queue guidance remains intact.</p>
+    <h3>Expected files</h3>
+    <ul>
+      <li><code>src/test-fixtures/e2e-run.ts</code> if browser index assertions need full-page coverage</li>
+      <li><code>src/test-fixtures/run.ts</code> only if agent instruction fixtures change queue-visible behavior</li>
+      <li><code>README.md</code> and CLI help text if public examples need updating</li>
+    </ul>
+    <h3>Work</h3>
+    <ul>
+      <li>Run full regression gates and update any stale docs/help examples touched by the PR workflow.</li>
+      <li>Confirm non-GitHub or unlinked plans degrade to <strong>No PR</strong>/<strong>Unknown</strong> without breaking index rendering.</li>
+      <li>Confirm all errors are agent-legible and include the next safe action.</li>
+      <li>Record any low-risk deferrals in this plan's Decisions / Deviations Log before handoff.</li>
+    </ul>
+    <h3>Verify</h3>
+    <pre><code>bun run build
+bun run test
+bun run test:e2e
+bun run test:fixtures -- --scenario seeded-comment-stream
+bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated</code></pre>
+  </section>
+
+  <section id="verification-strategy" class="card">
+    <h2>Verification strategy</h2>
+    <p>Use contract tests as the primary guard for persistence, CLI/API shape, GitHub state mapping, and failure semantics. Use rendered HTML assertions for index visibility and e2e only for browser-level index parity. Run the full repo gates before marking the implementation complete because this changes public CLI, API, and browser index contracts.</p>
+  </section>
+
+  <section id="delivery-order" class="card">
+    <h2>Delivery order</h2>
+    <ol>
+      <li>Lock the structured PR metadata contract and store migration.</li>
+      <li>Add the explicit link and refresh CLI path so agents have a deterministic update mechanism.</li>
+      <li>Expose the metadata in API/CLI/index UI.</li>
+      <li>Wire Linear link detection/display and update repo planning guidance for Solution narrative plus Linear issue references.</li>
+      <li>Make agent guidance point to the deterministic PR commands.</li>
+      <li>Run full regression and update public docs/help text touched by the workflow.</li>
+    </ol>
+  </section>
+
+  <section id="non-goals" class="card">
+    <h2>Non-goals</h2>
+    <ul>
+      <li>Creating pull requests from plan-reviewer.</li>
+      <li>Running background GitHub polling from normal index page loads.</li>
+      <li>Supporting GitLab, Bitbucket, Gerrit, or arbitrary forge providers in this slice.</li>
+      <li>Calling the Linear API, syncing Linear issue state, or creating Linear issues.</li>
+      <li>Using plan HTML parsing as the authoritative PR source.</li>
+      <li>Changing comment queue delivery, source sync safety, or execution-ready review semantics except for additive PR handoff guidance.</li>
+      <li>Adding authentication or multi-tenant security to the local unauthenticated service.</li>
+    </ul>
+  </section>
+
+  <section id="decisions-deviations-log" class="card">
+    <h2>Decisions / Deviations Log</h2>
+    <ul>
+      <li id="log-2026-06-08-initial">2026-06-08: Initial plan chooses structured service metadata plus explicit agent CLI linking, with GitHub branch auto-discovery as a safe fallback. No implementation changes have been made.</li>
+      <li id="log-2026-06-09-solution-narrative">2026-06-09: Browser feedback requested a solution narrative; added proposed behavior, user workflow, and pros/cons without changing implementation scope.</li>
+      <li id="log-2026-06-09-linear-guidance">2026-06-09: Browser feedback requested Linear issue links and planning guidance requiring solution narratives; expanded scope to include <code>NOD-NNN</code> link detection and repo plan guidance updates.</li>
+      <li id="log-2026-06-09-adversarial-scenarios">2026-06-09: Browser feedback requested adversarial scenario review; added wrong-repo branch, spoofed URL, closed-unmerged, Linear false-positive, and cross-plan update scenarios.</li>
+      <li id="log-2026-06-09-review-gaps">2026-06-09: Plan review found missing API, stale-status, and Linear URL contracts; locked <code>PUT/DELETE /api/plans/:planId/pull-request</code>, 24-hour derived stale behavior, and the default <code>https://linear.app/nodaste/issue/&lt;ISSUE_KEY&gt;</code> Linear link format.</li>
+      <li id="log-2026-06-09-stale-terminal-fix">2026-06-09: Re-review found stale status could mask closed-unmerged PRs; clarified that stale applies only to open/unknown last-known states and never replaces terminal closed or merged states.</li>
+      <li id="log-2026-06-09-execution-ready">2026-06-09: Independent plan reviews converged on execution-ready after integrating blocker feedback.</li>
+      <li id="log-2026-06-09-p1-p5-implemented">2026-06-09: Implemented P1-P5 scoped surfaces: structured PR persistence/API, CLI link/refresh, index/API PR status display, Linear key detection/link rendering, repo planning guidance, and registration agent handoff guidance. Verified with <code>bun run test</code>.</li>
+      <li id="log-2026-06-09-p6-verified">2026-06-09: Completed P6 verification and docs parity. <code>bun run test</code>, <code>bun run test:e2e</code>, <code>bun run test:fixtures -- --scenario seeded-comment-stream</code>, and <code>bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated</code> passed; the harness fixture hit a transient Node 26 <code>setTypeOfService EINVAL</code> once and passed on immediate rerun. Codex implementation review returned <code>VERDICT: PASS_SCOPED</code>. Claude first review returned <code>VERDICT: PASS_WITH_DEFERRED_FOLLOW_UPS</code>; its build-comment concern was resolved by preserving the original Build Plan comment body, and the user explicitly waived the blocked Claude re-review because Claude was out of capacity.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>

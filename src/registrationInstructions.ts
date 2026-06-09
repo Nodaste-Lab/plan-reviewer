@@ -40,8 +40,8 @@ export function buildRegistrationAgentInstructions(input: { planId: string; revi
   return {
     type: instructionType,
     required: true,
-    summary: 'Use the queue-backed agent next command as the primary browser-comment listener loop.',
-    nextAction: 'Drain pending comments with agent next --no-wait, then listen with agent next --wait before continuing implementation or review work. After a claim, process and ack it before starting another listener.',
+    summary: 'Use the queue-backed agent next command as the primary browser-comment listener loop; after creating a PR, link and refresh PR status for this plan.',
+    nextAction: 'Drain pending comments with agent next --no-wait, then listen with agent next --wait before continuing implementation or review work. After a claim, process and ack it before starting another listener. After creating a PR, run plan-review pr link and plan-review pr refresh for this plan before final handoff.',
     planId: input.planId,
     reviewUrl: input.reviewUrl,
     serviceUrlRequired: true,
@@ -59,6 +59,8 @@ export function buildRegistrationAgentInstructions(input: { planId: string; revi
       'Acknowledge with the returned ackCommand or plan-review ack <commentId> --claim <claimId> --summary "..." --changed-files thoughts/plans/... --json.',
       'Resolve only after a successful ack when appropriate, then immediately rerun the listen command.',
       'If the plan-review service restarts or the listener exits before a claim, restart the same agent next command; queue state and claim leases remain authoritative.',
+      `After creating a GitHub PR, run plan-review pr link ${input.planId} --url <github-pr-url> --json, then plan-review pr refresh ${input.planId} --json before final handoff.`,
+      'Verify the index shows the expected PR state (open, merged, closed, unknown, or stale); do not rely on manual plan text edits for PR status.',
       'Use plan-review watch only as an optional low-latency/debug stream, not as the correctness-critical delivery path.'
     ],
     referenceImplementations: commands.referenceImplementations
