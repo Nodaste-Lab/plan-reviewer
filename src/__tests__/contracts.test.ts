@@ -70,6 +70,7 @@ test('PR schema, URL parsing, stale derivation, and adversarial GitHub discovery
   assert.equal(pullRequestStatus({ ...pullRequest, state: 'open', merged: false, lastCheckedAt: '2000-01-01T00:00:00.000Z' }), 'stale');
   assert.equal(pullRequestStatus({ ...pullRequest, state: 'unknown', merged: false, lastCheckedAt: undefined }), 'stale');
   assert.deepEqual(parseGitHubPrUrl('https://github.com/demo/sample/pull/12'), { owner: 'demo', repo: 'sample', number: 12, url: 'https://github.com/demo/sample/pull/12' });
+  assert.equal(planPullRequestSchema.parse({ ...pullRequest, url: 'https://github.com/Demo/Sample/pull/12' }).url, 'https://github.com/Demo/Sample/pull/12');
   assert.throws(() => parseGitHubPrUrl('https://github.com.evil/demo/sample/pull/12'), /canonical GitHub PR URL/);
   assert.throws(() => planPullRequestSchema.parse({ ...pullRequest, merged: true }), /mergedAt is required/);
 

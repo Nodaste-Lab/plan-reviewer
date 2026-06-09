@@ -61,7 +61,7 @@ export const planPullRequestSchema = z.object({
   status: z.enum(['unlinked', 'open', 'merged', 'closed', 'unknown', 'stale']).optional()
 }).superRefine((input, context) => {
   const urlMatch = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)$/.exec(input.url);
-  if (urlMatch && (urlMatch[1] !== input.owner || urlMatch[2] !== input.repo || Number(urlMatch[3]) !== input.number)) {
+  if (urlMatch && (urlMatch[1].toLowerCase() !== input.owner.toLowerCase() || urlMatch[2].toLowerCase() !== input.repo.toLowerCase() || Number(urlMatch[3]) !== input.number)) {
     context.addIssue({ code: 'custom', path: ['url'], message: 'url owner/repo/number must match pull request fields' });
   }
   if (input.merged && !input.mergedAt) {
