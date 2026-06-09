@@ -236,8 +236,8 @@ test('registration instruction helper builds canonical agent-next guidance and r
   assert.match(instructions.processingLoop.join('\n'), /do not blindly loop successful claim commands/);
   assert.match(instructions.processingLoop.join('\n'), /plan-review ack <commentId> --claim <claimId> --summary/);
   assert.match(instructions.processingLoop.join('\n'), /Resolve only after a successful ack/);
-  assert.match(instructions.processingLoop.join('\n'), /plan-review pr link plan_abc --url <github-pr-url> --json/);
-  assert.match(instructions.processingLoop.join('\n'), /plan-review pr refresh plan_abc --json/);
+  assert.match(instructions.processingLoop.join('\n'), /plan-review pr link plan_abc --url <github-pr-url> --service-url <registration service URL> --json/);
+  assert.match(instructions.processingLoop.join('\n'), /plan-review pr refresh plan_abc --url <registration service URL> --json/);
   assert.match(instructions.processingLoop.join('\n'), /plan-review watch only as an optional/);
 
   const rendered = renderRegistrationInstructionCommands(instructions, 'http://reviewer.example:4317');

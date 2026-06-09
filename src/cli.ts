@@ -116,6 +116,7 @@ function fullUrl(base: string, maybePath: string): string {
 function registrationInstructionsOutput(data: RegisterResponse, serviceUrl: string): string {
   if (!data.agentInstructions) return `Watch command: ${data.watchCommand} --url ${serviceUrl}\n`;
   const renderedCommands = renderRegistrationInstructionCommands(data.agentInstructions, serviceUrl);
+  const processingLoop = data.agentInstructions.processingLoop.map(step => step.replaceAll('<registration service URL>', serviceUrl));
   return [
     'REQUIRED NEXT ACTION:',
     data.agentInstructions.nextAction,
@@ -133,7 +134,7 @@ function registrationInstructionsOutput(data: RegisterResponse, serviceUrl: stri
     renderedCommands.optionalWatchCommand,
     '',
     'Comment lifecycle:',
-    ...data.agentInstructions.processingLoop.map(step => `- ${step}`)
+    ...processingLoop.map(step => `- ${step}`)
   ].join('\n') + '\n';
 }
 
