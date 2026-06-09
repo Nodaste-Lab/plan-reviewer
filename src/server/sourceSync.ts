@@ -204,6 +204,8 @@ export class SourceSyncService {
       const payload: RegisterPlanInput = {
         repoKey: plan.repoKey,
         repoName: plan.repoName,
+        remoteUrl: plan.remoteUrl,
+        rootPath: plan.rootPath,
         branch: plan.branch,
         commitSha: plan.commitSha,
         planPath: plan.planPath,

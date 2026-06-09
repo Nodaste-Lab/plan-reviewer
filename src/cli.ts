@@ -10,6 +10,21 @@ import { appendNdjson, requestJson } from './client/api.js';
 import { findImageSources } from './htmlImages.js';
 import { renderRegistrationInstructionCommands, type RegistrationAgentInstructions } from './registrationInstructions.js';
 import { buildAgentNextClaimed, buildAgentNextEmpty } from './agentNext.js';
+import { discoverPullRequest, fetchPullRequestByUrl, parseGitHubRemote, refreshPullRequest } from './githubPr.js';
+import type { PlanPullRequest } from './schemas.js';
+
+interface PlanApiRecord {
+  plan: {
+    id: string;
+    repoName: string;
+    repoKey: string;
+    remoteUrl?: string;
+    branch?: string;
+    slug: string;
+    publicationMetadata: { branch: string; executionReady: boolean; linearIssue?: string };
+    pullRequest?: PlanPullRequest | null;
+  };
+}
 
 interface RegisterResponse {
   planId: string;
@@ -101,6 +116,7 @@ function fullUrl(base: string, maybePath: string): string {
 function registrationInstructionsOutput(data: RegisterResponse, serviceUrl: string): string {
   if (!data.agentInstructions) return `Watch command: ${data.watchCommand} --url ${serviceUrl}\n`;
   const renderedCommands = renderRegistrationInstructionCommands(data.agentInstructions, serviceUrl);
+  const processingLoop = data.agentInstructions.processingLoop.map(step => step.replaceAll('<registration service URL>', serviceUrl));
   return [
     'REQUIRED NEXT ACTION:',
     data.agentInstructions.nextAction,
@@ -118,7 +134,7 @@ function registrationInstructionsOutput(data: RegisterResponse, serviceUrl: stri
     renderedCommands.optionalWatchCommand,
     '',
     'Comment lifecycle:',
-    ...data.agentInstructions.processingLoop.map(step => `- ${step}`)
+    ...processingLoop.map(step => `- ${step}`)
   ].join('\n') + '\n';
 }
 
@@ -201,12 +217,19 @@ async function registerPlan(filePath: string, options: { url?: string; json?: bo
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload)
   });
+  const pullRequestDiscovery = await tryAutoDiscoverRegisteredPullRequest(serviceUrl, data.planId, meta.remoteUrl ?? meta.repoKey, branch, payload.planPath);
+  const outputData = pullRequestDiscovery ? { ...data, pullRequestDiscovery } : data;
   if (options.json) {
-    printJson(data);
+    printJson(outputData);
     return;
   }
   const sync = data.sourceSync?.active ? `active (${data.sourceSync.sourcePath})` : 'snapshot';
-  process.stdout.write(`Plan ID: ${data.planId}\nIndex URL: ${fullUrl(serviceUrl, data.indexUrl)}\nReview URL: ${fullUrl(serviceUrl, data.reviewUrl)}\nSource sync: ${sync}\n${registrationInstructionsOutput(data, serviceUrl)}`);
+  const discoveryNote = pullRequestDiscovery
+    ? pullRequestDiscovery.status === 'linked'
+      ? `PR auto-discovery: linked ${pullRequestDiscovery.pullRequest.url}\n`
+      : `PR auto-discovery: ${pullRequestDiscovery.message}\nNEXT: ${pullRequestDiscovery.nextAction}\n`
+    : '';
+  process.stdout.write(`Plan ID: ${data.planId}\nIndex URL: ${fullUrl(serviceUrl, data.indexUrl)}\nReview URL: ${fullUrl(serviceUrl, data.reviewUrl)}\nSource sync: ${sync}\n${discoveryNote}${registrationInstructionsOutput(data, serviceUrl)}`);
 }
 
 async function printIndex(options: { url?: string; json?: boolean; q?: string; repoKey?: string; limit?: string; cursor?: string }) {
@@ -217,15 +240,129 @@ async function printIndex(options: { url?: string; json?: boolean; q?: string; r
   if (options.limit) params.set('limit', options.limit);
   if (options.cursor) params.set('cursor', options.cursor);
   const query = params.toString();
-  const data = await requestJson<{ plans?: Array<{ plan: { repoName: string; slug: string; publicationMetadata: { branch: string; executionReady: boolean; linearIssue?: string } }; counts: { pending: number; claimed: number; acknowledged: number; resolved: number }; reviewUrl: string }>; nextCursor?: string }>(`${serviceUrl}/api/plans${query ? `?${query}` : ''}`);
+  const data = await requestJson<{ plans?: Array<PlanApiRecord & { counts: { pending: number; claimed: number; acknowledged: number; resolved: number }; reviewUrl: string }>; nextCursor?: string }>(`${serviceUrl}/api/plans${query ? `?${query}` : ''}`);
   if (options.json) printJson(data);
   else {
     const rows = data.plans ?? [];
-    const table = rows.map(item =>
-      `${item.plan.repoName}\t${item.plan.slug}\t${item.plan.publicationMetadata.branch}\t${item.plan.publicationMetadata.linearIssue ?? '-'}\texecutionReady:${item.plan.publicationMetadata.executionReady}\tpending:${item.counts.pending} claimed:${item.counts.claimed} ack:${item.counts.acknowledged} resolved:${item.counts.resolved}\t${fullUrl(serviceUrl, item.reviewUrl)}`
-    );
-    process.stdout.write(`Index URL: ${serviceUrl}/\nRepo\tPlan\tBranch\tLinear\tExecution Ready\tStatus\tReview URL\n${table.join('\n')}${data.nextCursor ? `\nNext cursor: ${data.nextCursor}` : ''}\n`);
+    const table = rows.map(item => {
+      const pr = item.plan.pullRequest;
+      const prLabel = pr ? `PR ${pr.status ?? pr.state} #${pr.number}` : 'No PR';
+      return `${item.plan.repoName}\t${item.plan.slug}\t${item.plan.publicationMetadata.branch}\t${item.plan.publicationMetadata.linearIssue ?? '-'}\t${prLabel}\texecutionReady:${item.plan.publicationMetadata.executionReady}\tpending:${item.counts.pending} claimed:${item.counts.claimed} ack:${item.counts.acknowledged} resolved:${item.counts.resolved}\t${fullUrl(serviceUrl, item.reviewUrl)}`;
+    });
+    process.stdout.write(`Index URL: ${serviceUrl}/\nRepo\tPlan\tBranch\tLinear\tPR\tExecution Ready\tStatus\tReview URL\n${table.join('\n')}${data.nextCursor ? `\nNext cursor: ${data.nextCursor}` : ''}\n`);
   }
+}
+
+async function tryAutoDiscoverRegisteredPullRequest(serviceUrl: string, planId: string, remoteOrRepoKey: string | undefined, branch: string, planPath: string): Promise<{ status: 'linked'; pullRequest: PlanPullRequest } | { status: 'not-linked'; code: string; message: string; nextAction: string } | undefined> {
+  if (!planPath.startsWith('thoughts/plans/')) return undefined;
+  const repo = parseGitHubRemote(remoteOrRepoKey);
+  if (!repo) return undefined;
+  try {
+    const existing = await getPlanApi(serviceUrl, planId);
+    if (existing.plan.pullRequest) return undefined;
+    const pullRequest = await discoverPullRequest(repo, branch, {}, planId);
+    const persisted = await persistPullRequest(serviceUrl, planId, pullRequest);
+    return { status: 'linked', pullRequest: persisted.pullRequest };
+  } catch (error) {
+    return {
+      status: 'not-linked',
+      code: error instanceof PlanReviewError ? error.code : 'github_lookup_failed',
+      message: error instanceof Error ? error.message : String(error),
+      nextAction: error instanceof PlanReviewError && error.nextAction
+        ? error.nextAction.replaceAll('<plan>', planId)
+        : `Link explicitly: plan-review pr link ${planId} --url https://github.com/<owner>/<repo>/pull/<number>`
+    };
+  }
+}
+
+async function getPlanApi(serviceUrl: string, plan: string): Promise<PlanApiRecord> {
+  return requestJson<PlanApiRecord>(`${serviceUrl}/api/plans/${encodeURIComponent(plan)}`);
+}
+
+async function persistPullRequest(serviceUrl: string, planId: string, pullRequest: PlanPullRequest): Promise<{ planId: string; pullRequest: PlanPullRequest }> {
+  return requestJson<{ planId: string; pullRequest: PlanPullRequest }>(`${serviceUrl}/api/plans/${encodeURIComponent(planId)}/pull-request`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(pullRequest)
+  });
+}
+
+async function linkPullRequest(plan: string, options: { url?: string; number?: string; repo?: string; json?: boolean; serviceUrl?: string }) {
+  const serviceUrl = resolveServiceUrl(options.serviceUrl);
+  const planData = await getPlanApi(serviceUrl, plan);
+  let prUrl = options.url;
+  if (!prUrl && options.number) {
+    const repo = options.repo
+      ? parseGitHubRemote(`https://github.com/${options.repo}`)
+      : parseGitHubRemote(planData.plan.remoteUrl ?? planData.plan.repoKey);
+    if (!repo) {
+      throw new PlanReviewError('github_repo_required', 'pr link --number requires a GitHub repo', 1, { plan }, 'Pass --repo <owner>/<repo> or use --url https://github.com/<owner>/<repo>/pull/<number>.');
+    }
+    prUrl = `https://github.com/${repo.owner}/${repo.repo}/pull/${options.number}`;
+  }
+  if (!prUrl) {
+    throw new PlanReviewError('url_required', 'pr link requires --url <github-pr-url> or --number <n>', 1, { plan }, 'Pass --url https://github.com/<owner>/<repo>/pull/<number>.');
+  }
+  let pullRequest: PlanPullRequest;
+  try {
+    pullRequest = await fetchPullRequestByUrl(prUrl);
+  } catch (error) {
+    if (error instanceof PlanReviewError) error.nextAction = error.nextAction.replaceAll('<plan>', planData.plan.id);
+    throw error;
+  }
+  const data = await persistPullRequest(serviceUrl, planData.plan.id, pullRequest);
+  if (options.json) printJson(data);
+  else process.stdout.write(`Linked ${planData.plan.id} to ${data.pullRequest.url} (${data.pullRequest.status ?? data.pullRequest.state})\n`);
+}
+
+async function refreshOnePullRequest(serviceUrl: string, planData: PlanApiRecord): Promise<{ planId: string; pullRequest: PlanPullRequest }> {
+  let pullRequest: PlanPullRequest;
+  if (planData.plan.pullRequest) {
+    try {
+      pullRequest = await refreshPullRequest(planData.plan.pullRequest);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const nextAction = error instanceof PlanReviewError && error.nextAction ? ` NEXT: ${error.nextAction.replaceAll('<plan>', planData.plan.id)}` : '';
+      const terminal = planData.plan.pullRequest.merged || planData.plan.pullRequest.state === 'closed';
+      pullRequest = terminal
+        ? { ...planData.plan.pullRequest, lastRefreshError: `${message}${nextAction}` }
+        : { ...planData.plan.pullRequest, state: 'unknown', lastCheckedAt: undefined, lastRefreshError: `${message}${nextAction}` };
+    }
+  } else {
+    const repo = parseGitHubRemote(planData.plan.remoteUrl ?? planData.plan.repoKey);
+    if (!repo) {
+      throw new PlanReviewError('non_github_remote', `Plan ${planData.plan.id} does not have a GitHub remote`, 1, { planId: planData.plan.id, remoteUrl: planData.plan.remoteUrl, repoKey: planData.plan.repoKey }, `Link explicitly: plan-review pr link ${planData.plan.id} --url https://github.com/<owner>/<repo>/pull/<number>`);
+    }
+    pullRequest = await discoverPullRequest(repo, planData.plan.publicationMetadata.branch, {}, planData.plan.id);
+  }
+  return persistPullRequest(serviceUrl, planData.plan.id, pullRequest);
+}
+
+async function refreshPullRequestCommand(plan: string | undefined, options: { all?: boolean; json?: boolean; url?: string; repoKey?: string }) {
+  const serviceUrl = resolveServiceUrl(options.url);
+  if (options.all) {
+    const params = new URLSearchParams();
+    if (options.repoKey) params.set('repoKey', options.repoKey);
+    const index = await requestJson<{ plans: PlanApiRecord[] }>(`${serviceUrl}/api/plans${params.toString() ? `?${params}` : ''}`);
+    const results = [];
+    const errors = [];
+    for (const item of index.plans) {
+      try {
+        results.push(await refreshOnePullRequest(serviceUrl, item));
+      } catch (error) {
+        errors.push({ planId: item.plan.id, code: error instanceof PlanReviewError ? error.code : 'error', message: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    const data = { results, errors };
+    if (options.json) printJson(data);
+    else process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
+    return;
+  }
+  if (!plan) throw new PlanReviewError('plan_required', 'pr refresh requires <plan> or --all', 1, {}, 'Run plan-review pr refresh <plan> --json or plan-review pr refresh --all --json.');
+  const planData = await getPlanApi(serviceUrl, plan);
+  const data = await refreshOnePullRequest(serviceUrl, planData);
+  if (options.json) printJson(data);
+  else process.stdout.write(`Refreshed ${planData.plan.id}: ${data.pullRequest.status ?? data.pullRequest.state} ${data.pullRequest.url}\n`);
 }
 
 function parseSse(buffer: string): { events: Array<{ id?: string; event?: string; data?: string }>; rest: string } {
@@ -669,6 +806,22 @@ export async function main(argv: string[] = process.argv.slice(2)) {
     .option('--cursor <cursor>')
     .option('--json')
     .action(printIndex);
+
+  const pr = program.command('pr');
+  pr.command('link <plan>')
+    .option('--url <githubPrUrl>', 'canonical GitHub PR URL')
+    .option('--number <number>', 'GitHub PR number; uses the plan GitHub remote unless --repo is passed')
+    .option('--repo <ownerRepo>', 'GitHub owner/repo for --number')
+    .option('--service-url <url>', 'plan-review service URL')
+    .option('--json')
+    .action(linkPullRequest);
+
+  pr.command('refresh [plan]')
+    .option('--url <url>', 'plan-review service URL')
+    .option('--all')
+    .option('--repo-key <repoKey>')
+    .option('--json')
+    .action(refreshPullRequestCommand);
 
   program.command('watch <planId>')
     .option('--url <url>')

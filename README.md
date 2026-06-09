@@ -79,6 +79,13 @@ plan-review agent next plan_123 --wait --json --url http://127.0.0.1:4317
 
 A claimed result includes `commentId`, `claimId`, the original `browser.comment.v1` `conversationPayload`, and copy-paste `ackCommand` / `resolveCommand` guidance. After acting on the comment, ack with the returned claim ID, optionally resolve after ack, then immediately run the wait command again. Active claims are not double-claimed by reruns; released or expired claims return to pending through normal queue state.
 
+After an agent creates a GitHub PR for a plan, link and refresh the plan's PR metadata before final handoff so the index can report open/merged/closed state programmatically:
+
+```bash
+plan-review pr link plan_123 --url https://github.com/OWNER/REPO/pull/123 --json
+plan-review pr refresh plan_123 --json
+```
+
 The older watch stream remains available as an optional low-latency/debug stream, not as the correctness-critical agent delivery path:
 
 ```bash

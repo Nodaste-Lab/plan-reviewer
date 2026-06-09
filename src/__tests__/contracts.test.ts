@@ -7,14 +7,15 @@ import { spawn, spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { claimCommentsSchema, createCommentSchema, registerPlanSchema } from '../schemas.js';
+import { claimCommentsSchema, createCommentSchema, planPullRequestSchema, registerPlanSchema } from '../schemas.js';
 import { renderPlan } from '../render/render.js';
-import { PlanReviewStore } from '../storage/database.js';
+import { normalizeLinearIssueKey, PlanReviewStore } from '../storage/database.js';
 import { createApp } from '../server/app.js';
 import { SourceSyncService } from '../server/sourceSync.js';
 import { findImageSources } from '../htmlImages.js';
 import { resolveServiceUrl } from '../config.js';
 import { discoverImageAssets } from '../cli.js';
+import { discoverPullRequest, parseGitHubPrUrl, pullRequestStatus } from '../githubPr.js';
 import { buildRegistrationAgentInstructions, renderRegistrationInstructionCommands } from '../registrationInstructions.js';
 import { buildAgentNextClaimed, buildAgentNextEmpty } from '../agentNext.js';
 import { sha256 } from '../util.js';
@@ -48,6 +49,140 @@ test('schemas validate locked registration, comment, and claim contracts', () =>
 
   assert.equal(claimCommentsSchema.parse({ mode: 'one' }).leaseSeconds, 300);
   assert.throws(() => claimCommentsSchema.parse({ mode: 'bulk', limit: 0 }));
+});
+
+test('PR schema, URL parsing, stale derivation, and adversarial GitHub discovery are locked', async () => {
+  const pullRequest = planPullRequestSchema.parse({
+    provider: 'github',
+    url: 'https://github.com/demo/sample/pull/12',
+    owner: 'demo',
+    repo: 'sample',
+    number: 12,
+    headRef: 'feature/x',
+    headRepo: 'demo/sample',
+    baseRef: 'main',
+    state: 'closed',
+    merged: false,
+    lastCheckedAt: new Date().toISOString(),
+    source: 'explicit'
+  });
+  assert.equal(pullRequestStatus(pullRequest), 'closed');
+  assert.equal(pullRequestStatus({ ...pullRequest, state: 'closed', merged: true, lastCheckedAt: '2000-01-01T00:00:00.000Z' }), 'merged');
+  assert.equal(pullRequestStatus({ ...pullRequest, state: 'open', merged: false, lastCheckedAt: '2000-01-01T00:00:00.000Z' }), 'stale');
+  assert.equal(pullRequestStatus({ ...pullRequest, state: 'unknown', merged: false, lastCheckedAt: undefined }), 'stale');
+  assert.deepEqual(parseGitHubPrUrl('https://github.com/demo/sample/pull/12'), { owner: 'demo', repo: 'sample', number: 12, url: 'https://github.com/demo/sample/pull/12' });
+  assert.equal(planPullRequestSchema.parse({ ...pullRequest, url: 'https://github.com/Demo/Sample/pull/12' }).url, 'https://github.com/Demo/Sample/pull/12');
+  assert.throws(() => parseGitHubPrUrl('https://github.com.evil/demo/sample/pull/12'), /canonical GitHub PR URL/);
+  assert.throws(() => planPullRequestSchema.parse({ ...pullRequest, merged: true }), /mergedAt is required/);
+
+  const wrongRepoFetch = async () => new Response(JSON.stringify([
+    { html_url: 'https://github.com/other/sample/pull/9', number: 9, state: 'open', head: { ref: 'feature/x', repo: { full_name: 'other/sample' } }, base: { ref: 'main' } }
+  ]), { status: 200 });
+  await assert.rejects(
+    () => discoverPullRequest({ owner: 'demo', repo: 'sample' }, 'feature/x', { fetchImpl: wrongRepoFetch, token: 't' }),
+    /No GitHub PR matched/
+  );
+
+  const ambiguousFetch = async () => new Response(JSON.stringify([
+    { html_url: 'https://github.com/demo/sample/pull/1', number: 1, state: 'open', head: { ref: 'feature/x', repo: { full_name: 'demo/sample' } }, base: { ref: 'main' } },
+    { html_url: 'https://github.com/demo/sample/pull/2', number: 2, state: 'open', head: { ref: 'feature/x', repo: { full_name: 'demo/sample' } }, base: { ref: 'main' } }
+  ]), { status: 200 });
+  await assert.rejects(
+    () => discoverPullRequest({ owner: 'demo', repo: 'sample' }, 'feature/x', { fetchImpl: ambiguousFetch, token: 't' }),
+    /Multiple GitHub PRs matched/
+  );
+});
+
+test('Linear issue detection normalizes only NOD numeric keys', () => {
+  assert.equal(normalizeLinearIssueKey('nod-123'), 'NOD-123');
+  assert.equal(normalizeLinearIssueKey('NOD-ABC', '<p>see nod-456</p>'), 'NOD-456');
+  assert.equal(normalizeLinearIssueKey('NOD-', 'NOD-ABC'), undefined);
+});
+
+test('registered plans expose normalized Linear links from metadata or non-code HTML text only', async () => {
+  const app = createApp({ dbPath: tempDbPath('linear-detection') });
+  try {
+    const baseMetadata = { worktreePath: '/tmp/sample', branch: 'main', executionReady: false, executionReadyBasis: 'agent-review-results' as const };
+    const falsePositive = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload({
+        slug: 'linear-code-sample',
+        planPath: 'thoughts/plans/linear-code-sample.html',
+        html: '<!doctype html><html><body><p>No issue.</p><code>NOD-999</code><pre>nod-888</pre></body></html>',
+        fileHash: 'linear-code-sample',
+        publicationMetadata: baseMetadata
+      })
+    });
+    assert.equal(falsePositive.statusCode, 200);
+    const falsePositivePlan = await app.inject({ method: 'GET', url: `/api/plans/${falsePositive.json().data.planId}` });
+    assert.equal(falsePositivePlan.json().data.plan.linearIssueKey, undefined);
+
+    const detected = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload({
+        slug: 'linear-text',
+        planPath: 'thoughts/plans/linear-text.html',
+        html: '<!doctype html><html><body><p>Tracks nod-456 in Linear.</p></body></html>',
+        fileHash: 'linear-text',
+        publicationMetadata: baseMetadata
+      })
+    });
+    assert.equal(detected.statusCode, 200);
+    const detectedPlan = await app.inject({ method: 'GET', url: `/api/plans/${detected.json().data.planId}` });
+    assert.equal(detectedPlan.json().data.plan.linearIssueKey, 'NOD-456');
+    assert.equal(detectedPlan.json().data.plan.linearIssueUrl, 'https://linear.app/nodaste/issue/NOD-456');
+  } finally {
+    await app.close();
+  }
+});
+
+test('PR persistence API exposes one current PR and clear behavior', async () => {
+  const { app, planId } = await registeredApp('pr-persistence');
+  try {
+    const payload = planPullRequestSchema.parse({
+      provider: 'github',
+      url: 'https://github.com/demo/sample/pull/12',
+      owner: 'demo',
+      repo: 'sample',
+      number: 12,
+      headRef: 'feature/x',
+      headRepo: 'demo/sample',
+      baseRef: 'main',
+      state: 'open',
+      merged: false,
+      lastCheckedAt: new Date().toISOString(),
+      source: 'explicit'
+    });
+    const put = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/pull-request`, payload });
+    assert.equal(put.statusCode, 200);
+    assert.equal(put.json().data.pullRequest.status, 'open');
+
+    const replacement = { ...payload, url: 'https://github.com/demo/sample/pull/13', number: 13, state: 'closed' as const, lastCheckedAt: '2000-01-01T00:00:00.000Z' };
+    const putAgain = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/pull-request`, payload: replacement });
+    assert.equal(putAgain.statusCode, 200);
+    assert.equal(putAgain.json().data.pullRequest.number, 13);
+    assert.equal(putAgain.json().data.pullRequest.status, 'closed');
+
+    const get = await app.inject({ method: 'GET', url: `/api/plans/${planId}` });
+    assert.equal(get.json().data.plan.pullRequest.number, 13);
+    const list = await app.inject({ method: 'GET', url: '/api/plans' });
+    assert.equal(list.json().data.plans[0].plan.pullRequest.number, 13);
+    assert.equal((await app.inject({ method: 'GET', url: '/api/plans?q=PR%20closed' })).json().data.plans.length, 1);
+    assert.equal((await app.inject({ method: 'GET', url: '/api/plans?q=unmerged' })).json().data.plans.length, 1);
+    assert.equal((await app.inject({ method: 'GET', url: '/api/plans?q=merged' })).json().data.plans.length, 0);
+    assert.equal((await app.inject({ method: 'GET', url: '/api/plans?q=https%3A%2F%2Fgithub.com%2Fdemo%2Fsample%2Fpull%2F13' })).json().data.plans.length, 1);
+    assert.equal((await app.inject({ method: 'GET', url: '/api/plans?q=NOD-123' })).json().data.plans.length, 1);
+
+    const del = await app.inject({ method: 'DELETE', url: `/api/plans/${planId}/pull-request` });
+    assert.equal(del.statusCode, 200);
+    assert.equal(del.json().data.pullRequest, null);
+    const after = await app.inject({ method: 'GET', url: `/api/plans/${planId}` });
+    assert.equal(after.json().data.plan.pullRequest, null);
+  } finally {
+    await app.close();
+  }
 });
 
 test('agent next helpers build locked empty and claimed contracts', () => {
@@ -101,6 +236,8 @@ test('registration instruction helper builds canonical agent-next guidance and r
   assert.match(instructions.processingLoop.join('\n'), /do not blindly loop successful claim commands/);
   assert.match(instructions.processingLoop.join('\n'), /plan-review ack <commentId> --claim <claimId> --summary/);
   assert.match(instructions.processingLoop.join('\n'), /Resolve only after a successful ack/);
+  assert.match(instructions.processingLoop.join('\n'), /plan-review pr link plan_abc --url <github-pr-url> --service-url <registration service URL> --json/);
+  assert.match(instructions.processingLoop.join('\n'), /plan-review pr refresh plan_abc --url <registration service URL> --json/);
   assert.match(instructions.processingLoop.join('\n'), /plan-review watch only as an optional/);
 
   const rendered = renderRegistrationInstructionCommands(instructions, 'http://reviewer.example:4317');
