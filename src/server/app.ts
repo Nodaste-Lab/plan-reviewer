@@ -773,6 +773,9 @@ function handlePlanReviewEvent(event){
     return;
   }
   if (event.type === 'plan.sync.failed'
+    || event.type === 'plan.note.created'
+    || event.type === 'plan.deferred'
+    || event.type === 'plan.resumed'
     || event.type === 'comment.created'
     || event.type === 'comment.claimed'
     || event.type === 'comment.acknowledged'

@@ -775,6 +775,20 @@ test('review shell title uses rendered plan title with safe fallback and escapin
   }
 });
 
+test('review client polling reloads metadata for plan lifecycle and note events', async () => {
+  const app = createApp({ dbPath: tempDbPath('review-client-lifecycle-events') });
+  try {
+    const client = await app.inject({ method: 'GET', url: '/client.js' });
+    assert.equal(client.statusCode, 200);
+    assert.match(client.body, /\/api\/plans\/\'\+planId\+\'\/events\/poll/);
+    assert.match(client.body, /event\.type === 'plan\.note\.created'/);
+    assert.match(client.body, /event\.type === 'plan\.deferred'/);
+    assert.match(client.body, /event\.type === 'plan\.resumed'/);
+  } finally {
+    await app.close();
+  }
+});
+
 test('execution-review request button creates an agent-visible comment', async () => {
   const { app, planId } = await registeredApp('execution-review-request');
   try {
