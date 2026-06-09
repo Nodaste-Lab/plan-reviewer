@@ -631,7 +631,20 @@ export class PlanReviewStore {
       modifiedAt,
       reviewUrl: `/p/${row.id}`
       };
-    }).sort((a, b) => String(b.activityAt).localeCompare(String(a.activityAt)));
+    }).sort((a, b) => {
+      const aStarted = a.progress.totalPhases > 0 && a.progress.completedPhases > 0;
+      const bStarted = b.progress.totalPhases > 0 && b.progress.completedPhases > 0;
+      if (aStarted !== bStarted) return bStarted ? 1 : -1;
+      if (aStarted && bStarted) {
+        const aRatio = a.progress.completedPhases / a.progress.totalPhases;
+        const bRatio = b.progress.completedPhases / b.progress.totalPhases;
+        if (aRatio !== bRatio) return bRatio - aRatio;
+      }
+      return String(b.activityAt).localeCompare(String(a.activityAt))
+        || String(a.plan.repoName).localeCompare(String(b.plan.repoName))
+        || String(a.plan.slug).localeCompare(String(b.plan.slug))
+        || String(a.plan.id).localeCompare(String(b.plan.id));
+    });
   }
 
   listPlanAssets(versionId: string) {

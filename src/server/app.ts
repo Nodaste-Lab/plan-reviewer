@@ -125,21 +125,16 @@ function planCardSearch(item: ListedPlan): string {
   return `${item.plan.repoName} ${item.plan.repoKey} ${item.plan.slug} ${fullyQualifiedPlanPath(item)} ${metadata.worktreePath} ${metadata.branch} ${metadata.linearIssue ?? ''}${attentionTerms}`.toLowerCase();
 }
 
-function indexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCount: number): string {
-  const repos = [...new Set(plans.map(item => item.plan.repoName))].sort();
-  const attentionCount = plans.filter(planNeedsAttention).length;
-  const attentionSummary = attentionCount
-    ? `<div class="attention-summary" role="status"><strong>${attentionCount} ${attentionCount === 1 ? 'plan · source file missing' : 'plans · source files missing'}</strong><span>Cached copies still open.</span><button type="button" data-attention-filter aria-pressed="false">Needs attention</button></div>`
-    : '';
-  const rows = repos
-    .map(repoName => {
-      const repoPlans = plans.filter(item => item.plan.repoName === repoName);
-      return `<section class="repo-group" data-repo-group="${escapeHtml(repoName)}"><h2>${escapeHtml(repoName)}</h2>${repoPlans.map(item => {
-        const complete = item.progress.totalPhases > 0 && item.progress.completedPhases === item.progress.totalPhases;
-        const needsAttention = planNeedsAttention(item);
-        const statusLabel = needsAttention ? 'Source missing' : complete ? 'Complete' : 'Incomplete';
-        const cardClass = needsAttention ? 'needs-attention' : complete ? 'complete' : 'incomplete';
-        return `<article class="plan-card ${cardClass}" data-plan-id="${escapeHtml(item.plan.id)}" data-repo="${escapeHtml(item.plan.repoName)}" data-search="${escapeHtml(planCardSearch(item))}" data-needs-attention="${needsAttention ? 'true' : 'false'}" aria-label="${escapeHtml(`${item.plan.repoName} / ${item.plan.slug}: ${statusLabel}`)}">
+function hasStartedPlanProgress(item: ListedPlan): boolean {
+  return item.progress.totalPhases > 0 && item.progress.completedPhases > 0;
+}
+
+function planCardHtml(item: ListedPlan): string {
+  const complete = item.progress.totalPhases > 0 && item.progress.completedPhases === item.progress.totalPhases;
+  const needsAttention = planNeedsAttention(item);
+  const statusLabel = needsAttention ? 'Source missing' : complete ? 'Complete' : 'Incomplete';
+  const cardClass = needsAttention ? 'needs-attention' : complete ? 'complete' : 'incomplete';
+  return `<article class="plan-card ${cardClass}" data-plan-id="${escapeHtml(item.plan.id)}" data-repo="${escapeHtml(item.plan.repoName)}" data-search="${escapeHtml(planCardSearch(item))}" data-needs-attention="${needsAttention ? 'true' : 'false'}" aria-label="${escapeHtml(`${item.plan.repoName} / ${item.plan.slug}: ${statusLabel}`)}">
       <div class="plan-card-header"><h2><a href="/p/${escapeHtml(item.plan.id)}">${escapeHtml(item.plan.repoName)} / ${escapeHtml(item.plan.slug)}</a></h2><div class="plan-actions"><span class="status-pill${needsAttention ? ' attention' : ''}">${escapeHtml(statusLabel)}</span><button class="archive-plan" type="button" data-archive-plan="${escapeHtml(item.plan.id)}">Archive</button></div></div>
       <p><code>${escapeHtml(fullyQualifiedPlanPath(item))}</code></p>
       ${publicationMetadataHtml(item)}
@@ -148,9 +143,37 @@ function indexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCoun
       ${commentCountsHtml(item)}
       ${lastUpdatedHtml(item.modifiedAt)}
     </article>`;
-      }).join('\n')}</section>`;
-    })
-    .join('\n');
+}
+
+function repoGroupsHtml(plans: ListedPlan[]): string {
+  const groups: string[] = [];
+  let currentRepo: string | undefined;
+  let currentCards: string[] = [];
+  const flush = () => {
+    if (!currentRepo) return;
+    groups.push(`<section class="repo-group" data-repo-group="${escapeHtml(currentRepo)}"><h2>${escapeHtml(currentRepo)}</h2>${currentCards.join('\n')}</section>`);
+  };
+  for (const item of plans) {
+    if (item.plan.repoName !== currentRepo) {
+      flush();
+      currentRepo = String(item.plan.repoName);
+      currentCards = [];
+    }
+    currentCards.push(planCardHtml(item));
+  }
+  flush();
+  return groups.join('\n');
+}
+
+function indexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCount: number): string {
+  const repos = [...new Set(plans.map(item => item.plan.repoName))].sort();
+  const attentionCount = plans.filter(planNeedsAttention).length;
+  const attentionSummary = attentionCount
+    ? `<div class="attention-summary" role="status"><strong>${attentionCount} ${attentionCount === 1 ? 'plan · source file missing' : 'plans · source files missing'}</strong><span>Cached copies still open.</span><button type="button" data-attention-filter aria-pressed="false">Needs attention</button></div>`
+    : '';
+  const startedPlans = plans.filter(hasStartedPlanProgress);
+  const notStartedPlans = plans.filter(item => !hasStartedPlanProgress(item));
+  const rows = [repoGroupsHtml(startedPlans), repoGroupsHtml(notStartedPlans)].filter(Boolean).join('\n');
   return `<!doctype html><html><head><meta charset="utf-8"><title>Plan Review Index</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <style>${baseIndexStyles()}</style>
@@ -229,12 +252,17 @@ function filterPlans(plans: ReturnType<PlanReviewStore['listPlans']>, query: { q
 
 const executionReviewRequestBody = 'Review this plan with both codex and claude code, iterating on the plan until both agents agree it is execution ready';
 
+function buildPlanRequestBody(planPath: string): string {
+  return `/skill:scoped-plan-run thoughts/plans/${path.basename(planPath)}`;
+}
+
 function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan']): string {
   const escapedPlanId = escapeHtml(plan.id);
   const reviewButton = '<button id="request-execution-review" type="button">Request execution-ready review</button>';
+  const buildButton = '<button id="build-plan" type="button">Build Plan</button>';
   const navActions = plan.archivedAt
-    ? `<a href="/archive">← Archive</a>${reviewButton}<span id="archive-status" class="archive-status">Archived</span><button id="restore-plan" type="button">Restore plan</button>`
-    : `<a href="/">← Plan index</a>${reviewButton}<span id="archive-status" class="archive-status" hidden></span><button id="archive-plan" type="button">Archive plan</button>`;
+    ? `<a href="/archive">← Archive</a>${reviewButton}${buildButton}<span id="archive-status" class="archive-status">Archived</span><button id="restore-plan" type="button">Restore plan</button>`
+    : `<a href="/">← Plan index</a>${reviewButton}${buildButton}<span id="archive-status" class="archive-status" hidden></span><button id="archive-plan" type="button">Archive plan</button>`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Plan ${escapedPlanId}</title>
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
@@ -281,7 +309,7 @@ body{margin:0;background:#0b1020;color:#e5e7eb;font-family:system-ui,sans-serif}
 #composer textarea{width:260px;height:90px;background:#020617;color:#e5e7eb;border:1px solid #2b364d;border-radius:6px;padding:8px;display:block}
 #composer button{margin-top:8px;margin-right:8px}.plan-review-selected{outline:2px dotted #38bdf8!important;box-shadow:none!important}.lightbox{position:fixed;inset:36px 360px 36px 36px;background:#020617;border:1px solid #38bdf8;z-index:12;display:grid;grid-template-rows:auto 1fr}.lightbox[hidden]{display:none}.lightbox header{display:flex;gap:8px;padding:10px;border-bottom:1px solid #2b364d}.lightbox img{max-width:100%;max-height:100%;place-self:center;transform-origin:center}.lightbox-stage{display:grid;overflow:hidden;position:relative}#image-selection-box{position:absolute;border:2px solid #38bdf8;background:rgba(56,189,248,.2);pointer-events:none}#mobile-comments-toggle{display:none}
 @media(prefers-reduced-motion:reduce){.selection-box{transition:none}}
-@media(max-width:760px){body{overflow:hidden}#plan-navbar{position:sticky;top:0;z-index:30;height:56px;box-sizing:border-box;justify-content:flex-start;gap:8px;padding:8px;overflow-x:auto;overscroll-behavior-x:contain}#plan-navbar a,#plan-navbar button{flex:0 0 auto;min-height:40px;padding:8px 10px;font-size:13px;line-height:1.15;white-space:normal}#request-execution-review{max-width:170px}#app{display:block;min-height:calc(100dvh - 56px)}#review{height:calc(100dvh - 56px);overflow:hidden}#plan-frame{width:100%;height:100%;border:0}#sidebar{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:24;max-height:min(72dvh,620px);box-sizing:border-box;border-left:0;border-top:1px solid #2b364d;border-radius:18px 18px 0 0;padding:12px 16px calc(16px + env(safe-area-inset-bottom));background:#111827;box-shadow:0 -16px 40px rgba(0,0,0,.45);overflow:auto;transform:translateY(100%);transition:transform .18s ease}body.comments-open #sidebar{transform:translateY(0)}#sidebar h1{position:sticky;top:-12px;margin:0 0 12px;padding:8px 0 10px;background:#111827;font-size:20px;z-index:1}.comment-row{padding:12px;margin:10px 0}.comment-row p{margin:.55rem 0}.comments-empty{margin:0;color:#a7b0c0;font-size:14px}#mobile-comments-toggle{display:flex;position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:25;min-height:44px;align-items:center;gap:6px;border:1px solid #38bdf8;border-radius:999px;background:#075985;color:#e0f2fe;padding:0 14px;font-weight:800;box-shadow:0 12px 28px rgba(0,0,0,.35)}body.comments-open #mobile-comments-toggle{background:#0f172a;border-color:#64748b}#composer{left:0;right:0;bottom:0;top:auto;z-index:60;box-sizing:border-box;border-left:0;border-right:0;border-bottom:0;border-radius:18px 18px 0 0;padding:14px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -16px 40px rgba(0,0,0,.48)}#composer textarea{width:100%;height:122px;box-sizing:border-box;font-size:16px}#composer button{min-height:44px;padding:8px 12px}.lightbox{inset:0;z-index:50;border:0}.lightbox header{flex-wrap:wrap}.selection-box{border-radius:4px}.marker{width:28px;height:28px}}
+@media(max-width:760px){body{overflow:hidden}#plan-navbar{position:sticky;top:0;z-index:30;height:56px;box-sizing:border-box;justify-content:flex-start;gap:8px;padding:8px;overflow-x:auto;overscroll-behavior-x:contain}#plan-navbar a,#plan-navbar button{flex:0 0 auto;min-height:40px;padding:8px 10px;font-size:13px;line-height:1.15;white-space:normal}#request-execution-review{max-width:170px}#build-plan{max-width:120px}#app{display:block;min-height:calc(100dvh - 56px)}#review{height:calc(100dvh - 56px);overflow:hidden}#plan-frame{width:100%;height:100%;border:0}#sidebar{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:24;max-height:min(72dvh,620px);box-sizing:border-box;border-left:0;border-top:1px solid #2b364d;border-radius:18px 18px 0 0;padding:12px 16px calc(16px + env(safe-area-inset-bottom));background:#111827;box-shadow:0 -16px 40px rgba(0,0,0,.45);overflow:auto;transform:translateY(100%);transition:transform .18s ease}body.comments-open #sidebar{transform:translateY(0)}#sidebar h1{position:sticky;top:-12px;margin:0 0 12px;padding:8px 0 10px;background:#111827;font-size:20px;z-index:1}.comment-row{padding:12px;margin:10px 0}.comment-row p{margin:.55rem 0}.comments-empty{margin:0;color:#a7b0c0;font-size:14px}#mobile-comments-toggle{display:flex;position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:25;min-height:44px;align-items:center;gap:6px;border:1px solid #38bdf8;border-radius:999px;background:#075985;color:#e0f2fe;padding:0 14px;font-weight:800;box-shadow:0 12px 28px rgba(0,0,0,.35)}body.comments-open #mobile-comments-toggle{background:#0f172a;border-color:#64748b}#composer{left:0;right:0;bottom:0;top:auto;z-index:60;box-sizing:border-box;border-left:0;border-right:0;border-bottom:0;border-radius:18px 18px 0 0;padding:14px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -16px 40px rgba(0,0,0,.48)}#composer textarea{width:100%;height:122px;box-sizing:border-box;font-size:16px}#composer button{min-height:44px;padding:8px 12px}.lightbox{inset:0;z-index:50;border:0}.lightbox header{flex-wrap:wrap}.selection-box{border-radius:4px}.marker{width:28px;height:28px}}
 `;
 
 const clientJs = `
@@ -293,6 +321,7 @@ const frame = document.getElementById('plan-frame');
 const archivePlanButton = document.getElementById('archive-plan');
 const restorePlanButton = document.getElementById('restore-plan');
 const executionReviewButton = document.getElementById('request-execution-review');
+const buildPlanButton = document.getElementById('build-plan');
 const composer = document.getElementById('composer');
 const body = document.getElementById('comment-body');
 const discardWarning = document.getElementById('comment-discard-warning');
@@ -403,6 +432,22 @@ executionReviewButton?.addEventListener('click', async () => {
   setTimeout(() => {
     executionReviewButton.disabled = false;
     executionReviewButton.textContent = originalText;
+  }, 1600);
+});
+buildPlanButton?.addEventListener('click', async () => {
+  buildPlanButton.disabled = true;
+  const originalText = buildPlanButton.textContent;
+  const res = await fetch('/api/plans/'+encodeURIComponent(planId)+'/request-build-plan', { method: 'POST' });
+  if (!res.ok) {
+    buildPlanButton.disabled = false;
+    alert('Unable to request plan build.');
+    return;
+  }
+  buildPlanButton.textContent = 'Build requested';
+  await scheduleMetaLoad();
+  setTimeout(() => {
+    buildPlanButton.disabled = false;
+    buildPlanButton.textContent = originalText;
   }, 1600);
 });
 function mergeMetaOptions(left = {}, right = {}){
@@ -1411,6 +1456,30 @@ export function createApp(options: AppOptions): FastifyInstance {
         anchor: {
           cssSelector: 'body',
           textPreview: 'Plan execution-ready review request',
+          headingPath: ['Plan'],
+          rect: { x: 0, y: 0, width: 1, height: 1 },
+          viewport: { width: 1, height: 1 }
+        },
+        createdBy: { displayName: 'Plan reviewer' }
+      });
+      if (result.created) bus.emitEvent(result.event);
+      return ok({ comment: result.comment, created: result.created });
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.post('/api/plans/:planId/request-build-plan', async (request, reply) => {
+    try {
+      const { planId } = request.params as { planId: string };
+      const { plan, version } = store.getPlan(planId);
+      const result = store.createComment(plan.id, {
+        versionId: version.id,
+        body: buildPlanRequestBody(plan.planPath),
+        anchorType: 'dom',
+        anchor: {
+          cssSelector: 'body',
+          textPreview: 'Plan build request',
           headingPath: ['Plan'],
           rect: { x: 0, y: 0, width: 1, height: 1 },
           viewport: { width: 1, height: 1 }
