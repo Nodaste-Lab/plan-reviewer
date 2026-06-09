@@ -381,8 +381,46 @@ try {
     await page.waitForFunction(() => document.querySelectorAll('.plan-card:not([hidden])').length === 1);
     assert.match(await page.locator('.plan-card:not([hidden])').innerText(), /Source missing/);
     assert.match(await page.locator('.plan-card:not([hidden])').innerText(), /Showing cached copy/);
+    const navSwitch = await registerTinyPlan('nav-switch');
     await page.goto(`${baseUrl}/p/${registered.planId}`);
     assert.equal(await page.title(), 'E2E Plan · Plan Review');
+    await page.waitForSelector('#plan-list-nav');
+    await page.waitForSelector('#desktop-comments-toggle[aria-expanded="false"]');
+    assert.match(await page.locator('#plan-list-nav').innerText(), /E2E Plan/);
+    assert.equal(await page.evaluate(() => document.body.classList.contains('comments-open')), false);
+    assert.equal(await page.evaluate(() => Math.round(document.querySelector<HTMLElement>('#sidebar')!.getBoundingClientRect().width) <= 60), true);
+    await page.click('#desktop-comments-toggle');
+    await page.waitForFunction(() => document.body.classList.contains('comments-open'));
+    await page.waitForFunction(() => Math.round(document.querySelector<HTMLElement>('#sidebar')!.getBoundingClientRect().width) >= 300);
+    assert.equal(await page.locator('#desktop-comments-toggle').getAttribute('aria-expanded'), 'true');
+    await page.click('#desktop-comments-toggle');
+    await page.waitForFunction(() => !document.body.classList.contains('comments-open'));
+    await page.click(`#plan-list-nav a[href="/p/${navSwitch.planId}"]`);
+    await page.waitForURL(`${baseUrl}/p/${navSwitch.planId}`);
+    assert.equal(await page.locator('#plan-list-nav [aria-current="page"]').getAttribute('data-plan-id'), navSwitch.planId);
+    await page.goto(`${baseUrl}/p/${registered.planId}`);
+    assert.equal((await context.post(`/api/plans/${navSwitch.planId}/archive`)).ok(), true);
+    let planListRequests = 0;
+    let failNextPlanList = true;
+    await page.route('**/api/plans/navigator?limit=200&currentPlanId=*', async route => {
+      planListRequests += 1;
+      if (failNextPlanList) {
+        failNextPlanList = false;
+        await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ ok: false, error: { code: 'unavailable', message: 'forced navigator failure' } }) });
+        return;
+      }
+      await route.continue();
+    });
+    await page.goto(`${baseUrl}/p/${registered.planId}`);
+    await page.waitForSelector('#plan-list-error:not([hidden])');
+    assert.match(await page.locator('#plan-list-error').innerText(), /current plan remains reviewable/i);
+    assert.equal(await page.locator('#plan-frame').count(), 1);
+    await page.click('#plan-list-retry');
+    await page.waitForSelector('#plan-list-error', { state: 'hidden' });
+    assert.match(await page.locator('#plan-list-nav').innerText(), /E2E Plan/);
+    await page.waitForTimeout(500);
+    assert.equal(planListRequests <= 3, true, `navigator refresh made too many requests: ${planListRequests}`);
+    await page.unroute('**/api/plans/navigator?limit=200&currentPlanId=*');
     await page.evaluate(() => {
       const globals = window as typeof window & { html2canvas?: unknown; __html2canvasCalls?: number; __html2canvasMode?: 'success' | 'fail' };
       globals.__html2canvasCalls = 0;
@@ -476,6 +514,15 @@ try {
       await page.waitForFunction(() => document.querySelector<HTMLElement>('#composer')?.hidden === false);
     };
     await page.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#dom-annotation'));
+    await page.click('#desktop-comments-toggle');
+    await page.waitForFunction(() => document.body.classList.contains('comments-open'));
+    const frameWidthWithCommentsOpen = await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.getBoundingClientRect().width ?? 0);
+    await openDomComposer();
+    assert.equal(await page.evaluate(() => document.body.classList.contains('comments-open')), true);
+    assert.equal(await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.getBoundingClientRect().width ?? 0), frameWidthWithCommentsOpen);
+    await page.click('#cancel-comment');
+    await page.click('#desktop-comments-toggle');
+    await page.waitForFunction(() => !document.body.classList.contains('comments-open'));
     await openDomComposer();
     const activeBox = await selectionBoxState('#active-selection-box', '#dom-annotation');
     assert.equal(activeBox.hidden, false);
@@ -635,6 +682,7 @@ try {
     await page.fill('#comment-body', 'Browser delete pending comment');
     await page.click('#submit-comment');
     await page.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('Browser delete pending comment'));
+    if (!await page.evaluate(() => document.body.classList.contains('comments-open'))) await page.click('#desktop-comments-toggle');
     const deleteRow = page.locator('.comment-row').filter({ hasText: 'Browser delete pending comment' });
     await deleteRow.getByRole('button', { name: 'Delete' }).click();
     await page.waitForFunction(() => !document.querySelector('#comments')?.textContent?.includes('Browser delete pending comment'));
@@ -652,6 +700,7 @@ try {
         body: JSON.stringify({ ok: false, error: { code: 'invalid_state', message: 'Only pending unclaimed comments can be deleted', details: {}, nextAction: 'Refresh and retry after the claim is released.' } })
       });
     });
+    if (!await page.evaluate(() => document.body.classList.contains('comments-open'))) await page.click('#desktop-comments-toggle');
     const conflictRow = page.locator('.comment-row').filter({ hasText: 'Browser delete conflict guidance' });
     await conflictRow.getByRole('button', { name: 'Delete' }).click();
     await conflictRow.locator('.comment-delete-error').waitFor({ state: 'visible' });
@@ -671,6 +720,7 @@ try {
     const claimedUiClaim = await context.post(`/api/plans/${registered.planId}/comments/claim`, { data: { mode: 'selected', commentIds: [claimedUi.id] } });
     assert.equal(claimedUiClaim.ok(), true);
     await page.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('Browser claimed delete unavailable'));
+    if (!await page.evaluate(() => document.body.classList.contains('comments-open'))) await page.click('#desktop-comments-toggle');
     const claimedRowDeleteButtons = await page.locator('.comment-row').filter({ hasText: 'Browser claimed delete unavailable' }).getByRole('button', { name: 'Delete' }).count();
     assert.equal(claimedRowDeleteButtons, 0);
 
@@ -822,6 +872,7 @@ try {
     assert.equal(newestRace.ok(), true);
     await page.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.body.textContent?.includes('Race newest target'));
     await page.waitForFunction(() => document.title === 'Race Newest Plan · Plan Review');
+    await page.waitForFunction(() => document.querySelector('#current-plan-title')?.textContent === 'Race Newest Plan');
     const resumeRender = resumeDelayedRender as (() => void) | null;
     assert.ok(resumeRender);
     resumeRender();
@@ -861,6 +912,7 @@ try {
     assert.equal(bodyTitleRefresh.ok(), true);
     await page.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('main title')?.textContent === 'Inline Icon Title');
     await page.waitForFunction(() => document.title === 'e2e / e2e · Plan Review');
+
 
     await page.evaluate(() => {
       const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
@@ -1039,9 +1091,17 @@ try {
       await touchContext.close();
     }
 
+    const mobilePlanNote = await context.post(`/api/plans/${registered.planId}/notes`, { data: { body: 'Mobile plan note remains visible.' } });
+    assert.equal(mobilePlanNote.ok(), true);
     await page.setViewportSize({ width: 486, height: 902 });
     await page.goto(`${baseUrl}/p/${registered.planId}`);
     await page.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#text-target'));
+    await page.click('#mobile-comments-toggle');
+    await page.waitForFunction(() => document.body.classList.contains('comments-open'));
+    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector<HTMLElement>('#plan-notes-panel')!).display !== 'none'), true);
+    assert.match(await page.locator('#plan-notes-panel').innerText(), /Mobile plan note remains visible/);
+    await page.click('#mobile-comments-toggle');
+    await page.waitForFunction(() => !document.body.classList.contains('comments-open'));
     await page.evaluate(() => {
       const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
       const target = iframe.contentDocument!.querySelector<HTMLElement>('#text-target')!;
