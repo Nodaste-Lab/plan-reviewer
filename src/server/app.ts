@@ -10,9 +10,12 @@ import {
   ackCommentSchema,
   claimCommentsSchema,
   createCommentSchema,
+  createPlanNoteSchema,
+  deferPlanSchema,
   registerPlanSchema,
   releaseCommentSchema,
-  resolveCommentSchema
+  resolveCommentSchema,
+  resumePlanSchema
 } from '../schemas.js';
 import { renderPlan } from '../render/render.js';
 import { buildRegistrationAgentInstructions } from '../registrationInstructions.js';
@@ -109,6 +112,11 @@ function lastUpdatedHtml(value: string): string {
   return `<p class="timestamp-row"><span class="row-label">Last updated</span> <time datetime="${escapeHtml(value)}" data-local-timestamp>${escapeHtml(value)}</time></p>`;
 }
 
+function latestNoteHtml(item: ListedPlan): string {
+  if (!item.latestNote) return '<p class="note-summary muted"><span class="row-label">Notes</span> None</p>';
+  return `<p class="note-summary"><span class="row-label">Latest note</span> ${escapeHtml(item.latestNote.body)} <small class="muted">· <time datetime="${escapeHtml(item.latestNote.createdAt)}" data-local-timestamp>${escapeHtml(item.latestNote.createdAt)}</time> · ${item.noteCount} total</small></p>`;
+}
+
 function localTimestampScript(): string {
   return `document.querySelectorAll('[data-local-timestamp]').forEach(time=>{const date=new Date(time.getAttribute('datetime')||''); if(Number.isNaN(date.getTime())) return; time.textContent=new Intl.DateTimeFormat(undefined,{dateStyle:'medium',timeStyle:'short'}).format(date); time.title=date.toISOString();});`;
 }
@@ -165,7 +173,7 @@ function syncWarningHtml(item: ListedPlan, options: { archived?: boolean } = {})
 function planCardSearch(item: ListedPlan): string {
   const metadata = item.plan.publicationMetadata;
   const attentionTerms = planNeedsAttention(item) ? ' needs attention source missing source unavailable failed cached copy' : '';
-  return `${item.plan.repoName} ${item.plan.repoKey} ${item.plan.slug} ${fullyQualifiedPlanPath(item)} ${metadata.worktreePath} ${metadata.branch} ${metadata.linearIssue ?? ''}${attentionTerms}`.toLowerCase();
+  return `${item.plan.repoName} ${item.plan.repoKey} ${item.plan.slug} ${fullyQualifiedPlanPath(item)} ${metadata.worktreePath} ${metadata.branch} ${metadata.linearIssue ?? ''} ${item.latestNote?.body ?? ''}${attentionTerms}`.toLowerCase();
 }
 
 function hasStartedPlanProgress(item: ListedPlan): boolean {
@@ -182,6 +190,7 @@ function planCardHtml(item: ListedPlan): string {
       <p><code>${escapeHtml(fullyQualifiedPlanPath(item))}</code></p>
       ${publicationMetadataHtml(item)}
       ${needsAttention ? syncWarningHtml(item) : ''}
+      ${latestNoteHtml(item)}
       ${progressHtml(item.progress)}
       ${commentCountsHtml(item)}
       ${lastUpdatedHtml(item.modifiedAt)}
@@ -208,7 +217,7 @@ function repoGroupsHtml(plans: ListedPlan[]): string {
   return groups.join('\n');
 }
 
-function indexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCount: number): string {
+function indexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCount: number, deferredCount: number): string {
   const repos = [...new Set(plans.map(item => item.plan.repoName))].sort();
   const attentionCount = plans.filter(planNeedsAttention).length;
   const attentionSummary = attentionCount
@@ -220,7 +229,7 @@ function indexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCoun
   return `<!doctype html><html><head><meta charset="utf-8"><title>Plan Review Index</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <style>${baseIndexStyles()}</style>
-  </head><body><main><div class="page-header"><div><h1>Plan Review Index</h1><p class="muted">Active plans are shown by default.</p></div><a class="nav-link primary" href="/archive">Archived (${archivedCount}) →</a></div>${attentionSummary}<div class="toolbar"><input id="q" placeholder="Filter plans" aria-label="Filter plans"><select id="repo" aria-label="Filter by repo"><option value="">All repos</option>${repos.map(repo => `<option value="${escapeHtml(repo)}">${escapeHtml(repo)}</option>`).join('')}</select></div><div id="plans">${rows || '<p>No plans registered.</p>'}</div><script>
+  </head><body><main><div class="page-header"><div><h1>Plan Review Index</h1><p class="muted">Active plans are shown by default.</p></div><div class="plan-actions"><a class="nav-link primary" href="/deferred">Deferred (${deferredCount}) →</a><a class="nav-link primary" href="/archive">Archived (${archivedCount}) →</a></div></div>${attentionSummary}<div class="toolbar"><input id="q" placeholder="Filter plans" aria-label="Filter plans"><select id="repo" aria-label="Filter by repo"><option value="">All repos</option>${repos.map(repo => `<option value="${escapeHtml(repo)}">${escapeHtml(repo)}</option>`).join('')}</select></div><div id="plans">${rows || '<p>No active plans registered.</p>'}</div><script>
   const q=document.getElementById('q'), repo=document.getElementById('repo'), attentionFilter=document.querySelector('[data-attention-filter]'), cards=[...document.querySelectorAll('.plan-card')];
   let attentionOnly=false;
   function apply(){const text=q.value.toLowerCase(), r=repo.value; cards.forEach(card=>{card.hidden=!!((r&&card.dataset.repo!==r)||(text&&!card.dataset.search.includes(text))||(attentionOnly&&card.dataset.needsAttention!=='true'));}); document.querySelectorAll('.repo-group').forEach(group=>{group.hidden=!group.querySelector('.plan-card:not([hidden])');});}
@@ -230,7 +239,7 @@ function indexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCoun
   </script></main></body></html>`;
 }
 
-function archiveHtml(plans: ReturnType<PlanReviewStore['listPlans']>): string {
+function archiveHtml(plans: ReturnType<PlanReviewStore['listPlans']>, deferredCount = 0): string {
   const archivedPlans = plans
     .filter(item => item.plan.archivedAt)
     .sort((a, b) => String(b.plan.archivedAt).localeCompare(String(a.plan.archivedAt)) || String(b.activityAt).localeCompare(String(a.activityAt)) || String(a.plan.repoName).localeCompare(String(b.plan.repoName)) || String(a.plan.slug).localeCompare(String(b.plan.slug)) || String(a.plan.id).localeCompare(String(b.plan.id)));
@@ -244,6 +253,7 @@ function archiveHtml(plans: ReturnType<PlanReviewStore['listPlans']>): string {
       <p><code>${escapeHtml(fullyQualifiedPlanPath(item))}</code></p>
       ${publicationMetadataHtml(item)}
       ${sourceWarning}
+      ${latestNoteHtml(item)}
       ${progressHtml(item.progress)}
       ${commentCountsHtml(item)}
       ${lastUpdatedHtml(item.modifiedAt)}
@@ -255,12 +265,47 @@ function archiveHtml(plans: ReturnType<PlanReviewStore['listPlans']>): string {
   return `<!doctype html><html><head><meta charset="utf-8"><title>Archived Plans</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <style>${baseIndexStyles()}</style>
-  </head><body><main><div class="page-header"><div><h1>Archived Plans</h1><p class="muted">Archived plans stay out of the active index but remain inspectable and restorable.</p></div><a class="nav-link primary" href="/">← Active index</a></div><div class="toolbar"><input id="q" placeholder="Filter archived plans" aria-label="Filter archived plans"><select id="repo" aria-label="Filter by repo"><option value="">All repos</option>${repos.map(repo => `<option value="${escapeHtml(repo)}">${escapeHtml(repo)}</option>`).join('')}</select></div><p class="muted" id="archive-count">${archivedPlans.length} archived</p><div id="plans">${rows || empty}</div>${rows ? filteredEmpty : ''}<script>
+  </head><body><main><div class="page-header"><div><h1>Archived Plans</h1><p class="muted">Archived plans stay out of the active index but remain inspectable and restorable.</p></div><div class="plan-actions"><a class="nav-link primary" href="/">← Active index</a><a class="nav-link primary" href="/deferred">Deferred (${deferredCount}) →</a></div></div><div class="toolbar"><input id="q" placeholder="Filter archived plans" aria-label="Filter archived plans"><select id="repo" aria-label="Filter by repo"><option value="">All repos</option>${repos.map(repo => `<option value="${escapeHtml(repo)}">${escapeHtml(repo)}</option>`).join('')}</select></div><p class="muted" id="archive-count">${archivedPlans.length} archived</p><div id="plans">${rows || empty}</div>${rows ? filteredEmpty : ''}<script>
   const q=document.getElementById('q'), repo=document.getElementById('repo'), cards=[...document.querySelectorAll('.plan-card')], filteredEmpty=document.getElementById('archive-filter-empty'), count=document.getElementById('archive-count');
   function apply(){const text=q.value.toLowerCase(), r=repo.value; let visible=0; cards.forEach(card=>{card.hidden=!!((r&&card.dataset.repo!==r)||(text&&!card.dataset.search.includes(text))); if(!card.hidden) visible++;}); if(filteredEmpty) filteredEmpty.hidden=visible>0||cards.length===0; if(count) count.textContent=visible+' archived';}
   ${localTimestampScript()}
   q?.addEventListener('input',apply); repo?.addEventListener('change',apply); document.getElementById('clear-filters')?.addEventListener('click',()=>{q.value=''; repo.value=''; apply();});
   document.addEventListener('click',async event=>{const target=event.target; const button=target instanceof Element ? target.closest('[data-restore-plan]') : null; if(!button) return; button.disabled=true; const card=button.closest('.plan-card'); const error=card?.querySelector('.restore-error'); if(error) error.hidden=true; const planId=button.dataset.restorePlan; let res; try{res=await fetch('/api/plans/'+encodeURIComponent(planId)+'/unarchive',{method:'POST'});}catch{button.disabled=false; if(error) error.hidden=false; return;} if(!res.ok){button.disabled=false; if(error) error.hidden=false; return;} card?.remove(); const index=cards.findIndex(item=>item.dataset.planId===planId); if(index>=0) cards.splice(index,1); apply();});
+  </script></main></body></html>`;
+}
+
+function deferredHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCount = 0): string {
+  const deferredPlans = plans
+    .filter(item => item.plan.lifecycleState === 'deferred')
+    .sort((a, b) => String(b.plan.deferredAt ?? b.activityAt).localeCompare(String(a.plan.deferredAt ?? a.activityAt)) || String(a.plan.repoName).localeCompare(String(b.plan.repoName)) || String(a.plan.slug).localeCompare(String(b.plan.slug)));
+  const repos = [...new Set(deferredPlans.map(item => item.plan.repoName))].sort();
+  const rows = deferredPlans.map(item => {
+    const sourceWarning = planNeedsAttention(item) ? syncWarningHtml(item, { archived: true }) : '';
+    const deferredAt = item.plan.deferredAt ? `<p class="timestamp-row"><span class="row-label">Deferred</span> <time datetime="${escapeHtml(item.plan.deferredAt)}" data-local-timestamp>${escapeHtml(item.plan.deferredAt)}</time></p>` : '';
+    return `<article class="plan-card needs-attention" data-plan-id="${escapeHtml(item.plan.id)}" data-repo="${escapeHtml(item.plan.repoName)}" data-search="${escapeHtml(planCardSearch(item))}">
+      <div class="plan-card-header"><h2><a href="/p/${escapeHtml(item.plan.id)}">${escapeHtml(item.plan.repoName)} / ${escapeHtml(item.plan.slug)}</a></h2><div class="plan-actions"><span class="status-pill attention">Deferred</span><button class="restore-plan" type="button" data-resume-plan="${escapeHtml(item.plan.id)}">Resume</button><button class="archive-plan" type="button" data-archive-plan="${escapeHtml(item.plan.id)}">Archive</button></div></div>
+      <p><code>${escapeHtml(fullyQualifiedPlanPath(item))}</code></p>
+      ${publicationMetadataHtml(item)}
+      ${sourceWarning}
+      ${latestNoteHtml(item)}
+      ${deferredAt}
+      ${progressHtml(item.progress)}
+      ${commentCountsHtml(item)}
+      ${lastUpdatedHtml(item.modifiedAt)}
+      <p class="restore-error" hidden>Action failed. Check the service and try again.</p>
+    </article>`;
+  }).join('\n');
+  const empty = '<p class="empty-state" id="deferred-empty">No deferred plans yet.</p>';
+  const filteredEmpty = '<p class="empty-state" id="deferred-filter-empty" hidden>No deferred plans match the current filters. <button type="button" id="clear-filters">Clear filters</button></p>';
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Deferred Plans</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <style>${baseIndexStyles()}</style>
+  </head><body><main><div class="page-header"><div><h1>Deferred Plans</h1><p class="muted">Deferred plans are paused for later pickup and keep their notes with the plan.</p></div><div class="plan-actions"><a class="nav-link primary" href="/">← Active index</a><a class="nav-link primary" href="/archive">Archived (${archivedCount}) →</a></div></div><div class="toolbar"><input id="q" placeholder="Filter deferred plans" aria-label="Filter deferred plans"><select id="repo" aria-label="Filter by repo"><option value="">All repos</option>${repos.map(repo => `<option value="${escapeHtml(repo)}">${escapeHtml(repo)}</option>`).join('')}</select></div><p class="muted" id="deferred-count">${deferredPlans.length} deferred</p><div id="plans">${rows || empty}</div>${rows ? filteredEmpty : ''}<script>
+  const q=document.getElementById('q'), repo=document.getElementById('repo'), cards=[...document.querySelectorAll('.plan-card')], filteredEmpty=document.getElementById('deferred-filter-empty'), count=document.getElementById('deferred-count');
+  function apply(){const text=q.value.toLowerCase(), r=repo.value; let visible=0; cards.forEach(card=>{card.hidden=!!((r&&card.dataset.repo!==r)||(text&&!card.dataset.search.includes(text))); if(!card.hidden) visible++;}); if(filteredEmpty) filteredEmpty.hidden=visible>0||cards.length===0; if(count) count.textContent=visible+' deferred';}
+  ${localTimestampScript()}
+  q?.addEventListener('input',apply); repo?.addEventListener('change',apply); document.getElementById('clear-filters')?.addEventListener('click',()=>{q.value=''; repo.value=''; apply();});
+  document.addEventListener('click',async event=>{const target=event.target; const resume=target instanceof Element ? target.closest('[data-resume-plan]') : null; const archive=target instanceof Element ? target.closest('[data-archive-plan]') : null; const button=resume||archive; if(!button) return; button.disabled=true; const card=button.closest('.plan-card'); const error=card?.querySelector('.restore-error'); if(error) error.hidden=true; const planId=resume ? button.dataset.resumePlan : button.dataset.archivePlan; const path=resume ? '/resume' : '/archive'; let res; try{res=await fetch('/api/plans/'+encodeURIComponent(planId)+path,{method:'POST',headers:{'content-type':'application/json'},body: resume ? '{}' : undefined});}catch{button.disabled=false; if(error) error.hidden=false; return;} if(!res.ok){button.disabled=false; if(error) error.hidden=false; return;} card?.remove(); const index=cards.findIndex(item=>item.dataset.planId===planId); if(index>=0) cards.splice(index,1); apply();});
   </script></main></body></html>`;
 }
 
@@ -307,7 +352,9 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], shell
   const buildButton = '<button id="build-plan" type="button">Build Plan</button>';
   const navActions = plan.archivedAt
     ? `<a href="/archive">← Archive</a>${reviewButton}${buildButton}<span id="archive-status" class="archive-status">Archived</span><button id="restore-plan" type="button">Restore plan</button>`
-    : `<a href="/">← Plan index</a>${reviewButton}${buildButton}<span id="archive-status" class="archive-status" hidden></span><button id="archive-plan" type="button">Archive plan</button>`;
+    : plan.lifecycleState === 'deferred'
+      ? `<a href="/deferred">← Deferred</a>${reviewButton}${buildButton}<span id="archive-status" class="archive-status">Deferred</span><button id="resume-plan" type="button">Resume plan</button><button id="archive-plan" type="button">Archive plan</button>`
+      : `<a href="/">← Plan index</a>${reviewButton}${buildButton}<span id="archive-status" class="archive-status" hidden></span><button id="defer-plan" type="button">Defer plan</button><button id="archive-plan" type="button">Archive plan</button>`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapedShellTitle}</title>
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
@@ -315,7 +362,7 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], shell
   </head><body data-plan-id="${escapedPlanId}" data-plan-title-fallback="${encodedTitleFallback}">
     <nav id="plan-navbar" aria-label="Plan actions">${navActions}</nav>
     <div id="app">
-      <aside id="sidebar"><h1>Comments</h1><div id="sync-warning" hidden></div><div id="deferred-refresh-notice" hidden>Plan updated in the background. Finish or cancel this comment to refresh.</div><div id="comments"></div></aside>
+      <aside id="sidebar"><h1>Comments</h1><div id="sync-warning" hidden></div><section id="plan-notes-panel"><h2>Plan notes</h2><div id="plan-notes"></div><textarea id="plan-note-body" placeholder="Add a plan note for agents"></textarea><button id="add-plan-note" type="button">Add note</button></section><div id="deferred-refresh-notice" hidden>Plan updated in the background. Finish or cancel this comment to refresh.</div><div id="comments"></div></aside>
       <main id="review"><iframe id="plan-frame" sandbox="allow-same-origin allow-popups" src="/render/${escapedPlanId}"></iframe><button id="mobile-comments-toggle" type="button" aria-controls="sidebar" aria-expanded="false">Comments</button><div id="hover-selection-box" class="selection-box hover" hidden></div><div id="active-selection-box" class="selection-box active" hidden></div></main>
     </div>
     <div id="lightbox" class="lightbox" hidden><header><button id="zoom-out">-</button><button id="zoom-reset">Reset</button><button id="zoom-in">+</button><button id="pan-toggle">Pan</button><button id="close-lightbox">Close</button></header><div id="lightbox-stage" class="lightbox-stage"><img id="lightbox-image" alt=""><div id="image-selection-box" hidden></div></div></div>
@@ -352,7 +399,7 @@ body{margin:0;background:#0b1020;color:#e5e7eb;font-family:system-ui,sans-serif}
 #sync-warning{border:1px solid #f59e0b;background:rgba(245,158,11,.12);color:#fde68a;border-radius:8px;padding:10px;margin:8px 0 14px;font-size:13px}#deferred-refresh-notice{border:1px solid #38bdf8;background:rgba(56,189,248,.12);color:#bae6fd;border-radius:8px;padding:10px;margin:8px 0 14px;font-size:13px}#composer{position:fixed;right:340px;top:80px;background:#0f172a;border:1px solid #38bdf8;padding:12px;border-radius:8px;z-index:20;box-shadow:0 12px 32px rgba(0,0,0,.4)}#composer.discard-warning{border-color:#ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.22),0 12px 32px rgba(0,0,0,.4)}
 #comment-discard-warning{margin-top:8px;color:#fecaca;font-size:13px;font-weight:700}#composer.discard-warning textarea{border-color:#ef4444}
 #composer textarea{width:260px;height:90px;background:#020617;color:#e5e7eb;border:1px solid #2b364d;border-radius:6px;padding:8px;display:block}
-#composer button{margin-top:8px;margin-right:8px}.plan-review-selected{outline:2px dotted #38bdf8!important;box-shadow:none!important}.lightbox{position:fixed;inset:36px 360px 36px 36px;background:#020617;border:1px solid #38bdf8;z-index:12;display:grid;grid-template-rows:auto 1fr}.lightbox[hidden]{display:none}.lightbox header{display:flex;gap:8px;padding:10px;border-bottom:1px solid #2b364d}.lightbox img{max-width:100%;max-height:100%;place-self:center;transform-origin:center}.lightbox-stage{display:grid;overflow:hidden;position:relative}#image-selection-box{position:absolute;border:2px solid #38bdf8;background:rgba(56,189,248,.2);pointer-events:none}#mobile-comments-toggle{display:none}
+#composer button{margin-top:8px;margin-right:8px}#plan-notes-panel{border:1px solid #2b364d;border-radius:10px;background:#0f172a;padding:10px;margin:0 0 14px}#plan-notes-panel h2{font-size:15px;margin:0 0 8px}#plan-notes .note-row{border-top:1px solid #263246;padding:8px 0}#plan-notes .note-row:first-child{border-top:0}#plan-note-body{width:100%;min-height:70px;box-sizing:border-box;background:#020617;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px}#add-plan-note{margin-top:8px;background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px 10px;cursor:pointer}.plan-review-selected{outline:2px dotted #38bdf8!important;box-shadow:none!important}.lightbox{position:fixed;inset:36px 360px 36px 36px;background:#020617;border:1px solid #38bdf8;z-index:12;display:grid;grid-template-rows:auto 1fr}.lightbox[hidden]{display:none}.lightbox header{display:flex;gap:8px;padding:10px;border-bottom:1px solid #2b364d}.lightbox img{max-width:100%;max-height:100%;place-self:center;transform-origin:center}.lightbox-stage{display:grid;overflow:hidden;position:relative}#image-selection-box{position:absolute;border:2px solid #38bdf8;background:rgba(56,189,248,.2);pointer-events:none}#mobile-comments-toggle{display:none}
 @media(prefers-reduced-motion:reduce){.selection-box{transition:none}}
 @media(max-width:760px){body{overflow:hidden}#plan-navbar{position:sticky;top:0;z-index:30;height:56px;box-sizing:border-box;justify-content:flex-start;gap:8px;padding:8px;overflow-x:auto;overscroll-behavior-x:contain}#plan-navbar a,#plan-navbar button{flex:0 0 auto;min-height:40px;padding:8px 10px;font-size:13px;line-height:1.15;white-space:normal}#request-execution-review{max-width:170px}#build-plan{max-width:120px}#app{display:block;min-height:calc(100dvh - 56px)}#review{height:calc(100dvh - 56px);overflow:hidden}#plan-frame{width:100%;height:100%;border:0}#sidebar{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:24;max-height:min(72dvh,620px);box-sizing:border-box;border-left:0;border-top:1px solid #2b364d;border-radius:18px 18px 0 0;padding:12px 16px calc(16px + env(safe-area-inset-bottom));background:#111827;box-shadow:0 -16px 40px rgba(0,0,0,.45);overflow:auto;transform:translateY(100%);transition:transform .18s ease}body.comments-open #sidebar{transform:translateY(0)}#sidebar h1{position:sticky;top:-12px;margin:0 0 12px;padding:8px 0 10px;background:#111827;font-size:20px;z-index:1}.comment-row{padding:12px;margin:10px 0}.comment-row p{margin:.55rem 0}.comments-empty{margin:0;color:#a7b0c0;font-size:14px}#mobile-comments-toggle{display:flex;position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:25;min-height:44px;align-items:center;gap:6px;border:1px solid #38bdf8;border-radius:999px;background:#075985;color:#e0f2fe;padding:0 14px;font-weight:800;box-shadow:0 12px 28px rgba(0,0,0,.35)}body.comments-open #mobile-comments-toggle{background:#0f172a;border-color:#64748b}#composer{left:0;right:0;bottom:0;top:auto;z-index:60;box-sizing:border-box;border-left:0;border-right:0;border-bottom:0;border-radius:18px 18px 0 0;padding:14px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -16px 40px rgba(0,0,0,.48)}#composer textarea{width:100%;height:122px;box-sizing:border-box;font-size:16px}#composer button{min-height:44px;padding:8px 12px}.lightbox{inset:0;z-index:50;border:0}.lightbox header{flex-wrap:wrap}.selection-box{border-radius:4px}.marker{width:28px;height:28px}}
 `;
@@ -370,8 +417,13 @@ try {
 const frame = document.getElementById('plan-frame');
 const archivePlanButton = document.getElementById('archive-plan');
 const restorePlanButton = document.getElementById('restore-plan');
+const deferPlanButton = document.getElementById('defer-plan');
+const resumePlanButton = document.getElementById('resume-plan');
 const executionReviewButton = document.getElementById('request-execution-review');
 const buildPlanButton = document.getElementById('build-plan');
+const planNotes = document.getElementById('plan-notes');
+const planNoteBody = document.getElementById('plan-note-body');
+const addPlanNoteButton = document.getElementById('add-plan-note');
 const composer = document.getElementById('composer');
 const body = document.getElementById('comment-body');
 const discardWarning = document.getElementById('comment-discard-warning');
@@ -474,6 +526,43 @@ restorePlanButton?.addEventListener('click', async () => {
   }
   window.location.href = '/';
 });
+deferPlanButton?.addEventListener('click', async () => {
+  const note = prompt('Why defer this plan, and what should the next agent know?');
+  if (!note || !note.trim()) return;
+  deferPlanButton.disabled = true;
+  const res = await fetch('/api/plans/'+encodeURIComponent(planId)+'/defer', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ note }) });
+  if (!res.ok) {
+    deferPlanButton.disabled = false;
+    alert('Unable to defer plan. Add a note/reason and try again.');
+    return;
+  }
+  window.location.href = '/deferred';
+});
+resumePlanButton?.addEventListener('click', async () => {
+  const note = prompt('Optional resume note for agents:') || undefined;
+  resumePlanButton.disabled = true;
+  const res = await fetch('/api/plans/'+encodeURIComponent(planId)+'/resume', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(note?.trim() ? { note } : {}) });
+  if (!res.ok) {
+    resumePlanButton.disabled = false;
+    alert('Unable to resume plan.');
+    return;
+  }
+  window.location.href = '/';
+});
+addPlanNoteButton?.addEventListener('click', async () => {
+  const body = planNoteBody?.value.trim();
+  if (!body) return;
+  addPlanNoteButton.disabled = true;
+  const res = await fetch('/api/plans/'+encodeURIComponent(planId)+'/notes', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ body }) });
+  if (!res.ok) {
+    addPlanNoteButton.disabled = false;
+    alert('Unable to add plan note.');
+    return;
+  }
+  if (planNoteBody) planNoteBody.value = '';
+  addPlanNoteButton.disabled = false;
+  await loadMeta();
+});
 executionReviewButton?.addEventListener('click', async () => {
   executionReviewButton.disabled = true;
   const originalText = executionReviewButton.textContent;
@@ -538,6 +627,7 @@ async function loadMeta(options = {}){
     return;
   }
   renderSyncWarning(json.data.plan);
+  renderPlanNotes(json.data.notes || []);
   renderComments(json.data.comments || []);
 }
 function scheduleMetaLoad(options = {}){
@@ -683,6 +773,9 @@ function handlePlanReviewEvent(event){
     return;
   }
   if (event.type === 'plan.sync.failed'
+    || event.type === 'plan.note.created'
+    || event.type === 'plan.deferred'
+    || event.type === 'plan.resumed'
     || event.type === 'comment.created'
     || event.type === 'comment.claimed'
     || event.type === 'comment.acknowledged'
@@ -691,6 +784,11 @@ function handlePlanReviewEvent(event){
     || event.type === 'comment.deleted') {
     scheduleMetaLoad();
   }
+}
+function renderPlanNotes(items){
+  if (!planNotes) return;
+  const rows = items.map(note => '<div class="note-row"><p>'+escapeHtml(note.body)+'</p><small>'+escapeHtml(note.createdBy?.displayName || 'Plan reviewer')+' · '+escapeHtml(new Date(note.createdAt).toLocaleString())+'</small></div>').join('');
+  planNotes.innerHTML = rows || '<p class="comments-empty">No plan notes yet.</p>';
 }
 function renderComments(items){
   renderMarkers(items);
@@ -1482,20 +1580,27 @@ export function createApp(options: AppOptions): FastifyInstance {
 
   app.get('/', async (request, reply) => {
     const query = request.query as { q?: string; repoKey?: string; status?: string };
-    const allPlans = store.listPlans({ includeArchived: true });
-    const activePlans = allPlans.filter(item => !item.plan.archivedAt);
-    const archivedCount = allPlans.length - activePlans.length;
-    reply.type('text/html').send(indexHtml(filterPlans(activePlans, query).plans, archivedCount));
+    const allPlans = store.listPlans({ includeArchived: true, includeDeferred: true });
+    const activePlans = allPlans.filter(item => item.plan.lifecycleState === 'active');
+    const archivedCount = allPlans.filter(item => item.plan.lifecycleState === 'archived').length;
+    const deferredCount = allPlans.filter(item => item.plan.lifecycleState === 'deferred').length;
+    reply.type('text/html').send(indexHtml(filterPlans(activePlans, query).plans, archivedCount, deferredCount));
+  });
+
+  app.get('/deferred', async (_request, reply) => {
+    const allPlans = store.listPlans({ includeArchived: true, includeDeferred: true });
+    reply.type('text/html').send(deferredHtml(allPlans, allPlans.filter(item => item.plan.lifecycleState === 'archived').length));
   });
 
   app.get('/archive', async (_request, reply) => {
-    reply.type('text/html').send(archiveHtml(store.listPlans({ includeArchived: true })));
+    const allPlans = store.listPlans({ includeArchived: true, includeDeferred: true });
+    reply.type('text/html').send(archiveHtml(allPlans, allPlans.filter(item => item.plan.lifecycleState === 'deferred').length));
   });
 
   app.get('/api/plans', async (request, reply) => {
     try {
-      const query = request.query as { q?: string; repoKey?: string; status?: string; limit?: string; cursor?: string; includeArchived?: string };
-      const { plans, nextCursor } = filterPlans(store.listPlans({ includeArchived: query.includeArchived === 'true' }), query);
+      const query = request.query as { q?: string; repoKey?: string; status?: string; lifecycle?: 'active' | 'deferred' | 'archived'; limit?: string; cursor?: string; includeArchived?: string; includeDeferred?: string };
+      const { plans, nextCursor } = filterPlans(store.listPlans({ includeArchived: query.includeArchived === 'true', includeDeferred: query.includeDeferred === 'true', lifecycleState: query.lifecycle }), query);
       return ok({ plans, nextCursor });
     } catch (error) {
       sendError(reply, error);
@@ -1522,7 +1627,7 @@ export function createApp(options: AppOptions): FastifyInstance {
           sourcePath: plan.sourcePath,
           status: plan.lastSyncStatus,
           error: plan.lastSyncError,
-          active: !plan.archivedAt && plan.watchMode === 'filesystem' && plan.lastSyncStatus !== 'failed'
+          active: plan.lifecycleState === 'active' && plan.watchMode === 'filesystem' && plan.lastSyncStatus !== 'failed'
         },
         publicationMetadata: plan.publicationMetadata,
         renderedWithWarnings: rendered.warnings,
@@ -1562,20 +1667,22 @@ export function createApp(options: AppOptions): FastifyInstance {
 
   app.get('/api/plans/:planId', async (request, reply) => {
     try {
-	      const { planId } = request.params as { planId: string };
-	      const { plan, version } = store.getPlan(planId);
-	      emitExpired(plan.id);
-	      return ok({
+      const { planId } = request.params as { planId: string };
+      const { plan, version } = store.getPlan(planId);
+      emitExpired(plan.id);
+      return ok({
         plan,
-	        latestVersion: version,
-	        assets: store.listPlanAssets(version.id),
-	        versions: [version],
-	        counts: store.getPlanCounts(plan.id),
-	        progress: store.getPlanProgress(plan.id),
-	        comments: store.listComments(plan.id),
+        latestVersion: version,
+        assets: store.listPlanAssets(version.id),
+        versions: [version],
+        counts: store.getPlanCounts(plan.id),
+        progress: store.getPlanProgress(plan.id),
+        latestNote: store.listPlanNotes(plan.id, { limit: 1 })[0],
+        notes: store.listPlanNotes(plan.id),
+        comments: store.listComments(plan.id),
         latestEventSequence: store.latestEventSequence(plan.id, 'all'),
-	        reviewUrl: `/p/${plan.id}`
-	      });
+        reviewUrl: `/p/${plan.id}`
+      });
     } catch (error) {
       sendError(reply, error);
     }
@@ -1603,6 +1710,66 @@ export function createApp(options: AppOptions): FastifyInstance {
       await sourceSync.register(result.plan.id);
       await sourceSync.syncNow(result.plan.id, 'manual');
       return ok({ plan: result.plan });
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.post('/api/plans/:planId/defer', async (request, reply) => {
+    try {
+      const { planId } = request.params as { planId: string };
+      const { plan } = store.getPlan(planId);
+      const input = deferPlanSchema.safeParse(request.body);
+      if (!input.success) {
+        throw new PlanReviewError(
+          'validation_failed',
+          'Defer requires a non-empty note/reason',
+          400,
+          { issues: input.error.issues },
+          'Retry with --note "why paused and next step" or POST {"note":"why paused and next step"}.'
+        );
+      }
+      const result = store.deferPlan(plan.id, input.data);
+      for (const event of result.events) bus.emitEvent(event);
+      await sourceSync.unregister(result.plan.id);
+      return ok({ plan: result.plan, note: result.note });
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.post('/api/plans/:planId/resume', async (request, reply) => {
+    try {
+      const { planId } = request.params as { planId: string };
+      const { plan } = store.getPlan(planId);
+      const result = store.resumePlan(plan.id, resumePlanSchema.parse(request.body ?? {}));
+      for (const event of result.events) bus.emitEvent(event);
+      await sourceSync.register(result.plan.id);
+      await sourceSync.syncNow(result.plan.id, 'manual');
+      return ok({ plan: result.plan, note: result.note });
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.post('/api/plans/:planId/notes', async (request, reply) => {
+    try {
+      const { planId } = request.params as { planId: string };
+      const { plan } = store.getPlan(planId);
+      const result = store.createPlanNote(plan.id, createPlanNoteSchema.parse(request.body));
+      if (result.event) bus.emitEvent(result.event);
+      return ok({ note: result.note, created: result.created });
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.get('/api/plans/:planId/notes', async (request, reply) => {
+    try {
+      const { planId } = request.params as { planId: string };
+      const query = request.query as { limit?: string };
+      const { plan } = store.getPlan(planId);
+      return ok({ notes: store.listPlanNotes(plan.id, { limit: query.limit ? Number(query.limit) : undefined }) });
     } catch (error) {
       sendError(reply, error);
     }

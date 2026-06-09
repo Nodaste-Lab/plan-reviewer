@@ -7,8 +7,12 @@ import type {
   AckCommentInput,
   ClaimCommentsInput,
   CreateCommentInput,
+  CreatePlanNoteInput,
+  DeferPlanInput,
   RegisterPlanInput,
   ResolveCommentInput,
+  ResumePlanInput,
+  PlanLifecycleState,
   PlanPublicationMetadata
 } from '../schemas.js';
 import { ensureDir, PlanReviewError, sha256, shortHash, slugify } from '../util.js';
@@ -25,6 +29,9 @@ export interface PlanRecord {
   sourcePath?: string;
   watchMode: 'filesystem' | 'snapshot';
   publicationMetadata: PlanPublicationMetadata;
+  lifecycleState: PlanLifecycleState;
+  deferredAt?: string;
+  deferredNoteId?: string;
   lastSyncAt?: string;
   lastSyncStatus?: string;
   lastSyncError?: Record<string, unknown> | null;
@@ -35,6 +42,14 @@ export interface PlanProgress {
   totalPhases: number;
   completedPhases: number;
   phases: Array<{ label: string; complete: boolean }>;
+}
+
+export interface PlanNoteRecord {
+  id: string;
+  planId: string;
+  body: string;
+  createdBy: Record<string, unknown>;
+  createdAt: string;
 }
 
 export interface VersionRecord {
@@ -140,6 +155,15 @@ function inferAssetDimensions(bytes: Buffer): { width?: number; height?: number 
 
 function optionalString(value: unknown): string | undefined {
   return value === null || value === undefined || value === '' ? undefined : String(value);
+}
+
+function lifecycleStateFromRow(row: Record<string, unknown>): PlanLifecycleState {
+  if (optionalString(row.archivedAt) || optionalString(row.archived_at)) return 'archived';
+  return optionalString(row.lifecycleState) === 'deferred' || optionalString(row.lifecycle_state) === 'deferred' ? 'deferred' : 'active';
+}
+
+function noteAuthor(input?: { displayName?: string }): Record<string, unknown> {
+  return { type: 'operator', displayName: input?.displayName?.trim() || 'Plan reviewer' };
 }
 
 function metadataFromRow(row: Record<string, unknown>): PlanPublicationMetadata {
@@ -256,6 +280,9 @@ export class PlanReviewStore {
         plan_path TEXT NOT NULL,
         source_path TEXT,
         watch_mode TEXT NOT NULL DEFAULT 'snapshot',
+        lifecycle_state TEXT NOT NULL DEFAULT 'active',
+        deferred_at TEXT,
+        deferred_note_id TEXT,
         last_sync_at TEXT,
         last_sync_status TEXT,
         last_sync_error_json TEXT,
@@ -308,6 +335,7 @@ export class PlanReviewStore {
         created_by_json TEXT NOT NULL,
         client_mutation_id TEXT,
         claim_id TEXT,
+        deleted_at TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         UNIQUE(plan_id, sequence),
@@ -347,12 +375,24 @@ export class PlanReviewStore {
         acknowledged_at TEXT,
         created_at TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS plan_notes (
+        id TEXT PRIMARY KEY,
+        plan_id TEXT NOT NULL REFERENCES plans(id),
+        body TEXT NOT NULL,
+        created_by_json TEXT NOT NULL,
+        client_mutation_id TEXT,
+        created_at TEXT NOT NULL,
+        UNIQUE(plan_id, client_mutation_id)
+      );
       CREATE UNIQUE INDEX IF NOT EXISTS idx_active_claim
         ON claims(comment_id)
         WHERE released_at IS NULL AND acknowledged_at IS NULL;
     `);
     this.ensureColumn('plans', 'source_path', 'TEXT');
     this.ensureColumn('plans', 'watch_mode', "TEXT NOT NULL DEFAULT 'snapshot'");
+    this.ensureColumn('plans', 'lifecycle_state', "TEXT NOT NULL DEFAULT 'active'");
+    this.ensureColumn('plans', 'deferred_at', 'TEXT');
+    this.ensureColumn('plans', 'deferred_note_id', 'TEXT');
     this.ensureColumn('plans', 'last_sync_at', 'TEXT');
     this.ensureColumn('plans', 'last_sync_status', 'TEXT');
     this.ensureColumn('plans', 'last_sync_error_json', 'TEXT');
@@ -479,14 +519,17 @@ export class PlanReviewStore {
       const watchMode = input.watchMode ?? 'snapshot';
       const lastSyncStatus = watchMode === 'filesystem' ? 'synced' : 'snapshot';
       this.db
-        .prepare(`INSERT INTO plans (id, repo_id, slug, plan_path, source_path, watch_mode, last_sync_at, last_sync_status, last_sync_error_json, archived_at, publication_metadata_json, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
+        .prepare(`INSERT INTO plans (id, repo_id, slug, plan_path, source_path, watch_mode, lifecycle_state, deferred_at, deferred_note_id, last_sync_at, last_sync_status, last_sync_error_json, archived_at, publication_metadata_json, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, 'active', NULL, NULL, ?, ?, ?, NULL, ?, ?, ?)
           ON CONFLICT(repo_id, plan_path, slug) DO UPDATE SET updated_at = excluded.updated_at,
             source_path = excluded.source_path, watch_mode = excluded.watch_mode,
             last_sync_at = excluded.last_sync_at, last_sync_status = excluded.last_sync_status,
             last_sync_error_json = excluded.last_sync_error_json,
             publication_metadata_json = excluded.publication_metadata_json,
-            archived_at = plans.archived_at`)
+            archived_at = plans.archived_at,
+            lifecycle_state = plans.lifecycle_state,
+            deferred_at = plans.deferred_at,
+            deferred_note_id = plans.deferred_note_id`)
         .run(planId, repoId, slug, input.planPath, input.sourcePath ?? null, watchMode, now, lastSyncStatus, null, JSON.stringify(input.publicationMetadata), now, now);
 
       const htmlName = `${input.fileHash}.html`;
@@ -553,7 +596,7 @@ export class PlanReviewStore {
         repoId,
         repoKey,
         slug,
-        sourceSync: { watchMode, sourcePath: input.sourcePath, status: lastSyncStatus, active: watchMode === 'filesystem' },
+        sourceSync: { watchMode, sourcePath: input.sourcePath, status: lastSyncStatus, active: watchMode === 'filesystem' && this.getPlan(planId).plan.lifecycleState === 'active' },
         event,
         reviewUrl: `/p/${planId}`,
         indexUrl: '/',
@@ -563,10 +606,20 @@ export class PlanReviewStore {
     return tx();
   }
 
-  listPlans(options: { includeArchived?: boolean } = {}) {
-    const archiveFilter = options.includeArchived ? '' : 'WHERE p.archived_at IS NULL';
+  listPlans(options: { includeArchived?: boolean; includeDeferred?: boolean; lifecycleState?: PlanLifecycleState } = {}) {
+    const filters: string[] = [];
+    if (options.lifecycleState) {
+      if (options.lifecycleState === 'archived') filters.push('p.archived_at IS NOT NULL');
+      else if (options.lifecycleState === 'deferred') filters.push("p.archived_at IS NULL AND p.lifecycle_state = 'deferred'");
+      else filters.push("p.archived_at IS NULL AND COALESCE(p.lifecycle_state, 'active') != 'deferred'");
+    } else {
+      if (!options.includeArchived) filters.push('p.archived_at IS NULL');
+      if (!options.includeDeferred) filters.push("COALESCE(p.lifecycle_state, 'active') != 'deferred'");
+    }
+    const archiveFilter = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
     const rows = this.db.prepare(`
       SELECT p.id, p.slug, p.plan_path AS planPath, p.source_path AS sourcePath, p.watch_mode AS watchMode,
+        p.lifecycle_state AS lifecycleState, p.deferred_at AS deferredAt, p.deferred_note_id AS deferredNoteId,
         p.last_sync_at AS lastSyncAt, p.last_sync_status AS lastSyncStatus, p.last_sync_error_json AS lastSyncErrorJson,
         p.archived_at AS archivedAt, p.publication_metadata_json AS publicationMetadataJson,
         r.repo_name AS repoName, r.repo_key AS repoKey, r.root_path AS rootPath,
@@ -596,6 +649,7 @@ export class PlanReviewStore {
       const sourceMtimeMs = optionalNumber(row.sourceMtimeMs);
       const modifiedAt = isoFromEpochMs(sourceMtimeMs) ?? String(row.versionCreatedAt ?? planUpdatedAt);
       const progress = htmlBlobPath ? extractPlanProgress(fs.readFileSync(htmlBlobPath, 'utf8')) : { totalPhases: 0, completedPhases: 0, phases: [] };
+      const latestNote = this.latestPlanNote(String(row.id));
       return {
       plan: {
         id: row.id,
@@ -605,6 +659,9 @@ export class PlanReviewStore {
         repoKey: row.repoKey,
         sourcePath: optionalString(row.sourcePath),
         watchMode: (row.watchMode ?? 'snapshot') as 'filesystem' | 'snapshot',
+        lifecycleState: lifecycleStateFromRow(row),
+        deferredAt: optionalString(row.deferredAt),
+        deferredNoteId: optionalString(row.deferredNoteId),
         lastSyncAt: optionalString(row.lastSyncAt),
         lastSyncStatus: optionalString(row.lastSyncStatus),
         lastSyncError: parseJson(row.lastSyncErrorJson as string | null, null),
@@ -627,6 +684,8 @@ export class PlanReviewStore {
         resolved: Number(row.resolved ?? 0)
       },
       progress,
+      noteCount: this.countPlanNotes(String(row.id)),
+      latestNote,
       activityAt,
       modifiedAt,
       reviewUrl: `/p/${row.id}`
@@ -645,6 +704,60 @@ export class PlanReviewStore {
         || String(a.plan.slug).localeCompare(String(b.plan.slug))
         || String(a.plan.id).localeCompare(String(b.plan.id));
     });
+  }
+
+  private noteFromRow(row: Record<string, unknown>): PlanNoteRecord {
+    return {
+      id: String(row.id),
+      planId: String(row.plan_id ?? row.planId),
+      body: String(row.body),
+      createdBy: parseJson(String(row.created_by_json ?? row.createdByJson), {}),
+      createdAt: String(row.created_at ?? row.createdAt)
+    };
+  }
+
+  createPlanNote(planId: string, input: CreatePlanNoteInput): { note: PlanNoteRecord; event?: StoredEvent; created: boolean } {
+    const tx = this.db.transaction(() => {
+      this.getPlan(planId);
+      const duplicate = input.clientMutationId
+        ? this.db.prepare('SELECT * FROM plan_notes WHERE plan_id = ? AND client_mutation_id = ?').get(planId, input.clientMutationId) as Record<string, unknown> | undefined
+        : undefined;
+      if (duplicate) {
+        return { note: this.noteFromRow(duplicate), created: false };
+      }
+      const now = nowIso();
+      const noteId = id('note');
+      this.db.prepare(`INSERT INTO plan_notes (id, plan_id, body, created_by_json, client_mutation_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)`)
+        .run(noteId, planId, input.body, JSON.stringify(noteAuthor(input.createdBy)), input.clientMutationId ?? null, now);
+      this.db.prepare('UPDATE plans SET updated_at = ? WHERE id = ?').run(now, planId);
+      const note = this.getPlanNote(noteId);
+      const event = this.addEvent(planId, 'plan.note.created', { eventType: 'plan.note.created', planId, note });
+      return { note, event, created: true };
+    });
+    return tx();
+  }
+
+  private getPlanNote(noteId: string): PlanNoteRecord {
+    const row = this.db.prepare('SELECT * FROM plan_notes WHERE id = ?').get(noteId) as Record<string, unknown> | undefined;
+    if (!row) throw new PlanReviewError('not_found', `Plan note '${noteId}' was not found`, 404);
+    return this.noteFromRow(row);
+  }
+
+  listPlanNotes(planId: string, options: { limit?: number } = {}): PlanNoteRecord[] {
+    this.getPlan(planId);
+    const rows = this.db.prepare('SELECT * FROM plan_notes WHERE plan_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?')
+      .all(planId, options.limit ?? 50) as Array<Record<string, unknown>>;
+    return rows.map(row => this.noteFromRow(row));
+  }
+
+  private latestPlanNote(planId: string): PlanNoteRecord | undefined {
+    return this.listPlanNotes(planId, { limit: 1 })[0];
+  }
+
+  private countPlanNotes(planId: string): number {
+    const row = this.db.prepare('SELECT COUNT(*) AS count FROM plan_notes WHERE plan_id = ?').get(planId) as { count: number };
+    return Number(row.count ?? 0);
   }
 
   listPlanAssets(versionId: string) {
@@ -702,7 +815,8 @@ export class PlanReviewStore {
   getPlan(identifier: string): { plan: PlanRecord; version: VersionRecord } {
     const row = this.db.prepare(`
       SELECT p.id, p.repo_id AS repoId, p.slug, p.plan_path AS planPath, p.source_path AS sourcePath,
-        p.watch_mode AS watchMode, p.last_sync_at AS lastSyncAt, p.last_sync_status AS lastSyncStatus,
+        p.watch_mode AS watchMode, p.lifecycle_state AS lifecycleState, p.deferred_at AS deferredAt, p.deferred_note_id AS deferredNoteId,
+        p.last_sync_at AS lastSyncAt, p.last_sync_status AS lastSyncStatus,
         p.last_sync_error_json AS lastSyncErrorJson, p.archived_at AS archivedAt, p.publication_metadata_json AS publicationMetadataJson,
         r.repo_name AS repoName, r.repo_key AS repoKey, r.root_path AS rootPath,
         v.id AS versionId, v.file_hash AS fileHash, v.branch, v.commit_sha AS commitSha,
@@ -719,7 +833,8 @@ export class PlanReviewStore {
     `).get(identifier) as Record<string, string> | undefined;
     const slugRows = row ? [] : this.db.prepare(`
       SELECT p.id, p.repo_id AS repoId, p.slug, p.plan_path AS planPath, p.source_path AS sourcePath,
-        p.watch_mode AS watchMode, p.last_sync_at AS lastSyncAt, p.last_sync_status AS lastSyncStatus,
+        p.watch_mode AS watchMode, p.lifecycle_state AS lifecycleState, p.deferred_at AS deferredAt, p.deferred_note_id AS deferredNoteId,
+        p.last_sync_at AS lastSyncAt, p.last_sync_status AS lastSyncStatus,
         p.last_sync_error_json AS lastSyncErrorJson, p.archived_at AS archivedAt, p.publication_metadata_json AS publicationMetadataJson,
         r.repo_name AS repoName, r.repo_key AS repoKey, r.root_path AS rootPath,
         v.id AS versionId, v.file_hash AS fileHash, v.branch, v.commit_sha AS commitSha,
@@ -756,6 +871,9 @@ export class PlanReviewStore {
         commitSha: selectedRow.commitSha ?? undefined,
         sourcePath: optionalString(selectedRow.sourcePath),
         watchMode: (selectedRow.watchMode ?? 'snapshot') as 'filesystem' | 'snapshot',
+        lifecycleState: lifecycleStateFromRow(selectedRow),
+        deferredAt: optionalString(selectedRow.deferredAt),
+        deferredNoteId: optionalString(selectedRow.deferredNoteId),
         lastSyncAt: optionalString(selectedRow.lastSyncAt),
         lastSyncStatus: optionalString(selectedRow.lastSyncStatus),
         lastSyncError: parseJson(selectedRow.lastSyncErrorJson, null),
@@ -787,11 +905,69 @@ export class PlanReviewStore {
     return fs.readFileSync(row.renderedBlobPath, 'utf8');
   }
 
+  deferPlan(identifier: string, input: DeferPlanInput): { plan: PlanRecord; note: PlanNoteRecord; events: StoredEvent[] } {
+    const tx = this.db.transaction(() => {
+      const { plan } = this.getPlan(identifier);
+      if (plan.lifecycleState === 'archived') {
+        throw new PlanReviewError('invalid_state', 'Archived plans cannot be deferred', 409, { planId: plan.id, lifecycleState: plan.lifecycleState }, 'Restore the archived plan before deferring it.');
+      }
+      if (plan.lifecycleState === 'deferred') {
+        throw new PlanReviewError('invalid_state', 'Plan is already deferred', 409, { planId: plan.id, lifecycleState: plan.lifecycleState }, 'Resume the plan before deferring it again, or add a plan note to update deferred status.');
+      }
+      const now = nowIso();
+      const noteId = id('note');
+      this.db.prepare(`INSERT INTO plan_notes (id, plan_id, body, created_by_json, client_mutation_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(plan_id, client_mutation_id) DO NOTHING`)
+        .run(noteId, plan.id, input.note, JSON.stringify(noteAuthor(input.createdBy)), input.clientMutationId ?? null, now);
+      const note = input.clientMutationId
+        ? (this.db.prepare('SELECT * FROM plan_notes WHERE plan_id = ? AND client_mutation_id = ?').get(plan.id, input.clientMutationId) as Record<string, unknown> | undefined)
+        : undefined;
+      const storedNote = note ? this.noteFromRow(note) : this.getPlanNote(noteId);
+      this.db.prepare("UPDATE plans SET lifecycle_state = 'deferred', deferred_at = COALESCE(deferred_at, ?), deferred_note_id = ?, archived_at = NULL, updated_at = ? WHERE id = ?")
+        .run(now, storedNote.id, now, plan.id);
+      const updated = this.getPlan(plan.id).plan;
+      const noteEvent = this.addEvent(plan.id, 'plan.note.created', { eventType: 'plan.note.created', planId: plan.id, note: storedNote });
+      const deferredEvent = this.addEvent(plan.id, 'plan.deferred', { eventType: 'plan.deferred', planId: plan.id, deferredAt: updated.deferredAt, deferredNoteId: storedNote.id });
+      return { plan: updated, note: storedNote, events: [noteEvent, deferredEvent] };
+    });
+    return tx();
+  }
+
+  resumePlan(identifier: string, input: ResumePlanInput = {}): { plan: PlanRecord; note?: PlanNoteRecord; events: StoredEvent[] } {
+    const tx = this.db.transaction(() => {
+      const { plan } = this.getPlan(identifier);
+      if (plan.lifecycleState === 'archived') {
+        throw new PlanReviewError('invalid_state', 'Archived plans cannot be resumed from deferred state', 409, { planId: plan.id, lifecycleState: plan.lifecycleState }, 'Restore the archived plan first.');
+      }
+      if (plan.lifecycleState !== 'deferred') {
+        throw new PlanReviewError('invalid_state', 'Only deferred plans can be resumed', 409, { planId: plan.id, lifecycleState: plan.lifecycleState }, 'Defer the plan first, or continue working from the active plan page.');
+      }
+      const now = nowIso();
+      let note: PlanNoteRecord | undefined;
+      const events: StoredEvent[] = [];
+      if (input.note) {
+        const noteId = id('note');
+        this.db.prepare(`INSERT INTO plan_notes (id, plan_id, body, created_by_json, client_mutation_id, created_at)
+          VALUES (?, ?, ?, ?, ?, ?)`)
+          .run(noteId, plan.id, input.note, JSON.stringify(noteAuthor(input.createdBy)), input.clientMutationId ?? null, now);
+        note = this.getPlanNote(noteId);
+        events.push(this.addEvent(plan.id, 'plan.note.created', { eventType: 'plan.note.created', planId: plan.id, note }));
+      }
+      this.db.prepare("UPDATE plans SET lifecycle_state = 'active', deferred_at = NULL, deferred_note_id = NULL, updated_at = ? WHERE id = ?")
+        .run(now, plan.id);
+      const updated = this.getPlan(plan.id).plan;
+      events.push(this.addEvent(plan.id, 'plan.resumed', { eventType: 'plan.resumed', planId: plan.id, resumedAt: now, noteId: note?.id }));
+      return { plan: updated, note, events };
+    });
+    return tx();
+  }
+
   archivePlan(identifier: string): { plan: PlanRecord; event: StoredEvent } {
     const { plan } = this.getPlan(identifier);
     const archivedAt = plan.archivedAt ?? nowIso();
     if (!plan.archivedAt) {
-      this.db.prepare('UPDATE plans SET archived_at = ?, updated_at = ? WHERE id = ?').run(archivedAt, archivedAt, plan.id);
+      this.db.prepare("UPDATE plans SET archived_at = ?, lifecycle_state = 'archived', updated_at = ? WHERE id = ?").run(archivedAt, archivedAt, plan.id);
     }
     const updated = this.getPlan(plan.id).plan;
     const event = this.addEvent(plan.id, 'plan.archived', { eventType: 'plan.archived', planId: plan.id, archivedAt });
@@ -802,7 +978,7 @@ export class PlanReviewStore {
     const { plan } = this.getPlan(identifier);
     const unarchivedAt = nowIso();
     if (plan.archivedAt) {
-      this.db.prepare('UPDATE plans SET archived_at = NULL, updated_at = ? WHERE id = ?').run(unarchivedAt, plan.id);
+      this.db.prepare("UPDATE plans SET archived_at = NULL, lifecycle_state = 'active', deferred_at = NULL, deferred_note_id = NULL, updated_at = ? WHERE id = ?").run(unarchivedAt, plan.id);
     }
     const updated = this.getPlan(plan.id).plan;
     const event = this.addEvent(plan.id, 'plan.unarchived', { eventType: 'plan.unarchived', planId: plan.id, unarchivedAt });
@@ -810,7 +986,7 @@ export class PlanReviewStore {
   }
 
   listFilesystemPlans(): Array<{ planId: string }> {
-    const rows = this.db.prepare("SELECT id AS planId FROM plans WHERE watch_mode = 'filesystem' AND source_path IS NOT NULL AND archived_at IS NULL ORDER BY updated_at DESC").all() as Array<{ planId: string }>;
+    const rows = this.db.prepare("SELECT id AS planId FROM plans WHERE watch_mode = 'filesystem' AND source_path IS NOT NULL AND archived_at IS NULL AND COALESCE(lifecycle_state, 'active') != 'deferred' ORDER BY updated_at DESC").all() as Array<{ planId: string }>;
     return rows;
   }
 
@@ -1105,6 +1281,7 @@ export class PlanReviewStore {
       FROM claims cl
       JOIN comments c ON c.id = cl.comment_id
       WHERE cl.released_at IS NULL AND cl.acknowledged_at IS NULL AND cl.lease_expires_at <= ?
+        AND c.deleted_at IS NULL
         ${planId ? 'AND c.plan_id = ?' : ''}
     `).all(...(planId ? [now, planId] : [now])) as Array<{ id: string; commentId: string; planId: string }>;
     const tx = this.db.transaction(() => {
@@ -1126,6 +1303,13 @@ export class PlanReviewStore {
 
   claimComments(planId: string, input: ClaimCommentsInput, agentId = 'plan-review-cli') {
     const tx = this.db.transaction(() => {
+      const { plan } = this.getPlan(planId);
+      if (plan.lifecycleState === 'deferred') {
+        throw new PlanReviewError('invalid_state', 'Deferred plans cannot claim comments', 409, { planId: plan.id, lifecycleState: plan.lifecycleState }, 'Resume the plan before claiming comments, or leave it deferred for later pickup.');
+      }
+      if (plan.lifecycleState === 'archived') {
+        throw new PlanReviewError('invalid_state', 'Archived plans cannot claim comments', 409, { planId: plan.id, lifecycleState: plan.lifecycleState }, 'Restore the archived plan before claiming comments.');
+      }
       const expiredEvents = this.releaseExpiredClaims(planId);
       if (input.mode === 'one' && input.commentIds?.length) {
         throw new PlanReviewError('validation_failed', 'mode=one does not accept commentIds', 400);
@@ -1360,7 +1544,7 @@ export class PlanReviewStore {
 
   queueSnapshot(filters: { repoKey?: string; planId?: string; limit?: number }) {
     this.releaseExpiredClaims(filters.planId);
-    const clauses = ["c.status = 'pending'", 'c.deleted_at IS NULL'];
+    const clauses = ["c.status = 'pending'", 'c.deleted_at IS NULL', 'p.archived_at IS NULL', "COALESCE(p.lifecycle_state, 'active') != 'deferred'"];
     const params: unknown[] = [];
     if (filters.planId) {
       clauses.push('c.plan_id = ?');

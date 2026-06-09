@@ -4,6 +4,8 @@ export const commentStatusSchema = z.enum(['pending', 'claimed', 'acknowledged',
 export const anchorTypeSchema = z.enum(['dom', 'text_range', 'image']);
 export const anchorStateSchema = z.enum(['mapped', 'stale', 'unmapped']);
 export const claimModeSchema = z.enum(['one', 'selected', 'bulk']);
+export const planLifecycleStateSchema = z.enum(['active', 'deferred', 'archived']);
+export const noteAuthorSchema = z.object({ displayName: z.string().optional() }).optional();
 export const eventTypeSchema = z.enum([
   'comment.created',
   'comment.claimed',
@@ -14,6 +16,11 @@ export const eventTypeSchema = z.enum([
   'plan.version.registered',
   'plan.version.synced',
   'plan.sync.failed',
+  'plan.archived',
+  'plan.unarchived',
+  'plan.deferred',
+  'plan.resumed',
+  'plan.note.created',
   'heartbeat'
 ]);
 
@@ -118,9 +125,31 @@ export const releaseCommentSchema = z.object({
   reason: z.string().optional()
 });
 
+export const createPlanNoteSchema = z.object({
+  body: z.string().trim().min(1),
+  createdBy: noteAuthorSchema,
+  clientMutationId: z.string().optional()
+});
+
+export const deferPlanSchema = z.object({
+  note: z.string().trim().min(1),
+  createdBy: noteAuthorSchema,
+  clientMutationId: z.string().optional()
+});
+
+export const resumePlanSchema = z.object({
+  note: z.string().trim().min(1).optional(),
+  createdBy: noteAuthorSchema,
+  clientMutationId: z.string().optional()
+});
+
 export type PlanPublicationMetadata = z.infer<typeof planPublicationMetadataSchema>;
 export type RegisterPlanInput = z.infer<typeof registerPlanSchema>;
 export type CreateCommentInput = z.infer<typeof createCommentSchema>;
 export type ClaimCommentsInput = z.infer<typeof claimCommentsSchema>;
 export type AckCommentInput = z.infer<typeof ackCommentSchema>;
 export type ResolveCommentInput = z.infer<typeof resolveCommentSchema>;
+export type CreatePlanNoteInput = z.infer<typeof createPlanNoteSchema>;
+export type DeferPlanInput = z.infer<typeof deferPlanSchema>;
+export type ResumePlanInput = z.infer<typeof resumePlanSchema>;
+export type PlanLifecycleState = z.infer<typeof planLifecycleStateSchema>;
