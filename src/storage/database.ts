@@ -1303,6 +1303,13 @@ export class PlanReviewStore {
 
   claimComments(planId: string, input: ClaimCommentsInput, agentId = 'plan-review-cli') {
     const tx = this.db.transaction(() => {
+      const { plan } = this.getPlan(planId);
+      if (plan.lifecycleState === 'deferred') {
+        throw new PlanReviewError('invalid_state', 'Deferred plans cannot claim comments', 409, { planId: plan.id, lifecycleState: plan.lifecycleState }, 'Resume the plan before claiming comments, or leave it deferred for later pickup.');
+      }
+      if (plan.lifecycleState === 'archived') {
+        throw new PlanReviewError('invalid_state', 'Archived plans cannot claim comments', 409, { planId: plan.id, lifecycleState: plan.lifecycleState }, 'Restore the archived plan before claiming comments.');
+      }
       const expiredEvents = this.releaseExpiredClaims(planId);
       if (input.mode === 'one' && input.commentIds?.length) {
         throw new PlanReviewError('validation_failed', 'mode=one does not accept commentIds', 400);
@@ -1537,7 +1544,7 @@ export class PlanReviewStore {
 
   queueSnapshot(filters: { repoKey?: string; planId?: string; limit?: number }) {
     this.releaseExpiredClaims(filters.planId);
-    const clauses = ["c.status = 'pending'", 'c.deleted_at IS NULL'];
+    const clauses = ["c.status = 'pending'", 'c.deleted_at IS NULL', 'p.archived_at IS NULL', "COALESCE(p.lifecycle_state, 'active') != 'deferred'"];
     const params: unknown[] = [];
     if (filters.planId) {
       clauses.push('c.plan_id = ?');

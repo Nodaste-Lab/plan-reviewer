@@ -357,6 +357,7 @@ test('deferred lifecycle hides plans from active index and preserves agent-visib
     const registered = await app.inject({ method: 'POST', url: '/api/plans/register', payload: sampleRegisterPayload() });
     assert.equal(registered.statusCode, 200);
     const planId = registered.json().data.planId;
+    const versionId = registered.json().data.versionId;
 
     const activeResume = await app.inject({ method: 'POST', url: `/api/plans/${planId}/resume`, payload: {} });
     assert.equal(activeResume.statusCode, 409);
@@ -378,6 +379,13 @@ test('deferred lifecycle hides plans from active index and preserves agent-visib
     assert.match(activeShell.body, /id="plan-notes-panel"/);
     assert.doesNotMatch(activeShell.body, /id="resume-plan"/);
 
+    const pendingComment = await app.inject({
+      method: 'POST',
+      url: `/api/plans/${planId}/comments`,
+      payload: { versionId, body: 'Hold this while deferred.', anchorType: 'dom', anchor: domAnchor() }
+    });
+    assert.equal(pendingComment.statusCode, 200);
+
     const deferred = await app.inject({ method: 'POST', url: `/api/plans/${planId}/defer`, payload: { note: 'Blocked on PM review; resume at P3.' } });
     assert.equal(deferred.statusCode, 200);
     assert.equal(deferred.json().data.plan.lifecycleState, 'deferred');
@@ -389,6 +397,15 @@ test('deferred lifecycle hides plans from active index and preserves agent-visib
     assert.equal(duplicateDefer.statusCode, 409);
     assert.equal(duplicateDefer.json().error.code, 'invalid_state');
     assert.match(duplicateDefer.json().error.nextAction, /Resume the plan before deferring it again/);
+
+    const deferredQueue = await app.inject({ method: 'GET', url: `/api/agent/queue?planId=${planId}` });
+    assert.equal(deferredQueue.statusCode, 200);
+    assert.deepEqual(deferredQueue.json().data.items, []);
+
+    const deferredClaim = await app.inject({ method: 'POST', url: `/api/plans/${planId}/comments/claim`, payload: { mode: 'one' } });
+    assert.equal(deferredClaim.statusCode, 409);
+    assert.equal(deferredClaim.json().error.code, 'invalid_state');
+    assert.match(deferredClaim.json().error.nextAction, /Resume the plan before claiming comments/);
 
     const activeApi = await app.inject({ method: 'GET', url: '/api/plans' });
     assert.equal(activeApi.statusCode, 200);
