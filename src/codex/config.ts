@@ -69,7 +69,6 @@ export function buildAppServerThreadOptions(target: DeliveryTargetRecord): Recor
     cwd: target.cwd,
     sandbox: target.sandbox,
     model: target.model,
-    modelReasoningEffort: target.effort,
     approvalPolicy: 'never',
     config: codexConfigOverrides()
   });

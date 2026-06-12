@@ -23,14 +23,12 @@ Task:
 
 Important:
 - The plan-reviewer service owns queue state.
+- Do not run plan-review ack, resolve, release, watch, or agent next commands; the delivery worker records the response after this turn completes.
 - Do not start a long polling loop.
 - Do not process unrelated comments.
 - If you cannot address this comment safely, explain why.
 
 browser.comment.v1 payload:
 ${payload}
-
-Ack guidance for tools or shell:
-plan-review ack ${input.comment.id} --claim ${input.claimId} --summary "..." --changed-files <paths> --json --url ${input.serviceUrl}
 `;
 }

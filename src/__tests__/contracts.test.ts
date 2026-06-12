@@ -21,7 +21,7 @@ import { buildAgentNextClaimed, buildAgentNextEmpty } from '../agentNext.js';
 import { sha256 } from '../util.js';
 import { domAnchor, registeredApp, sampleHtml, sampleRegisterPayload, tempDbPath } from './helpers.js';
 import { buildCodexDeliveryPrompt } from '../codex/prompt.js';
-import { AppServerCodexClient, buildAppServerThreadResumeRequest, buildAppServerTurnStartRequest, deliveryErrorFromAppServerJsonRpc } from '../codex/appServerClient.js';
+import { AppServerCodexClient, buildAppServerInitializeRequest, buildAppServerThreadResumeRequest, buildAppServerTurnStartRequest, deliveryErrorFromAppServerJsonRpc } from '../codex/appServerClient.js';
 import { buildCodexProcessEnv, buildSdkRunOptions, codexDeliveryHome } from '../codex/config.js';
 import { SdkCodexClient } from '../codex/sdkClient.js';
 import { FakeCodexClient } from '../codex/client.js';
@@ -77,7 +77,7 @@ test('schemas validate locked registration, comment, and claim contracts', () =>
   assert.throws(() => claimCommentsSchema.parse({ mode: 'bulk', limit: 0 }));
 });
 
-test('codex delivery schemas and prompt contract use public threadId and text-turn ack guidance', () => {
+test('codex delivery schemas and prompt contract use public threadId and worker-owned ack guidance', () => {
   const enabledTarget = deliveryTargetUpdateSchema.parse({ enabled: true, threadId: 'thr_123', mode: 'sdk', effort: 'medium' });
   assert.equal(enabledTarget.threadId, 'thr_123');
   assert.throws(() => deliveryTargetUpdateSchema.parse({ enabled: true }), /threadId is required/);
@@ -107,8 +107,8 @@ test('codex delivery schemas and prompt contract use public threadId and text-tu
     });
     assert.match(prompt, /New plan-reviewer feedback was claimed/);
     assert.match(prompt, /browser\.comment\.v1 payload/);
-    assert.match(prompt, new RegExp(`plan-review ack ${comment.id} --claim claim_123`));
-    assert.match(prompt, /--url http:\/\/127\.0\.0\.1:4317/);
+    assert.match(prompt, /Do not run plan-review ack, resolve, release, watch, or agent next commands/);
+    assert.doesNotMatch(prompt, new RegExp(`plan-review ack ${comment.id} --claim claim_123`));
   } finally {
     store.close();
   }
@@ -402,8 +402,48 @@ test('delivery auto-resolve does not mask ack failure after Codex completion', a
   }
 });
 
+test('delivery worker records externally_resolved when delivered Codex turn already resolved the claim', async () => {
+  const store = new PlanReviewStore(tempDbPath('delivery-worker-self-resolved'));
+  try {
+    const payload = registerPlanSchema.parse(sampleRegisterPayload());
+    const rendered = renderPlan(payload);
+    const registered = store.registerPlan(payload, rendered.renderedHtml, rendered.warnings);
+    store.upsertDeliveryTarget(registered.planId, { adapter: 'codex', enabled: true, mode: 'fake', threadId: 'thr_self_resolved', autoResolve: false });
+    const comment = store.createComment(registered.planId, {
+      versionId: registered.versionId,
+      body: 'Resolve me inside the delivered turn',
+      anchorType: 'dom',
+      anchor: domAnchor()
+    }).comment;
+    const client = {
+      async deliverComment(input: CodexDeliveryInput) {
+        store.ackComment(input.comment.id, {
+          claimId: input.claimId,
+          action: { runId: 'turn_self_resolved', responseSummary: 'Handled inside Codex turn.' }
+        });
+        store.resolveComment(input.comment.id, {
+          resolutionNote: 'Done',
+          action: { runId: 'turn_self_resolved', responseSummary: 'Resolved inside Codex turn.' }
+        });
+        return {
+          finalResponse: 'Resolved inside Codex turn.',
+          threadId: input.target.threadId ?? 'thr_self_resolved',
+          turnId: 'turn_self_resolved'
+        };
+      }
+    };
+    const worker = new DeliveryWorker(store, { enabled: true, serviceUrl: 'http://127.0.0.1:4317', clientFactory: () => client });
+    const row = await worker.processOnce();
+    assert.equal(row?.status, 'externally_resolved');
+    assert.equal(store.getDeliveryRow(row!.id)?.status, 'externally_resolved');
+    assert.equal(store.getComment(comment.id).status, 'resolved');
+  } finally {
+    store.close();
+  }
+});
+
 test('HTTP delivery endpoints validate targets, expose outbox rows, and retry failed rows', async () => {
-  const app = createApp({ dbPath: tempDbPath('delivery-http') });
+  const app = createApp({ dbPath: tempDbPath('delivery-http'), delivery: { enabled: false } });
   try {
     const registered = await app.inject({
       method: 'POST',
@@ -455,6 +495,17 @@ test('HTTP delivery endpoints validate targets, expose outbox rows, and retry fa
 });
 
 test('app-server transport starts turns with plain text input items', () => {
+  assert.deepEqual(buildAppServerInitializeRequest().params, {
+    clientInfo: {
+      name: 'plan-reviewer',
+      title: 'Plan Reviewer',
+      version: '0.1.0'
+    },
+    capabilities: {
+      experimentalApi: true,
+      requestAttestation: false
+    }
+  });
   assert.deepEqual(buildAppServerTurnStartRequest('thr_123', 'hello').params, {
     threadId: 'thr_123',
     input: [{ type: 'text', text: 'hello' }]
@@ -465,7 +516,6 @@ test('app-server transport starts turns with plain text input items', () => {
     threadId: 'thr_123',
     cwd: '/repo',
     sandbox: 'read-only',
-    modelReasoningEffort: 'low',
     approvalPolicy: 'never',
     config: {
       'plugins.enabled': false,

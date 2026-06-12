@@ -4,6 +4,25 @@ import type { CodexClient } from './client.js';
 import { DeliveryTransportError, type CodexDeliveryInput, type CodexDeliveryResult } from '../delivery/types.js';
 import { buildAppServerThreadOptions, buildCodexProcessEnv, codexAuthConfigError } from './config.js';
 
+export function buildAppServerInitializeRequest(): Record<string, unknown> {
+  return {
+    jsonrpc: '2.0',
+    id: 'initialize',
+    method: 'initialize',
+    params: {
+      clientInfo: {
+        name: 'plan-reviewer',
+        title: 'Plan Reviewer',
+        version: '0.1.0'
+      },
+      capabilities: {
+        experimentalApi: true,
+        requestAttestation: false
+      }
+    }
+  };
+}
+
 export function buildAppServerTurnStartRequest(threadId: string, prompt: string): Record<string, unknown> {
   return {
     jsonrpc: '2.0',
@@ -160,7 +179,7 @@ export class AppServerCodexClient implements CodexClient {
         }
       });
       for (const request of [
-        { jsonrpc: '2.0', id: 'initialize', method: 'initialize', params: {} },
+        buildAppServerInitializeRequest(),
         buildAppServerThreadResumeRequest(threadId, input),
         buildAppServerTurnStartRequest(threadId, input.prompt)
       ]) {
