@@ -3,7 +3,12 @@ import os from 'node:os';
 import path from 'node:path';
 
 export interface ServiceConfig {
-  url: string;
+  url?: string;
+  codexDelivery?: {
+    enabled?: boolean | string;
+    mode?: 'sdk' | 'app-server' | 'fake' | string;
+    intervalMs?: number | string;
+  };
 }
 
 export interface DeliveryWorkerConfig {
@@ -25,6 +30,28 @@ function normalizeUrl(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.replace(/\/$/, '') : undefined;
 }
 
+function userConfigPath(homeDir = os.homedir()): string {
+  return path.join(homeDir, '.config', 'plan-reviewer', 'config.json');
+}
+
+function parseEnabled(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    if (/^(1|true|yes|enabled)$/i.test(value)) return true;
+    if (/^(0|false|no|disabled)$/i.test(value)) return false;
+  }
+  return undefined;
+}
+
+function parseMode(value: unknown): DeliveryWorkerConfig['mode'] | undefined {
+  return value === 'app-server' || value === 'fake' || value === 'sdk' ? value : undefined;
+}
+
+function parseIntervalMs(value: unknown): number | undefined {
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
 export function resolveServiceUrl(explicitUrl?: string, cwd = process.cwd()): string {
   const explicit = normalizeUrl(explicitUrl);
   if (explicit) return explicit;
@@ -35,20 +62,24 @@ export function resolveServiceUrl(explicitUrl?: string, cwd = process.cwd()): st
   const projectUrl = normalizeUrl(project.url);
   if (projectUrl) return projectUrl;
 
-  const user = readJson(path.join(os.homedir(), '.config', 'plan-reviewer', 'config.json'));
+  const user = readJson(userConfigPath());
   const userUrl = normalizeUrl(user.url);
   if (userUrl) return userUrl;
 
   return 'http://127.0.0.1:4317';
 }
 
-export function resolveDeliveryWorkerConfig(options: { serviceUrl?: string } = {}): DeliveryWorkerConfig {
+export function resolveDeliveryWorkerConfig(options: { serviceUrl?: string; userConfigFile?: string } = {}): DeliveryWorkerConfig {
+  const user = readJson(options.userConfigFile ?? userConfigPath());
+  const configured = user.codexDelivery ?? {};
+  const envEnabled = parseEnabled(process.env.PLAN_REVIEW_CODEX_DELIVERY);
+  const envMode = parseMode(process.env.PLAN_REVIEW_CODEX_DELIVERY_MODE);
+  const envIntervalMs = parseIntervalMs(process.env.PLAN_REVIEW_CODEX_DELIVERY_INTERVAL_MS);
+
   return {
-    enabled: /^(1|true|yes|enabled)$/i.test(process.env.PLAN_REVIEW_CODEX_DELIVERY ?? ''),
-    mode: process.env.PLAN_REVIEW_CODEX_DELIVERY_MODE === 'app-server' || process.env.PLAN_REVIEW_CODEX_DELIVERY_MODE === 'fake'
-      ? process.env.PLAN_REVIEW_CODEX_DELIVERY_MODE
-      : 'sdk',
-    intervalMs: Number(process.env.PLAN_REVIEW_CODEX_DELIVERY_INTERVAL_MS ?? 10000),
+    enabled: envEnabled ?? parseEnabled(configured.enabled) ?? false,
+    mode: envMode ?? parseMode(configured.mode) ?? 'sdk',
+    intervalMs: envIntervalMs ?? parseIntervalMs(configured.intervalMs) ?? 10000,
     serviceUrl: options.serviceUrl ?? resolveServiceUrl()
   };
 }

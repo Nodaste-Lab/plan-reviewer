@@ -6,14 +6,28 @@ Codex delivery lets `plan-reviewer` wake a configured Codex thread only when a b
 
 Delivery is disabled unless both conditions are true:
 
-- The service is started with `PLAN_REVIEW_CODEX_DELIVERY=1`.
+- The service is configured with `codexDelivery.enabled: true` or started with `PLAN_REVIEW_CODEX_DELIVERY=1`.
 - The plan has an enabled `codex` target with an explicit `threadId`.
 
-The MVP service is unauthenticated. Keep Codex delivery on loopback or a trusted network:
+For the packaged/Homebrew service, enable the worker persistently in `~/.config/plan-reviewer/config.json` and restart the service:
+
+```json
+{
+  "codexDelivery": {
+    "enabled": true,
+    "mode": "sdk",
+    "intervalMs": 10000
+  }
+}
+```
+
+For ad hoc service runs, environment variables override the config file:
 
 ```bash
 PLAN_REVIEW_CODEX_DELIVERY=1 plan-review serve --host 127.0.0.1 --port 4317
 ```
+
+The MVP service is unauthenticated. Keep Codex delivery on loopback or a trusted network.
 
 ## Configure a Target
 
