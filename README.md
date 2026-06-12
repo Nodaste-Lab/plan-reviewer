@@ -134,6 +134,25 @@ Pending unclaimed comments can be deleted from the browser UI or with `DELETE /a
 
 Every comment event carries `conversationPayload.type = "browser.comment.v1"`. Host adapters for Codex, Claude, or Pi can append that payload into the active conversation, let the agent answer there, and call `ack` or `resolve` with a response summary, changed files, run ID, and optional commit SHA. The service stores the response metadata but does not implement a separate chat product.
 
+## Codex Delivery
+
+Codex delivery is opt-in per plan and disabled by default at the service level. It uses the same queue claim lifecycle as `agent next`: a browser comment creates one delivery outbox row, the worker claims that exact comment, sends one normal Codex text turn to the configured thread, then acks only after Codex completes.
+
+```bash
+PLAN_REVIEW_CODEX_DELIVERY=1 plan-review serve --host 127.0.0.1 --port 4317
+plan-review delivery target set plan_123 --adapter codex --thread <threadId> --mode sdk --json
+plan-review delivery list plan_123 --json
+plan-review delivery retry plan_123 --adapter codex --comment cmt_123 --json
+```
+
+Registration convenience flags are also available:
+
+```bash
+plan-review register thoughts/plans/my-plan.html --execution-ready false --codex-thread <threadId> --codex-delivery enabled
+```
+
+See [docs/codex-delivery.md](docs/codex-delivery.md) for setup, fake-adapter smoke tests, SDK/app-server notes, manual recovery, and security guidance.
+
 ## Authoring HTML Plans
 
 Use stable `id` attributes on major sections, phase cards, acceptance criteria, diagrams, and mockups. The renderer preserves those IDs as `data-plan-node-id`; otherwise it derives deterministic IDs from headings, sibling paths, and short content hashes. Prefer semantic `section`, `article`, `figure`, `figcaption`, headings, lists, and tables so comments capture useful heading paths.

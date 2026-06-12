@@ -12,6 +12,7 @@ import { renderRegistrationInstructionCommands, type RegistrationAgentInstructio
 import { buildAgentNextClaimed, buildAgentNextEmpty } from './agentNext.js';
 import { discoverPullRequest, fetchPullRequestByUrl, parseGitHubRemote, refreshPullRequest } from './githubPr.js';
 import type { PlanPullRequest } from './schemas.js';
+import { deliveryTargetUpdateSchema } from './schemas.js';
 
 interface PlanApiRecord {
   plan: {
@@ -37,6 +38,7 @@ interface RegisterResponse {
   publicationMetadata?: { worktreePath: string; branch: string; linearIssue?: string; executionReady: boolean; executionReadyBasis: 'agent-review-results' };
   renderedWithWarnings: Array<{ code: string; detail: string }>;
   agentInstructions?: RegistrationAgentInstructions;
+  codexDelivery?: unknown;
 }
 
 function git(args: string[], cwd = process.cwd()): string | undefined {
@@ -178,7 +180,7 @@ function parseExecutionReady(value: string | undefined): boolean {
   throw new PlanReviewError('validation_failed', '--execution-ready must be true or false', 1, { executionReady: value });
 }
 
-async function registerPlan(filePath: string, options: { url?: string; json?: boolean; repo?: string; branch?: string; commit?: string; newThread?: boolean; snapshot?: boolean; executionReady?: string; linearIssue?: string }) {
+async function registerPlan(filePath: string, options: { url?: string; json?: boolean; repo?: string; branch?: string; commit?: string; newThread?: boolean; snapshot?: boolean; executionReady?: string; linearIssue?: string; codexThread?: string; codexDelivery?: string; codexMode?: string }) {
   const serviceUrl = resolveServiceUrl(options.url);
   const absolute = path.resolve(filePath);
   const html = fs.readFileSync(absolute, 'utf8');
@@ -210,7 +212,16 @@ async function registerPlan(filePath: string, options: { url?: string; json?: bo
     sourceSize: options.snapshot ? undefined : stat.size,
     watchMode: options.snapshot ? 'snapshot' as const : 'filesystem' as const,
     assets: discoverImageAssets(html, absolute),
-    updateMode: options.newThread ? 'new-thread' as const : 'upsert' as const
+    updateMode: options.newThread ? 'new-thread' as const : 'upsert' as const,
+    codexDelivery: options.codexThread || options.codexDelivery || options.codexMode
+      ? {
+          enabled: /^(enabled|true|1|yes)$/i.test(options.codexDelivery ?? ''),
+          mode: options.codexMode ?? 'sdk',
+          threadId: options.codexThread,
+          cwd: meta.rootPath,
+          autoResolve: false
+        }
+      : undefined
   };
   const data = await requestJson<RegisterResponse>(`${serviceUrl}/api/plans/register`, {
     method: 'POST',
@@ -774,6 +785,59 @@ async function listPlanNotes(planId: string, options: { url?: string; json?: boo
   else process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
 }
 
+async function setDeliveryTarget(planId: string, options: { url?: string; adapter?: string; thread?: string; mode?: string; enable?: boolean; disable?: boolean; cwd?: string; sandbox?: string; model?: string; effort?: string; autoResolve?: boolean; json?: boolean }) {
+  const serviceUrl = resolveServiceUrl(options.url);
+  const enabled = options.disable ? false : options.enable ?? true;
+  const payload = deliveryTargetUpdateSchema.parse({
+    adapter: options.adapter ?? 'codex',
+    enabled,
+    mode: options.mode ?? 'sdk',
+    threadId: options.thread,
+    cwd: options.cwd,
+    sandbox: options.sandbox,
+    model: options.model,
+    effort: options.effort,
+    autoResolve: Boolean(options.autoResolve)
+  });
+  const data = await requestJson<unknown>(`${serviceUrl}/api/plans/${planId}/delivery/${payload.adapter}`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (options.json) printJson(data);
+  else process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
+}
+
+async function showDeliveryTarget(planId: string, options: { url?: string; adapter?: string; json?: boolean }) {
+  const serviceUrl = resolveServiceUrl(options.url);
+  const adapter = options.adapter ?? 'codex';
+  const data = await requestJson<unknown>(`${serviceUrl}/api/plans/${planId}/delivery/${adapter}`);
+  if (options.json) printJson(data);
+  else process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
+}
+
+async function listDelivery(planId: string, options: { url?: string; adapter?: string; json?: boolean }) {
+  const serviceUrl = resolveServiceUrl(options.url);
+  const params = new URLSearchParams();
+  if (options.adapter) params.set('adapter', options.adapter);
+  const query = params.toString();
+  const data = await requestJson<unknown>(`${serviceUrl}/api/plans/${planId}/delivery/outbox${query ? `?${query}` : ''}`);
+  if (options.json) printJson(data);
+  else process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
+}
+
+async function retryDelivery(planId: string, options: { url?: string; adapter?: string; comment?: string; json?: boolean }) {
+  const serviceUrl = resolveServiceUrl(options.url);
+  const adapter = options.adapter ?? 'codex';
+  const data = await requestJson<unknown>(`${serviceUrl}/api/plans/${planId}/delivery/${adapter}/retry`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ commentId: options.comment })
+  });
+  if (options.json) printJson(data);
+  else process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
+}
+
 export async function main(argv: string[] = process.argv.slice(2)) {
   const program = new Command();
   program.name('plan-review').description('Local HTML plan review daemon and CLI');
@@ -795,6 +859,9 @@ export async function main(argv: string[] = process.argv.slice(2)) {
     .option('--snapshot', 'register a detached snapshot instead of live filesystem sync')
     .option('--linear-issue <issue>', 'optional Linear issue associated with this plan')
     .option('--execution-ready <true|false>', 'whether agent-review results say this plan is execution ready')
+    .option('--codex-thread <threadId>', 'target Codex thread id for delivery metadata')
+    .option('--codex-delivery <enabled|disabled>', 'whether Codex delivery is enabled for this plan')
+    .option('--codex-mode <mode>', 'Codex delivery mode: sdk|app-server|fake')
     .option('--json')
     .action(registerPlan);
 
@@ -866,6 +933,39 @@ export async function main(argv: string[] = process.argv.slice(2)) {
     .option('--lease-seconds <seconds>')
     .option('--json')
     .action(claim);
+
+  const delivery = program.command('delivery');
+  const deliveryTarget = delivery.command('target');
+  deliveryTarget.command('set <planId>')
+    .option('--url <url>')
+    .option('--adapter <adapter>', 'delivery adapter', 'codex')
+    .option('--thread <threadId>', 'target thread id')
+    .option('--mode <mode>', 'sdk|app-server|fake', 'sdk')
+    .option('--enable', 'enable delivery', true)
+    .option('--disable', 'disable delivery')
+    .option('--cwd <path>')
+    .option('--sandbox <sandbox>')
+    .option('--model <model>')
+    .option('--effort <effort>')
+    .option('--auto-resolve')
+    .option('--json')
+    .action(setDeliveryTarget);
+  deliveryTarget.command('show <planId>')
+    .option('--url <url>')
+    .option('--adapter <adapter>', 'delivery adapter', 'codex')
+    .option('--json')
+    .action(showDeliveryTarget);
+  delivery.command('list <planId>')
+    .option('--url <url>')
+    .option('--adapter <adapter>')
+    .option('--json')
+    .action(listDelivery);
+  delivery.command('retry <planId>')
+    .option('--url <url>')
+    .option('--adapter <adapter>', 'delivery adapter', 'codex')
+    .option('--comment <commentId>')
+    .option('--json')
+    .action(retryDelivery);
 
   program.command('ack <commentId>')
     .option('--url <url>')

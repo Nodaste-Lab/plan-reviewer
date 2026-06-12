@@ -11,6 +11,8 @@ import {
   createCommentSchema,
   createPlanNoteSchema,
   deferPlanSchema,
+  deliveryAdapterSchema,
+  deliveryTargetUpdateSchema,
   planPullRequestSchema,
   registerPlanSchema,
   releaseCommentSchema,
@@ -23,9 +25,12 @@ import { PlanReviewStore, type StoredEvent } from '../storage/database.js';
 import { SourceSyncService } from './sourceSync.js';
 import { fail, ok, PlanReviewError } from '../util.js';
 import { planTitleFallback, renderedHtmlTitle, reviewShellTitle } from '../planTitles.js';
+import { resolveDeliveryWorkerConfig, type DeliveryWorkerConfig } from '../config.js';
+import { DeliveryWorker, type DeliveryWorkerOptions } from '../delivery/worker.js';
 
 export interface AppOptions {
   dbPath: string;
+  delivery?: Partial<DeliveryWorkerConfig> & Pick<DeliveryWorkerOptions, 'clientFactory'>;
 }
 
 interface EventBus {
@@ -1658,14 +1663,32 @@ export function createApp(options: AppOptions): FastifyInstance {
   const store = new PlanReviewStore(options.dbPath);
   const bus = createEventBus();
   const sourceSync = new SourceSyncService(store, bus);
+  const deliveryConfig = { ...resolveDeliveryWorkerConfig(), ...(options.delivery ?? {}) };
+  const deliveryWorker = new DeliveryWorker(store, {
+    enabled: deliveryConfig.enabled,
+    intervalMs: deliveryConfig.intervalMs,
+    serviceUrl: deliveryConfig.serviceUrl,
+    clientFactory: options.delivery?.clientFactory
+  });
   void sourceSync.rehydrateFromStore();
+  deliveryWorker.start();
   const emitExpired = (planId?: string) => {
     const events = store.releaseExpiredClaims(planId);
     for (const event of events) bus.emitEvent(event);
     return events;
   };
+  const deliveryRuntime = () => ({
+    workerEnabled: deliveryConfig.enabled,
+    mode: deliveryConfig.mode,
+    serviceUrl: deliveryConfig.serviceUrl,
+    status: deliveryConfig.enabled ? 'enabled' : 'disabled',
+    message: deliveryConfig.enabled
+      ? 'Automatic Codex delivery worker is enabled.'
+      : 'Automatic Codex delivery is disabled by service config. Set PLAN_REVIEW_CODEX_DELIVERY=1 to enable the worker; manual agent next remains available.'
+  });
 
   app.addHook('onClose', async () => {
+    deliveryWorker.stop();
     await sourceSync.close();
     store.close();
   });
@@ -1755,6 +1778,7 @@ export function createApp(options: AppOptions): FastifyInstance {
           active: plan.lifecycleState === 'active' && plan.watchMode === 'filesystem' && plan.lastSyncStatus !== 'failed'
         },
         publicationMetadata: plan.publicationMetadata,
+        codexDelivery: store.getDeliveryTarget(plan.id, 'codex'),
         renderedWithWarnings: rendered.warnings,
         agentInstructions: buildRegistrationAgentInstructions({ planId: result.planId, reviewUrl: result.reviewUrl })
       });
@@ -1805,6 +1829,11 @@ export function createApp(options: AppOptions): FastifyInstance {
         latestNote: store.listPlanNotes(plan.id, { limit: 1 })[0],
         notes: store.listPlanNotes(plan.id),
         comments: store.listComments(plan.id),
+        delivery: {
+          codex: store.getDeliveryTarget(plan.id, 'codex'),
+          outbox: store.listDeliveryRows(plan.id),
+          runtime: deliveryRuntime()
+        },
         latestEventSequence: store.latestEventSequence(plan.id, 'all'),
         reviewUrl: `/p/${plan.id}`
       });
@@ -1830,6 +1859,61 @@ export function createApp(options: AppOptions): FastifyInstance {
       const { plan } = store.getPlan(planId);
       store.clearPullRequest(plan.id);
       return ok({ planId: plan.id, pullRequest: null });
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.get('/api/plans/:planId/delivery/:adapter', async (request, reply) => {
+    try {
+      const { planId, adapter } = request.params as { planId: string; adapter: string };
+      const parsedAdapter = deliveryAdapterSchema.parse(adapter);
+      const { plan } = store.getPlan(planId);
+      return ok({
+        target: store.getDeliveryTarget(plan.id, parsedAdapter),
+        outbox: store.listDeliveryRows(plan.id, parsedAdapter),
+        runtime: deliveryRuntime()
+      });
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.put('/api/plans/:planId/delivery/:adapter', async (request, reply) => {
+    try {
+      const { planId, adapter } = request.params as { planId: string; adapter: string };
+      const parsedAdapter = deliveryAdapterSchema.parse(adapter);
+      const { plan } = store.getPlan(planId);
+      const input = deliveryTargetUpdateSchema.parse({ adapter: parsedAdapter, ...(request.body as Record<string, unknown> ?? {}) });
+      const result = store.upsertDeliveryTarget(plan.id, input);
+      deliveryWorker.wake();
+      return ok(result);
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.get('/api/plans/:planId/delivery/outbox', async (request, reply) => {
+    try {
+      const { planId } = request.params as { planId: string };
+      const query = request.query as { adapter?: string };
+      const adapter = query.adapter ? deliveryAdapterSchema.parse(query.adapter) : undefined;
+      const { plan } = store.getPlan(planId);
+      return ok({ outbox: store.listDeliveryRows(plan.id, adapter), runtime: deliveryRuntime() });
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.post('/api/plans/:planId/delivery/:adapter/retry', async (request, reply) => {
+    try {
+      const { planId, adapter } = request.params as { planId: string; adapter: string };
+      const parsedAdapter = deliveryAdapterSchema.parse(adapter);
+      const body = (request.body ?? {}) as { commentId?: string };
+      const { plan } = store.getPlan(planId);
+      const result = store.retryDeliveryRows(plan.id, parsedAdapter, body.commentId);
+      deliveryWorker.wake();
+      return ok(result);
     } catch (error) {
       sendError(reply, error);
     }
@@ -1939,7 +2023,10 @@ export function createApp(options: AppOptions): FastifyInstance {
         },
         createdBy: { displayName: 'Plan reviewer' }
       });
-      if (result.created) bus.emitEvent(result.event);
+      if (result.created) {
+        bus.emitEvent(result.event);
+        deliveryWorker.wake();
+      }
       return ok({ comment: result.comment, created: result.created });
     } catch (error) {
       sendError(reply, error);
@@ -1963,7 +2050,10 @@ export function createApp(options: AppOptions): FastifyInstance {
         },
         createdBy: { displayName: 'Plan reviewer' }
       });
-      if (result.created) bus.emitEvent(result.event);
+      if (result.created) {
+        bus.emitEvent(result.event);
+        deliveryWorker.wake();
+      }
       return ok({ comment: result.comment, created: result.created });
     } catch (error) {
       sendError(reply, error);
@@ -1975,7 +2065,10 @@ export function createApp(options: AppOptions): FastifyInstance {
       const { planId } = request.params as { planId: string };
       const { plan } = store.getPlan(planId);
       const result = store.createComment(plan.id, createCommentSchema.parse(request.body));
-      if (result.created) bus.emitEvent(result.event);
+      if (result.created) {
+        bus.emitEvent(result.event);
+        deliveryWorker.wake();
+      }
       return ok(result);
     } catch (error) {
       sendError(reply, error);

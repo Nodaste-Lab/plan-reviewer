@@ -14,8 +14,12 @@ import type {
   ResumePlanInput,
   PlanLifecycleState,
   PlanPublicationMetadata,
-  PlanPullRequest
+  PlanPullRequest,
+  DeliveryAdapter,
+  DeliveryStatus,
+  DeliveryTargetInput
 } from '../schemas.js';
+import type { DeliveryErrorShape, DeliveryOutboxRow, DeliveryTargetRecord } from '../delivery/types.js';
 import { pullRequestStatus } from '../githubPr.js';
 import { ensureDir, PlanReviewError, sha256, shortHash, slugify } from '../util.js';
 import { planTitleFallback, renderedHtmlTitle } from '../planTitles.js';
@@ -102,6 +106,8 @@ export interface StoredComment {
   deletedAt?: string;
   claim?: { id: string; agentId: string; leaseExpiresAt: string } | null;
 }
+
+export type { DeliveryOutboxRow, DeliveryTargetRecord };
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -448,6 +454,38 @@ export class PlanReviewStore {
         created_at TEXT NOT NULL,
         UNIQUE(plan_id, client_mutation_id)
       );
+      CREATE TABLE IF NOT EXISTS delivery_targets (
+        plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+        adapter TEXT NOT NULL DEFAULT 'codex',
+        enabled INTEGER NOT NULL DEFAULT 0,
+        mode TEXT NOT NULL DEFAULT 'sdk',
+        target_thread_id TEXT,
+        target_cwd TEXT,
+        sandbox TEXT,
+        model TEXT,
+        effort TEXT,
+        auto_resolve INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY(plan_id, adapter)
+      );
+      CREATE TABLE IF NOT EXISTS delivery_outbox (
+        id TEXT PRIMARY KEY,
+        plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+        comment_id TEXT NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
+        adapter TEXT NOT NULL DEFAULT 'codex',
+        status TEXT NOT NULL,
+        attempt_count INTEGER NOT NULL DEFAULT 0,
+        next_attempt_at TEXT NOT NULL,
+        claim_id TEXT,
+        target_thread_id TEXT,
+        adapter_turn_id TEXT,
+        last_error_json TEXT,
+        result_json TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(comment_id, adapter)
+      );
       CREATE UNIQUE INDEX IF NOT EXISTS idx_active_claim
         ON claims(comment_id)
         WHERE released_at IS NULL AND acknowledged_at IS NULL;
@@ -624,6 +662,268 @@ export class PlanReviewStore {
     this.db.prepare('UPDATE plans SET updated_at = ? WHERE id = ?').run(now, planId);
   }
 
+  private deliveryTargetFromRow(row: Record<string, unknown>): DeliveryTargetRecord {
+    return {
+      planId: String(row.plan_id ?? row.planId),
+      adapter: String(row.adapter) as DeliveryAdapter,
+      enabled: Boolean(Number(row.enabled ?? 0)),
+      mode: String(row.mode ?? 'sdk') as DeliveryTargetRecord['mode'],
+      threadId: optionalString(row.target_thread_id ?? row.threadId),
+      cwd: optionalString(row.target_cwd ?? row.cwd),
+      sandbox: optionalString(row.sandbox),
+      model: optionalString(row.model),
+      effort: optionalString(row.effort),
+      autoResolve: Boolean(Number(row.auto_resolve ?? 0)),
+      createdAt: String(row.created_at ?? row.createdAt),
+      updatedAt: String(row.updated_at ?? row.updatedAt)
+    };
+  }
+
+  private deliveryOutboxFromRow(row: Record<string, unknown>): DeliveryOutboxRow {
+    return {
+      id: String(row.id),
+      planId: String(row.plan_id ?? row.planId),
+      commentId: String(row.comment_id ?? row.commentId),
+      adapter: String(row.adapter) as DeliveryAdapter,
+      status: String(row.status) as DeliveryStatus,
+      attemptCount: Number(row.attempt_count ?? row.attemptCount ?? 0),
+      nextAttemptAt: String(row.next_attempt_at ?? row.nextAttemptAt),
+      claimId: optionalString(row.claim_id ?? row.claimId),
+      targetThreadId: optionalString(row.target_thread_id ?? row.targetThreadId),
+      adapterTurnId: optionalString(row.adapter_turn_id ?? row.adapterTurnId),
+      lastError: parseJson<DeliveryErrorShape | undefined>(row.last_error_json as string | null, undefined),
+      result: parseJson<Record<string, unknown> | undefined>(row.result_json as string | null, undefined),
+      createdAt: String(row.created_at ?? row.createdAt),
+      updatedAt: String(row.updated_at ?? row.updatedAt)
+    };
+  }
+
+  getDeliveryTarget(planId: string, adapter: DeliveryAdapter = 'codex'): DeliveryTargetRecord | null {
+    this.getPlan(planId);
+    const row = this.db.prepare('SELECT * FROM delivery_targets WHERE plan_id = ? AND adapter = ?').get(planId, adapter) as Record<string, unknown> | undefined;
+    return row ? this.deliveryTargetFromRow(row) : null;
+  }
+
+  upsertDeliveryTarget(planId: string, input: DeliveryTargetInput): { target: DeliveryTargetRecord; backfilled: number } {
+    const tx = this.db.transaction(() => {
+      this.getPlan(planId);
+      const adapter = input.adapter ?? 'codex';
+      const previous = this.getDeliveryTarget(planId, adapter);
+      const now = nowIso();
+      const createdAt = previous?.createdAt ?? now;
+      this.db.prepare(`INSERT INTO delivery_targets
+        (plan_id, adapter, enabled, mode, target_thread_id, target_cwd, sandbox, model, effort, auto_resolve, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(plan_id, adapter) DO UPDATE SET
+          enabled = excluded.enabled,
+          mode = excluded.mode,
+          target_thread_id = excluded.target_thread_id,
+          target_cwd = excluded.target_cwd,
+          sandbox = excluded.sandbox,
+          model = excluded.model,
+          effort = excluded.effort,
+          auto_resolve = excluded.auto_resolve,
+          updated_at = excluded.updated_at`)
+        .run(
+          planId,
+          adapter,
+          input.enabled ? 1 : 0,
+          input.mode ?? 'sdk',
+          input.threadId ?? null,
+          input.cwd ?? null,
+          input.sandbox ?? null,
+          input.model ?? null,
+          input.effort ?? null,
+          input.autoResolve ? 1 : 0,
+          createdAt,
+          now
+        );
+      this.db.prepare('UPDATE plans SET updated_at = ? WHERE id = ?').run(now, planId);
+      const target = this.getDeliveryTarget(planId, adapter)!;
+      const shouldBackfill = target.enabled && (!previous?.enabled || previous.threadId !== target.threadId);
+      const backfilled = shouldBackfill ? this.backfillDelivery(planId, adapter) : 0;
+      if (!target.enabled) {
+        this.db.prepare("UPDATE delivery_outbox SET status = 'paused', updated_at = ? WHERE plan_id = ? AND adapter = ? AND status IN ('pending','retry_wait')")
+          .run(nowIso(), planId, adapter);
+      } else {
+        this.db.prepare("UPDATE delivery_outbox SET status = 'pending', next_attempt_at = ?, updated_at = ? WHERE plan_id = ? AND adapter = ? AND status = 'paused'")
+          .run(nowIso(), nowIso(), planId, adapter);
+      }
+      return { target: this.getDeliveryTarget(planId, adapter)!, backfilled };
+    });
+    return tx();
+  }
+
+  enqueueDelivery(planId: string, commentId: string, adapter: DeliveryAdapter = 'codex'): DeliveryOutboxRow | null {
+    const target = this.getDeliveryTarget(planId, adapter);
+    if (!target?.enabled || !target.threadId) return null;
+    const now = nowIso();
+    const rowId = id('del');
+    this.db.prepare(`INSERT INTO delivery_outbox
+      (id, plan_id, comment_id, adapter, status, attempt_count, next_attempt_at, target_thread_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 'pending', 0, ?, ?, ?, ?)
+      ON CONFLICT(comment_id, adapter) DO NOTHING`)
+      .run(rowId, planId, commentId, adapter, now, target.threadId, now, now);
+    return this.getDeliveryRowByComment(commentId, adapter);
+  }
+
+  backfillDelivery(planId: string, adapter: DeliveryAdapter = 'codex'): number {
+    const target = this.getDeliveryTarget(planId, adapter);
+    if (!target?.enabled || !target.threadId) return 0;
+    const rows = this.db.prepare(`
+      SELECT id FROM comments
+      WHERE plan_id = ?
+        AND status = 'pending'
+        AND deleted_at IS NULL
+        AND claim_id IS NULL
+      ORDER BY sequence ASC
+    `).all(planId) as Array<{ id: string }>;
+    let created = 0;
+    for (const row of rows) {
+      const before = this.getDeliveryRowByComment(row.id, adapter);
+      this.enqueueDelivery(planId, row.id, adapter);
+      if (!before && this.getDeliveryRowByComment(row.id, adapter)) created += 1;
+    }
+    return created;
+  }
+
+  getDeliveryRow(id: string): DeliveryOutboxRow | null {
+    const row = this.db.prepare('SELECT * FROM delivery_outbox WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+    return row ? this.deliveryOutboxFromRow(row) : null;
+  }
+
+  getDeliveryRowByComment(commentId: string, adapter: DeliveryAdapter = 'codex'): DeliveryOutboxRow | null {
+    const row = this.db.prepare('SELECT * FROM delivery_outbox WHERE comment_id = ? AND adapter = ?').get(commentId, adapter) as Record<string, unknown> | undefined;
+    return row ? this.deliveryOutboxFromRow(row) : null;
+  }
+
+  listDeliveryRows(planId: string, adapter?: DeliveryAdapter): DeliveryOutboxRow[] {
+    this.getPlan(planId);
+    const rows = this.db.prepare(`SELECT * FROM delivery_outbox WHERE plan_id = ? ${adapter ? 'AND adapter = ?' : ''} ORDER BY created_at ASC, id ASC`)
+      .all(...(adapter ? [planId, adapter] : [planId])) as Array<Record<string, unknown>>;
+    return rows.map(row => this.deliveryOutboxFromRow(row));
+  }
+
+  listStaleDeliveryRows(statuses: DeliveryStatus[], olderThanIso: string): DeliveryOutboxRow[] {
+    if (statuses.length === 0) return [];
+    const placeholders = statuses.map(() => '?').join(',');
+    const rows = this.db.prepare(`SELECT * FROM delivery_outbox WHERE status IN (${placeholders}) AND updated_at <= ? ORDER BY updated_at ASC, id ASC`)
+      .all(...statuses, olderThanIso) as Array<Record<string, unknown>>;
+    return rows.map(row => this.deliveryOutboxFromRow(row));
+  }
+
+  acquireNextDeliveryRow(now = nowIso()): DeliveryOutboxRow | null {
+    const tx = this.db.transaction(() => {
+      const row = this.db.prepare(`
+        SELECT o.*
+        FROM delivery_outbox o
+        JOIN delivery_targets t ON t.plan_id = o.plan_id AND t.adapter = o.adapter
+        WHERE o.status IN ('pending','retry_wait')
+          AND o.next_attempt_at <= ?
+          AND t.enabled = 1
+        ORDER BY o.next_attempt_at ASC, o.created_at ASC, o.id ASC
+        LIMIT 1
+      `).get(now) as Record<string, unknown> | undefined;
+      if (!row) return null;
+      const updated = nowIso();
+      const result = this.db.prepare("UPDATE delivery_outbox SET status = 'claiming', updated_at = ? WHERE id = ? AND status IN ('pending','retry_wait')")
+        .run(updated, row.id);
+      if (result.changes !== 1) return null;
+      return this.getDeliveryRow(String(row.id));
+    });
+    return tx();
+  }
+
+  acquireAckPendingDeliveryRow(now = nowIso()): DeliveryOutboxRow | null {
+    const tx = this.db.transaction(() => {
+      const row = this.db.prepare(`
+        SELECT * FROM delivery_outbox
+        WHERE status = 'ack_pending'
+          AND next_attempt_at <= ?
+        ORDER BY next_attempt_at ASC, updated_at ASC, id ASC
+        LIMIT 1
+      `).get(now) as Record<string, unknown> | undefined;
+      if (!row) return null;
+      this.db.prepare('UPDATE delivery_outbox SET updated_at = ? WHERE id = ?').run(nowIso(), row.id);
+      return this.getDeliveryRow(String(row.id));
+    });
+    return tx();
+  }
+
+  markDeliveryStatus(
+    rowId: string,
+    status: DeliveryStatus,
+    options: {
+      claimId?: string | null;
+      targetThreadId?: string | null;
+      adapterTurnId?: string | null;
+      result?: Record<string, unknown> | null;
+      error?: DeliveryErrorShape | null;
+      nextAttemptAt?: string;
+      incrementAttempt?: boolean;
+    } = {}
+  ): DeliveryOutboxRow {
+    const current = this.getDeliveryRow(rowId);
+    if (!current) throw new PlanReviewError('not_found', `Delivery row '${rowId}' was not found`, 404);
+    const now = nowIso();
+    this.db.prepare(`UPDATE delivery_outbox SET
+      status = ?,
+      attempt_count = attempt_count + ?,
+      next_attempt_at = COALESCE(?, next_attempt_at),
+      claim_id = CASE WHEN ? THEN ? ELSE claim_id END,
+      target_thread_id = COALESCE(?, target_thread_id),
+      adapter_turn_id = COALESCE(?, adapter_turn_id),
+      result_json = CASE WHEN ? THEN ? ELSE result_json END,
+      last_error_json = CASE WHEN ? THEN ? ELSE last_error_json END,
+      updated_at = ?
+      WHERE id = ?`)
+      .run(
+        status,
+        options.incrementAttempt ? 1 : 0,
+        options.nextAttemptAt ?? null,
+        Object.prototype.hasOwnProperty.call(options, 'claimId') ? 1 : 0,
+        options.claimId ?? null,
+        options.targetThreadId ?? null,
+        options.adapterTurnId ?? null,
+        Object.prototype.hasOwnProperty.call(options, 'result') ? 1 : 0,
+        options.result === null || options.result === undefined ? null : JSON.stringify(options.result),
+        Object.prototype.hasOwnProperty.call(options, 'error') ? 1 : 0,
+        options.error === null || options.error === undefined ? null : JSON.stringify(options.error),
+        now,
+        rowId
+      );
+    return this.getDeliveryRow(rowId)!;
+  }
+
+  retryDeliveryRows(planId: string, adapter: DeliveryAdapter = 'codex', commentId?: string): { retried: number; rows: DeliveryOutboxRow[] } {
+    this.getPlan(planId);
+    const now = nowIso();
+    const result = this.db.prepare(`
+      UPDATE delivery_outbox
+      SET status = CASE
+          WHEN status = 'ack_failed' AND result_json IS NOT NULL THEN 'ack_pending'
+          ELSE 'pending'
+        END,
+        next_attempt_at = ?,
+        last_error_json = NULL,
+        updated_at = ?
+      WHERE plan_id = ?
+        AND adapter = ?
+        AND status IN ('failed','retry_wait','ack_failed')
+        ${commentId ? 'AND comment_id = ?' : ''}
+    `).run(...(commentId ? [now, now, planId, adapter, commentId] : [now, now, planId, adapter]));
+    return { retried: result.changes, rows: this.listDeliveryRows(planId, adapter).filter(row => !commentId || row.commentId === commentId) };
+  }
+
+  activeClaim(claimId: string, commentId: string): { id: string; leaseExpiresAt: string } | null {
+    const row = this.db.prepare(`
+      SELECT id, lease_expires_at AS leaseExpiresAt
+      FROM claims
+      WHERE id = ? AND comment_id = ? AND released_at IS NULL AND acknowledged_at IS NULL AND lease_expires_at > ?
+    `).get(claimId, commentId, nowIso()) as { id: string; leaseExpiresAt: string } | undefined;
+    return row ?? null;
+  }
+
   registerPlan(input: RegisterPlanInput, renderedHtml: string, renderWarnings: unknown[], syncOrigin: 'manual_register' | 'filesystem_watch' = 'manual_register') {
     const tx = this.db.transaction(() => {
       const now = nowIso();
@@ -745,7 +1045,12 @@ export class PlanReviewStore {
         watchCommand: `plan-review watch ${planId} --mode queue`
       };
     });
-    return tx();
+    const result = tx();
+    if (input.codexDelivery) {
+      const codexDelivery = this.upsertDeliveryTarget(result.planId, { adapter: 'codex', ...input.codexDelivery });
+      return { ...result, codexDelivery };
+    }
+    return result;
   }
 
   listPlans(options: { includeArchived?: boolean; includeDeferred?: boolean; lifecycleState?: PlanLifecycleState; limit?: number; currentPlanId?: string } = {}) {
@@ -1315,6 +1620,7 @@ export class PlanReviewStore {
         commentId,
         comment
       }, commentId);
+      this.enqueueDelivery(planId, commentId, 'codex');
       return { comment, event, created: true };
     });
     return tx();

@@ -7,9 +7,9 @@ import { spawn, spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { claimCommentsSchema, createCommentSchema, planPullRequestSchema, registerPlanSchema } from '../schemas.js';
+import { claimCommentsSchema, createCommentSchema, deliveryTargetUpdateSchema, planPullRequestSchema, registerPlanSchema } from '../schemas.js';
 import { renderPlan } from '../render/render.js';
-import { normalizeLinearIssueKey, PlanReviewStore } from '../storage/database.js';
+import { normalizeLinearIssueKey, PlanReviewStore, type StoredComment } from '../storage/database.js';
 import { createApp } from '../server/app.js';
 import { SourceSyncService } from '../server/sourceSync.js';
 import { findImageSources } from '../htmlImages.js';
@@ -20,6 +20,32 @@ import { buildRegistrationAgentInstructions, renderRegistrationInstructionComman
 import { buildAgentNextClaimed, buildAgentNextEmpty } from '../agentNext.js';
 import { sha256 } from '../util.js';
 import { domAnchor, registeredApp, sampleHtml, sampleRegisterPayload, tempDbPath } from './helpers.js';
+import { buildCodexDeliveryPrompt } from '../codex/prompt.js';
+import { AppServerCodexClient, buildAppServerThreadResumeRequest, buildAppServerTurnStartRequest, deliveryErrorFromAppServerJsonRpc } from '../codex/appServerClient.js';
+import { buildCodexProcessEnv, buildSdkRunOptions, codexDeliveryHome } from '../codex/config.js';
+import { SdkCodexClient } from '../codex/sdkClient.js';
+import { FakeCodexClient } from '../codex/client.js';
+import { DeliveryTransportError, type CodexDeliveryInput } from '../delivery/types.js';
+import { DeliveryWorker } from '../delivery/worker.js';
+
+function storelessComment(id: string): StoredComment {
+  const now = new Date().toISOString();
+  return {
+    id,
+    planId: 'plan_1',
+    versionId: 'ver_1',
+    sequence: 1,
+    status: 'pending',
+    body: 'Transport-only comment',
+    anchorType: 'dom',
+    anchorState: 'mapped',
+    anchor: {},
+    conversationPayload: { type: 'browser.comment.v1', commentId: id },
+    createdBy: {},
+    createdAt: now,
+    claim: null
+  };
+}
 
 test('schemas validate locked registration, comment, and claim contracts', () => {
   const register = registerPlanSchema.parse(sampleRegisterPayload());
@@ -49,6 +75,472 @@ test('schemas validate locked registration, comment, and claim contracts', () =>
 
   assert.equal(claimCommentsSchema.parse({ mode: 'one' }).leaseSeconds, 300);
   assert.throws(() => claimCommentsSchema.parse({ mode: 'bulk', limit: 0 }));
+});
+
+test('codex delivery schemas and prompt contract use public threadId and text-turn ack guidance', () => {
+  const enabledTarget = deliveryTargetUpdateSchema.parse({ enabled: true, threadId: 'thr_123', mode: 'sdk', effort: 'medium' });
+  assert.equal(enabledTarget.threadId, 'thr_123');
+  assert.throws(() => deliveryTargetUpdateSchema.parse({ enabled: true }), /threadId is required/);
+  assert.throws(() => registerPlanSchema.parse(sampleRegisterPayload({
+    codexDelivery: { enabled: true, mode: 'sdk' }
+  })), /threadId is required/);
+  assert.equal(registerPlanSchema.parse(sampleRegisterPayload({
+    codexDelivery: { enabled: true, threadId: 'thr_123', mode: 'sdk' }
+  })).codexDelivery?.threadId, 'thr_123');
+
+  const store = new PlanReviewStore(tempDbPath('codex-prompt'));
+  try {
+    const rendered = renderPlan(registerPlanSchema.parse(sampleRegisterPayload()));
+    const registered = store.registerPlan(registerPlanSchema.parse(sampleRegisterPayload()), rendered.renderedHtml, rendered.warnings);
+    const comment = store.createComment(registered.planId, {
+      versionId: registered.versionId,
+      body: 'Please tighten this acceptance criterion.',
+      anchorType: 'dom',
+      anchor: domAnchor()
+    }).comment;
+    const prompt = buildCodexDeliveryPrompt({
+      planId: registered.planId,
+      reviewUrl: `/p/${registered.planId}`,
+      serviceUrl: 'http://127.0.0.1:4317',
+      comment,
+      claimId: 'claim_123'
+    });
+    assert.match(prompt, /New plan-reviewer feedback was claimed/);
+    assert.match(prompt, /browser\.comment\.v1 payload/);
+    assert.match(prompt, new RegExp(`plan-review ack ${comment.id} --claim claim_123`));
+    assert.match(prompt, /--url http:\/\/127\.0\.0\.1:4317/);
+  } finally {
+    store.close();
+  }
+});
+
+test('delivery storage persists targets, enqueues comments idempotently, and backfills pending unclaimed comments', () => {
+  const store = new PlanReviewStore(tempDbPath('delivery-storage'));
+  try {
+    const payload = registerPlanSchema.parse(sampleRegisterPayload());
+    const rendered = renderPlan(payload);
+    const registered = store.registerPlan(payload, rendered.renderedHtml, rendered.warnings);
+    const first = store.createComment(registered.planId, {
+      versionId: registered.versionId,
+      body: 'First pending comment',
+      anchorType: 'dom',
+      anchor: domAnchor(),
+      clientMutationId: 'delivery-first'
+    });
+    assert.equal(store.listDeliveryRows(registered.planId).length, 0);
+
+    const target = store.upsertDeliveryTarget(registered.planId, { adapter: 'codex', enabled: true, mode: 'sdk', threadId: 'thr_123', autoResolve: false });
+    assert.equal(target.target.threadId, 'thr_123');
+    assert.equal(target.backfilled, 1);
+    assert.equal(store.listDeliveryRows(registered.planId).length, 1);
+
+    const duplicate = store.createComment(registered.planId, {
+      versionId: registered.versionId,
+      body: 'First pending comment',
+      anchorType: 'dom',
+      anchor: domAnchor(),
+      clientMutationId: 'delivery-first'
+    });
+    assert.equal(duplicate.created, false);
+    assert.equal(store.listDeliveryRows(registered.planId).length, 1);
+
+    const second = store.createComment(registered.planId, {
+      versionId: registered.versionId,
+      body: 'Second pending comment',
+      anchorType: 'dom',
+      anchor: domAnchor()
+    });
+    assert.equal(second.created, true);
+    assert.equal(store.listDeliveryRows(registered.planId).length, 2);
+
+    store.upsertDeliveryTarget(registered.planId, { adapter: 'codex', enabled: false, mode: 'sdk', threadId: 'thr_123', autoResolve: false });
+    store.createComment(registered.planId, {
+      versionId: registered.versionId,
+      body: 'Delivery disabled comment',
+      anchorType: 'dom',
+      anchor: domAnchor()
+    });
+    assert.equal(store.listDeliveryRows(registered.planId).length, 2);
+    assert.equal(first.comment.status, 'pending');
+  } finally {
+    store.close();
+  }
+});
+
+test('delivery worker fake client claims one comment, prompts Codex once, then acks with result metadata', async () => {
+  const store = new PlanReviewStore(tempDbPath('delivery-worker-success'));
+  try {
+    const payload = registerPlanSchema.parse(sampleRegisterPayload());
+    const rendered = renderPlan(payload);
+    const registered = store.registerPlan(payload, rendered.renderedHtml, rendered.warnings);
+    store.upsertDeliveryTarget(registered.planId, { adapter: 'codex', enabled: true, mode: 'fake', threadId: 'thr_worker', autoResolve: false });
+    const comment = store.createComment(registered.planId, {
+      versionId: registered.versionId,
+      body: 'Deliver me',
+      anchorType: 'dom',
+      anchor: domAnchor()
+    }).comment;
+    const fake = new FakeCodexClient({ response: { finalResponse: 'Updated plan text.', changedFiles: ['thoughts/plans/sample-plan.html'] } });
+    const worker = new DeliveryWorker(store, { enabled: true, serviceUrl: 'http://127.0.0.1:4317', clientFactory: () => fake });
+    const row = await worker.processOnce();
+    assert.equal(row?.status, 'delivered');
+    assert.equal(fake.calls.length, 1);
+    assert.match(fake.calls[0].prompt, /Deliver me/);
+    const acked = store.getComment(comment.id);
+    assert.equal(acked.status, 'acknowledged');
+    assert.equal(acked.agentResponse?.responseSummary, 'Updated plan text.');
+    assert.deepEqual(acked.agentResponse?.changedFiles, ['thoughts/plans/sample-plan.html']);
+  } finally {
+    store.close();
+  }
+});
+
+test('delivery worker releases claims and schedules retry for retryable Codex failures', async () => {
+  const store = new PlanReviewStore(tempDbPath('delivery-worker-retry'));
+  try {
+    const payload = registerPlanSchema.parse(sampleRegisterPayload());
+    const rendered = renderPlan(payload);
+    const registered = store.registerPlan(payload, rendered.renderedHtml, rendered.warnings);
+    store.upsertDeliveryTarget(registered.planId, { adapter: 'codex', enabled: true, mode: 'fake', threadId: 'thr_retry', autoResolve: false });
+    const comment = store.createComment(registered.planId, {
+      versionId: registered.versionId,
+      body: 'Retry me',
+      anchorType: 'dom',
+      anchor: domAnchor()
+    }).comment;
+    const fake = new FakeCodexClient({ fail: new DeliveryTransportError('codex_app_server_unavailable', 'app-server down', true) });
+    const worker = new DeliveryWorker(store, { enabled: true, serviceUrl: 'http://127.0.0.1:4317', clientFactory: () => fake });
+    const row = await worker.processOnce();
+    assert.equal(row?.status, 'retry_wait');
+    assert.equal(row.lastError?.code, 'codex_app_server_unavailable');
+    assert.equal(store.getComment(comment.id).status, 'pending');
+  } finally {
+    store.close();
+  }
+});
+
+test('delivery worker records externally_claimed when a manual listener wins the queue claim first', async () => {
+  const store = new PlanReviewStore(tempDbPath('delivery-worker-external-claim'));
+  try {
+    const payload = registerPlanSchema.parse(sampleRegisterPayload());
+    const rendered = renderPlan(payload);
+    const registered = store.registerPlan(payload, rendered.renderedHtml, rendered.warnings);
+    store.upsertDeliveryTarget(registered.planId, { adapter: 'codex', enabled: true, mode: 'fake', threadId: 'thr_external', autoResolve: false });
+    const comment = store.createComment(registered.planId, {
+      versionId: registered.versionId,
+      body: 'Manual listener should win',
+      anchorType: 'dom',
+      anchor: domAnchor()
+    }).comment;
+    const manual = store.claimComments(registered.planId, { mode: 'selected', commentIds: [comment.id], leaseSeconds: 300 }, 'manual-listener');
+    assert.equal(manual.claimed[0].id, comment.id);
+    const fake = new FakeCodexClient();
+    const worker = new DeliveryWorker(store, { enabled: true, serviceUrl: 'http://127.0.0.1:4317', clientFactory: () => fake });
+    const row = await worker.processOnce();
+    assert.equal(row?.status, 'externally_claimed');
+    assert.equal(row?.claimId, manual.claimed[0].claim?.id);
+    assert.equal(fake.calls.length, 0);
+  } finally {
+    store.close();
+  }
+});
+
+test('delivery worker records externally_deleted when a queued comment is deleted before selected claim', async () => {
+  const store = new PlanReviewStore(tempDbPath('delivery-worker-external-delete'));
+  try {
+    const payload = registerPlanSchema.parse(sampleRegisterPayload());
+    const rendered = renderPlan(payload);
+    const registered = store.registerPlan(payload, rendered.renderedHtml, rendered.warnings);
+    store.upsertDeliveryTarget(registered.planId, { adapter: 'codex', enabled: true, mode: 'fake', threadId: 'thr_deleted', autoResolve: false });
+    const comment = store.createComment(registered.planId, {
+      versionId: registered.versionId,
+      body: 'Delete before delivery',
+      anchorType: 'dom',
+      anchor: domAnchor()
+    }).comment;
+    store.deleteComment(comment.id);
+    const fake = new FakeCodexClient();
+    const worker = new DeliveryWorker(store, { enabled: true, serviceUrl: 'http://127.0.0.1:4317', clientFactory: () => fake });
+    const row = await worker.processOnce();
+    assert.equal(row?.status, 'externally_deleted');
+    assert.equal(fake.calls.length, 0);
+  } finally {
+    store.close();
+  }
+});
+
+test('delivery stale delivering recovery records matching external terminal state', async () => {
+  const store = new PlanReviewStore(tempDbPath('delivery-worker-stale-external'));
+  try {
+    const payload = registerPlanSchema.parse(sampleRegisterPayload());
+    const rendered = renderPlan(payload);
+    const registered = store.registerPlan(payload, rendered.renderedHtml, rendered.warnings);
+    store.upsertDeliveryTarget(registered.planId, { adapter: 'codex', enabled: true, mode: 'fake', threadId: 'thr_stale_external', autoResolve: false });
+    const comment = store.createComment(registered.planId, {
+      versionId: registered.versionId,
+      body: 'Ack externally after delivery starts',
+      anchorType: 'dom',
+      anchor: domAnchor()
+    }).comment;
+    const claim = store.claimComments(registered.planId, { mode: 'selected', commentIds: [comment.id], leaseSeconds: 300 }, 'manual-listener');
+    const row = store.getDeliveryRowByComment(comment.id)!;
+    store.markDeliveryStatus(row.id, 'delivering', { claimId: claim.claimed[0].claim?.id });
+    store.ackComment(comment.id, {
+      claimId: claim.claimed[0].claim!.id,
+      action: { runId: 'manual-turn', responseSummary: 'Handled manually.' }
+    });
+    const fake = new FakeCodexClient();
+    const worker = new DeliveryWorker(store, { enabled: true, serviceUrl: 'http://127.0.0.1:4317', deliveringTimeoutMs: 0, clientFactory: () => fake });
+    await worker.processOnce();
+    assert.equal(store.getDeliveryRow(row.id)?.status, 'externally_acknowledged');
+    assert.equal(fake.calls.length, 0);
+  } finally {
+    store.close();
+  }
+});
+
+test('delivery retry for ack_failed rows with stored result retries only ack and never starts another Codex turn', async () => {
+  const store = new PlanReviewStore(tempDbPath('delivery-worker-ack-retry'));
+  try {
+    const payload = registerPlanSchema.parse(sampleRegisterPayload());
+    const rendered = renderPlan(payload);
+    const registered = store.registerPlan(payload, rendered.renderedHtml, rendered.warnings);
+    store.upsertDeliveryTarget(registered.planId, { adapter: 'codex', enabled: true, mode: 'fake', threadId: 'thr_ack_retry', autoResolve: false });
+    const comment = store.createComment(registered.planId, {
+      versionId: registered.versionId,
+      body: 'Ack me from stored result',
+      anchorType: 'dom',
+      anchor: domAnchor()
+    }).comment;
+    const claim = store.claimComments(registered.planId, { mode: 'selected', commentIds: [comment.id], leaseSeconds: 300 }, 'plan-review-delivery:codex');
+    const row = store.getDeliveryRowByComment(comment.id)!;
+    store.markDeliveryStatus(row.id, 'ack_failed', {
+      claimId: claim.claimed[0].claim?.id,
+      adapterTurnId: 'turn_stored',
+      result: { finalResponse: 'Stored response only.', changedFiles: ['thoughts/plans/sample-plan.html'] },
+      error: { code: 'ack_failed', message: 'ack failed before restart', retryable: false }
+    });
+    const retry = store.retryDeliveryRows(registered.planId, 'codex', comment.id);
+    assert.equal(retry.retried, 1);
+    assert.equal(store.getDeliveryRow(row.id)?.status, 'ack_pending');
+    const fake = new FakeCodexClient();
+    const worker = new DeliveryWorker(store, { enabled: true, serviceUrl: 'http://127.0.0.1:4317', clientFactory: () => fake });
+    const processed = await worker.processOnce();
+    assert.equal(processed?.status, 'delivered');
+    assert.equal(fake.calls.length, 0);
+    const acked = store.getComment(comment.id);
+    assert.equal(acked.status, 'acknowledged');
+    assert.equal(acked.agentResponse?.runId, 'turn_stored');
+    assert.equal(acked.agentResponse?.responseSummary, 'Stored response only.');
+  } finally {
+    store.close();
+  }
+});
+
+test('delivery auto-resolve does not mask ack failure after Codex completion', async () => {
+  const store = new PlanReviewStore(tempDbPath('delivery-worker-autoresolve-ack-failure'));
+  try {
+    const payload = registerPlanSchema.parse(sampleRegisterPayload());
+    const rendered = renderPlan(payload);
+    const registered = store.registerPlan(payload, rendered.renderedHtml, rendered.warnings);
+    store.upsertDeliveryTarget(registered.planId, { adapter: 'codex', enabled: true, mode: 'fake', threadId: 'thr_ack_mask', autoResolve: true });
+    const comment = store.createComment(registered.planId, {
+      versionId: registered.versionId,
+      body: 'Ack failure should remain visible',
+      anchorType: 'dom',
+      anchor: domAnchor()
+    }).comment;
+    const client = {
+      async deliverComment(input: CodexDeliveryInput) {
+        store.releaseComment(input.comment.id, input.claimId, 'simulate-lost-claim-before-ack');
+        return {
+          finalResponse: 'Fully resolved, but ack failed.',
+          threadId: input.target.threadId ?? 'thr_ack_mask',
+          turnId: 'turn_ack_mask',
+          fullyResolved: true,
+          changedFiles: ['thoughts/plans/sample-plan.html']
+        };
+      }
+    };
+    const worker = new DeliveryWorker(store, { enabled: true, serviceUrl: 'http://127.0.0.1:4317', clientFactory: () => client });
+    const row = await worker.processOnce();
+    assert.equal(row?.status, 'ack_failed');
+    assert.equal(store.getDeliveryRow(row!.id)?.status, 'ack_failed');
+    assert.equal(store.getComment(comment.id).status, 'pending');
+  } finally {
+    store.close();
+  }
+});
+
+test('HTTP delivery endpoints validate targets, expose outbox rows, and retry failed rows', async () => {
+  const app = createApp({ dbPath: tempDbPath('delivery-http') });
+  try {
+    const registered = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload()
+    });
+    assert.equal(registered.statusCode, 200);
+    const { planId, versionId } = registered.json().data;
+    const missingThread = await app.inject({
+      method: 'PUT',
+      url: `/api/plans/${planId}/delivery/codex`,
+      payload: { enabled: true, mode: 'sdk' }
+    });
+    assert.equal(missingThread.statusCode, 400);
+    assert.match(missingThread.body, /threadId is required/);
+
+    await app.inject({
+      method: 'POST',
+      url: `/api/plans/${planId}/comments`,
+      payload: { versionId, body: 'Backfill this later', anchorType: 'dom', anchor: domAnchor() }
+    });
+    const enabled = await app.inject({
+      method: 'PUT',
+      url: `/api/plans/${planId}/delivery/codex`,
+      payload: { enabled: true, mode: 'sdk', threadId: 'thr_http' }
+    });
+    assert.equal(enabled.statusCode, 200);
+    assert.equal(enabled.json().data.backfilled, 1);
+    assert.equal(enabled.json().data.target.threadId, 'thr_http');
+
+    const outbox = await app.inject({ method: 'GET', url: `/api/plans/${planId}/delivery/outbox?adapter=codex` });
+    assert.equal(outbox.statusCode, 200);
+    const row = outbox.json().data.outbox[0];
+    assert.equal(row.status, 'pending');
+
+    const detail = await app.inject({ method: 'GET', url: `/api/plans/${planId}/delivery/codex` });
+    assert.equal(detail.statusCode, 200);
+    assert.equal(detail.json().data.target.threadId, 'thr_http');
+    assert.equal(detail.json().data.runtime.workerEnabled, false);
+    assert.equal(detail.json().data.runtime.status, 'disabled');
+    assert.match(detail.json().data.runtime.message, /PLAN_REVIEW_CODEX_DELIVERY=1/);
+
+    const retry = await app.inject({ method: 'POST', url: `/api/plans/${planId}/delivery/codex/retry`, payload: { commentId: row.commentId } });
+    assert.equal(retry.statusCode, 200);
+    assert.equal(retry.json().data.retried, 0);
+  } finally {
+    await app.close();
+  }
+});
+
+test('app-server transport starts turns with plain text input items', () => {
+  assert.deepEqual(buildAppServerTurnStartRequest('thr_123', 'hello').params, {
+    threadId: 'thr_123',
+    input: [{ type: 'text', text: 'hello' }]
+  });
+  const target = { planId: 'plan_1', adapter: 'codex' as const, enabled: true, mode: 'app-server' as const, threadId: 'thr_123', cwd: '/repo', sandbox: 'read-only', effort: 'low', autoResolve: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  const input = { target, comment: storelessComment('cmt_app_server'), claimId: 'claim_1', prompt: 'hello' };
+  assert.deepEqual(buildAppServerThreadResumeRequest('thr_123', input).params, {
+    threadId: 'thr_123',
+    cwd: '/repo',
+    sandbox: 'read-only',
+    modelReasoningEffort: 'low',
+    approvalPolicy: 'never',
+    config: {
+      'plugins.enabled': false,
+      'mcp.enabled': false,
+      'connectors.enabled': false,
+      'plugins."cloudflare@openai-curated".enabled': false,
+      plugins: {},
+      mcpServers: {},
+      mcp_servers: {},
+      connectors: {}
+    }
+  });
+  assert.deepEqual(buildSdkRunOptions(target, 'low'), {
+    workingDirectory: '/repo',
+    sandboxMode: 'read-only',
+    modelReasoningEffort: 'low',
+    approvalPolicy: 'never',
+    webSearchMode: 'disabled',
+    codexHome: codexDeliveryHome(),
+    env: buildCodexProcessEnv(),
+    config: {
+      'plugins.enabled': false,
+      'mcp.enabled': false,
+      'connectors.enabled': false,
+      'plugins."cloudflare@openai-curated".enabled': false,
+      plugins: {},
+      mcpServers: {},
+      mcp_servers: {},
+      connectors: {}
+    }
+  });
+  assert.equal(buildCodexProcessEnv().CODEX_HOME, codexDeliveryHome());
+  assert.equal(Object.hasOwn(buildCodexProcessEnv(), 'HOME'), false);
+  const wrongThread = deliveryErrorFromAppServerJsonRpc({ code: -32600, message: 'invalid session id' });
+  assert.equal(wrongThread.code, 'thread_not_found');
+  assert.equal(wrongThread.retryable, false);
+});
+
+test('app-server transport derives streamed final response and rejects permanent JSON-RPC errors', async () => {
+  const target = { planId: 'plan_1', adapter: 'codex' as const, enabled: true, mode: 'app-server' as const, threadId: 'thr_app', cwd: process.cwd(), autoResolve: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  const input = { target, comment: storelessComment('cmt_app_server_stream'), claimId: 'claim_1', prompt: 'hello' };
+  const successScript = [
+    "process.stdin.resume();",
+    "console.log(JSON.stringify({ method: 'item/agentMessage/delta', params: { delta: 'Real ' } }));",
+    "console.log(JSON.stringify({ method: 'item/agentMessage/delta', params: { delta: 'response' } }));",
+    "console.log(JSON.stringify({ method: 'turn/completed', params: { threadId: 'thr_app', turn: { id: 'turn_1' } } }));"
+  ].join('');
+  const success = await new AppServerCodexClient({ command: process.execPath, args: ['-e', successScript], timeoutMs: 1000 }).deliverComment(input);
+  assert.equal(success.finalResponse, 'Real response');
+  assert.equal(success.turnId, 'turn_1');
+
+  const failureScript = [
+    "process.stdin.resume();",
+    "console.log(JSON.stringify({ id: 'thread-resume', error: { code: -32600, message: 'invalid session id' } }));"
+  ].join('');
+  await assert.rejects(
+    () => new AppServerCodexClient({ command: process.execPath, args: ['-e', failureScript], timeoutMs: 1000 }).deliverComment(input),
+    (error: unknown) => error instanceof DeliveryTransportError && error.code === 'thread_not_found' && error.retryable === false
+  );
+
+  const authExitScript = [
+    "process.stderr.write('401 Unauthorized: Missing bearer or basic authentication in header');",
+    "process.exit(1);"
+  ].join('');
+  await assert.rejects(
+    () => new AppServerCodexClient({ command: process.execPath, args: ['-e', authExitScript], timeoutMs: 1000 }).deliverComment(input),
+    (error: unknown) => error instanceof DeliveryTransportError && error.code === 'codex_auth_required' && error.retryable === false
+  );
+  const configExitScript = [
+    "process.stderr.write('provider profile missing for delivery config');",
+    "process.exit(1);"
+  ].join('');
+  await assert.rejects(
+    () => new AppServerCodexClient({ command: process.execPath, args: ['-e', configExitScript], timeoutMs: 1000 }).deliverComment(input),
+    (error: unknown) => error instanceof DeliveryTransportError && error.code === 'codex_auth_required' && error.retryable === false
+  );
+});
+
+test('SDK transport classifies auth/config turn failures as permanent', async () => {
+  const target = { planId: 'plan_1', adapter: 'codex' as const, enabled: true, mode: 'sdk' as const, threadId: 'thr_sdk', cwd: process.cwd(), autoResolve: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  const input = { target, comment: storelessComment('cmt_sdk_auth'), claimId: 'claim_1', prompt: 'hello' };
+  const client = new SdkCodexClient(async () => ({
+    resumeThread: async () => ({
+      id: 'thr_sdk',
+      run: async () => {
+        throw new Error('401 Unauthorized: Missing bearer or basic authentication in header');
+      }
+    })
+  }));
+  await assert.rejects(
+    () => client.deliverComment(input),
+    (error: unknown) => error instanceof DeliveryTransportError && error.code === 'codex_auth_required' && error.retryable === false
+  );
+  const configClient = new SdkCodexClient(async () => ({
+    resumeThread: async () => ({
+      id: 'thr_sdk',
+      run: async () => {
+        throw new Error('provider profile missing for delivery config');
+      }
+    })
+  }));
+  await assert.rejects(
+    () => configClient.deliverComment(input),
+    (error: unknown) => error instanceof DeliveryTransportError && error.code === 'codex_auth_required' && error.retryable === false
+  );
 });
 
 test('PR schema, URL parsing, stale derivation, and adversarial GitHub discovery are locked', async () => {
@@ -2423,6 +2915,7 @@ test('CLI watch polling fallback keeps waiting for once until timeout or event',
 
 test('CLI register prints required watcher instructions and preserves JSON payload', async () => {
   let registerRequests = 0;
+  const registerBodies: Array<Record<string, unknown>> = [];
   const registrationData = {
     planId: 'plan_cli',
     versionId: 'ver_cli',
@@ -2437,9 +2930,13 @@ test('CLI register prints required watcher instructions and preserves JSON paylo
   const server = http.createServer((request, response) => {
     if (request.url === '/api/plans/register') {
       registerRequests += 1;
-      request.resume();
-      response.setHeader('content-type', 'application/json');
-      response.end(JSON.stringify({ ok: true, data: registrationData }));
+      let body = '';
+      request.on('data', chunk => { body += chunk; });
+      request.on('end', () => {
+        registerBodies.push(JSON.parse(body) as Record<string, unknown>);
+        response.setHeader('content-type', 'application/json');
+        response.end(JSON.stringify({ ok: true, data: registrationData }));
+      });
       return;
     }
     response.statusCode = 404;
@@ -2493,7 +2990,17 @@ test('CLI register prints required watcher instructions and preserves JSON paylo
     assert.equal(parsed.agentInstructions.preferredCommand, 'plan-review agent next plan_cli --wait --json');
     assert.equal(parsed.agentInstructions.drainCommand, 'plan-review agent next plan_cli --no-wait --json');
     assert.doesNotMatch(parsed.agentInstructions.durableCommand, /--url/);
-    assert.equal(registerRequests, 2);
+
+    const codex = await runRegister(['--execution-ready', 'true', '--codex-thread', 'thr_cli', '--codex-delivery', 'enabled', '--codex-mode', 'sdk', '--json']);
+    assert.equal(codex.code, 0, codex.stderr);
+    assert.deepEqual(registerBodies.at(-1)?.codexDelivery, {
+      enabled: true,
+      mode: 'sdk',
+      threadId: 'thr_cli',
+      cwd: root,
+      autoResolve: false
+    });
+    assert.equal(registerRequests, 3);
   } finally {
     fs.rmSync(planDir, { recursive: true, force: true });
     await new Promise<void>(resolve => server.close(() => resolve()));
@@ -2539,6 +3046,66 @@ test('CLI register failure does not print watcher instructions', async () => {
     assert.doesNotMatch(result.stdout, /agentInstructions/);
   } finally {
     fs.rmSync(planDir, { recursive: true, force: true });
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
+
+test('CLI delivery target and outbox commands map to REST endpoints', async () => {
+  const calls: Array<{ method?: string; url?: string; body?: unknown }> = [];
+  const server = http.createServer((request, response) => {
+    const complete = (body?: unknown) => {
+      calls.push({ method: request.method, url: request.url, body });
+      response.setHeader('content-type', 'application/json');
+      if (request.url === '/api/plans/plan_1/delivery/codex' && request.method === 'PUT') {
+        response.end(JSON.stringify({ ok: true, data: { target: body, backfilled: 0 } }));
+        return;
+      }
+      if (request.url === '/api/plans/plan_1/delivery/codex' && request.method === 'GET') {
+        response.end(JSON.stringify({ ok: true, data: { target: { adapter: 'codex', threadId: 'thr_cli' }, outbox: [] } }));
+        return;
+      }
+      if (request.url === '/api/plans/plan_1/delivery/outbox?adapter=codex' && request.method === 'GET') {
+        response.end(JSON.stringify({ ok: true, data: { outbox: [{ id: 'del_1', status: 'failed' }] } }));
+        return;
+      }
+      if (request.url === '/api/plans/plan_1/delivery/codex/retry' && request.method === 'POST') {
+        response.end(JSON.stringify({ ok: true, data: { retried: 1, rows: [] } }));
+        return;
+      }
+      response.statusCode = 404;
+      response.end(JSON.stringify({ ok: false, error: { code: 'not_found', message: 'not found' } }));
+    };
+    if (request.method === 'GET') {
+      complete();
+      return;
+    }
+    let raw = '';
+    request.on('data', chunk => { raw += chunk; });
+    request.on('end', () => complete(raw ? JSON.parse(raw) : undefined));
+  });
+
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address();
+    assert(address && typeof address !== 'string');
+    const serviceUrl = `http://127.0.0.1:${address.port}`;
+    assert.equal((await runCli(['delivery', 'target', 'set', 'plan_1', '--adapter', 'codex', '--thread', 'thr_cli', '--mode', 'sdk', '--json', '--url', serviceUrl])).code, 0);
+    assert.equal((await runCli(['delivery', 'target', 'show', 'plan_1', '--adapter', 'codex', '--json', '--url', serviceUrl])).code, 0);
+    assert.equal((await runCli(['delivery', 'list', 'plan_1', '--adapter', 'codex', '--json', '--url', serviceUrl])).code, 0);
+    assert.equal((await runCli(['delivery', 'retry', 'plan_1', '--adapter', 'codex', '--comment', 'cmt_1', '--json', '--url', serviceUrl])).code, 0);
+    assert.deepEqual(calls[0], {
+      method: 'PUT',
+      url: '/api/plans/plan_1/delivery/codex',
+      body: { adapter: 'codex', enabled: true, mode: 'sdk', threadId: 'thr_cli', autoResolve: false }
+    });
+    assert.deepEqual(calls.map(call => `${call.method} ${call.url}`), [
+      'PUT /api/plans/plan_1/delivery/codex',
+      'GET /api/plans/plan_1/delivery/codex',
+      'GET /api/plans/plan_1/delivery/outbox?adapter=codex',
+      'POST /api/plans/plan_1/delivery/codex/retry'
+    ]);
+    assert.deepEqual(calls[3].body, { commentId: 'cmt_1' });
+  } finally {
     await new Promise<void>(resolve => server.close(() => resolve()));
   }
 });

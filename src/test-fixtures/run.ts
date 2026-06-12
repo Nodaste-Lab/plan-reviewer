@@ -2,14 +2,15 @@ import assert from 'node:assert/strict';
 import { createApp } from '../server/app.js';
 import { sha256 } from '../util.js';
 import { runHarnessSmoke } from './harness-smoke.js';
+import { FakeCodexClient } from '../codex/client.js';
 
 function argValue(name: string): string | undefined {
   const index = process.argv.indexOf(name);
   return index >= 0 ? process.argv[index + 1] : undefined;
 }
 
-async function withServer<T>(scenario: string, run: (baseUrl: string) => Promise<T>): Promise<T> {
-  const app = createApp({ dbPath: `/tmp/plan-reviewer-fixture-${process.pid}-${scenario}.sqlite` });
+async function withServer<T>(scenario: string, run: (baseUrl: string) => Promise<T>, options: Parameters<typeof createApp>[0]['delivery'] = {}): Promise<T> {
+  const app = createApp({ dbPath: `/tmp/plan-reviewer-fixture-${process.pid}-${scenario}.sqlite`, delivery: options });
   await app.listen({ host: '127.0.0.1', port: 0 });
   const address = app.server.address();
   if (!address || typeof address === 'string') throw new Error('server did not bind to a TCP port');
@@ -155,10 +156,39 @@ async function queueClaimAck(): Promise<void> {
   });
 }
 
+async function codexDeliveryFake(): Promise<void> {
+  const fake = new FakeCodexClient({ response: { finalResponse: 'Fixture fake Codex response.', changedFiles: ['thoughts/plans/fixture.html'] } });
+  await withServer('codex-delivery-fake', async baseUrl => {
+    const { planId, versionId } = await register(baseUrl);
+    const enabled = await requestJson<{ target: { threadId: string }; backfilled: number }>(`${baseUrl}/api/plans/${planId}/delivery/codex`, {
+      method: 'PUT',
+      body: JSON.stringify({ enabled: true, mode: 'fake', threadId: 'fixture-thread' })
+    });
+    assert.equal(enabled.target.threadId, 'fixture-thread');
+    assert.equal(enabled.backfilled, 0);
+    const { comment } = await createComment(baseUrl, planId, versionId);
+    const deadline = Date.now() + 3000;
+    let plan: { comments: Array<{ id: string; status: string; agentResponse?: Record<string, unknown> }>; delivery: { outbox: Array<{ status: string; commentId: string; result?: Record<string, unknown> }> } };
+    do {
+      plan = await requestJson<typeof plan>(`${baseUrl}/api/plans/${planId}`);
+      const delivered = plan.delivery.outbox.find(row => row.commentId === comment.id && row.status === 'delivered');
+      const acked = plan.comments.find(item => item.id === comment.id && item.status === 'acknowledged');
+      if (delivered && acked) {
+        assert.equal(acked.agentResponse?.responseSummary, 'Fixture fake Codex response.');
+        assert.equal(fake.calls.length, 1);
+        return;
+      }
+      await new Promise(resolve => setTimeout(resolve, 50));
+    } while (Date.now() < deadline);
+    throw new Error(`fake Codex delivery did not ack comment ${comment.id}`);
+  }, { enabled: true, mode: 'fake', intervalMs: 50, serviceUrl: 'http://127.0.0.1:4317', clientFactory: () => fake });
+}
+
 const scenario = argValue('--scenario') ?? 'all';
 if (scenario === 'seeded-comment-stream' || scenario === 'all') await seededCommentStream();
 if (scenario === 'sse-latency' || scenario === 'all') await sseLatency();
 if (scenario === 'queue-claim-ack' || scenario === 'all') await queueClaimAck();
+if (scenario === 'codex-delivery-fake' || scenario === 'all') await codexDeliveryFake();
 if (scenario === 'agent-listener-harness-smoke' || scenario === 'all') {
   const harnessMode = (argValue('--harness-mode') ?? 'simulated') as 'simulated' | 'real';
   const harnesses = (argValue('--harnesses') ?? 'pi,codex,claude-code').split(',').map(item => item.trim()).filter(Boolean);
