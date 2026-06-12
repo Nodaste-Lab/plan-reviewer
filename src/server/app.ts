@@ -387,6 +387,7 @@ function filterPlans(plans: ReturnType<PlanReviewStore['listPlans']>, query: { q
 }
 
 const executionReviewRequestBody = 'Review this plan with both codex and claude code, iterating on the plan until both agents agree it is execution ready';
+const clientAssetVersion = 'mobile-touch-layer-v7';
 
 function buildPlanRequestBody(planPath: string): string {
   return `/skill:scoped-plan-run thoughts/plans/${path.basename(planPath)}`;
@@ -409,18 +410,18 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapedShellTitle}</title>
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <link rel="stylesheet" href="/client.css">
+    <link rel="stylesheet" href="/client.css?v=${clientAssetVersion}">
   </head><body data-plan-id="${escapedPlanId}" data-plan-title-fallback="${encodedTitleFallback}">
     <nav id="plan-navbar" aria-label="Plan actions"><div id="plan-navbar-actions">${navActions}</div><div id="current-plan-bar"><strong id="current-plan-title">${escapedCurrentTitle}</strong><span class="ready-pill ${plan.publicationMetadata.executionReady ? 'ready' : 'not-ready'}">${escapeHtml(readyLabel)}</span></div></nav>
     <div id="app">
       ${planNavigatorHtml(plans, plan.id)}
-      <main id="review"><iframe id="plan-frame" sandbox="allow-same-origin allow-popups" src="/render/${escapedPlanId}"></iframe><button id="mobile-comments-toggle" class="comments-toggle" type="button" aria-controls="sidebar" aria-expanded="false">Comments</button><div id="hover-selection-box" class="selection-box hover" hidden></div><div id="active-selection-box" class="selection-box active" hidden></div></main>
+      <main id="review"><iframe id="plan-frame" sandbox="allow-same-origin allow-popups" src="/render/${escapedPlanId}"></iframe><div id="plan-touch-layer" aria-hidden="true"></div><button id="mobile-comments-toggle" class="comments-toggle" type="button" aria-controls="sidebar" aria-expanded="false">Comments</button><div id="hover-selection-box" class="selection-box hover" hidden></div><div id="active-selection-box" class="selection-box active" hidden></div></main>
       <aside id="sidebar"><h1>Comments</h1><div id="sync-warning" hidden></div><section id="plan-notes-panel"><h2>Plan notes</h2><div id="plan-notes"></div><textarea id="plan-note-body" placeholder="Add a plan note for agents"></textarea><button id="add-plan-note" type="button">Add note</button></section><div id="deferred-refresh-notice" hidden>Plan updated in the background. Finish or cancel this comment to refresh.</div><div id="comments"></div></aside>
     </div>
     <div id="lightbox" class="lightbox" hidden><header><button id="zoom-out">-</button><button id="zoom-reset">Reset</button><button id="zoom-in">+</button><button id="pan-toggle">Pan</button><button id="close-lightbox">Close</button></header><div id="lightbox-stage" class="lightbox-stage"><img id="lightbox-image" alt=""><div id="image-selection-box" hidden></div></div></div>
-    <div id="composer" hidden><textarea id="comment-body" placeholder="Comment on selection"></textarea><div id="comment-discard-warning" hidden>Your comment would be lost. Use Cancel to discard it.</div><button id="submit-comment">Submit</button><button id="cancel-comment">Cancel</button></div>
+    <div id="composer" hidden><textarea id="comment-body" placeholder="Comment on selection" inputmode="text" enterkeyhint="done" autocapitalize="sentences"></textarea><div id="comment-discard-warning" hidden>Your comment would be lost. Use Cancel to discard it.</div><button id="submit-comment">Submit</button><button id="cancel-comment">Cancel</button></div>
     <script src="/vendor/html2canvas.js"></script>
-    <script type="module" src="/client.js"></script>
+    <script type="module" src="/client.js?v=${clientAssetVersion}"></script>
   </body></html>`;
 }
 
@@ -448,13 +449,14 @@ body{--comments-width:48px;margin:0;background:#0b1020;color:#e5e7eb;font-family
 #app{display:grid;grid-template-columns:260px minmax(0,1fr) var(--comments-width);min-height:calc(100vh - 86px);transition:grid-template-columns .18s ease}
 #plan-list-nav{grid-column:1;border-right:1px solid #2b364d;background:#0b1220;padding:14px;overflow:auto}#plan-list-nav h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#a7b0c0;margin:0}.plan-list-header{display:flex;align-items:center;justify-content:space-between;gap:8px}.plan-list-error{border:1px solid #f59e0b;background:rgba(245,158,11,.12);color:#fde68a;border-radius:8px;padding:8px;margin:10px 0;font-size:13px}.plan-list-empty{color:#a7b0c0;font-size:13px}.plan-nav-item{display:grid;gap:5px;padding:10px;margin:8px 0;border:1px solid #253248;border-radius:10px;background:#101827;color:#cbd5e1;text-decoration:none}.plan-nav-item:hover{border-color:#64748b}.plan-nav-item.active{border-color:#38bdf8;background:linear-gradient(135deg,rgba(14,165,233,.18),rgba(16,24,39,.95))}.plan-nav-item.attention{border-color:#f59e0b}.plan-nav-title{font-size:13px;font-weight:850;color:#f8fafc;line-height:1.25}.plan-nav-meta{display:flex;gap:6px;align-items:center;flex-wrap:wrap;color:#a7b0c0;font-size:11px}.plan-nav-submeta{color:#8fa0b8;font-size:11px}.plan-nav-pill{border:1px solid #475569;border-radius:999px;padding:1px 6px;background:#0b1220}.plan-nav-pill.ready{border-color:#22c55e;color:#bbf7d0}.plan-nav-pill.not-ready{border-color:#f59e0b;color:#fde68a}
 #review{grid-column:2;position:relative;min-width:0}#sidebar{grid-column:3;grid-row:1;border-left:1px solid #2b364d;padding:0;background:#111827;overflow:hidden}#sidebar>h1,#sidebar>#sync-warning,#sidebar>#plan-notes-panel,#sidebar>#deferred-refresh-notice,#sidebar>#comments{display:none}body.comments-open #sidebar{padding:16px;overflow:auto}body.comments-open #sidebar>h1,body.comments-open #sidebar>#sync-warning,body.comments-open #sidebar>#plan-notes-panel,body.comments-open #sidebar>#deferred-refresh-notice,body.comments-open #sidebar>#comments{display:block}
+#plan-touch-layer{display:none}
 #plan-frame{width:100%;height:calc(100vh - 86px);border:0;background:white}.selection-box,.comment-anchor{position:fixed;pointer-events:none;border-radius:6px;transition:left .22s cubic-bezier(.2,0,.2,1),top .22s cubic-bezier(.2,0,.2,1),width .22s cubic-bezier(.2,0,.2,1),height .22s cubic-bezier(.2,0,.2,1),opacity .14s ease}.selection-box{z-index:8;box-sizing:border-box;background:transparent;box-shadow:none}.selection-box.hover{border:2px dotted rgba(56,189,248,.82)}.selection-box.active{z-index:9;border:2px dotted #38bdf8;box-shadow:0 0 0 1px rgba(255,255,255,.72)}.comment-anchor{z-index:7}.comment-anchor.pending{border:2px dotted rgba(192,132,252,.95);background:transparent;box-shadow:0 0 0 3px rgba(168,85,247,.08)}.comment-anchor.addressed{border:2px dotted rgba(216,180,254,.9);background:transparent;box-shadow:none}.comment-anchor-label{position:absolute;right:-10px;top:-12px;min-width:24px;height:24px;border-radius:999px;display:grid;place-items:center;padding:0 6px;background:#7e22ce;color:white;border:2px solid #f3e8ff;font-weight:800;font-size:12px;box-shadow:0 8px 18px rgba(0,0,0,.35)}.comment-anchor.addressed .comment-anchor-label{display:none}.comment-row{border:1px solid #2b364d;padding:10px;margin:8px 0;border-radius:8px;background:#0f172a}.comment-row small{color:#a7b0c0}.marker{position:absolute;z-index:9;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#0ea5e9;color:white;border:2px solid #dbeafe;font-weight:700;box-shadow:0 8px 18px rgba(0,0,0,.35);pointer-events:none}
 #sync-warning{border:1px solid #f59e0b;background:rgba(245,158,11,.12);color:#fde68a;border-radius:8px;padding:10px;margin:8px 0 14px;font-size:13px}#deferred-refresh-notice{border:1px solid #38bdf8;background:rgba(56,189,248,.12);color:#bae6fd;border-radius:8px;padding:10px;margin:8px 0 14px;font-size:13px}#composer{position:fixed;right:calc(var(--comments-width) + 20px);top:112px;background:#0f172a;border:1px solid #38bdf8;padding:12px;border-radius:8px;z-index:20;box-shadow:0 12px 32px rgba(0,0,0,.4)}#composer.discard-warning{border-color:#ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.22),0 12px 32px rgba(0,0,0,.4)}
 #comment-discard-warning{margin-top:8px;color:#fecaca;font-size:13px;font-weight:700}#composer.discard-warning textarea{border-color:#ef4444}
-#composer textarea{width:260px;height:90px;background:#020617;color:#e5e7eb;border:1px solid #2b364d;border-radius:6px;padding:8px;display:block}
+#composer textarea{width:260px;height:90px;background:#020617;color:#e5e7eb;border:1px solid #2b364d;border-radius:6px;padding:8px;display:block;pointer-events:auto;touch-action:manipulation;-webkit-user-select:text;user-select:text}
 #composer button{margin-top:8px;margin-right:8px}#plan-notes-panel{border:1px solid #2b364d;border-radius:10px;background:#0f172a;padding:10px;margin:0 0 14px}#plan-notes-panel h2{font-size:15px;margin:0 0 8px}#plan-notes .note-row{border-top:1px solid #263246;padding:8px 0}#plan-notes .note-row:first-child{border-top:0}#plan-note-body{width:100%;min-height:70px;box-sizing:border-box;background:#020617;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px}#add-plan-note{margin-top:8px;background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px 10px;cursor:pointer}.plan-review-selected{outline:2px dotted #38bdf8!important;box-shadow:none!important}.lightbox{position:fixed;inset:36px calc(var(--comments-width) + 40px) 36px 36px;background:#020617;border:1px solid #38bdf8;z-index:12;display:grid;grid-template-rows:auto 1fr}.lightbox[hidden]{display:none}.lightbox header{display:flex;gap:8px;padding:10px;border-bottom:1px solid #2b364d}.lightbox img{max-width:100%;max-height:100%;place-self:center;transform-origin:center}.lightbox-stage{display:grid;overflow:hidden;position:relative}#image-selection-box{position:absolute;border:2px solid #38bdf8;background:rgba(56,189,248,.2);pointer-events:none}#mobile-comments-toggle{display:none}
 @media(prefers-reduced-motion:reduce){.selection-box{transition:none}}
-@media(max-width:760px){body{overflow:hidden;--comments-width:0}#plan-navbar{position:sticky;top:0;z-index:30;min-height:88px;box-sizing:border-box;gap:6px;padding:8px;overflow-x:auto;overscroll-behavior-x:contain}#plan-navbar-actions{justify-content:flex-start;gap:8px}#plan-navbar a,#plan-navbar button{flex:0 0 auto;min-height:40px;padding:8px 10px;font-size:13px;line-height:1.15;white-space:normal}#current-plan-bar{font-size:13px}#request-execution-review{max-width:170px}#build-plan{max-width:120px}#desktop-comments-toggle{display:none}#app{display:block;min-height:calc(100dvh - 88px)}#plan-list-nav{display:none}#review{height:calc(100dvh - 88px);overflow:hidden}#plan-frame{width:100%;height:100%;border:0}#sidebar{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:24;max-height:min(72dvh,620px);box-sizing:border-box;border-left:0;border-top:1px solid #2b364d;border-radius:18px 18px 0 0;padding:12px 16px calc(16px + env(safe-area-inset-bottom));background:#111827;box-shadow:0 -16px 40px rgba(0,0,0,.45);overflow:auto;transform:translateY(100%);transition:transform .18s ease}#sidebar>h1,#sidebar>#sync-warning,#sidebar>#plan-notes-panel,#sidebar>#deferred-refresh-notice,#sidebar>#comments{display:block}body.comments-open #sidebar{transform:translateY(0)}#sidebar h1{position:sticky;top:-12px;margin:0 0 12px;padding:8px 0 10px;background:#111827;font-size:20px;z-index:1}.comment-row{padding:12px;margin:10px 0}.comment-row p{margin:.55rem 0}.comments-empty{margin:0;color:#a7b0c0;font-size:14px}#mobile-comments-toggle{display:flex;position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:25;min-height:44px;align-items:center;gap:6px;border:1px solid #38bdf8;border-radius:999px;background:#075985;color:#e0f2fe;padding:0 14px;font-weight:800;box-shadow:0 12px 28px rgba(0,0,0,.35)}body.comments-open #mobile-comments-toggle{background:#0f172a;border-color:#64748b}#composer{left:0;right:0;bottom:0;top:auto;z-index:60;box-sizing:border-box;border-left:0;border-right:0;border-bottom:0;border-radius:18px 18px 0 0;padding:14px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -16px 40px rgba(0,0,0,.48)}#composer textarea{width:100%;height:122px;box-sizing:border-box;font-size:16px}#composer button{min-height:44px;padding:8px 12px}.lightbox{inset:0;z-index:50;border:0}.lightbox header{flex-wrap:wrap}.selection-box{border-radius:4px}.marker{width:28px;height:28px}}
+@media(max-width:760px),(pointer:coarse){body{overflow:hidden;--comments-width:0}#plan-navbar{position:sticky;top:0;z-index:30;min-height:88px;box-sizing:border-box;gap:6px;padding:8px;overflow-x:auto;overscroll-behavior-x:contain}#plan-navbar-actions{justify-content:flex-start;gap:8px}#plan-navbar a,#plan-navbar button{flex:0 0 auto;min-height:40px;padding:8px 10px;font-size:13px;line-height:1.15;white-space:normal}#current-plan-bar{font-size:13px}#request-execution-review{max-width:170px}#build-plan{max-width:120px}#desktop-comments-toggle{display:none}#app{display:block;min-height:calc(100dvh - 88px)}#plan-list-nav{display:none}#review{height:calc(100dvh - 88px);overflow:hidden}#plan-frame{width:100%;height:100%;border:0;pointer-events:none}#plan-touch-layer{display:block;position:absolute;inset:0;z-index:22;background:transparent;touch-action:none;pointer-events:auto}#sidebar{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:24;max-height:min(72dvh,620px);box-sizing:border-box;border-left:0;border-top:1px solid #2b364d;border-radius:18px 18px 0 0;padding:12px 16px calc(16px + env(safe-area-inset-bottom));background:#111827;box-shadow:0 -16px 40px rgba(0,0,0,.45);overflow:auto;transform:translateY(100%);transition:transform .18s ease}#sidebar>h1,#sidebar>#sync-warning,#sidebar>#plan-notes-panel,#sidebar>#deferred-refresh-notice,#sidebar>#comments{display:block}body.comments-open #sidebar{transform:translateY(0)}#sidebar h1{position:sticky;top:-12px;margin:0 0 12px;padding:8px 0 10px;background:#111827;font-size:20px;z-index:1}.comment-row{padding:12px;margin:10px 0}.comment-row p{margin:.55rem 0}.comments-empty{margin:0;color:#a7b0c0;font-size:14px}#mobile-comments-toggle{display:flex;position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:25;min-height:44px;align-items:center;gap:6px;border:1px solid #38bdf8;border-radius:999px;background:#075985;color:#e0f2fe;padding:0 14px;font-weight:800;box-shadow:0 12px 28px rgba(0,0,0,.35)}body.comments-open #mobile-comments-toggle{background:#0f172a;border-color:#64748b}#composer{left:0;right:0;bottom:0;top:auto;z-index:60;box-sizing:border-box;border-left:0;border-right:0;border-bottom:0;border-radius:18px 18px 0 0;padding:14px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -16px 40px rgba(0,0,0,.48)}#composer textarea{width:100%;height:122px;box-sizing:border-box;font-size:16px}#composer button{min-height:44px;padding:8px 12px}.lightbox{inset:0;z-index:50;border:0}.lightbox header{flex-wrap:wrap}.selection-box{border-radius:4px}.marker{width:28px;height:28px}}
 `;
 
 const clientJs = `
@@ -469,6 +471,7 @@ try {
   planTitleFallback = decodedTitleFallback.replace(/\s+·\s+Plan Review$/i, '').trim() || decodedTitleFallback;
 } catch {}
 const frame = document.getElementById('plan-frame');
+const planTouchLayer = document.getElementById('plan-touch-layer');
 const archivePlanButton = document.getElementById('archive-plan');
 const restorePlanButton = document.getElementById('restore-plan');
 const deferPlanButton = document.getElementById('defer-plan');
@@ -482,6 +485,7 @@ const composer = document.getElementById('composer');
 const body = document.getElementById('comment-body');
 const discardWarning = document.getElementById('comment-discard-warning');
 const submitCommentButton = document.getElementById('submit-comment');
+const cancelCommentButton = document.getElementById('cancel-comment');
 const comments = document.getElementById('comments');
 const mobileCommentsToggle = document.getElementById('mobile-comments-toggle');
 const desktopCommentsToggle = document.getElementById('desktop-comments-toggle');
@@ -529,9 +533,12 @@ let deferredPlanRefresh = null;
 let lightboxDragStart = null;
 let lightboxPanStart = null;
 let touchStart = null;
+let touchScrollStart = null;
 let suppressSyntheticClickUntil = 0;
 let washi = null;
 function isMobileShell(){ return window.matchMedia('(max-width: 760px)').matches; }
+function debugTouch(label, data = {}){
+}
 function updateCommentsToggles(){
   const count = Number(mobileCommentsToggle?.dataset.commentCount || desktopCommentsToggle?.dataset.commentCount || '0');
   const open = document.body.classList.contains('comments-open');
@@ -570,6 +577,15 @@ function showComposer(){
   composer.hidden = false;
   body.focus();
 }
+function focusCommentBody(event){
+  event?.stopPropagation?.();
+  body.focus({ preventScroll: true });
+}
+body.addEventListener('touchstart', focusCommentBody, { capture: true });
+body.addEventListener('pointerdown', focusCommentBody, { capture: true });
+body.addEventListener('click', focusCommentBody, { capture: true });
+submitCommentButton?.addEventListener('touchstart', event => event.stopPropagation(), { capture: true });
+cancelCommentButton?.addEventListener('touchstart', event => event.stopPropagation(), { capture: true });
 mobileCommentsToggle?.addEventListener('click', () => {
   setCommentsOpen(!document.body.classList.contains('comments-open'));
 });
@@ -1222,6 +1238,10 @@ function interactiveTargetFromPoint(doc, event){
   if (!touch) return interactiveTargetFromEvent(event);
   return interactiveTargetFromElement(doc.elementFromPoint(touch.clientX, touch.clientY));
 }
+function interactiveTargetFromTouchPoint(doc, point){
+  if (!point) return null;
+  return interactiveTargetFromElement(doc.elementFromPoint(point.x, point.y));
+}
 function commentTargetFromEvent(event){
   const element = elementFromEvent(event);
   return element?.closest?.('[data-plan-node-id]') || element || null;
@@ -1232,17 +1252,68 @@ function commentTargetFromPoint(doc, event){
   const element = doc.elementFromPoint(touch.clientX, touch.clientY);
   return element?.closest?.('[data-plan-node-id]') || element || commentTargetFromEvent(event);
 }
+function commentTargetFromTouchPoint(doc, point, fallbackTarget){
+  if (!point) return fallbackTarget;
+  const element = doc.elementFromPoint(point.x, point.y);
+  return element?.closest?.('[data-plan-node-id]') || element || fallbackTarget;
+}
+function frameTouchPoint(event){
+  const point = eventPoint(event);
+  if (!point) return null;
+  const rect = frame.getBoundingClientRect();
+  return { x: point.clientX - rect.left, y: point.clientY - rect.top };
+}
 function touchPoint(event){
   const point = eventPoint(event);
   return point ? { x: point.clientX, y: point.clientY } : null;
 }
-function touchMoved(start, event){
-  const point = touchPoint(event);
+function touchMovedToPoint(start, point){
   if (!start || !point) return Boolean(start?.moved);
   return start.moved || Math.hypot(point.x - start.x, point.y - start.y) > 12;
 }
+function touchMoved(start, event){
+  return touchMovedToPoint(start, touchPoint(event));
+}
+function eventForTouchPoint(point, fallbackEvent){
+  return point ? { clientX: point.x, clientY: point.y } : fallbackEvent;
+}
+function activateFrameInteractiveTarget(point, sourceLabel){
+  const doc = frame.contentDocument;
+  if (!doc || !point) return false;
+  const target = interactiveTargetFromTouchPoint(doc, point);
+  if (!target) return false;
+  debugTouch(sourceLabel + '-interactive', { tag: target.tagName, id: target.id || '', href: target.getAttribute?.('href') || '' });
+  const anchor = target.closest?.('a[href],area[href]');
+  if (anchor) {
+    const href = anchor.href;
+    const targetName = anchor.getAttribute('target');
+    if (targetName && targetName !== '_self') {
+      frame.contentWindow?.open(href, targetName);
+    } else {
+      frame.contentWindow.location.href = href;
+    }
+    return true;
+  }
+  target.click?.();
+  return true;
+}
+function openComposerFromFramePoint(point, sourceLabel){
+  const doc = frame.contentDocument;
+  if (!doc || !point) {
+    debugTouch(sourceLabel + '-blocked', { hasDoc: Boolean(doc), point });
+    return false;
+  }
+  const interactive = interactiveTargetFromTouchPoint(doc, point);
+  const target = commentTargetFromTouchPoint(doc, point, doc.body);
+  debugTouch(sourceLabel, { point, interactive: Boolean(interactive), target: target?.tagName || null, id: target?.id || '', node: target?.getAttribute?.('data-plan-node-id') || null });
+  if (interactive) return activateFrameInteractiveTarget(point, sourceLabel);
+  return openElementComposer(target, eventForTouchPoint(point, null));
+}
 function openElementComposer(element, event){
-  if (submitInFlight || !element || typeof element.getBoundingClientRect !== 'function') return false;
+  if (submitInFlight || !element || typeof element.getBoundingClientRect !== 'function') {
+    debugTouch('open-blocked', { submitInFlight, hasElement: Boolean(element), tag: element?.tagName || null });
+    return false;
+  }
   selected = element.closest?.('[data-plan-node-id]') || element;
   selectedForScreenshot = selected;
   pendingAnchor = anchorForElement(selected, event);
@@ -1250,13 +1321,22 @@ function openElementComposer(element, event){
   if (selected.tagName?.toLowerCase() === 'img') showLightbox(selected);
   clearDiscardWarning();
   showComposer();
+  debugTouch('open-composer', { tag: selected.tagName, id: selected.id || '', node: selected.getAttribute('data-plan-node-id'), x: event?.clientX, y: event?.clientY });
   return true;
 }
-function releaseMobileNativeSelection(selection){
+function prepareMobileTextSelectionSurround(){
   if (!isMobileShell()) return;
   selected = selectedForScreenshot;
   updateSelectionBoxes();
-  selection.removeAllRanges();
+}
+function releaseMobileNativeSelection(selection){
+  if (!isMobileShell()) return;
+  setTimeout(() => {
+    try {
+      selection.removeAllRanges();
+    } catch {}
+    body.focus({ preventScroll: true });
+  }, 0);
 }
 function scheduleSelectionBoxUpdate(){
   if (selectionBoxReflowQueued) return;
@@ -1384,20 +1464,23 @@ function attachFrameListeners(){
   if (frameListenersAttached || !frame.contentDocument) return;
   frameListenersAttached = true;
   const doc = frame.contentDocument;
+  debugTouch('listeners-attached', { readyState: doc.readyState, url: doc.location.href });
   const adoptTextSelection = () => {
     if (submitInFlight) return false;
     const selection = doc.getSelection();
     if (!selection || selection.isCollapsed || !selection.toString().trim()) return false;
     pendingAnchor = anchorForSelection(selection);
-    releaseMobileNativeSelection(selection);
+    prepareMobileTextSelectionSurround();
     clearDiscardWarning();
     showComposer();
+    releaseMobileNativeSelection(selection);
     return true;
   };
   doc.addEventListener('mouseup', () => { adoptTextSelection(); }, true);
   doc.addEventListener('touchstart', event => {
     const point = touchPoint(event);
     touchStart = point ? { ...point, moved: false } : null;
+    debugTouch('touchstart', { point, target: elementFromEvent(event)?.tagName || null, id: elementFromEvent(event)?.id || '' });
     if (interactiveTargetFromPoint(doc, event)) {
       hovered = null;
       scheduleSelectionBoxUpdate();
@@ -1413,23 +1496,29 @@ function attachFrameListeners(){
     if (!touchStart) return;
     if (touchMoved(touchStart, event)) {
       touchStart.moved = true;
+      debugTouch('touchmove-moved', { point: touchPoint(event) });
       hovered = null;
       scheduleSelectionBoxUpdate();
     }
   }, true);
   doc.addEventListener('touchend', event => {
-    const endedOnInteractiveTarget = Boolean(interactiveTargetFromPoint(doc, event));
+    const endPoint = touchPoint(event);
+    const fallbackTarget = commentTargetFromEvent(event);
+    const endedOnInteractiveTarget = Boolean(interactiveTargetFromTouchPoint(doc, endPoint) || interactiveTargetFromEvent(event));
+    const target = commentTargetFromTouchPoint(doc, endPoint, fallbackTarget);
+    const anchorEvent = eventForTouchPoint(endPoint, event);
+    const start = touchStart;
+    touchStart = null;
+    const moved = touchMovedToPoint(start, endPoint);
+    debugTouch('touchend', { endPoint, start, moved, interactive: endedOnInteractiveTarget, target: target?.tagName || null, id: target?.id || '', node: target?.getAttribute?.('data-plan-node-id') || null });
+    if (moved || endedOnInteractiveTarget) return;
+    if (adoptTextSelection()) {
+      debugTouch('adopt-selection-sync');
+      return;
+    }
+    if (openElementComposer(target, anchorEvent)) suppressSyntheticClickUntil = Date.now() + 700;
     setTimeout(() => {
-      if (adoptTextSelection()) {
-        touchStart = null;
-        return;
-      }
-      const start = touchStart;
-      touchStart = null;
-      if (touchMoved(start, event)) return;
-      if (endedOnInteractiveTarget) return;
-      const target = commentTargetFromPoint(doc, event);
-      if (openElementComposer(target, event)) suppressSyntheticClickUntil = Date.now() + 700;
+      if (adoptTextSelection()) debugTouch('adopt-selection-deferred');
     }, 120);
   }, true);
   doc.addEventListener('mousemove', event => {
@@ -1449,6 +1538,7 @@ function attachFrameListeners(){
     scheduleSelectionBoxUpdate();
   }, true);
   doc.addEventListener('click', event => {
+    debugTouch('click', { target: elementFromEvent(event)?.tagName || null, id: elementFromEvent(event)?.id || '', suppressed: Date.now() < suppressSyntheticClickUntil });
     if (interactiveTargetFromEvent(event)) return;
     event.preventDefault();
     event.stopPropagation();
@@ -1461,6 +1551,72 @@ function attachFrameListeners(){
   frame.contentWindow?.addEventListener('resize', scheduleMarkerReflow);
 }
 frame.addEventListener('load', () => { frameListenersAttached = false; attachFrameListeners(); mountWashiOverlay(); redrawMarkers(); });
+frame.addEventListener('touchstart', event => {
+  const point = frameTouchPoint(event);
+  touchStart = point ? { ...point, moved: false } : null;
+  debugTouch('frame-touchstart', { point });
+}, true);
+frame.addEventListener('touchmove', event => {
+  if (!touchStart) return;
+  const point = frameTouchPoint(event);
+  if (touchMovedToPoint(touchStart, point)) {
+    touchStart.moved = true;
+    debugTouch('frame-touchmove-moved', { point });
+  }
+}, true);
+frame.addEventListener('touchend', event => {
+  const point = frameTouchPoint(event);
+  const start = touchStart;
+  touchStart = null;
+  const moved = touchMovedToPoint(start, point);
+  debugTouch('frame-touchend', { point, start, moved });
+  if (moved) return;
+  if (openComposerFromFramePoint(point, 'frame-open')) suppressSyntheticClickUntil = Date.now() + 700;
+}, true);
+frame.addEventListener('click', event => {
+  if (Date.now() < suppressSyntheticClickUntil) return;
+  const point = frameTouchPoint(event);
+  if (openComposerFromFramePoint(point, 'frame-click-open')) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+}, true);
+planTouchLayer?.addEventListener('touchstart', event => {
+  const point = frameTouchPoint(event);
+  touchStart = point ? { ...point, moved: false } : null;
+  const raw = eventPoint(event);
+  touchScrollStart = raw ? { clientY: raw.clientY, scrollY: frame.contentWindow?.scrollY || 0 } : null;
+  debugTouch('layer-touchstart', { point });
+}, true);
+planTouchLayer?.addEventListener('touchmove', event => {
+  if (!touchStart) return;
+  const point = frameTouchPoint(event);
+  if (touchMovedToPoint(touchStart, point)) touchStart.moved = true;
+  const raw = eventPoint(event);
+  if (raw && touchScrollStart && frame.contentWindow) {
+    frame.contentWindow.scrollTo(0, touchScrollStart.scrollY + touchScrollStart.clientY - raw.clientY);
+    scheduleMarkerReflow();
+  }
+  debugTouch('layer-touchmove', { point, moved: Boolean(touchStart?.moved) });
+}, true);
+planTouchLayer?.addEventListener('touchend', event => {
+  const point = frameTouchPoint(event);
+  const start = touchStart;
+  const moved = touchMovedToPoint(start, point);
+  touchStart = null;
+  touchScrollStart = null;
+  debugTouch('layer-touchend', { point, start, moved });
+  if (moved) return;
+  if (openComposerFromFramePoint(point, 'layer-open')) suppressSyntheticClickUntil = Date.now() + 700;
+}, true);
+planTouchLayer?.addEventListener('click', event => {
+  if (Date.now() < suppressSyntheticClickUntil) return;
+  const point = frameTouchPoint(event);
+  if (openComposerFromFramePoint(point, 'layer-click-open')) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+}, true);
 window.addEventListener('resize', scheduleMarkerReflow);
 if (frame.contentDocument && frame.contentDocument.readyState !== 'loading') setTimeout(attachFrameListeners, 0);
 document.getElementById('close-lightbox').addEventListener('click', () => { lightbox.hidden = true; });

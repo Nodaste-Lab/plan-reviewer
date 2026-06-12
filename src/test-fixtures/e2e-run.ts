@@ -524,6 +524,14 @@ try {
     await page.click('#desktop-comments-toggle');
     await page.waitForFunction(() => !document.body.classList.contains('comments-open'));
     await openDomComposer();
+    await page.waitForFunction(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const box = document.querySelector<HTMLElement>('#active-selection-box')!;
+      const target = iframe.contentDocument!.querySelector<HTMLElement>('#dom-annotation')!;
+      const boxRect = box.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      return !box.hidden && Math.abs(boxRect.width - targetRect.width) <= 1 && Math.abs(boxRect.height - targetRect.height) <= 1;
+    });
     const activeBox = await selectionBoxState('#active-selection-box', '#dom-annotation');
     assert.equal(activeBox.hidden, false);
     assert.equal(activeBox.background, 'rgba(0, 0, 0, 0)');
@@ -1025,6 +1033,15 @@ try {
       commentId => Boolean(document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector(`.comment-anchor.addressed[data-comment-id="${commentId}"]`)),
       resolvedFallback.comment.id
     );
+    await page.waitForFunction(commentId => {
+      const doc = document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument;
+      const anchor = doc?.querySelector<HTMLElement>(`.comment-anchor.addressed[data-comment-id="${commentId}"]`);
+      const target = doc?.querySelector<HTMLElement>('#text-target');
+      if (!anchor || !target) return false;
+      const anchorRect = anchor.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      return Math.abs(anchorRect.y - targetRect.y) <= 1 && Math.abs(anchorRect.width - targetRect.width) <= 1;
+    }, resolvedFallback.comment.id);
     assert.equal(await page.evaluate(commentId => {
       const doc = document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument;
       const anchor = doc?.querySelector<HTMLElement>(`.comment-anchor.pending[data-comment-id="${commentId}"]`);
@@ -1076,7 +1093,9 @@ try {
       const touchPage = await touchContext.newPage();
       await touchPage.goto(`${baseUrl}/p/${registered.planId}`);
       await touchPage.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#plan-test-link'));
-      await touchPage.frameLocator('#plan-frame').locator('#plan-test-link').tap();
+      const linkBox = await touchPage.frameLocator('#plan-frame').locator('#plan-test-link').boundingBox();
+      assert.ok(linkBox);
+      await touchPage.touchscreen.tap(linkBox.x + linkBox.width / 2, linkBox.y + linkBox.height / 2);
       await touchPage.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.location.hash === '#link-target');
       await touchPage.waitForTimeout(180);
       assert.equal(await touchPage.evaluate(() => document.querySelector<HTMLElement>('#composer')?.hidden), true);
@@ -1085,7 +1104,9 @@ try {
         iframe.contentWindow?.history.replaceState(null, '', iframe.contentWindow.location.pathname);
         iframe.contentWindow?.scrollTo(0, 0);
       });
-      await touchPage.frameLocator('#plan-frame').locator('#link-adjacent-text').tap();
+      const adjacentBox = await touchPage.frameLocator('#plan-frame').locator('#link-adjacent-text').boundingBox();
+      assert.ok(adjacentBox);
+      await touchPage.touchscreen.tap(adjacentBox.x + adjacentBox.width / 2, adjacentBox.y + adjacentBox.height / 2);
       await touchPage.waitForFunction(() => document.querySelector<HTMLElement>('#composer')?.hidden === false);
     } finally {
       await touchContext.close();
@@ -1121,6 +1142,11 @@ try {
       target.dispatchEvent(end);
     });
     await page.waitForFunction(() => document.querySelector<HTMLElement>('#composer')?.hidden === false);
+    await page.waitForFunction(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const selection = iframe.contentDocument!.getSelection()!;
+      return document.activeElement?.id === 'comment-body' && selection.toString() === '' && selection.isCollapsed;
+    });
     assert.deepEqual(await page.evaluate(() => {
       const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
       const selection = iframe.contentDocument!.getSelection()!;
@@ -1132,6 +1158,26 @@ try {
     }), { activeElementId: 'comment-body', selectedText: '', isCollapsed: true });
     await page.keyboard.type('Mobile selected text composer accepts typing');
     assert.equal(await page.inputValue('#comment-body'), 'Mobile selected text composer accepts typing');
+    await page.click('#cancel-comment');
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#composer')?.hidden === true);
+    await page.evaluate(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const doc = iframe.contentDocument!;
+      const target = doc.querySelector<HTMLElement>('#text-target')!;
+      const rect = target.getBoundingClientRect();
+      const touch = { clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 };
+      const start = new Event('touchstart', { bubbles: true, cancelable: true });
+      Object.defineProperty(start, 'touches', { value: [touch] });
+      Object.defineProperty(start, 'changedTouches', { value: [touch] });
+      target.dispatchEvent(start);
+      let changedTouches = [touch];
+      const end = new Event('touchend', { bubbles: true, cancelable: true });
+      Object.defineProperty(end, 'touches', { value: [] });
+      Object.defineProperty(end, 'changedTouches', { get: () => changedTouches });
+      doc.dispatchEvent(end);
+      changedTouches = [];
+    });
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#composer')?.hidden === false);
     await page.click('#cancel-comment');
     await page.waitForFunction(() => document.querySelector<HTMLElement>('#composer')?.hidden === true);
     await page.evaluate(() => {
