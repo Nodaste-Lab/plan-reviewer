@@ -1252,6 +1252,12 @@ function openElementComposer(element, event){
   showComposer();
   return true;
 }
+function releaseMobileNativeSelection(selection){
+  if (!isMobileShell()) return;
+  selected = selectedForScreenshot;
+  updateSelectionBoxes();
+  selection.removeAllRanges();
+}
 function scheduleSelectionBoxUpdate(){
   if (selectionBoxReflowQueued) return;
   selectionBoxReflowQueued = true;
@@ -1383,6 +1389,7 @@ function attachFrameListeners(){
     const selection = doc.getSelection();
     if (!selection || selection.isCollapsed || !selection.toString().trim()) return false;
     pendingAnchor = anchorForSelection(selection);
+    releaseMobileNativeSelection(selection);
     clearDiscardWarning();
     showComposer();
     return true;

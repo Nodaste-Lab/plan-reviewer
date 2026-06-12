@@ -1104,6 +1104,38 @@ try {
     await page.waitForFunction(() => !document.body.classList.contains('comments-open'));
     await page.evaluate(() => {
       const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const doc = iframe.contentDocument!;
+      const target = doc.querySelector<HTMLElement>('#text-target')!;
+      const text = target.firstChild!;
+      const range = doc.createRange();
+      range.setStart(text, 0);
+      range.setEnd(text, 10);
+      const selection = doc.getSelection()!;
+      selection.removeAllRanges();
+      selection.addRange(range);
+      const rect = range.getBoundingClientRect();
+      const touch = { clientX: rect.left + Math.max(1, rect.width / 2), clientY: rect.top + Math.max(1, rect.height / 2) };
+      const end = new Event('touchend', { bubbles: true, cancelable: true });
+      Object.defineProperty(end, 'touches', { value: [] });
+      Object.defineProperty(end, 'changedTouches', { value: [touch] });
+      target.dispatchEvent(end);
+    });
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#composer')?.hidden === false);
+    assert.deepEqual(await page.evaluate(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const selection = iframe.contentDocument!.getSelection()!;
+      return {
+        activeElementId: document.activeElement?.id,
+        selectedText: selection.toString(),
+        isCollapsed: selection.isCollapsed
+      };
+    }), { activeElementId: 'comment-body', selectedText: '', isCollapsed: true });
+    await page.keyboard.type('Mobile selected text composer accepts typing');
+    assert.equal(await page.inputValue('#comment-body'), 'Mobile selected text composer accepts typing');
+    await page.click('#cancel-comment');
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#composer')?.hidden === true);
+    await page.evaluate(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
       const target = iframe.contentDocument!.querySelector<HTMLElement>('#text-target')!;
       const rect = target.getBoundingClientRect();
       const touch = { clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 };

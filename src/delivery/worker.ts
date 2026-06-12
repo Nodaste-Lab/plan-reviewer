@@ -256,6 +256,7 @@ export class DeliveryWorker {
       return;
     }
     if (!this.store.activeClaim(row.claimId, row.commentId)) {
+      if (this.markExternallyHandled(row, { retryUnavailable: false })) return;
       this.store.markDeliveryStatus(row.id, 'ack_failed', {
         error: { code: 'ack_claim_lost', message: 'Codex completed but the queue claim expired or was lost before ack', retryable: false }
       });
@@ -278,8 +279,7 @@ export class DeliveryWorker {
       this.store.markDeliveryStatus(row.id, 'delivered');
     } catch (error) {
       if (error instanceof PlanReviewError && (error.code === 'claim_required' || error.code === 'invalid_state')) {
-        this.markExternallyHandled(row);
-        if (this.store.getDeliveryRow(row.id)?.status === 'retry_wait') {
+        if (!this.markExternallyHandled(row, { retryUnavailable: false })) {
           this.store.markDeliveryStatus(row.id, 'ack_failed', {
             error: { code: 'ack_failed', message: error.message, retryable: false }
           });
