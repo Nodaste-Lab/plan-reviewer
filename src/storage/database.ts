@@ -5,7 +5,9 @@ import os from 'node:os';
 import { nanoid } from 'nanoid';
 import type {
   AckCommentInput,
+  AppendThreadEntryInput,
   ClaimCommentsInput,
+  ClaimQueueInput,
   CreateCommentInput,
   CreatePlanNoteInput,
   DeferPlanInput,
@@ -17,7 +19,9 @@ import type {
   PlanPullRequest,
   DeliveryAdapter,
   DeliveryStatus,
-  DeliveryTargetInput
+  DeliveryTargetInput,
+  ReviewMode,
+  ThreadEntryRole
 } from '../schemas.js';
 import type { DeliveryErrorShape, DeliveryOutboxRow, DeliveryTargetRecord } from '../delivery/types.js';
 import { pullRequestStatus } from '../githubPr.js';
@@ -37,7 +41,8 @@ export interface PlanRecord {
   commitSha?: string;
   sourcePath?: string;
   watchMode: 'filesystem' | 'snapshot';
-  publicationMetadata: PlanPublicationMetadata;
+  reviewMode: ReviewMode;
+  publicationMetadata?: PlanPublicationMetadata;
   linearIssueKey?: string;
   linearIssueUrl?: string;
   pullRequest?: PlanPullRequest | null;
@@ -88,6 +93,20 @@ export interface StoredEvent {
   createdAt: string;
 }
 
+export interface StoredCommentThreadEntry {
+  id: string;
+  planId: string;
+  commentId: string;
+  sequence: number;
+  role: ThreadEntryRole;
+  body: string;
+  createdBy: Record<string, unknown>;
+  claimId?: string;
+  deliveryAdapter?: DeliveryAdapter;
+  action?: Record<string, unknown>;
+  createdAt: string;
+}
+
 export interface StoredComment {
   id: string;
   planId: string;
@@ -101,6 +120,7 @@ export interface StoredComment {
   screenshotAssetId?: string;
   conversationPayload: Record<string, unknown>;
   agentResponse?: Record<string, unknown>;
+  threadEntries: StoredCommentThreadEntry[];
   createdBy: Record<string, unknown>;
   createdAt: string;
   deletedAt?: string;
@@ -180,7 +200,8 @@ function noteAuthor(input?: { displayName?: string }): Record<string, unknown> {
   return { type: 'operator', displayName: input?.displayName?.trim() || 'Plan reviewer' };
 }
 
-function metadataFromRow(row: Record<string, unknown>): PlanPublicationMetadata {
+function metadataFromRow(row: Record<string, unknown>, reviewMode: ReviewMode): PlanPublicationMetadata | undefined {
+  if (reviewMode === 'collaboration') return undefined;
   const parsed = parseJson<PlanPublicationMetadata | null>(row.publicationMetadataJson as string | null, null);
   if (parsed) return parsed;
   return {
@@ -189,6 +210,10 @@ function metadataFromRow(row: Record<string, unknown>): PlanPublicationMetadata 
     executionReady: false,
     executionReadyBasis: 'agent-review-results'
   };
+}
+
+function inferReviewMode(input: Pick<RegisterPlanInput, 'reviewMode' | 'publicationMetadata' | 'planPath'>): ReviewMode {
+  return input.reviewMode ?? (input.publicationMetadata?.executionReadyBasis || input.planPath.startsWith('thoughts/plans/') ? 'planning' : 'collaboration');
 }
 
 function optionalNumber(value: unknown): number | undefined {
@@ -331,6 +356,7 @@ export class PlanReviewStore {
         plan_path TEXT NOT NULL,
         source_path TEXT,
         watch_mode TEXT NOT NULL DEFAULT 'snapshot',
+        review_mode TEXT NOT NULL DEFAULT 'planning',
         lifecycle_state TEXT NOT NULL DEFAULT 'active',
         deferred_at TEXT,
         deferred_note_id TEXT,
@@ -435,6 +461,23 @@ export class PlanReviewStore {
         created_at TEXT NOT NULL,
         UNIQUE(plan_id, sequence)
       );
+      CREATE TABLE IF NOT EXISTS comment_thread_entries (
+        id TEXT PRIMARY KEY,
+        plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+        comment_id TEXT NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
+        sequence INTEGER NOT NULL,
+        role TEXT NOT NULL,
+        body TEXT NOT NULL,
+        created_by_json TEXT NOT NULL,
+        claim_id TEXT,
+        delivery_adapter TEXT,
+        action_json TEXT,
+        client_mutation_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(comment_id, sequence),
+        UNIQUE(comment_id, client_mutation_id)
+      );
       CREATE TABLE IF NOT EXISTS claims (
         id TEXT PRIMARY KEY,
         comment_id TEXT NOT NULL REFERENCES comments(id),
@@ -492,6 +535,7 @@ export class PlanReviewStore {
     `);
     this.ensureColumn('plans', 'source_path', 'TEXT');
     this.ensureColumn('plans', 'watch_mode', "TEXT NOT NULL DEFAULT 'snapshot'");
+    this.ensureColumn('plans', 'review_mode', "TEXT NOT NULL DEFAULT 'planning'");
     this.ensureColumn('plans', 'lifecycle_state', "TEXT NOT NULL DEFAULT 'active'");
     this.ensureColumn('plans', 'deferred_at', 'TEXT');
     this.ensureColumn('plans', 'deferred_note_id', 'TEXT');
@@ -508,7 +552,27 @@ export class PlanReviewStore {
     this.ensureColumn('plan_versions', 'progress_json', 'TEXT');
     this.ensureColumn('plan_versions', 'progress_total', 'INTEGER');
     this.ensureColumn('plan_versions', 'progress_completed', 'INTEGER');
+    this.backfillThreadEntries();
     this.backfillPlanVersionMetadata();
+  }
+
+  private backfillThreadEntries(): void {
+    const rows = this.db.prepare(`
+      SELECT c.id, c.plan_id AS planId, c.body, c.created_by_json AS createdByJson, c.created_at AS createdAt, c.updated_at AS updatedAt
+      FROM comments c
+      LEFT JOIN comment_thread_entries e ON e.comment_id = c.id
+      WHERE e.id IS NULL
+    `).all() as Array<Record<string, unknown>>;
+    if (rows.length === 0) return;
+    const insert = this.db.prepare(`INSERT INTO comment_thread_entries
+      (id, plan_id, comment_id, sequence, role, body, created_by_json, created_at, updated_at)
+      VALUES (?, ?, ?, 1, 'human', ?, ?, ?, ?)`);
+    const tx = this.db.transaction(() => {
+      for (const row of rows) {
+        insert.run(id('cte'), row.planId, row.id, row.body, row.createdByJson, row.createdAt, row.updatedAt ?? row.createdAt);
+      }
+    });
+    tx();
   }
 
   private backfillPlanVersionMetadata(): void {
@@ -564,6 +628,13 @@ export class PlanReviewStore {
     const row = this.db
       .prepare('SELECT COALESCE(MAX(sequence), 0) + 1 AS next FROM comments WHERE plan_id = ?')
       .get(planId) as { next: number };
+    return row.next;
+  }
+
+  private nextThreadEntrySequence(commentId: string): number {
+    const row = this.db
+      .prepare('SELECT COALESCE(MAX(sequence), 0) + 1 AS next FROM comment_thread_entries WHERE comment_id = ?')
+      .get(commentId) as { next: number };
     return row.next;
   }
 
@@ -660,6 +731,27 @@ export class PlanReviewStore {
     const now = nowIso();
     this.db.prepare('DELETE FROM plan_pull_requests WHERE plan_id = ?').run(planId);
     this.db.prepare('UPDATE plans SET updated_at = ? WHERE id = ?').run(now, planId);
+  }
+
+  private threadEntryFromRow(row: Record<string, unknown>): StoredCommentThreadEntry {
+    return {
+      id: String(row.id),
+      planId: String(row.plan_id ?? row.planId),
+      commentId: String(row.comment_id ?? row.commentId),
+      sequence: Number(row.sequence),
+      role: String(row.role) as ThreadEntryRole,
+      body: String(row.body),
+      createdBy: parseJson(String(row.created_by_json ?? row.createdByJson), {}),
+      claimId: optionalString(row.claim_id ?? row.claimId),
+      deliveryAdapter: optionalString(row.delivery_adapter ?? row.deliveryAdapter) as DeliveryAdapter | undefined,
+      action: parseJson<Record<string, unknown> | undefined>(row.action_json as string | null, undefined),
+      createdAt: String(row.created_at ?? row.createdAt)
+    };
+  }
+
+  listThreadEntries(commentId: string): StoredCommentThreadEntry[] {
+    const rows = this.db.prepare('SELECT * FROM comment_thread_entries WHERE comment_id = ? ORDER BY sequence ASC').all(commentId) as Array<Record<string, unknown>>;
+    return rows.map(row => this.threadEntryFromRow(row));
   }
 
   private deliveryTargetFromRow(row: Record<string, unknown>): DeliveryTargetRecord {
@@ -951,12 +1043,13 @@ export class PlanReviewStore {
       const planId = existingPlan?.id || id('plan');
       const slug = input.updateMode === 'new-thread' ? `${baseSlug}-${shortHash(planId)}` : baseSlug;
       const watchMode = input.watchMode ?? 'snapshot';
+      const reviewMode = inferReviewMode(input);
       const lastSyncStatus = watchMode === 'filesystem' ? 'synced' : 'snapshot';
       this.db
-        .prepare(`INSERT INTO plans (id, repo_id, slug, plan_path, source_path, watch_mode, lifecycle_state, deferred_at, deferred_note_id, last_sync_at, last_sync_status, last_sync_error_json, archived_at, publication_metadata_json, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, 'active', NULL, NULL, ?, ?, ?, NULL, ?, ?, ?)
+        .prepare(`INSERT INTO plans (id, repo_id, slug, plan_path, source_path, watch_mode, review_mode, lifecycle_state, deferred_at, deferred_note_id, last_sync_at, last_sync_status, last_sync_error_json, archived_at, publication_metadata_json, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'active', NULL, NULL, ?, ?, ?, NULL, ?, ?, ?)
           ON CONFLICT(repo_id, plan_path, slug) DO UPDATE SET updated_at = excluded.updated_at,
-            source_path = excluded.source_path, watch_mode = excluded.watch_mode,
+            source_path = excluded.source_path, watch_mode = excluded.watch_mode, review_mode = excluded.review_mode,
             last_sync_at = excluded.last_sync_at, last_sync_status = excluded.last_sync_status,
             last_sync_error_json = excluded.last_sync_error_json,
             publication_metadata_json = excluded.publication_metadata_json,
@@ -964,7 +1057,7 @@ export class PlanReviewStore {
             lifecycle_state = plans.lifecycle_state,
             deferred_at = plans.deferred_at,
             deferred_note_id = plans.deferred_note_id`)
-        .run(planId, repoId, slug, input.planPath, input.sourcePath ?? null, watchMode, now, lastSyncStatus, null, JSON.stringify(input.publicationMetadata), now, now);
+        .run(planId, repoId, slug, input.planPath, input.sourcePath ?? null, watchMode, reviewMode, now, lastSyncStatus, null, input.publicationMetadata ? JSON.stringify(input.publicationMetadata) : null, now, now);
 
       const htmlName = `${input.fileHash}.html`;
       const renderedName = `${sha256(renderedHtml)}.rendered.html`;
@@ -1029,6 +1122,7 @@ export class PlanReviewStore {
         eventType,
         sourcePath: input.sourcePath,
         watchMode,
+        reviewMode,
         lastSyncStatus
       });
 
@@ -1079,7 +1173,7 @@ export class PlanReviewStore {
       p.id ASC`;
     const selectRows = (where: string, limit?: number, args: unknown[] = []) => this.db.prepare(`
       SELECT p.id, p.slug, p.plan_path AS planPath, p.source_path AS sourcePath, p.watch_mode AS watchMode,
-        p.lifecycle_state AS lifecycleState, p.deferred_at AS deferredAt, p.deferred_note_id AS deferredNoteId,
+        p.review_mode AS reviewMode, p.lifecycle_state AS lifecycleState, p.deferred_at AS deferredAt, p.deferred_note_id AS deferredNoteId,
         p.last_sync_at AS lastSyncAt, p.last_sync_status AS lastSyncStatus, p.last_sync_error_json AS lastSyncErrorJson,
         p.archived_at AS archivedAt, p.publication_metadata_json AS publicationMetadataJson,
         r.repo_name AS repoName, r.repo_key AS repoKey, r.remote_url AS remoteUrl, r.root_path AS rootPath,
@@ -1121,8 +1215,9 @@ export class PlanReviewStore {
       const progress = storedProgress ?? (html ? extractPlanProgress(html) : { totalPhases: 0, completedPhases: 0, phases: [] });
       const displayTitle = optionalString(row.displayTitle) ?? (html ? renderedHtmlTitle(html) : undefined) ?? planTitleFallback({ id: row.id, repoName: row.repoName, slug: row.slug });
       const latestNote = this.latestPlanNote(String(row.id));
-      const publicationMetadata = metadataFromRow(row);
-      const linearIssueKey = normalizeLinearIssueKey(publicationMetadata.linearIssue, searchablePlanTextForLinear(html));
+      const reviewMode = (row.reviewMode ?? 'planning') as ReviewMode;
+      const publicationMetadata = metadataFromRow(row, reviewMode);
+      const linearIssueKey = normalizeLinearIssueKey(publicationMetadata?.linearIssue, searchablePlanTextForLinear(html));
       const planId = String(row.id);
       return {
       plan: {
@@ -1135,6 +1230,7 @@ export class PlanReviewStore {
         rootPath: optionalString(row.rootPath),
         sourcePath: optionalString(row.sourcePath),
         watchMode: (row.watchMode ?? 'snapshot') as 'filesystem' | 'snapshot',
+        reviewMode,
         lifecycleState: lifecycleStateFromRow(row),
         deferredAt: optionalString(row.deferredAt),
         deferredNoteId: optionalString(row.deferredNoteId),
@@ -1261,7 +1357,7 @@ export class PlanReviewStore {
 
   latestEventSequence(planId: string, mode: 'all' | 'queue' = 'all'): number {
     const eventFilter = mode === 'queue'
-      ? "AND event_type IN ('comment.created','comment.claimed','comment.acknowledged','comment.resolved','comment.released','comment.deleted')"
+      ? "AND event_type IN ('comment.created','comment.claimed','comment.acknowledged','comment.resolved','comment.released','comment.deleted','comment.thread_entry.created')"
       : '';
     const row = this.db
       .prepare(`SELECT COALESCE(MAX(sequence), 0) AS latest FROM comment_events WHERE plan_id = ? ${eventFilter}`)
@@ -1296,7 +1392,7 @@ export class PlanReviewStore {
   getPlan(identifier: string): { plan: PlanRecord; version: VersionRecord } {
     const row = this.db.prepare(`
       SELECT p.id, p.repo_id AS repoId, p.slug, p.plan_path AS planPath, p.source_path AS sourcePath,
-        p.watch_mode AS watchMode, p.lifecycle_state AS lifecycleState, p.deferred_at AS deferredAt, p.deferred_note_id AS deferredNoteId,
+        p.watch_mode AS watchMode, p.review_mode AS reviewMode, p.lifecycle_state AS lifecycleState, p.deferred_at AS deferredAt, p.deferred_note_id AS deferredNoteId,
         p.last_sync_at AS lastSyncAt, p.last_sync_status AS lastSyncStatus,
         p.last_sync_error_json AS lastSyncErrorJson, p.archived_at AS archivedAt, p.publication_metadata_json AS publicationMetadataJson,
         r.repo_name AS repoName, r.repo_key AS repoKey, r.remote_url AS remoteUrl, r.root_path AS rootPath,
@@ -1314,7 +1410,7 @@ export class PlanReviewStore {
     `).get(identifier) as Record<string, string> | undefined;
     const slugRows = row ? [] : this.db.prepare(`
       SELECT p.id, p.repo_id AS repoId, p.slug, p.plan_path AS planPath, p.source_path AS sourcePath,
-        p.watch_mode AS watchMode, p.lifecycle_state AS lifecycleState, p.deferred_at AS deferredAt, p.deferred_note_id AS deferredNoteId,
+        p.watch_mode AS watchMode, p.review_mode AS reviewMode, p.lifecycle_state AS lifecycleState, p.deferred_at AS deferredAt, p.deferred_note_id AS deferredNoteId,
         p.last_sync_at AS lastSyncAt, p.last_sync_status AS lastSyncStatus,
         p.last_sync_error_json AS lastSyncErrorJson, p.archived_at AS archivedAt, p.publication_metadata_json AS publicationMetadataJson,
         r.repo_name AS repoName, r.repo_key AS repoKey, r.remote_url AS remoteUrl, r.root_path AS rootPath,
@@ -1340,9 +1436,10 @@ export class PlanReviewStore {
     if (!selectedRow) {
       throw new PlanReviewError('not_found', `Plan '${identifier}' was not found`, 404, {}, 'Register the plan first.');
     }
-    const publicationMetadata = metadataFromRow(selectedRow);
+    const reviewMode = (selectedRow.reviewMode ?? 'planning') as ReviewMode;
+    const publicationMetadata = metadataFromRow(selectedRow, reviewMode);
     const html = fs.readFileSync(selectedRow.htmlBlobPath, 'utf8');
-    const linearIssueKey = normalizeLinearIssueKey(publicationMetadata.linearIssue, searchablePlanTextForLinear(html));
+    const linearIssueKey = normalizeLinearIssueKey(publicationMetadata?.linearIssue, searchablePlanTextForLinear(html));
     return {
       plan: {
         id: selectedRow.id,
@@ -1357,6 +1454,7 @@ export class PlanReviewStore {
         commitSha: selectedRow.commitSha ?? undefined,
         sourcePath: optionalString(selectedRow.sourcePath),
         watchMode: (selectedRow.watchMode ?? 'snapshot') as 'filesystem' | 'snapshot',
+        reviewMode,
         lifecycleState: lifecycleStateFromRow(selectedRow),
         deferredAt: optionalString(selectedRow.deferredAt),
         deferredNoteId: optionalString(selectedRow.deferredNoteId),
@@ -1392,6 +1490,22 @@ export class PlanReviewStore {
       .get(versionId, plan.id) as { renderedBlobPath: string } | undefined;
     if (!row) throw new PlanReviewError('not_found', `Version '${versionId}' was not found for plan '${plan.id}'`, 404);
     return fs.readFileSync(row.renderedBlobPath, 'utf8');
+  }
+
+  changePlanMode(identifier: string, reviewMode: ReviewMode): { plan: PlanRecord; event: StoredEvent; changed: boolean } {
+    const tx = this.db.transaction(() => {
+      const { plan } = this.getPlan(identifier);
+      if (plan.reviewMode === reviewMode) {
+        const event = this.addEvent(plan.id, 'plan.mode.changed', { eventType: 'plan.mode.changed', planId: plan.id, reviewMode, changed: false });
+        return { plan, event, changed: false };
+      }
+      const now = nowIso();
+      this.db.prepare('UPDATE plans SET review_mode = ?, updated_at = ? WHERE id = ?').run(reviewMode, now, plan.id);
+      const updated = this.getPlan(plan.id).plan;
+      const event = this.addEvent(plan.id, 'plan.mode.changed', { eventType: 'plan.mode.changed', planId: plan.id, reviewMode, changed: true });
+      return { plan: updated, event, changed: true };
+    });
+    return tx();
   }
 
   deferPlan(identifier: string, input: DeferPlanInput): { plan: PlanRecord; note: PlanNoteRecord; events: StoredEvent[] } {
@@ -1594,6 +1708,10 @@ export class PlanReviewStore {
           now,
           now
         );
+      this.db.prepare(`INSERT INTO comment_thread_entries
+        (id, plan_id, comment_id, sequence, role, body, created_by_json, created_at, updated_at)
+        VALUES (?, ?, ?, 1, 'human', ?, ?, ?, ?)`)
+        .run(id('cte'), planId, commentId, input.body, JSON.stringify({ type: 'reviewer', displayName: createdByName }), now, now);
       if (screenshotAssetId && screenshotAsset) {
         this.db
           .prepare(`INSERT INTO comment_assets
@@ -1621,6 +1739,7 @@ export class PlanReviewStore {
         comment
       }, commentId);
       this.enqueueDelivery(planId, commentId, 'codex');
+      this.enqueueDelivery(planId, commentId, 'hermes');
       return { comment, event, created: true };
     });
     return tx();
@@ -1681,6 +1800,7 @@ export class PlanReviewStore {
       screenshotAssetId: row.screenshot_asset_id ? String(row.screenshot_asset_id) : undefined,
       conversationPayload: parseJson(String(row.conversation_payload_json), {}),
       agentResponse: row.agent_response_json ? parseJson(String(row.agent_response_json), {}) : undefined,
+      threadEntries: this.listThreadEntries(String(row.id)),
       createdBy: parseJson(String(row.created_by_json), {}),
       createdAt: String(row.created_at),
       deletedAt: row.deleted_at ? String(row.deleted_at) : undefined,
@@ -1954,6 +2074,34 @@ export class PlanReviewStore {
     return tx();
   }
 
+  appendThreadEntry(commentId: string, input: AppendThreadEntryInput): { comment: StoredComment; entry: StoredCommentThreadEntry; event: StoredEvent; created: boolean } {
+    const tx = this.db.transaction(() => {
+      const comment = this.getComment(commentId);
+      this.assertCommentNotDeleted(comment, 'updated');
+      const duplicate = input.clientMutationId
+        ? this.db.prepare('SELECT * FROM comment_thread_entries WHERE comment_id = ? AND client_mutation_id = ?').get(commentId, input.clientMutationId) as Record<string, unknown> | undefined
+        : undefined;
+      if (duplicate) {
+        return { comment, entry: this.threadEntryFromRow(duplicate), event: this.getCommentCreatedEvent(commentId), created: false };
+      }
+      const now = nowIso();
+      const entryId = id('cte');
+      const sequence = this.nextThreadEntrySequence(commentId);
+      const createdBy = { type: input.role, displayName: input.createdBy?.displayName?.trim() || (input.role === 'agent' ? 'Agent' : input.role === 'system' ? 'System' : 'Reviewer') };
+      this.db.prepare(`INSERT INTO comment_thread_entries
+        (id, plan_id, comment_id, sequence, role, body, created_by_json, claim_id, delivery_adapter, action_json, client_mutation_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(entryId, comment.planId, commentId, sequence, input.role, input.body, JSON.stringify(createdBy), input.claimId ?? null, input.deliveryAdapter ?? null, input.action ? JSON.stringify(input.action) : null, input.clientMutationId ?? null, now, now);
+      this.db.prepare('UPDATE comments SET updated_at = ? WHERE id = ?').run(now, commentId);
+      this.db.prepare('UPDATE plans SET updated_at = ? WHERE id = ?').run(now, comment.planId);
+      const entry = this.listThreadEntries(commentId).find(item => item.id === entryId)!;
+      const updated = this.getComment(commentId);
+      const event = this.addEvent(comment.planId, 'comment.thread_entry.created', { eventType: 'comment.thread_entry.created', planId: comment.planId, commentId, entry, comment: updated }, commentId);
+      return { comment: updated, entry, event, created: true };
+    });
+    return tx();
+  }
+
   releaseComment(commentId: string, claimId: string, reason = 'released') {
     const tx = this.db.transaction(() => {
       const comment = this.getComment(commentId);
@@ -2024,12 +2172,68 @@ export class PlanReviewStore {
 
   eventsAfter(planId: string, afterSequence = 0, mode: 'all' | 'queue' = 'all', limit = 200): StoredEvent[] {
     const eventFilter = mode === 'queue'
-      ? "AND event_type IN ('comment.created','comment.claimed','comment.acknowledged','comment.resolved','comment.released','comment.deleted')"
+      ? "AND event_type IN ('comment.created','comment.claimed','comment.acknowledged','comment.resolved','comment.released','comment.deleted','comment.thread_entry.created')"
       : '';
     const rows = this.db
       .prepare(`SELECT * FROM comment_events WHERE plan_id = ? AND sequence > ? ${eventFilter} ORDER BY sequence ASC LIMIT ?`)
       .all(planId, afterSequence, limit) as Array<Record<string, unknown>>;
     return rows.map(row => this.eventFromRow(row));
+  }
+
+  claimNextAcrossQueue(input: ClaimQueueInput, agentId = 'plan-review-cli') {
+    const tx = this.db.transaction(() => {
+      const expiredEvents = this.releaseExpiredClaims();
+      const clauses = ["c.status = 'pending'", 'c.deleted_at IS NULL', 'c.claim_id IS NULL', 'p.archived_at IS NULL', "COALESCE(p.lifecycle_state, 'active') != 'deferred'"];
+      const params: unknown[] = [];
+      if (input.reviewMode) {
+        clauses.push('p.review_mode = ?');
+        params.push(input.reviewMode);
+      }
+      if (input.repoKey) {
+        clauses.push('r.repo_key = ?');
+        params.push(input.repoKey);
+      }
+      if (input.adapter) {
+        const modeClause = input.adapter === 'hermes'
+          ? "AND t.mode IN ('fake','webhook')"
+          : "AND t.mode IN ('sdk','app-server','fake')";
+        clauses.push(`EXISTS (
+          SELECT 1 FROM delivery_targets t
+          WHERE t.plan_id = p.id
+            AND t.adapter = ?
+            AND t.enabled = 1
+            AND t.target_thread_id IS NOT NULL
+            ${modeClause}
+        )`);
+        params.push(input.adapter);
+      }
+      const row = this.db.prepare(`
+        SELECT c.id AS commentId, c.plan_id AS planId
+        FROM comments c
+        JOIN plans p ON p.id = c.plan_id
+        JOIN repos r ON r.id = p.repo_id
+        WHERE ${clauses.join(' AND ')}
+        ORDER BY c.created_at ASC, c.sequence ASC, c.id ASC
+        LIMIT 1
+      `).get(...params) as { commentId: string; planId: string } | undefined;
+      if (!row) return { claimed: [], events: expiredEvents, skipped: [] };
+      const leaseExpiresAt = new Date(Date.now() + input.leaseSeconds * 1000).toISOString();
+      const claimId = id('claim');
+      this.db.prepare(`INSERT INTO claims (id, comment_id, agent_id, lease_expires_at, created_at)
+        VALUES (?, ?, ?, ?, ?)`)
+        .run(claimId, row.commentId, agentId, leaseExpiresAt, nowIso());
+      this.db.prepare("UPDATE comments SET status = 'claimed', claim_id = ?, updated_at = ? WHERE id = ?")
+        .run(claimId, nowIso(), row.commentId);
+      const updated = this.getComment(row.commentId);
+      const event = this.addEvent(row.planId, 'comment.claimed', {
+        eventType: 'comment.claimed',
+        planId: row.planId,
+        commentId: row.commentId,
+        comment: updated
+      }, row.commentId);
+      return { claimed: [updated], events: [...expiredEvents, event], leaseExpiresAt, skipped: [] };
+    });
+    return tx();
   }
 
   queueSnapshot(filters: { repoKey?: string; planId?: string; limit?: number }) {

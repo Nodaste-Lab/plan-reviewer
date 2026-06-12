@@ -210,6 +210,7 @@ export class SourceSyncService {
         commitSha: plan.commitSha,
         planPath: plan.planPath,
         publicationMetadata: plan.publicationMetadata,
+        reviewMode: plan.reviewMode,
         slug: plan.slug,
         html,
         fileHash,

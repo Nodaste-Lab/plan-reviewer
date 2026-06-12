@@ -1,6 +1,6 @@
 # Plan Reviewer
 
-Local HTML plan review daemon and CLI for plans under `thoughts/plans`.
+Local HTML review daemon and CLI for planning-mode implementation plans under `thoughts/plans` and collaboration-mode HTML documents.
 
 ## Install
 
@@ -27,7 +27,14 @@ plan-review register thoughts/plans/my-plan.html --repo auto --branch auto --com
 plan-review index
 ```
 
-Open the printed review URL. Publishing requires metadata for the worktree path, branch, optional Linear issue, and whether codex/claude-code review results say the plan is execution ready. The CLI fills worktree and branch from git; pass `--linear-issue <issue>` when applicable and always pass `--execution-ready true|false` based only on agent-review results.
+Open the printed review URL. Records have an explicit `reviewMode`: `planning` preserves reviewed-plan behavior, while `collaboration` hosts general HTML documents for anchored human/agent conversations. If omitted, the server infers `planning` for records with execution-readiness metadata or `thoughts/plans/` paths, and `collaboration` for general HTML without planning metadata. Override or correct mode without editing source HTML:
+
+```bash
+plan-review register docs/brief.html --review-mode collaboration
+plan-review mode plan_123 collaboration --json
+```
+
+Planning-mode publishing requires metadata for the worktree path, branch, optional Linear issue, and whether codex/claude-code review results say the plan is execution ready. The CLI fills worktree and branch from git; pass `--linear-issue <issue>` when applicable and pass `--execution-ready true|false` based only on agent-review results. Collaboration mode may omit execution-readiness metadata and hides planning-specific buttons/status chrome.
 
 The registration response is also the canonical source of listener instructions for agents: successful CLI registration prints a `REQUIRED NEXT ACTION:` block with copy-paste `agent next` commands, and API registration returns `agentInstructions` inside the existing `{ ok, data }` response envelope. Agents should drain pending queue work and start the listener command before continuing plan work.
 
@@ -77,7 +84,17 @@ Then listen for the next actionable comment:
 plan-review agent next plan_123 --wait --json --url http://127.0.0.1:4317
 ```
 
-A claimed result includes `commentId`, `claimId`, the original `browser.comment.v1` `conversationPayload`, and copy-paste `ackCommand` / `resolveCommand` guidance. After acting on the comment, ack with the returned claim ID, optionally resolve after ack, then immediately run the wait command again. Active claims are not double-claimed by reruns; released or expired claims return to pending through normal queue state.
+A claimed result includes `commentId`, `claimId`, the original `browser.comment.v1` `conversationPayload`, `reviewMode`/source metadata when available, and copy-paste `ackCommand` / `resolveCommand` guidance. After acting on the comment, optionally append a visible thread reply, ack with the returned claim ID, optionally resolve after ack, then immediately run the wait command again. Active claims are not double-claimed by reruns; released or expired claims return to pending through normal queue state.
+
+```bash
+plan-review reply cmt_123 --body "Updated the document." --claim claim_123 --adapter hermes --json
+```
+
+A single watcher can claim eligible work across active documents for an adapter without pre-claiming documents that lack an enabled target:
+
+```bash
+plan-review agent next --all --adapter hermes --json --url http://127.0.0.1:4317
+```
 
 After an agent creates a GitHub PR for a plan, link and refresh the plan's PR metadata before final handoff so the index can report open/merged/closed state programmatically:
 
@@ -100,7 +117,7 @@ Accept: text/event-stream
 Last-Event-ID: <last-seen-sequence>
 ```
 
-SSE frames use `id: <sequence>`, `event: comment.created|comment.claimed|comment.acknowledged|comment.resolved|comment.released|comment.deleted`, and JSON `data`. Non-queue event streams also include `plan.version.registered`, `plan.version.synced`, and `plan.sync.failed` for debug consumers; the browser review shell uses finite `/events/poll` requests for freshness instead of persistent SSE. On reconnect, `Last-Event-ID` replays later events. Heartbeats are sent every 15 seconds. If SSE is unavailable, agents poll:
+SSE frames use `id: <sequence>`, `event: comment.created|comment.claimed|comment.thread_entry.created|comment.acknowledged|comment.resolved|comment.released|comment.deleted`, and JSON `data`. Non-queue event streams also include `plan.version.registered`, `plan.version.synced`, and `plan.sync.failed` for debug consumers; the browser review shell uses finite `/events/poll` requests for freshness instead of persistent SSE. On reconnect, `Last-Event-ID` replays later events. Heartbeats are sent every 15 seconds. If SSE is unavailable, agents poll:
 
 ```http
 GET /api/plans/:planId/events/poll?afterSequence=<last-seen-sequence>&mode=queue
@@ -132,7 +149,7 @@ Pending unclaimed comments can be deleted from the browser UI or with `DELETE /a
 
 ## Browser Comment Bridge
 
-Every comment event carries `conversationPayload.type = "browser.comment.v1"`. Host adapters for Codex, Claude, or Pi can append that payload into the active conversation, let the agent answer there, and call `ack` or `resolve` with a response summary, changed files, run ID, and optional commit SHA. The service stores the response metadata but does not implement a separate chat product.
+Every comment event carries `conversationPayload.type = "browser.comment.v1"`. The original browser comment creates the first durable human thread entry. Agent replies should be appended with `POST /api/comments/:commentId/replies` or `plan-review reply`; ack/resolve remain lifecycle metadata and do not replace visible replies. Legacy `agent_response_json` response summaries remain display metadata for older integrations.
 
 ## Codex Delivery
 
@@ -164,7 +181,13 @@ Registration convenience flags are also available:
 plan-review register thoughts/plans/my-plan.html --execution-ready false --codex-thread <threadId> --codex-delivery enabled
 ```
 
-See [docs/codex-delivery.md](docs/codex-delivery.md) for setup, fake-adapter smoke tests, SDK/app-server notes, manual recovery, and security guidance.
+Hermes delivery uses the same target/outbox commands with `--adapter hermes`. The first slice supports `--mode fake` for fixtures and `--mode webhook`, where `--thread` is the trusted local webhook URL. Hermes payloads include plan/comment/claim IDs, review mode, source path, anchor/context, screenshot metadata, and thread history; `replyBody` results are appended as visible agent replies before ack.
+
+```bash
+plan-review delivery target set plan_123 --adapter hermes --thread http://127.0.0.1:8787/plan-review --mode webhook --json
+```
+
+See [docs/review-modes.md](docs/review-modes.md) for mode workflows and [docs/codex-delivery.md](docs/codex-delivery.md) for Codex setup, fake-adapter smoke tests, SDK/app-server notes, manual recovery, and security guidance.
 
 ## Authoring HTML Plans
 
@@ -174,7 +197,7 @@ Keep images relative to the plan file when they are repo assets. Include `alt`, 
 
 ## Security Seams
 
-The MVP is intentionally unauthenticated. Future bearer tokens, private share links, or network restrictions should plug in at Fastify request hooks before the route handlers and at CLI service-discovery/config boundaries. Until then, use `--host 127.0.0.1` for local-only use or the Homebrew default `0.0.0.0` only on a trusted network.
+The MVP is intentionally unauthenticated. Anyone who can reach the service can view registered planning/collaboration documents, create comments, claim work, append replies, and change modes. Future bearer tokens, private share links, or network restrictions should plug in at Fastify request hooks before the route handlers and at CLI service-discovery/config boundaries. Until then, use `--host 127.0.0.1` for local-only use or the Homebrew default `0.0.0.0` only on a trusted network.
 
 ## Development
 
