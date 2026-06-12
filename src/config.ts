@@ -6,14 +6,14 @@ export interface ServiceConfig {
   url?: string;
   codexDelivery?: {
     enabled?: boolean | string;
-    mode?: 'sdk' | 'app-server' | 'fake' | string;
+    mode?: 'sdk' | 'app-server' | 'fake' | 'webhook' | string;
     intervalMs?: number | string;
   };
 }
 
 export interface DeliveryWorkerConfig {
   enabled: boolean;
-  mode: 'sdk' | 'app-server' | 'fake';
+  mode: 'sdk' | 'app-server' | 'fake' | 'webhook';
   intervalMs: number;
   serviceUrl: string;
 }
@@ -44,7 +44,7 @@ function parseEnabled(value: unknown): boolean | undefined {
 }
 
 function parseMode(value: unknown): DeliveryWorkerConfig['mode'] | undefined {
-  return value === 'app-server' || value === 'fake' || value === 'sdk' ? value : undefined;
+  return value === 'app-server' || value === 'fake' || value === 'sdk' || value === 'webhook' ? value : undefined;
 }
 
 function parseIntervalMs(value: unknown): number | undefined {

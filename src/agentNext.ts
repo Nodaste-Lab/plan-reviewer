@@ -12,6 +12,10 @@ export interface AgentNextClaimedResult {
   planId: string;
   commentId: string;
   claimId: string;
+  reviewMode?: string;
+  planPath?: string;
+  sourcePath?: string;
+  source?: Record<string, unknown>;
   conversationPayload: Record<string, unknown>;
   ackCommand: string;
   resolveCommand: string;
@@ -61,6 +65,10 @@ export function buildAgentNextClaimed(input: {
   claimId: string;
   conversationPayload: Record<string, unknown>;
   serviceUrl: string;
+  reviewMode?: string;
+  planPath?: string;
+  sourcePath?: string;
+  source?: Record<string, unknown>;
 }): AgentNextClaimedResult {
   return {
     type: agentNextType,
@@ -68,6 +76,10 @@ export function buildAgentNextClaimed(input: {
     planId: input.planId,
     commentId: input.commentId,
     claimId: input.claimId,
+    reviewMode: input.reviewMode,
+    planPath: input.planPath,
+    sourcePath: input.sourcePath,
+    source: input.source,
     conversationPayload: input.conversationPayload,
     ackCommand: `plan-review ack ${input.commentId} --claim ${input.claimId} --summary "..." --changed-files <paths> --json --url ${input.serviceUrl}`,
     resolveCommand: `plan-review resolve ${input.commentId} --note "Done" --json --url ${input.serviceUrl}`,

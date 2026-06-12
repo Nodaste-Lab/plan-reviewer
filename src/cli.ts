@@ -9,7 +9,7 @@ import { resolveServiceUrl } from './config.js';
 import { appendNdjson, requestJson } from './client/api.js';
 import { findImageSources } from './htmlImages.js';
 import { renderRegistrationInstructionCommands, type RegistrationAgentInstructions } from './registrationInstructions.js';
-import { buildAgentNextClaimed, buildAgentNextEmpty } from './agentNext.js';
+import { buildAgentNextClaimed, buildAgentNextEmpty, type AgentNextResult } from './agentNext.js';
 import { discoverPullRequest, fetchPullRequestByUrl, parseGitHubRemote, refreshPullRequest } from './githubPr.js';
 import type { PlanPullRequest } from './schemas.js';
 import { deliveryTargetUpdateSchema } from './schemas.js';
@@ -22,7 +22,11 @@ interface PlanApiRecord {
     remoteUrl?: string;
     branch?: string;
     slug: string;
-    publicationMetadata: { branch: string; executionReady: boolean; linearIssue?: string };
+    planPath?: string;
+    sourcePath?: string;
+    watchMode?: string;
+    reviewMode: 'planning' | 'collaboration';
+    publicationMetadata?: { branch: string; executionReady: boolean; linearIssue?: string };
     pullRequest?: PlanPullRequest | null;
   };
 }
@@ -35,6 +39,7 @@ interface RegisterResponse {
   indexUrl: string;
   watchCommand: string;
   sourceSync?: { watchMode: 'filesystem' | 'snapshot'; sourcePath?: string; status?: string; error?: unknown; active?: boolean };
+  reviewMode?: 'planning' | 'collaboration';
   publicationMetadata?: { worktreePath: string; branch: string; linearIssue?: string; executionReady: boolean; executionReadyBasis: 'agent-review-results' };
   renderedWithWarnings: Array<{ code: string; detail: string }>;
   agentInstructions?: RegistrationAgentInstructions;
@@ -180,7 +185,7 @@ function parseExecutionReady(value: string | undefined): boolean {
   throw new PlanReviewError('validation_failed', '--execution-ready must be true or false', 1, { executionReady: value });
 }
 
-async function registerPlan(filePath: string, options: { url?: string; json?: boolean; repo?: string; branch?: string; commit?: string; newThread?: boolean; snapshot?: boolean; executionReady?: string; linearIssue?: string; codexThread?: string; codexDelivery?: string; codexMode?: string }) {
+async function registerPlan(filePath: string, options: { url?: string; json?: boolean; repo?: string; branch?: string; commit?: string; newThread?: boolean; snapshot?: boolean; executionReady?: string; linearIssue?: string; reviewMode?: 'planning' | 'collaboration'; codexThread?: string; codexDelivery?: string; codexMode?: string }) {
   const serviceUrl = resolveServiceUrl(options.url);
   const absolute = path.resolve(filePath);
   const html = fs.readFileSync(absolute, 'utf8');
@@ -189,6 +194,17 @@ async function registerPlan(filePath: string, options: { url?: string; json?: bo
   const branch = options.branch && options.branch !== 'auto' ? options.branch : meta.branch;
   const commitSha = options.commit && options.commit !== 'auto' ? options.commit : meta.commitSha;
   const repoName = options.repo && options.repo !== 'auto' ? options.repo : meta.repoName;
+  const planPath = path.relative(meta.rootPath, absolute) || filePath;
+  const inferredReviewMode = options.reviewMode ?? (options.executionReady !== undefined || planPath.startsWith('thoughts/plans/') ? 'planning' : 'collaboration');
+  const publicationMetadata = inferredReviewMode === 'planning'
+    ? {
+        worktreePath: meta.rootPath,
+        branch,
+        linearIssue: options.linearIssue,
+        executionReady: parseExecutionReady(options.executionReady),
+        executionReadyBasis: 'agent-review-results' as const
+      }
+    : undefined;
   const payload = {
     repoKey: meta.repoKey,
     repoName,
@@ -196,17 +212,12 @@ async function registerPlan(filePath: string, options: { url?: string; json?: bo
     rootPath: meta.rootPath,
     branch,
     commitSha,
-    planPath: path.relative(meta.rootPath, absolute) || filePath,
+    planPath,
     slug: slugify(path.basename(filePath, path.extname(filePath))),
     html,
     fileHash: sha256(html),
-    publicationMetadata: {
-      worktreePath: meta.rootPath,
-      branch,
-      linearIssue: options.linearIssue,
-      executionReady: parseExecutionReady(options.executionReady),
-      executionReadyBasis: 'agent-review-results' as const
-    },
+    reviewMode: options.reviewMode,
+    publicationMetadata,
     sourcePath: options.snapshot ? undefined : absolute,
     sourceMtimeMs: options.snapshot ? undefined : stat.mtimeMs,
     sourceSize: options.snapshot ? undefined : stat.size,
@@ -258,9 +269,9 @@ async function printIndex(options: { url?: string; json?: boolean; q?: string; r
     const table = rows.map(item => {
       const pr = item.plan.pullRequest;
       const prLabel = pr ? `PR ${pr.status ?? pr.state} #${pr.number}` : 'No PR';
-      return `${item.plan.repoName}\t${item.plan.slug}\t${item.plan.publicationMetadata.branch}\t${item.plan.publicationMetadata.linearIssue ?? '-'}\t${prLabel}\texecutionReady:${item.plan.publicationMetadata.executionReady}\tpending:${item.counts.pending} claimed:${item.counts.claimed} ack:${item.counts.acknowledged} resolved:${item.counts.resolved}\t${fullUrl(serviceUrl, item.reviewUrl)}`;
+      return `${item.plan.repoName}\t${item.plan.slug}\t${item.plan.publicationMetadata?.branch ?? item.plan.branch ?? '-'}\t${item.plan.publicationMetadata?.linearIssue ?? '-'}\t${prLabel}\tmode:${item.plan.reviewMode} executionReady:${item.plan.publicationMetadata?.executionReady ?? '-'}\tpending:${item.counts.pending} claimed:${item.counts.claimed} ack:${item.counts.acknowledged} resolved:${item.counts.resolved}\t${fullUrl(serviceUrl, item.reviewUrl)}`;
     });
-    process.stdout.write(`Index URL: ${serviceUrl}/\nRepo\tPlan\tBranch\tLinear\tPR\tExecution Ready\tStatus\tReview URL\n${table.join('\n')}${data.nextCursor ? `\nNext cursor: ${data.nextCursor}` : ''}\n`);
+    process.stdout.write(`Index URL: ${serviceUrl}/\nRepo\tDocument\tBranch\tLinear\tPR\tMode / Execution Ready\tStatus\tReview URL\n${table.join('\n')}${data.nextCursor ? `\nNext cursor: ${data.nextCursor}` : ''}\n`);
   }
 }
 
@@ -344,7 +355,7 @@ async function refreshOnePullRequest(serviceUrl: string, planData: PlanApiRecord
     if (!repo) {
       throw new PlanReviewError('non_github_remote', `Plan ${planData.plan.id} does not have a GitHub remote`, 1, { planId: planData.plan.id, remoteUrl: planData.plan.remoteUrl, repoKey: planData.plan.repoKey }, `Link explicitly: plan-review pr link ${planData.plan.id} --url https://github.com/<owner>/<repo>/pull/<number>`);
     }
-    pullRequest = await discoverPullRequest(repo, planData.plan.publicationMetadata.branch, {}, planData.plan.id);
+    pullRequest = await discoverPullRequest(repo, planData.plan.publicationMetadata?.branch ?? planData.plan.branch ?? 'main', {}, planData.plan.id);
   }
   return persistPullRequest(serviceUrl, planData.plan.id, pullRequest);
 }
@@ -590,7 +601,7 @@ async function waitForQueueSignal(serviceUrl: string, planId: string, latestSequ
   return latestSequence;
 }
 
-async function agentNext(planId: string, options: { url?: string; wait?: boolean; noWait?: boolean; timeout?: string; leaseSeconds?: string; json?: boolean }) {
+async function agentNext(planId: string | undefined, options: { url?: string; wait?: boolean; noWait?: boolean; timeout?: string; leaseSeconds?: string; json?: boolean; all?: boolean; adapter?: string }) {
   if (!options.json) {
     throw new PlanReviewError('validation_failed', 'agent next requires --json', 400, {}, 'Retry with --json so the agent receives a machine-readable payload.');
   }
@@ -599,6 +610,21 @@ async function agentNext(planId: string, options: { url?: string; wait?: boolean
   }
   const serviceUrl = resolveServiceUrl(options.url);
   const timeoutMs = parsePositiveInteger(options.timeout, 'timeout');
+  if (options.all) {
+    const leaseSeconds = parsePositiveInteger(options.leaseSeconds, 'leaseSeconds');
+    const data = await requestJson<AgentNextResult>(`${serviceUrl}/api/agent/queue/claim`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ adapter: options.adapter, leaseSeconds })
+    });
+    if (data.status === 'claimed') {
+      data.conversationPayload = enrichConversationPayload(data.conversationPayload, serviceUrl);
+    }
+    printJson(data);
+    return;
+  }
+  if (!planId) throw new PlanReviewError('plan_required', 'agent next requires <planId> unless --all is passed', 1);
+  const timeoutMsScoped = timeoutMs;
   const leaseSeconds = parsePositiveInteger(options.leaseSeconds, 'leaseSeconds');
   const shouldWait = Boolean(options.wait);
   const startedAt = Date.now();
@@ -634,7 +660,7 @@ async function agentNext(planId: string, options: { url?: string; wait?: boolean
       if (!shouldWait || !isRecoverableWaitError(error)) throw error;
     }
 
-    const remaining = remainingTimeoutMs(startedAt, timeoutMs);
+    const remaining = remainingTimeoutMs(startedAt, timeoutMsScoped);
     if (remaining !== undefined && remaining <= 0) {
       throw new PlanReviewError(
         'watch_timeout',
@@ -646,10 +672,10 @@ async function agentNext(planId: string, options: { url?: string; wait?: boolean
     }
 
     try {
-      latestSequence = await waitForQueueSignal(serviceUrl, planId, latestSequence, startedAt, timeoutMs, backoffMs);
+      latestSequence = await waitForQueueSignal(serviceUrl, planId, latestSequence, startedAt, timeoutMsScoped, backoffMs);
     } catch (error) {
       if (!isRecoverableWaitError(error)) throw error;
-      await sleepForWait(startedAt, timeoutMs, backoffMs);
+      await sleepForWait(startedAt, timeoutMsScoped, backoffMs);
     }
     backoffMs = Math.min(10000, backoffMs * 2);
   }
@@ -728,6 +754,29 @@ async function resolveComment(commentId: string, options: { url?: string; note?:
   else process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
 }
 
+async function replyComment(commentId: string, options: { url?: string; body?: string; role?: string; claim?: string; adapter?: string; json?: boolean }) {
+  if (!options.body?.trim()) throw new PlanReviewError('validation_failed', 'reply requires --body <text>', 1, { commentId });
+  const serviceUrl = resolveServiceUrl(options.url);
+  const data = await requestJson<unknown>(`${serviceUrl}/api/comments/${commentId}/replies`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ body: options.body, role: options.role ?? 'agent', claimId: options.claim, deliveryAdapter: options.adapter, createdBy: { displayName: options.adapter === 'hermes' ? 'Hermes' : 'Agent' } })
+  });
+  if (options.json) printJson(data);
+  else process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
+}
+
+async function setPlanMode(planId: string, reviewMode: string, options: { url?: string; json?: boolean }) {
+  const serviceUrl = resolveServiceUrl(options.url);
+  const data = await requestJson<unknown>(`${serviceUrl}/api/plans/${planId}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ reviewMode })
+  });
+  if (options.json) printJson(data);
+  else process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
+}
+
 async function releaseComment(commentId: string, options: { url?: string; claim?: string; reason?: string; json?: boolean }) {
   if (!options.claim) throw new PlanReviewError('claim_required', 'release requires --claim <claim-id>', 1, { commentId }, 'Pass the active claim id with --claim <claim-id>.');
   const serviceUrl = resolveServiceUrl(options.url);
@@ -788,10 +837,11 @@ async function listPlanNotes(planId: string, options: { url?: string; json?: boo
 async function setDeliveryTarget(planId: string, options: { url?: string; adapter?: string; thread?: string; mode?: string; enable?: boolean; disable?: boolean; cwd?: string; sandbox?: string; model?: string; effort?: string; autoResolve?: boolean; json?: boolean }) {
   const serviceUrl = resolveServiceUrl(options.url);
   const enabled = options.disable ? false : options.enable ?? true;
+  const adapter = options.adapter ?? 'codex';
   const payload = deliveryTargetUpdateSchema.parse({
-    adapter: options.adapter ?? 'codex',
+    adapter,
     enabled,
-    mode: options.mode ?? 'sdk',
+    mode: options.mode ?? (adapter === 'hermes' ? 'webhook' : 'sdk'),
     threadId: options.thread,
     cwd: options.cwd,
     sandbox: options.sandbox,
@@ -859,6 +909,7 @@ export async function main(argv: string[] = process.argv.slice(2)) {
     .option('--snapshot', 'register a detached snapshot instead of live filesystem sync')
     .option('--linear-issue <issue>', 'optional Linear issue associated with this plan')
     .option('--execution-ready <true|false>', 'whether agent-review results say this plan is execution ready')
+    .option('--review-mode <mode>', 'review mode: planning|collaboration')
     .option('--codex-thread <threadId>', 'target Codex thread id for delivery metadata')
     .option('--codex-delivery <enabled|disabled>', 'whether Codex delivery is enabled for this plan')
     .option('--codex-mode <mode>', 'Codex delivery mode: sdk|app-server|fake')
@@ -902,12 +953,14 @@ export async function main(argv: string[] = process.argv.slice(2)) {
     .action(watchPlan);
 
   const agent = program.command('agent');
-  agent.command('next <planId>')
+  agent.command('next [planId]')
     .option('--url <url>')
     .option('--wait', 'wait for the next pending comment')
     .option('--no-wait', 'perform one immediate queue check and exit')
     .option('--timeout <ms>', 'positive timeout in milliseconds for --wait')
     .option('--lease-seconds <seconds>', 'positive claim lease in seconds')
+    .option('--all', 'claim across all active documents')
+    .option('--adapter <adapter>', 'delivery adapter filter for --all')
     .option('--json', 'required machine-readable output')
     .action((planId, options) => agentNext(planId, {
       ...options,
@@ -940,7 +993,7 @@ export async function main(argv: string[] = process.argv.slice(2)) {
     .option('--url <url>')
     .option('--adapter <adapter>', 'delivery adapter', 'codex')
     .option('--thread <threadId>', 'target thread id')
-    .option('--mode <mode>', 'sdk|app-server|fake', 'sdk')
+    .option('--mode <mode>', 'sdk|app-server|fake|webhook; defaults to sdk for codex and webhook for hermes')
     .option('--enable', 'enable delivery', true)
     .option('--disable', 'disable delivery')
     .option('--cwd <path>')
@@ -988,6 +1041,20 @@ export async function main(argv: string[] = process.argv.slice(2)) {
     .option('--run-id <id>')
     .option('--json')
     .action(resolveComment);
+
+  program.command('reply <commentId>')
+    .option('--url <url>')
+    .option('--body <text>', 'visible reply body')
+    .option('--role <role>', 'human|agent|system', 'agent')
+    .option('--claim <claimId>')
+    .option('--adapter <adapter>')
+    .option('--json')
+    .action(replyComment);
+
+  program.command('mode <planId> <reviewMode>')
+    .option('--url <url>')
+    .option('--json')
+    .action(setPlanMode);
 
   program.command('release <commentId>')
     .option('--url <url>')

@@ -7,7 +7,10 @@ import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import { ZodError } from 'zod';
 import {
   ackCommentSchema,
+  appendThreadEntrySchema,
+  changePlanModeSchema,
   claimCommentsSchema,
+  claimQueueSchema,
   createCommentSchema,
   createPlanNoteSchema,
   deferPlanSchema,
@@ -27,6 +30,7 @@ import { fail, ok, PlanReviewError } from '../util.js';
 import { planTitleFallback, renderedHtmlTitle, reviewShellTitle } from '../planTitles.js';
 import { resolveDeliveryWorkerConfig, type DeliveryWorkerConfig } from '../config.js';
 import { DeliveryWorker, type DeliveryWorkerOptions } from '../delivery/worker.js';
+import { buildAgentNextClaimed, buildAgentNextEmpty } from '../agentNext.js';
 
 export interface AppOptions {
   dbPath: string;
@@ -93,12 +97,15 @@ function localTimestampScript(): string {
 function fullyQualifiedPlanPath(item: ReturnType<PlanReviewStore['listPlans']>[number]): string {
   if (item.plan.sourcePath && path.isAbsolute(item.plan.sourcePath)) return item.plan.sourcePath;
   if (path.isAbsolute(String(item.plan.planPath))) return String(item.plan.planPath);
-  const worktreePath = item.plan.publicationMetadata.worktreePath;
+  const worktreePath = item.plan.publicationMetadata?.worktreePath ?? item.plan.rootPath;
   return worktreePath ? path.join(worktreePath, String(item.plan.planPath)) : String(item.plan.planPath);
 }
 
 function publicationMetadataHtml(item: ReturnType<PlanReviewStore['listPlans']>[number]): string {
   const metadata = item.plan.publicationMetadata;
+  if (!metadata || item.plan.reviewMode === 'collaboration') {
+    return `<dl class="plan-metadata"><div><dt>Mode</dt><dd><span class="ready-pill ready">Collaboration</span></dd></div><div><dt>Source</dt><dd><code>${escapeHtml(item.plan.sourcePath ?? item.plan.planPath)}</code></dd></div></dl>`;
+  }
   const linear = item.plan.linearIssueKey
     ? `<a href="${escapeHtml(item.plan.linearIssueUrl)}" target="_blank" rel="noreferrer"><code>${escapeHtml(item.plan.linearIssueKey)}</code></a>`
     : metadata.linearIssue ? `<code>${escapeHtml(metadata.linearIssue)}</code>` : '<span class="muted">None</span>';
@@ -156,9 +163,9 @@ function planCardSearch(item: ListedPlan): string {
   const metadata = item.plan.publicationMetadata;
   const pr = item.plan.pullRequest;
   const prTerms = pr ? ` ${pr.url} ${pr.number} ${pr.state} ${pr.status ?? ''} ${pr.merged ? 'merged' : ''} pr ${pr.status ?? pr.state} pr ${pr.state} pull request pr` : ' no pr unlinked';
-  const linearTerms = ` ${metadata.linearIssue ?? ''} ${item.plan.linearIssueKey ?? ''} ${item.plan.linearIssueUrl ?? ''}`;
+  const linearTerms = ` ${metadata?.linearIssue ?? ''} ${item.plan.linearIssueKey ?? ''} ${item.plan.linearIssueUrl ?? ''}`;
   const attentionTerms = planNeedsAttention(item) ? ' needs attention source missing source unavailable failed cached copy' : '';
-  return `${item.plan.repoName} ${item.plan.repoKey} ${item.plan.slug} ${fullyQualifiedPlanPath(item)} ${metadata.worktreePath} ${metadata.branch} ${item.latestNote?.body ?? ''}${linearTerms}${prTerms}${attentionTerms}`.toLowerCase();
+  return `${item.plan.repoName} ${item.plan.repoKey} ${item.plan.slug} ${item.plan.reviewMode} ${fullyQualifiedPlanPath(item)} ${metadata?.worktreePath ?? ''} ${metadata?.branch ?? ''} ${item.latestNote?.body ?? ''}${linearTerms}${prTerms}${attentionTerms}`.toLowerCase();
 }
 
 function hasStartedPlanProgress(item: ListedPlan): boolean {
@@ -180,7 +187,7 @@ function displayTitle(item: ListedPlan): string {
 function planNavigatorRank(item: ListedPlan): number {
   if (planNeedsAttention(item)) return 3;
   if (planComplete(item)) return 0;
-  if (item.plan.publicationMetadata.executionReady) return 1;
+  if (item.plan.publicationMetadata?.executionReady) return 1;
   return 2;
 }
 
@@ -195,7 +202,8 @@ function sortPlansForNavigator(plans: ListedPlan[]): ListedPlan[] {
 function planNavigatorStatus(item: ListedPlan): string {
   if (planNeedsAttention(item)) return 'Needs attention';
   if (planComplete(item)) return 'Complete';
-  if (item.plan.publicationMetadata.executionReady) return 'Execution ready';
+  if (item.plan.reviewMode === 'collaboration') return 'Collaboration';
+  if (item.plan.publicationMetadata?.executionReady) return 'Execution ready';
   return 'Execution not ready';
 }
 
@@ -209,14 +217,16 @@ function planNavigatorItemHtml(item: ListedPlan, currentPlanId: string): string 
   const status = planNavigatorStatus(item);
   return `<a class="plan-nav-item${active ? ' active' : ''}${planNeedsAttention(item) ? ' attention' : ''}" href="/p/${escapeHtml(item.plan.id)}" data-plan-nav-item data-plan-id="${escapeHtml(item.plan.id)}" aria-current="${active ? 'page' : 'false'}">
     <span class="plan-nav-title">${escapeHtml(displayTitle(item))}</span>
-    <span class="plan-nav-meta"><span class="plan-nav-pill ${item.plan.publicationMetadata.executionReady ? 'ready' : 'not-ready'}">${escapeHtml(status)}</span><span>${escapeHtml(planNavigatorProgress(item))}</span></span>
+    <span class="plan-nav-meta"><span class="plan-nav-pill ${item.plan.reviewMode === 'collaboration' || item.plan.publicationMetadata?.executionReady ? 'ready' : 'not-ready'}">${escapeHtml(status)}</span><span>${escapeHtml(planNavigatorProgress(item))}</span></span>
     <span class="plan-nav-submeta">pending ${item.counts.pending} · updated <time datetime="${escapeHtml(item.modifiedAt)}" data-local-timestamp>${escapeHtml(item.modifiedAt)}</time></span>
   </a>`;
 }
 
-function planNavigatorHtml(plans: ListedPlan[], currentPlanId: string): string {
+function planNavigatorHtml(plans: ListedPlan[], currentPlanId: string, label = 'plans'): string {
   const items = sortPlansForNavigator(plans).map(item => planNavigatorItemHtml(item, currentPlanId)).join('');
-  return `<aside id="plan-list-nav" aria-label="Active plans"><div class="plan-list-header"><h2>Active plans</h2><button id="plan-list-retry" type="button" hidden>Retry</button></div><div class="plan-list-error" id="plan-list-error" hidden>Unable to load plans.</div><div id="plan-list-items">${items || '<p class="plan-list-empty">No active plans.</p>'}</div></aside>`;
+  const title = label === 'documents' ? 'Active documents' : 'Active plans';
+  const empty = label === 'documents' ? 'No active documents.' : 'No active plans.';
+  return `<aside id="plan-list-nav" aria-label="${escapeHtml(title)}"><div class="plan-list-header"><h2>${escapeHtml(title)}</h2><button id="plan-list-retry" type="button" hidden>Retry</button></div><div class="plan-list-error" id="plan-list-error" hidden>Unable to load ${escapeHtml(label)}.</div><div id="plan-list-items">${items || `<p class="plan-list-empty">${escapeHtml(empty)}</p>`}</div></aside>`;
 }
 
 function planCardHtml(item: ListedPlan): string {
@@ -397,26 +407,32 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
   const escapedPlanId = escapeHtml(plan.id);
   const escapedShellTitle = escapeHtml(shellTitle);
   const escapedCurrentTitle = escapeHtml(currentTitle);
-  const readyLabel = plan.publicationMetadata.executionReady ? 'Execution ready' : 'Execution not ready';
+  const isCollaboration = plan.reviewMode === 'collaboration';
+  const readyLabel = isCollaboration ? 'Collaboration mode' : plan.publicationMetadata?.executionReady ? 'Execution ready' : 'Execution not ready';
   const encodedTitleFallback = escapeHtml(encodeClientData(reviewShellTitle(planTitleFallback(plan))));
-  const reviewButton = '<button id="request-execution-review" type="button">Request execution-ready review</button>';
-  const buildButton = '<button id="build-plan" type="button">Build Plan</button>';
+  const reviewButton = isCollaboration ? '' : '<button id="request-execution-review" type="button">Request execution-ready review</button>';
+  const buildButton = isCollaboration ? '' : '<button id="build-plan" type="button">Build Plan</button>';
   const commentsButton = '<button id="desktop-comments-toggle" class="comments-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Open comments">Comments <span id="desktop-comments-count" class="comments-count" hidden></span></button>';
+  const indexLink = isCollaboration ? '<a href="/">← Document index</a>' : '<a href="/">← Plan index</a>';
+  const archiveLabel = isCollaboration ? 'Archive document' : 'Archive plan';
+  const restoreLabel = isCollaboration ? 'Restore document' : 'Restore plan';
+  const resumeLabel = isCollaboration ? 'Resume document' : 'Resume plan';
+  const deferAction = isCollaboration ? '' : '<button id="defer-plan" type="button">Defer plan</button>';
   const navActions = plan.archivedAt
-    ? `<a href="/archive">← Archive</a>${reviewButton}${buildButton}<span id="archive-status" class="archive-status">Archived</span><button id="restore-plan" type="button">Restore plan</button>${commentsButton}`
+    ? `<a href="/archive">← Archive</a>${reviewButton}${buildButton}<span id="archive-status" class="archive-status">Archived</span><button id="restore-plan" type="button">${restoreLabel}</button>${commentsButton}`
     : plan.lifecycleState === 'deferred'
-      ? `<a href="/deferred">← Deferred</a>${reviewButton}${buildButton}<span id="archive-status" class="archive-status">Deferred</span><button id="resume-plan" type="button">Resume plan</button><button id="archive-plan" type="button">Archive plan</button>${commentsButton}`
-      : `<a href="/">← Plan index</a>${reviewButton}${buildButton}<span id="archive-status" class="archive-status" hidden></span><button id="defer-plan" type="button">Defer plan</button><button id="archive-plan" type="button">Archive plan</button>${commentsButton}`;
+      ? `<a href="/deferred">← Deferred</a>${reviewButton}${buildButton}<span id="archive-status" class="archive-status">Deferred</span><button id="resume-plan" type="button">${resumeLabel}</button><button id="archive-plan" type="button">${archiveLabel}</button>${commentsButton}`
+      : `${indexLink}${reviewButton}${buildButton}<span id="archive-status" class="archive-status" hidden></span>${deferAction}<button id="archive-plan" type="button">${archiveLabel}</button>${commentsButton}`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapedShellTitle}</title>
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="stylesheet" href="/client.css?v=${clientAssetVersion}">
-  </head><body data-plan-id="${escapedPlanId}" data-plan-title-fallback="${encodedTitleFallback}">
-    <nav id="plan-navbar" aria-label="Plan actions"><div id="plan-navbar-actions">${navActions}</div><div id="current-plan-bar"><strong id="current-plan-title">${escapedCurrentTitle}</strong><span class="ready-pill ${plan.publicationMetadata.executionReady ? 'ready' : 'not-ready'}">${escapeHtml(readyLabel)}</span></div></nav>
+  </head><body data-plan-id="${escapedPlanId}" data-review-mode="${escapeHtml(plan.reviewMode)}" data-plan-title-fallback="${encodedTitleFallback}">
+    <nav id="plan-navbar" aria-label="Plan actions"><div id="plan-navbar-actions">${navActions}</div><div id="current-plan-bar"><strong id="current-plan-title">${escapedCurrentTitle}</strong><span class="ready-pill ${isCollaboration || plan.publicationMetadata?.executionReady ? 'ready' : 'not-ready'}">${escapeHtml(readyLabel)}</span></div></nav>
     <div id="app">
-      ${planNavigatorHtml(plans, plan.id)}
+      ${planNavigatorHtml(plans, plan.id, isCollaboration ? 'documents' : 'plans')}
       <main id="review"><iframe id="plan-frame" sandbox="allow-same-origin allow-popups" src="/render/${escapedPlanId}"></iframe><div id="plan-touch-layer" aria-hidden="true"></div><button id="mobile-comments-toggle" class="comments-toggle" type="button" aria-controls="sidebar" aria-expanded="false">Comments</button><div id="hover-selection-box" class="selection-box hover" hidden></div><div id="active-selection-box" class="selection-box active" hidden></div></main>
-      <aside id="sidebar"><h1>Comments</h1><div id="sync-warning" hidden></div><section id="plan-notes-panel"><h2>Plan notes</h2><div id="plan-notes"></div><textarea id="plan-note-body" placeholder="Add a plan note for agents"></textarea><button id="add-plan-note" type="button">Add note</button></section><div id="deferred-refresh-notice" hidden>Plan updated in the background. Finish or cancel this comment to refresh.</div><div id="comments"></div></aside>
+      <aside id="sidebar"><h1>Comments</h1><div id="sync-warning" hidden></div><section id="plan-notes-panel"><h2>${isCollaboration ? 'Document notes' : 'Plan notes'}</h2><div id="plan-notes"></div><textarea id="plan-note-body" placeholder="${isCollaboration ? 'Add context for agents' : 'Add a plan note for agents'}"></textarea><button id="add-plan-note" type="button">Add note</button></section><div id="deferred-refresh-notice" hidden>Document updated in the background. Finish or cancel this comment to refresh.</div><div id="comments"></div></aside>
     </div>
     <div id="lightbox" class="lightbox" hidden><header><button id="zoom-out">-</button><button id="zoom-reset">Reset</button><button id="zoom-in">+</button><button id="pan-toggle">Pan</button><button id="close-lightbox">Close</button></header><div id="lightbox-stage" class="lightbox-stage"><img id="lightbox-image" alt=""><div id="image-selection-box" hidden></div></div></div>
     <div id="composer" hidden><textarea id="comment-body" placeholder="Comment on selection" inputmode="text" enterkeyhint="done" autocapitalize="sentences"></textarea><div id="comment-discard-warning" hidden>Your comment would be lost. Use Cancel to discard it.</div><button id="submit-comment">Submit</button><button id="cancel-comment">Cancel</button></div>
@@ -464,6 +480,8 @@ import { finder } from '/vendor/finder.js';
 import { Washi } from '/vendor/washi.js';
 
 const planId = document.body.dataset.planId;
+const isCollaborationMode = document.body.dataset.reviewMode === 'collaboration';
+const documentKind = isCollaborationMode ? 'document' : 'plan';
 let planTitleFallback = 'Plan Review';
 try {
   const bytes = Uint8Array.from(atob(document.body.dataset.planTitleFallback || ''), char => char.charCodeAt(0));
@@ -593,12 +611,12 @@ desktopCommentsToggle?.addEventListener('click', () => {
   setCommentsOpen(!document.body.classList.contains('comments-open'));
 });
 archivePlanButton?.addEventListener('click', async () => {
-  if (!confirm('Archive this plan?')) return;
+  if (!confirm('Archive this '+documentKind+'?')) return;
   archivePlanButton.disabled = true;
   const res = await fetch('/api/plans/'+encodeURIComponent(planId)+'/archive', { method: 'POST' });
   if (!res.ok) {
     archivePlanButton.disabled = false;
-    alert('Unable to archive plan.');
+    alert('Unable to archive '+documentKind+'.');
     return;
   }
   window.location.href = '/';
@@ -608,19 +626,19 @@ restorePlanButton?.addEventListener('click', async () => {
   const res = await fetch('/api/plans/'+encodeURIComponent(planId)+'/unarchive', { method: 'POST' });
   if (!res.ok) {
     restorePlanButton.disabled = false;
-    alert('Unable to restore plan.');
+    alert('Unable to restore '+documentKind+'.');
     return;
   }
   window.location.href = '/';
 });
 deferPlanButton?.addEventListener('click', async () => {
-  const note = prompt('Why defer this plan, and what should the next agent know?');
+  const note = prompt('Why defer this '+documentKind+', and what should the next agent know?');
   if (!note || !note.trim()) return;
   deferPlanButton.disabled = true;
   const res = await fetch('/api/plans/'+encodeURIComponent(planId)+'/defer', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ note }) });
   if (!res.ok) {
     deferPlanButton.disabled = false;
-    alert('Unable to defer plan. Add a note/reason and try again.');
+    alert('Unable to defer '+documentKind+'. Add a note/reason and try again.');
     return;
   }
   window.location.href = '/deferred';
@@ -631,7 +649,7 @@ resumePlanButton?.addEventListener('click', async () => {
   const res = await fetch('/api/plans/'+encodeURIComponent(planId)+'/resume', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(note?.trim() ? { note } : {}) });
   if (!res.ok) {
     resumePlanButton.disabled = false;
-    alert('Unable to resume plan.');
+    alert('Unable to resume '+documentKind+'.');
     return;
   }
   window.location.href = '/';
@@ -643,7 +661,7 @@ addPlanNoteButton?.addEventListener('click', async () => {
   const res = await fetch('/api/plans/'+encodeURIComponent(planId)+'/notes', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ body }) });
   if (!res.ok) {
     addPlanNoteButton.disabled = false;
-    alert('Unable to add plan note.');
+    alert('Unable to add '+documentKind+' note.');
     return;
   }
   if (planNoteBody) planNoteBody.value = '';
@@ -878,14 +896,16 @@ function handlePlanReviewEvent(event){
     || event.type === 'comment.acknowledged'
     || event.type === 'comment.resolved'
     || event.type === 'comment.released'
-    || event.type === 'comment.deleted') {
+    || event.type === 'comment.deleted'
+    || event.type === 'comment.thread_entry.created'
+    || event.type === 'plan.mode.changed') {
     scheduleMetaLoad();
   }
 }
 function renderPlanNotes(items){
   if (!planNotes) return;
-  const rows = items.map(note => '<div class="note-row"><p>'+escapeHtml(note.body)+'</p><small>'+escapeHtml(note.createdBy?.displayName || 'Plan reviewer')+' · '+escapeHtml(new Date(note.createdAt).toLocaleString())+'</small></div>').join('');
-  planNotes.innerHTML = rows || '<p class="comments-empty">No plan notes yet.</p>';
+  const rows = items.map(note => '<div class="note-row"><p>'+escapeHtml(note.body)+'</p><small>'+escapeHtml(note.createdBy?.displayName || (isCollaborationMode ? 'Document reviewer' : 'Plan reviewer'))+' · '+escapeHtml(new Date(note.createdAt).toLocaleString())+'</small></div>').join('');
+  planNotes.innerHTML = rows || '<p class="comments-empty">No '+documentKind+' notes yet.</p>';
 }
 function renderComments(items){
   renderMarkers(items);
@@ -898,12 +918,14 @@ function renderComments(items){
     const metadata = [response.responseSummary || response.resolutionNote || response.note, changed, response.runId, response.handoffPath, response.commitSha].filter(Boolean).map(escapeHtml).join(' · ');
     const context = [c.anchor?.textPreview, c.anchor?.selectedText, c.anchor?.textQuote?.exact, c.anchor?.cssSelector].filter(Boolean).map(escapeHtml).join(' · ');
     const screenshot = c.screenshotAssetId ? '<a href="/comment-assets/'+encodeURIComponent(c.screenshotAssetId)+'">screenshot</a>' : '';
+    const entries = Array.isArray(c.threadEntries) && c.threadEntries.length ? c.threadEntries : [{ role: 'human', body: c.body, createdBy: c.createdBy, createdAt: c.createdAt }];
+    const thread = '<div class="comment-thread">'+entries.map(entry => '<div class="thread-entry '+escapeHtml(entry.role || '')+'"><strong>'+escapeHtml(entry.createdBy?.displayName || entry.role || 'Reviewer')+'</strong><p>'+escapeHtml(entry.body || '')+'</p><small>'+escapeHtml(entry.role || '')+' · '+escapeHtml(entry.createdAt ? new Date(entry.createdAt).toLocaleString() : '')+'</small></div>').join('')+'</div>';
     const canDelete = c.status === 'pending' && !c.claim;
     const deleteError = pendingDeleteError?.commentId === c.id ? '<small class="comment-delete-error" data-delete-error="'+escapeHtml(c.id)+'">'+escapeHtml(pendingDeleteError.message)+'</small>' : '<small class="comment-delete-error" data-delete-error="'+escapeHtml(c.id)+'" hidden></small>';
     const deleteAction = canDelete || pendingDeleteError?.commentId === c.id ? '<p>'+(canDelete ? '<button type="button" data-delete-comment="'+escapeHtml(c.id)+'">Delete</button> ' : '')+deleteError+'</p>' : '';
-    return '<div class="comment-row" data-comment-id="'+escapeHtml(c.id)+'"><strong>#'+c.sequence+' '+escapeHtml(c.status)+'</strong><p>'+escapeHtml(c.body)+'</p><small>'+escapeHtml(c.anchorType)+' · '+escapeHtml(c.anchorState)+(metadata ? ' · '+metadata : '')+'</small>'+(context ? '<p><small>Context: '+context+'</small></p>' : '')+(screenshot ? '<p><small>'+screenshot+'</small></p>' : '')+deleteAction+'</div>';
+    return '<div class="comment-row" data-comment-id="'+escapeHtml(c.id)+'"><strong>#'+c.sequence+' '+escapeHtml(c.status)+'</strong>'+thread+'<small>'+escapeHtml(c.anchorType)+' · '+escapeHtml(c.anchorState)+(metadata ? ' · '+metadata : '')+'</small>'+(context ? '<p><small>Context: '+context+'</small></p>' : '')+(screenshot ? '<p><small>'+screenshot+'</small></p>' : '')+deleteAction+'</div>';
   }).join('');
-  comments.innerHTML = rows || '<p class="comments-empty">No comments yet. Tap a plan section to start one.</p>';
+  comments.innerHTML = rows || '<p class="comments-empty">No comments yet. Tap a '+documentKind+' section to start one.</p>';
 }
 async function deleteComment(commentId, button){
   const error = comments.querySelector('[data-delete-error="'+CSS.escape(commentId)+'"]');
@@ -941,17 +963,17 @@ function planItemRatio(item){ return item?.progress?.totalPhases > 0 ? item.prog
 function planItemRank(item){ if (planItemAttention(item)) return 3; if (planItemComplete(item)) return 0; if (item?.plan?.publicationMetadata?.executionReady) return 1; return 2; }
 function planItemTitle(item){ return String(item?.displayTitle || item?.plan?.repoName + ' / ' + item?.plan?.slug); }
 function sortPlanNavItems(items){ return [...items].sort((a,b)=>planItemRank(a)-planItemRank(b)||planItemRatio(b)-planItemRatio(a)||String(b.activityAt||'').localeCompare(String(a.activityAt||''))||planItemTitle(a).localeCompare(planItemTitle(b))||String(a?.plan?.id||'').localeCompare(String(b?.plan?.id||''))); }
-function planItemStatus(item){ if (planItemAttention(item)) return 'Needs attention'; if (planItemComplete(item)) return 'Complete'; if (item?.plan?.publicationMetadata?.executionReady) return 'Execution ready'; return 'Execution not ready'; }
+function planItemStatus(item){ if (planItemAttention(item)) return 'Needs attention'; if (planItemComplete(item)) return 'Complete'; if (item?.plan?.reviewMode === 'collaboration') return 'Collaboration'; if (item?.plan?.publicationMetadata?.executionReady) return 'Execution ready'; return 'Execution not ready'; }
 function planItemProgress(item){ return item?.progress?.totalPhases ? item.progress.completedPhases + '/' + item.progress.totalPhases : 'No phases'; }
-function renderPlanNavigatorItems(items){
+function renderPlanNavigatorItems(items, label = 'plans'){
   if (!planListItems) return;
   const html = sortPlanNavItems(items).map(item => {
     const id = String(item?.plan?.id || '');
     const active = id === planId;
     const status = planItemStatus(item);
-    return '<a class="plan-nav-item'+(active ? ' active' : '')+(planItemAttention(item) ? ' attention' : '')+'" href="/p/'+encodeURIComponent(id)+'" data-plan-nav-item data-plan-id="'+escapeHtml(id)+'" aria-current="'+(active ? 'page' : 'false')+'"><span class="plan-nav-title">'+escapeHtml(planItemTitle(item))+'</span><span class="plan-nav-meta"><span class="plan-nav-pill '+(item?.plan?.publicationMetadata?.executionReady ? 'ready' : 'not-ready')+'">'+escapeHtml(status)+'</span><span>'+escapeHtml(planItemProgress(item))+'</span></span><span class="plan-nav-submeta">pending '+Number(item?.counts?.pending || 0)+' · updated '+escapeHtml(String(item?.modifiedAt || ''))+'</span></a>';
+    return '<a class="plan-nav-item'+(active ? ' active' : '')+(planItemAttention(item) ? ' attention' : '')+'" href="/p/'+encodeURIComponent(id)+'" data-plan-nav-item data-plan-id="'+escapeHtml(id)+'" aria-current="'+(active ? 'page' : 'false')+'"><span class="plan-nav-title">'+escapeHtml(planItemTitle(item))+'</span><span class="plan-nav-meta"><span class="plan-nav-pill '+(item?.plan?.reviewMode === 'collaboration' || item?.plan?.publicationMetadata?.executionReady ? 'ready' : 'not-ready')+'">'+escapeHtml(status)+'</span><span>'+escapeHtml(planItemProgress(item))+'</span></span><span class="plan-nav-submeta">pending '+Number(item?.counts?.pending || 0)+' · updated '+escapeHtml(String(item?.modifiedAt || ''))+'</span></a>';
   }).join('');
-  planListItems.innerHTML = html || '<p class="plan-list-empty">No active plans.</p>';
+  planListItems.innerHTML = html || '<p class="plan-list-empty">No active '+(label === 'documents' ? 'documents' : 'plans')+'.</p>';
 }
 async function loadPlanNavigator(){
   if (!planListItems) return;
@@ -959,7 +981,7 @@ async function loadPlanNavigator(){
     const res = await fetch('/api/plans/navigator?limit=200&currentPlanId=' + encodeURIComponent(planId), { cache: 'no-store' });
     const json = await res.json();
     if (!json.ok) throw new Error(json.error?.message || 'Unable to load plans');
-    renderPlanNavigatorItems(json.data.plans || []);
+    renderPlanNavigatorItems(json.data.plans || [], document.querySelector('#plan-list-nav')?.getAttribute('aria-label') === 'Active documents' ? 'documents' : 'plans');
     if (planListError) planListError.hidden = true;
     if (planListRetry) planListRetry.hidden = true;
   } catch (error) {
@@ -1941,8 +1963,10 @@ export function createApp(options: AppOptions): FastifyInstance {
           error: plan.lastSyncError,
           active: plan.lifecycleState === 'active' && plan.watchMode === 'filesystem' && plan.lastSyncStatus !== 'failed'
         },
+        reviewMode: plan.reviewMode,
         publicationMetadata: plan.publicationMetadata,
         codexDelivery: store.getDeliveryTarget(plan.id, 'codex'),
+        hermesDelivery: store.getDeliveryTarget(plan.id, 'hermes'),
         renderedWithWarnings: rendered.warnings,
         agentInstructions: buildRegistrationAgentInstructions({ planId: result.planId, reviewUrl: result.reviewUrl })
       });
@@ -1995,12 +2019,26 @@ export function createApp(options: AppOptions): FastifyInstance {
         comments: store.listComments(plan.id),
         delivery: {
           codex: store.getDeliveryTarget(plan.id, 'codex'),
+          hermes: store.getDeliveryTarget(plan.id, 'hermes'),
           outbox: store.listDeliveryRows(plan.id),
           runtime: deliveryRuntime()
         },
         latestEventSequence: store.latestEventSequence(plan.id, 'all'),
         reviewUrl: `/p/${plan.id}`
       });
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.patch('/api/plans/:planId', async (request, reply) => {
+    try {
+      const { planId } = request.params as { planId: string };
+      const { plan } = store.getPlan(planId);
+      const input = changePlanModeSchema.parse(request.body);
+      const result = store.changePlanMode(plan.id, input.reviewMode);
+      bus.emitEvent(result.event);
+      return ok({ plan: result.plan, changed: result.changed });
     } catch (error) {
       sendError(reply, error);
     }
@@ -2271,6 +2309,17 @@ export function createApp(options: AppOptions): FastifyInstance {
     }
   });
 
+  app.post('/api/comments/:commentId/replies', async (request, reply) => {
+    try {
+      const { commentId } = request.params as { commentId: string };
+      const result = store.appendThreadEntry(commentId, appendThreadEntrySchema.parse(request.body));
+      if (result.created) bus.emitEvent(result.event);
+      return ok({ comment: result.comment, entry: result.entry, created: result.created });
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
   app.post('/api/comments/:commentId/ack', async (request, reply) => {
     try {
 	      const { commentId } = request.params as { commentId: string };
@@ -2313,6 +2362,36 @@ export function createApp(options: AppOptions): FastifyInstance {
       for (const event of result.expiredEvents ?? []) bus.emitEvent(event);
       bus.emitEvent(result.event);
       return ok({ comment: result.comment });
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.post('/api/agent/queue/claim', async (request, reply) => {
+    try {
+      const input = claimQueueSchema.parse(request.body ?? {});
+      const agentId = request.headers['x-agent-id']?.toString() || 'plan-review-cli';
+      const result = store.claimNextAcrossQueue(input, agentId);
+      for (const event of result.events) bus.emitEvent(event);
+      const comment = result.claimed[0];
+      if (!comment?.claim?.id) return ok({ ...buildAgentNextEmpty('all'), skipped: result.skipped ?? [] });
+      const { plan } = store.getPlan(comment.planId);
+      const host = request.headers.host ? `http://${request.headers.host}` : deliveryConfig.serviceUrl;
+      return ok({
+        ...buildAgentNextClaimed({
+          planId: plan.id,
+          commentId: comment.id,
+          claimId: comment.claim.id,
+          conversationPayload: comment.conversationPayload,
+          serviceUrl: host,
+          reviewMode: plan.reviewMode,
+          planPath: plan.planPath,
+          sourcePath: plan.sourcePath,
+          source: { path: plan.sourcePath, watchMode: plan.watchMode, lastSyncStatus: plan.lastSyncStatus }
+        }),
+        leaseExpiresAt: result.leaseExpiresAt,
+        skipped: result.skipped ?? []
+      });
     } catch (error) {
       sendError(reply, error);
     }

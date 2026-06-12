@@ -6,8 +6,10 @@ export const anchorStateSchema = z.enum(['mapped', 'stale', 'unmapped']);
 export const claimModeSchema = z.enum(['one', 'selected', 'bulk']);
 export const planLifecycleStateSchema = z.enum(['active', 'deferred', 'archived']);
 export const noteAuthorSchema = z.object({ displayName: z.string().optional() }).optional();
-export const deliveryAdapterSchema = z.enum(['codex']);
-export const deliveryModeSchema = z.enum(['sdk', 'app-server', 'fake']);
+export const reviewModeSchema = z.enum(['planning', 'collaboration']);
+export const threadEntryRoleSchema = z.enum(['human', 'agent', 'system']);
+export const deliveryAdapterSchema = z.enum(['codex', 'hermes']);
+export const deliveryModeSchema = z.enum(['sdk', 'app-server', 'fake', 'webhook']);
 export const deliverySandboxSchema = z.enum(['read-only', 'workspace-write', 'danger-full-access']);
 export const deliveryEffortSchema = z.enum(['low', 'medium', 'high', 'xhigh']);
 export const deliveryStatusSchema = z.enum([
@@ -41,6 +43,8 @@ export const eventTypeSchema = z.enum([
   'plan.deferred',
   'plan.resumed',
   'plan.note.created',
+  'plan.mode.changed',
+  'comment.thread_entry.created',
   'heartbeat'
 ]);
 
@@ -104,12 +108,27 @@ const deliveryTargetUpdateBaseSchema = z.object({
   autoResolve: z.boolean().default(false)
 });
 
-function requireDeliveryThreadWhenEnabled(input: { enabled?: boolean; threadId?: string }, context: z.RefinementCtx): void {
+function requireDeliveryThreadWhenEnabled(input: { enabled?: boolean; threadId?: string; adapter?: DeliveryAdapter; mode?: DeliveryMode }, context: z.RefinementCtx): void {
   if (input.enabled && !input.threadId) {
     context.addIssue({
       code: 'custom',
       path: ['threadId'],
       message: 'threadId is required when delivery is enabled'
+    });
+  }
+  const adapter = input.adapter ?? 'codex';
+  if (adapter === 'codex' && input.mode === 'webhook') {
+    context.addIssue({
+      code: 'custom',
+      path: ['mode'],
+      message: 'webhook delivery mode is only supported for the hermes adapter'
+    });
+  }
+  if (adapter === 'hermes' && (input.mode === 'sdk' || input.mode === 'app-server')) {
+    context.addIssue({
+      code: 'custom',
+      path: ['mode'],
+      message: 'Hermes delivery mode must be fake or webhook'
     });
   }
 }
@@ -133,7 +152,8 @@ export const registerPlanSchema = z.object({
   slug: z.string().optional(),
   html: z.string().min(1),
   fileHash: z.string().min(1),
-  publicationMetadata: planPublicationMetadataSchema,
+  publicationMetadata: planPublicationMetadataSchema.optional(),
+  reviewMode: reviewModeSchema.optional(),
   sourcePath: z.string().min(1).optional(),
   sourceMtimeMs: z.number().nonnegative().optional(),
   sourceSize: z.number().int().nonnegative().optional(),
@@ -153,7 +173,15 @@ export const registerPlanSchema = z.object({
       message: 'sourcePath is required when watchMode is filesystem'
     });
   }
-  if (input.publicationMetadata.branch !== input.branch) {
+  const inferredMode = input.reviewMode ?? (input.publicationMetadata?.executionReadyBasis || input.planPath.startsWith('thoughts/plans/') ? 'planning' : 'collaboration');
+  if (inferredMode === 'planning' && !input.publicationMetadata) {
+    context.addIssue({
+      code: 'custom',
+      path: ['publicationMetadata'],
+      message: 'publicationMetadata is required for planning mode'
+    });
+  }
+  if (input.publicationMetadata && input.publicationMetadata.branch !== input.branch) {
     context.addIssue({
       code: 'custom',
       path: ['publicationMetadata', 'branch'],
@@ -207,6 +235,27 @@ export const releaseCommentSchema = z.object({
   reason: z.string().optional()
 });
 
+export const changePlanModeSchema = z.object({
+  reviewMode: reviewModeSchema
+});
+
+export const appendThreadEntrySchema = z.object({
+  role: threadEntryRoleSchema.default('agent'),
+  body: z.string().trim().min(1),
+  createdBy: noteAuthorSchema,
+  claimId: z.string().min(1).optional(),
+  deliveryAdapter: deliveryAdapterSchema.optional(),
+  action: z.record(z.string(), z.unknown()).optional(),
+  clientMutationId: z.string().optional()
+});
+
+export const claimQueueSchema = z.object({
+  adapter: deliveryAdapterSchema.optional(),
+  reviewMode: reviewModeSchema.optional(),
+  repoKey: z.string().min(1).optional(),
+  leaseSeconds: z.number().int().positive().max(3600).default(300)
+});
+
 export const createPlanNoteSchema = z.object({
   body: z.string().trim().min(1),
   createdBy: noteAuthorSchema,
@@ -225,6 +274,8 @@ export const resumePlanSchema = z.object({
   clientMutationId: z.string().optional()
 });
 
+export type ReviewMode = z.infer<typeof reviewModeSchema>;
+export type ThreadEntryRole = z.infer<typeof threadEntryRoleSchema>;
 export type PlanPublicationMetadata = z.infer<typeof planPublicationMetadataSchema>;
 export type PlanPullRequest = z.infer<typeof planPullRequestSchema>;
 export type RegisterPlanInput = z.infer<typeof registerPlanSchema>;
@@ -235,6 +286,8 @@ export type DeliveryTargetInput = z.infer<typeof deliveryTargetUpdateSchema>;
 export type CreateCommentInput = z.infer<typeof createCommentSchema>;
 export type ClaimCommentsInput = z.infer<typeof claimCommentsSchema>;
 export type AckCommentInput = z.infer<typeof ackCommentSchema>;
+export type AppendThreadEntryInput = z.infer<typeof appendThreadEntrySchema>;
+export type ClaimQueueInput = z.infer<typeof claimQueueSchema>;
 export type ResolveCommentInput = z.infer<typeof resolveCommentSchema>;
 export type CreatePlanNoteInput = z.infer<typeof createPlanNoteSchema>;
 export type DeferPlanInput = z.infer<typeof deferPlanSchema>;

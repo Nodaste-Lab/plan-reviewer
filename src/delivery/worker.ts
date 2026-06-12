@@ -3,13 +3,48 @@ import type { CodexClient } from '../codex/client.js';
 import { FakeCodexClient } from '../codex/client.js';
 import { SdkCodexClient } from '../codex/sdkClient.js';
 import { AppServerCodexClient } from '../codex/appServerClient.js';
-import { deliveryErrorShape, type CodexDeliveryInput, type CodexDeliveryResult, type DeliveryOutboxRow } from './types.js';
-import type { DeliveryMode } from '../schemas.js';
+import { deliveryErrorShape, DeliveryTransportError, type CodexDeliveryInput, type CodexDeliveryResult, type DeliveryOutboxRow, type HermesDeliveryPayload, type HermesDeliveryResult } from './types.js';
+import type { DeliveryAdapter, DeliveryMode } from '../schemas.js';
 import { PlanReviewStore, type StoredEvent } from '../storage/database.js';
 import { PlanReviewError } from '../util.js';
 
-const DELIVERY_AGENT_ID = 'plan-review-delivery:codex';
 const DELIVERY_LEASE_SECONDS = 1800;
+
+interface HermesClient {
+  deliverComment(input: { target: { threadId?: string }; payload: HermesDeliveryPayload }): Promise<HermesDeliveryResult>;
+}
+
+class FakeHermesClient implements HermesClient {
+  async deliverComment(input: { target: { threadId?: string }; payload: HermesDeliveryPayload }): Promise<HermesDeliveryResult> {
+    return {
+      replyBody: `Hermes fake response for ${input.payload.commentId}.`,
+      finalResponse: `Hermes fake response for ${input.payload.commentId}.`,
+      threadId: input.target.threadId ?? 'fake-hermes',
+      changedFiles: input.payload.sourcePath ? [input.payload.sourcePath] : undefined
+    };
+  }
+}
+
+class WebhookHermesClient implements HermesClient {
+  async deliverComment(input: { target: { threadId?: string }; payload: HermesDeliveryPayload }): Promise<HermesDeliveryResult> {
+    const url = input.target.threadId;
+    if (!url) throw new DeliveryTransportError('hermes_webhook_missing_url', 'Hermes webhook mode requires threadId to contain the local webhook URL', false);
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input.payload)
+    });
+    if (!response.ok) {
+      throw new DeliveryTransportError('hermes_webhook_failed', `Hermes webhook returned HTTP ${response.status}`, response.status >= 500 || response.status === 429);
+    }
+    const json = await response.json().catch(() => ({})) as HermesDeliveryResult;
+    return json;
+  }
+}
+
+function deliveryAgentId(adapter: DeliveryAdapter): string {
+  return `plan-review-delivery:${adapter}`;
+}
 
 export interface DeliveryWorkerOptions {
   enabled?: boolean;
@@ -119,11 +154,17 @@ export class DeliveryWorker {
     }
   }
 
-  private clientFor(mode: DeliveryMode): CodexClient {
+  private codexClientFor(mode: DeliveryMode): CodexClient {
     if (this.options.clientFactory) return this.options.clientFactory(mode);
     if (mode === 'fake') return new FakeCodexClient();
     if (mode === 'app-server') return new AppServerCodexClient();
     return new SdkCodexClient();
+  }
+
+  private hermesClientFor(mode: DeliveryMode): HermesClient {
+    if (mode === 'fake') return new FakeHermesClient();
+    if (mode === 'webhook') return new WebhookHermesClient();
+    throw new DeliveryTransportError('hermes_mode_invalid', 'Hermes delivery mode must be fake or webhook', false);
   }
 
   private async processRow(row: DeliveryOutboxRow): Promise<void> {
@@ -149,7 +190,7 @@ export class DeliveryWorker {
         claimed = this.store.claimComments(
           row.planId,
           { mode: 'selected', commentIds: [row.commentId], leaseSeconds: DELIVERY_LEASE_SECONDS },
-          DELIVERY_AGENT_ID
+          deliveryAgentId(row.adapter)
         );
       } catch (error) {
         if (error instanceof PlanReviewError && (error.code === 'claim_conflict' || error.code === 'invalid_state' || error.code === 'not_found')) {
@@ -167,36 +208,75 @@ export class DeliveryWorker {
       claimId = comment.claim.id;
       this.store.markDeliveryStatus(row.id, 'delivering', { claimId, targetThreadId: target.threadId });
       this.inFlightThreads.add(target.threadId);
-      const prompt = buildCodexDeliveryPrompt({
-        planId: row.planId,
-        reviewUrl: String(comment.conversationPayload?.evidence && typeof comment.conversationPayload.evidence === 'object'
-          ? (comment.conversationPayload.evidence as Record<string, unknown>).reviewUrl ?? `/p/${row.planId}`
-          : `/p/${row.planId}`),
-        serviceUrl: this.options.serviceUrl,
-        comment,
-        claimId
-      });
-      const input: CodexDeliveryInput = { target, comment, claimId, prompt };
-      const result = await this.clientFor(target.mode).deliverComment(input);
-      this.store.markDeliveryStatus(row.id, 'ack_pending', {
-        adapterTurnId: result.turnId ?? null,
-        result: this.resultJson(result),
-        error: null
-      });
-      await this.ackCompletedRow(this.store.getDeliveryRow(row.id)!);
-      const ackedRow = this.store.getDeliveryRow(row.id)!;
-      if (ackedRow.status === 'delivered' && target.autoResolve && result.fullyResolved) {
-        const latest = this.store.getDeliveryRow(row.id)!;
-        const resolved = this.store.resolveComment(row.commentId, {
-          resolutionNote: 'Codex delivery response indicated the feedback was fully resolved.',
-          action: {
-            runId: result.turnId,
-            responseSummary: result.finalResponse,
-            changedFiles: result.changedFiles
-          }
+      if (row.adapter === 'hermes') {
+        const plan = this.store.getPlan(row.planId).plan;
+        const payload: HermesDeliveryPayload = {
+          planId: row.planId,
+          commentId: comment.id,
+          claimId,
+          reviewMode: plan.reviewMode,
+          sourcePath: plan.sourcePath,
+          planPath: plan.planPath,
+          anchor: comment.anchor,
+          context: {
+            body: comment.body,
+            anchorType: comment.anchorType,
+            anchorState: comment.anchorState,
+            conversationPayload: comment.conversationPayload
+          },
+          screenshot: comment.screenshotAssetId ? { assetId: comment.screenshotAssetId, url: `${this.options.serviceUrl}/comment-assets/${comment.screenshotAssetId}` } : undefined,
+          threadHistory: comment.threadEntries
+        };
+        const result = await this.hermesClientFor(target.mode).deliverComment({ target, payload });
+        if (result.replyBody) {
+          const reply = this.store.appendThreadEntry(comment.id, {
+            role: 'agent',
+            body: result.replyBody,
+            claimId,
+            deliveryAdapter: 'hermes',
+            createdBy: { displayName: 'Hermes' },
+            action: { turnId: result.turnId, changedFiles: result.changedFiles }
+          });
+          this.options.eventBus?.emitEvent(reply.event);
+        }
+        this.store.markDeliveryStatus(row.id, 'ack_pending', {
+          adapterTurnId: result.turnId ?? null,
+          result: this.resultJson({ finalResponse: result.finalResponse ?? result.replyBody ?? 'Hermes delivery completed.', threadId: result.threadId ?? target.threadId ?? 'hermes', turnId: result.turnId, raw: result.raw, fullyResolved: result.fullyResolved, changedFiles: result.changedFiles }),
+          error: null
         });
-        if (resolved.event) this.options.eventBus?.emitEvent(resolved.event);
-        this.store.markDeliveryStatus(latest.id, 'resolved');
+        await this.ackCompletedRow(this.store.getDeliveryRow(row.id)!);
+      } else {
+        const prompt = buildCodexDeliveryPrompt({
+          planId: row.planId,
+          reviewUrl: String(comment.conversationPayload?.evidence && typeof comment.conversationPayload.evidence === 'object'
+            ? (comment.conversationPayload.evidence as Record<string, unknown>).reviewUrl ?? `/p/${row.planId}`
+            : `/p/${row.planId}`),
+          serviceUrl: this.options.serviceUrl,
+          comment,
+          claimId
+        });
+        const input: CodexDeliveryInput = { target, comment, claimId, prompt };
+        const result = await this.codexClientFor(target.mode).deliverComment(input);
+        this.store.markDeliveryStatus(row.id, 'ack_pending', {
+          adapterTurnId: result.turnId ?? null,
+          result: this.resultJson(result),
+          error: null
+        });
+        await this.ackCompletedRow(this.store.getDeliveryRow(row.id)!);
+        const ackedRow = this.store.getDeliveryRow(row.id)!;
+        if (ackedRow.status === 'delivered' && target.autoResolve && result.fullyResolved) {
+          const latest = this.store.getDeliveryRow(row.id)!;
+          const resolved = this.store.resolveComment(row.commentId, {
+            resolutionNote: 'Codex delivery response indicated the feedback was fully resolved.',
+            action: {
+              runId: result.turnId,
+              responseSummary: result.finalResponse,
+              changedFiles: result.changedFiles
+            }
+          });
+          if (resolved.event) this.options.eventBus?.emitEvent(resolved.event);
+          this.store.markDeliveryStatus(latest.id, 'resolved');
+        }
       }
     } catch (error) {
       const shape = deliveryErrorShape(error);

@@ -64,6 +64,34 @@ export interface CodexDeliveryResult {
   changedFiles?: string[];
 }
 
+export interface HermesDeliveryPayload {
+  planId: string;
+  commentId: string;
+  claimId: string;
+  reviewMode: string;
+  sourcePath?: string;
+  planPath: string;
+  anchor: Record<string, unknown>;
+  context: Record<string, unknown>;
+  screenshot?: Record<string, unknown>;
+  threadHistory: StoredComment['threadEntries'];
+}
+
+export interface HermesDeliveryInput {
+  target: DeliveryTargetRecord;
+  payload: HermesDeliveryPayload;
+}
+
+export interface HermesDeliveryResult {
+  replyBody?: string;
+  finalResponse?: string;
+  threadId?: string;
+  turnId?: string;
+  raw?: Record<string, unknown>;
+  fullyResolved?: boolean;
+  changedFiles?: string[];
+}
+
 export class DeliveryTransportError extends Error {
   constructor(
     public code: string,

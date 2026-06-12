@@ -41,6 +41,7 @@ function storelessComment(id: string): StoredComment {
     anchorState: 'mapped',
     anchor: {},
     conversationPayload: { type: 'browser.comment.v1', commentId: id },
+    threadEntries: [],
     createdBy: {},
     createdAt: now,
     claim: null
@@ -50,7 +51,7 @@ function storelessComment(id: string): StoredComment {
 test('schemas validate locked registration, comment, and claim contracts', () => {
   const register = registerPlanSchema.parse(sampleRegisterPayload());
   assert.equal(register.updateMode, 'upsert');
-  assert.equal(register.publicationMetadata.executionReadyBasis, 'agent-review-results');
+  assert.equal(register.publicationMetadata!.executionReadyBasis, 'agent-review-results');
   assert.throws(
     () => registerPlanSchema.parse(sampleRegisterPayload({ publicationMetadata: undefined })),
     /publicationMetadata/
@@ -77,10 +78,170 @@ test('schemas validate locked registration, comment, and claim contracts', () =>
   assert.throws(() => claimCommentsSchema.parse({ mode: 'bulk', limit: 0 }));
 });
 
+test('review modes infer, override, expose, and change without source edits', async () => {
+  const collaborationPayload = sampleRegisterPayload({
+    planPath: 'docs/brief.html',
+    slug: 'brief',
+    publicationMetadata: undefined,
+    reviewMode: undefined
+  });
+  const parsed = registerPlanSchema.parse(collaborationPayload);
+  assert.equal(parsed.publicationMetadata, undefined);
+
+  const app = createApp({ dbPath: tempDbPath('review-mode'), delivery: { enabled: false } });
+  try {
+    const collab = await app.inject({ method: 'POST', url: '/api/plans/register', payload: collaborationPayload });
+    assert.equal(collab.statusCode, 200);
+    assert.equal(collab.json().data.reviewMode, 'collaboration');
+    const planId = collab.json().data.planId;
+    const detail = await app.inject({ method: 'GET', url: `/api/plans/${planId}` });
+    assert.equal(detail.json().data.plan.reviewMode, 'collaboration');
+    assert.equal(detail.json().data.plan.publicationMetadata, undefined);
+    const shell = await app.inject({ method: 'GET', url: `/p/${planId}` });
+    assert.equal(shell.statusCode, 200);
+    assert.match(shell.body, /data-review-mode="collaboration"/);
+    assert.match(shell.body, /Document index/);
+    assert.match(shell.body, /Archive document/);
+    assert.doesNotMatch(shell.body, /Defer plan/);
+    const client = await app.inject({ method: 'GET', url: '/client.js' });
+    assert.match(client.body, /No '\+documentKind\+' notes yet/);
+    assert.match(client.body, /Tap a '\+documentKind\+' section to start one/);
+    assert.doesNotMatch(client.body, /Archive this plan|Unable to archive plan|Unable to add plan note|No plan notes yet|Tap a plan section/);
+
+    const changed = await app.inject({ method: 'PATCH', url: `/api/plans/${planId}`, payload: { reviewMode: 'planning' } });
+    assert.equal(changed.statusCode, 200);
+    assert.equal(changed.json().data.plan.reviewMode, 'planning');
+    assert.equal(changed.json().data.plan.planPath, 'docs/brief.html');
+
+    const legacyPlan = await app.inject({ method: 'POST', url: '/api/plans/register', payload: sampleRegisterPayload({ reviewMode: undefined }) });
+    assert.equal(legacyPlan.json().data.reviewMode, 'planning');
+    const legacyPlanId = legacyPlan.json().data.planId;
+    const changedToCollab = await app.inject({ method: 'PATCH', url: `/api/plans/${legacyPlanId}`, payload: { reviewMode: 'collaboration' } });
+    assert.equal(changedToCollab.statusCode, 200);
+    assert.equal(changedToCollab.json().data.plan.reviewMode, 'collaboration');
+    assert.equal(changedToCollab.json().data.plan.publicationMetadata, undefined);
+    const index = await app.inject({ method: 'GET', url: '/api/plans' });
+    const indexedChangedPlan = index.json().data.plans.find((item: { plan: { id: string } }) => item.plan.id === legacyPlanId);
+    assert.equal(indexedChangedPlan.plan.publicationMetadata, undefined);
+    assert.throws(() => registerPlanSchema.parse(sampleRegisterPayload({ publicationMetadata: undefined, reviewMode: 'planning' })), /publicationMetadata is required/);
+  } finally {
+    await app.close();
+  }
+});
+
+test('comment thread entries persist visible replies separately from ack lifecycle', () => {
+  const store = new PlanReviewStore(tempDbPath('thread-entries'));
+  try {
+    const payload = registerPlanSchema.parse(sampleRegisterPayload());
+    const rendered = renderPlan(payload);
+    const registered = store.registerPlan(payload, rendered.renderedHtml, rendered.warnings);
+    const created = store.createComment(registered.planId, {
+      versionId: registered.versionId,
+      body: 'Original human note',
+      anchorType: 'dom',
+      anchor: domAnchor(),
+      createdBy: { displayName: 'Aaron' }
+    }).comment;
+    assert.equal(created.threadEntries.length, 1);
+    assert.equal(created.threadEntries[0].role, 'human');
+    assert.equal(created.threadEntries[0].body, 'Original human note');
+
+    const claimed = store.claimComments(registered.planId, { mode: 'selected', commentIds: [created.id], leaseSeconds: 300 }, 'agent').claimed[0];
+    const reply = store.appendThreadEntry(created.id, { role: 'agent', body: 'Visible agent reply', claimId: claimed.claim!.id, deliveryAdapter: 'hermes', createdBy: { displayName: 'Hermes' } });
+    assert.equal(reply.entry.sequence, 2);
+    assert.equal(reply.event.eventType, 'comment.thread_entry.created');
+    assert.equal(reply.comment.threadEntries.map(entry => entry.body).join(' | '), 'Original human note | Visible agent reply');
+    assert.ok(store.eventsAfter(registered.planId, 0, 'queue').some(event => event.eventType === 'comment.thread_entry.created'));
+    store.ackComment(created.id, { claimId: claimed.claim!.id, action: { responseSummary: 'Ack metadata only' } });
+    const acked = store.getComment(created.id);
+    assert.equal(acked.status, 'acknowledged');
+    assert.equal(acked.threadEntries.length, 2);
+    assert.equal(acked.agentResponse?.responseSummary, 'Ack metadata only');
+  } finally {
+    store.close();
+  }
+});
+
+test('Hermes fake delivery appends a visible reply before acking the claim', async () => {
+  const store = new PlanReviewStore(tempDbPath('hermes-delivery'));
+  try {
+    const payload = registerPlanSchema.parse(sampleRegisterPayload({ reviewMode: 'collaboration', publicationMetadata: undefined, planPath: 'docs/hermes.html', slug: 'hermes-doc' }));
+    const rendered = renderPlan(payload);
+    const registered = store.registerPlan(payload, rendered.renderedHtml, rendered.warnings);
+    store.upsertDeliveryTarget(registered.planId, { adapter: 'hermes', enabled: true, mode: 'fake', threadId: 'fake-hermes', autoResolve: false });
+    const comment = store.createComment(registered.planId, { versionId: registered.versionId, body: 'Ask Hermes', anchorType: 'dom', anchor: domAnchor() }).comment;
+    const worker = new DeliveryWorker(store, { enabled: true, serviceUrl: 'http://127.0.0.1:4317' });
+    const row = await worker.processOnce();
+    assert.equal(row?.adapter, 'hermes');
+    assert.equal(row?.status, 'delivered');
+    const acked = store.getComment(comment.id);
+    assert.equal(acked.status, 'acknowledged');
+    assert.equal(acked.threadEntries.length, 2);
+    assert.equal(acked.threadEntries[1].role, 'agent');
+    assert.match(acked.threadEntries[1].body, /Hermes fake response/);
+  } finally {
+    store.close();
+  }
+});
+
+test('cross-document agent queue claim skips unavailable adapter work and returns mode metadata', async () => {
+  const app = createApp({ dbPath: tempDbPath('agent-queue-all'), delivery: { enabled: false } });
+  try {
+    const unavailable = await app.inject({ method: 'POST', url: '/api/plans/register', payload: sampleRegisterPayload({ planPath: 'docs/unavailable.html', slug: 'unavailable', publicationMetadata: undefined }) });
+    const available = await app.inject({ method: 'POST', url: '/api/plans/register', payload: sampleRegisterPayload({ planPath: 'docs/available.html', slug: 'available', publicationMetadata: undefined, reviewMode: 'collaboration' }) });
+    const unavailableData = unavailable.json().data;
+    const availableData = available.json().data;
+    await app.inject({ method: 'PUT', url: `/api/plans/${availableData.planId}/delivery/hermes`, payload: { enabled: true, mode: 'fake', threadId: 'fake-hermes' } });
+    await app.inject({ method: 'POST', url: `/api/plans/${unavailableData.planId}/comments`, payload: { versionId: unavailableData.versionId, body: 'Should stay pending', anchorType: 'dom', anchor: domAnchor() } });
+    const wanted = await app.inject({ method: 'POST', url: `/api/plans/${availableData.planId}/comments`, payload: { versionId: availableData.versionId, body: 'Claim me', anchorType: 'dom', anchor: domAnchor() } });
+
+    const claim = await app.inject({ method: 'POST', url: '/api/agent/queue/claim', payload: { adapter: 'hermes' } });
+    assert.equal(claim.statusCode, 200);
+    assert.equal(claim.json().data.status, 'claimed');
+    assert.equal(claim.json().data.commentId, wanted.json().data.comment.id);
+    assert.equal(claim.json().data.reviewMode, 'collaboration');
+    assert.equal(claim.json().data.planPath, 'docs/available.html');
+    const availableDetail = await app.inject({ method: 'GET', url: `/api/plans/${availableData.planId}` });
+    assert.equal(availableDetail.json().data.plan.reviewMode, 'collaboration');
+    const unavailableDetail = await app.inject({ method: 'GET', url: `/api/plans/${unavailableData.planId}` });
+    assert.equal(unavailableDetail.json().data.counts.pending, 1);
+  } finally {
+    await app.close();
+  }
+});
+
+test('cross-document Hermes claim skips legacy targets with invalid modes', () => {
+  const store = new PlanReviewStore(tempDbPath('agent-queue-invalid-hermes-mode'));
+  try {
+    const invalidPayload = registerPlanSchema.parse(sampleRegisterPayload({ planPath: 'docs/invalid-hermes.html', slug: 'invalid-hermes', publicationMetadata: undefined, reviewMode: 'collaboration' }));
+    const validPayload = registerPlanSchema.parse(sampleRegisterPayload({ planPath: 'docs/valid-hermes.html', slug: 'valid-hermes', publicationMetadata: undefined, reviewMode: 'collaboration' }));
+    const invalid = store.registerPlan(invalidPayload, renderPlan(invalidPayload).renderedHtml, []);
+    const valid = store.registerPlan(validPayload, renderPlan(validPayload).renderedHtml, []);
+    const db = (store as unknown as { db: Database.Database }).db;
+    const now = new Date().toISOString();
+    db.prepare(`INSERT INTO delivery_targets (plan_id, adapter, enabled, mode, target_thread_id, created_at, updated_at)
+      VALUES (?, 'hermes', 1, 'sdk', ?, ?, ?)`).run(invalid.planId, 'legacy-invalid-hermes', now, now);
+    store.upsertDeliveryTarget(valid.planId, { adapter: 'hermes', enabled: true, mode: 'fake', threadId: 'fake-hermes', autoResolve: false });
+    const skipped = store.createComment(invalid.planId, { versionId: invalid.versionId, body: 'Invalid target should not be claimed', anchorType: 'dom', anchor: domAnchor() }).comment;
+    const wanted = store.createComment(valid.planId, { versionId: valid.versionId, body: 'Valid target should be claimed', anchorType: 'dom', anchor: domAnchor() }).comment;
+
+    const claim = store.claimNextAcrossQueue({ adapter: 'hermes', leaseSeconds: 300 }, 'agent');
+    assert.equal(claim.claimed[0].id, wanted.id);
+    assert.equal(store.getComment(skipped.id).status, 'pending');
+  } finally {
+    store.close();
+  }
+});
+
 test('codex delivery schemas and prompt contract use public threadId and worker-owned ack guidance', () => {
   const enabledTarget = deliveryTargetUpdateSchema.parse({ enabled: true, threadId: 'thr_123', mode: 'sdk', effort: 'medium' });
   assert.equal(enabledTarget.threadId, 'thr_123');
+  assert.equal(deliveryTargetUpdateSchema.parse({ adapter: 'hermes', enabled: true, threadId: 'https://127.0.0.1/hermes', mode: 'webhook' }).mode, 'webhook');
+  assert.equal(deliveryTargetUpdateSchema.parse({ adapter: 'hermes', enabled: true, threadId: 'fake-hermes', mode: 'fake' }).mode, 'fake');
   assert.throws(() => deliveryTargetUpdateSchema.parse({ enabled: true }), /threadId is required/);
+  assert.throws(() => deliveryTargetUpdateSchema.parse({ adapter: 'hermes', enabled: true, threadId: 'fake-hermes', mode: 'sdk' }), /Hermes delivery mode must be fake or webhook/);
+  assert.throws(() => deliveryTargetUpdateSchema.parse({ adapter: 'hermes', enabled: true, threadId: 'fake-hermes', mode: 'app-server' }), /Hermes delivery mode must be fake or webhook/);
+  assert.throws(() => deliveryTargetUpdateSchema.parse({ adapter: 'codex', enabled: true, threadId: 'thr_123', mode: 'webhook' }), /webhook delivery mode is only supported for the hermes adapter/);
   assert.throws(() => registerPlanSchema.parse(sampleRegisterPayload({
     codexDelivery: { enabled: true, mode: 'sdk' }
   })), /threadId is required/);
@@ -2769,6 +2930,56 @@ test('CLI agent next --no-wait claims one comment and returns actionable JSON', 
   }
 });
 
+test('CLI agent next --all --adapter returns cross-document claim metadata', async () => {
+  let capturedBody = '';
+  const server = http.createServer((request, response) => {
+    if (request.url === '/api/agent/queue/claim') {
+      request.on('data', chunk => { capturedBody += chunk; });
+      request.on('end', () => {
+        response.setHeader('content-type', 'application/json');
+        response.end(JSON.stringify({
+          ok: true,
+          data: {
+            type: 'plan-review.agent.next.v1',
+            status: 'claimed',
+            planId: 'plan_2',
+            commentId: 'cmt_2',
+            claimId: 'claim_2',
+            reviewMode: 'collaboration',
+            planPath: 'docs/brief.html',
+            sourcePath: '/tmp/docs/brief.html',
+            source: { path: '/tmp/docs/brief.html', watchMode: 'filesystem' },
+            conversationPayload: { type: 'browser.comment.v1', commentId: 'cmt_2', evidence: { reviewUrl: '/p/plan_2' } },
+            ackCommand: 'plan-review ack cmt_2 --claim claim_2 --summary "..." --changed-files <paths> --json --url http://127.0.0.1',
+            resolveCommand: 'plan-review resolve cmt_2 --note "Done" --json --url http://127.0.0.1',
+            resolveAfterAck: true
+          }
+        }));
+      });
+      return;
+    }
+    response.statusCode = 404;
+    response.end('not found');
+  });
+
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address();
+    assert(address && typeof address !== 'string');
+    const serviceUrl = `http://127.0.0.1:${address.port}`;
+    const result = await runCli(['agent', 'next', '--all', '--adapter', 'hermes', '--json', '--url', serviceUrl]);
+    assert.equal(result.code, 0, result.stderr);
+    assert.deepEqual(JSON.parse(capturedBody), { adapter: 'hermes' });
+    const parsed = JSON.parse(result.stdout);
+    assert.equal(parsed.status, 'claimed');
+    assert.equal(parsed.reviewMode, 'collaboration');
+    assert.equal(parsed.planPath, 'docs/brief.html');
+    assert.equal(parsed.conversationPayload.evidence.reviewUrl, `${serviceUrl}/p/plan_2`);
+  } finally {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
+
 test('CLI agent next claimed result can be acknowledged with returned claim id', async () => {
   const app = createApp({ dbPath: tempDbPath('agent-next-ack') });
   await app.listen({ host: '127.0.0.1', port: 0 });
@@ -3136,7 +3347,7 @@ test('CLI delivery target and outbox commands map to REST endpoints', async () =
     const complete = (body?: unknown) => {
       calls.push({ method: request.method, url: request.url, body });
       response.setHeader('content-type', 'application/json');
-      if (request.url === '/api/plans/plan_1/delivery/codex' && request.method === 'PUT') {
+      if ((request.url === '/api/plans/plan_1/delivery/codex' || request.url === '/api/plans/plan_1/delivery/hermes') && request.method === 'PUT') {
         response.end(JSON.stringify({ ok: true, data: { target: body, backfilled: 0 } }));
         return;
       }
@@ -3170,6 +3381,7 @@ test('CLI delivery target and outbox commands map to REST endpoints', async () =
     assert(address && typeof address !== 'string');
     const serviceUrl = `http://127.0.0.1:${address.port}`;
     assert.equal((await runCli(['delivery', 'target', 'set', 'plan_1', '--adapter', 'codex', '--thread', 'thr_cli', '--mode', 'sdk', '--json', '--url', serviceUrl])).code, 0);
+    assert.equal((await runCli(['delivery', 'target', 'set', 'plan_1', '--adapter', 'hermes', '--thread', 'http://127.0.0.1:9000/hook', '--json', '--url', serviceUrl])).code, 0);
     assert.equal((await runCli(['delivery', 'target', 'show', 'plan_1', '--adapter', 'codex', '--json', '--url', serviceUrl])).code, 0);
     assert.equal((await runCli(['delivery', 'list', 'plan_1', '--adapter', 'codex', '--json', '--url', serviceUrl])).code, 0);
     assert.equal((await runCli(['delivery', 'retry', 'plan_1', '--adapter', 'codex', '--comment', 'cmt_1', '--json', '--url', serviceUrl])).code, 0);
@@ -3178,13 +3390,19 @@ test('CLI delivery target and outbox commands map to REST endpoints', async () =
       url: '/api/plans/plan_1/delivery/codex',
       body: { adapter: 'codex', enabled: true, mode: 'sdk', threadId: 'thr_cli', autoResolve: false }
     });
+    assert.deepEqual(calls[1], {
+      method: 'PUT',
+      url: '/api/plans/plan_1/delivery/hermes',
+      body: { adapter: 'hermes', enabled: true, mode: 'webhook', threadId: 'http://127.0.0.1:9000/hook', autoResolve: false }
+    });
     assert.deepEqual(calls.map(call => `${call.method} ${call.url}`), [
       'PUT /api/plans/plan_1/delivery/codex',
+      'PUT /api/plans/plan_1/delivery/hermes',
       'GET /api/plans/plan_1/delivery/codex',
       'GET /api/plans/plan_1/delivery/outbox?adapter=codex',
       'POST /api/plans/plan_1/delivery/codex/retry'
     ]);
-    assert.deepEqual(calls[3].body, { commentId: 'cmt_1' });
+    assert.deepEqual(calls[4].body, { commentId: 'cmt_1' });
   } finally {
     await new Promise<void>(resolve => server.close(() => resolve()));
   }
