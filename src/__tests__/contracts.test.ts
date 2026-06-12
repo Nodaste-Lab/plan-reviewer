@@ -13,7 +13,7 @@ import { normalizeLinearIssueKey, PlanReviewStore, type StoredComment } from '..
 import { createApp } from '../server/app.js';
 import { SourceSyncService } from '../server/sourceSync.js';
 import { findImageSources } from '../htmlImages.js';
-import { resolveServiceUrl } from '../config.js';
+import { resolveDeliveryWorkerConfig, resolveServiceUrl } from '../config.js';
 import { discoverImageAssets } from '../cli.js';
 import { discoverPullRequest, parseGitHubPrUrl, pullRequestStatus } from '../githubPr.js';
 import { buildRegistrationAgentInstructions, renderRegistrationInstructionCommands } from '../registrationInstructions.js';
@@ -3386,6 +3386,54 @@ test('service URL config ignores invalid url values and trims valid URLs', () =>
 
   fs.writeFileSync(path.join(dir, '.plan-reviewer.json'), '{"url":"http://127.0.0.1:9999/"}');
   assert.equal(resolveServiceUrl(undefined, dir), 'http://127.0.0.1:9999');
+});
+
+test('delivery worker config can be enabled from user config and overridden by env', () => {
+  const dir = path.join('/tmp', `plan-reviewer-delivery-config-${process.pid}-${Date.now()}`);
+  const configFile = path.join(dir, 'config.json');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(configFile, JSON.stringify({
+    codexDelivery: {
+      enabled: true,
+      mode: 'app-server',
+      intervalMs: 2500
+    }
+  }));
+
+  const original = {
+    enabled: process.env.PLAN_REVIEW_CODEX_DELIVERY,
+    mode: process.env.PLAN_REVIEW_CODEX_DELIVERY_MODE,
+    intervalMs: process.env.PLAN_REVIEW_CODEX_DELIVERY_INTERVAL_MS
+  };
+  delete process.env.PLAN_REVIEW_CODEX_DELIVERY;
+  delete process.env.PLAN_REVIEW_CODEX_DELIVERY_MODE;
+  delete process.env.PLAN_REVIEW_CODEX_DELIVERY_INTERVAL_MS;
+
+  try {
+    assert.deepEqual(resolveDeliveryWorkerConfig({ serviceUrl: 'http://127.0.0.1:4317', userConfigFile: configFile }), {
+      enabled: true,
+      mode: 'app-server',
+      intervalMs: 2500,
+      serviceUrl: 'http://127.0.0.1:4317'
+    });
+
+    process.env.PLAN_REVIEW_CODEX_DELIVERY = '0';
+    process.env.PLAN_REVIEW_CODEX_DELIVERY_MODE = 'fake';
+    process.env.PLAN_REVIEW_CODEX_DELIVERY_INTERVAL_MS = '50';
+    assert.deepEqual(resolveDeliveryWorkerConfig({ serviceUrl: 'http://127.0.0.1:4317', userConfigFile: configFile }), {
+      enabled: false,
+      mode: 'fake',
+      intervalMs: 50,
+      serviceUrl: 'http://127.0.0.1:4317'
+    });
+  } finally {
+    if (original.enabled === undefined) delete process.env.PLAN_REVIEW_CODEX_DELIVERY;
+    else process.env.PLAN_REVIEW_CODEX_DELIVERY = original.enabled;
+    if (original.mode === undefined) delete process.env.PLAN_REVIEW_CODEX_DELIVERY_MODE;
+    else process.env.PLAN_REVIEW_CODEX_DELIVERY_MODE = original.mode;
+    if (original.intervalMs === undefined) delete process.env.PLAN_REVIEW_CODEX_DELIVERY_INTERVAL_MS;
+    else process.env.PLAN_REVIEW_CODEX_DELIVERY_INTERVAL_MS = original.intervalMs;
+  }
 });
 
 test('CLI help is wired through the installed bin entrypoint', () => {

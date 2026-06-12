@@ -139,11 +139,24 @@ Every comment event carries `conversationPayload.type = "browser.comment.v1"`. H
 Codex delivery is opt-in per plan and disabled by default at the service level. It uses the same queue claim lifecycle as `agent next`: a browser comment creates one delivery outbox row, the worker claims that exact comment, sends one normal Codex text turn to the configured thread, then acks only after Codex completes.
 
 ```bash
-PLAN_REVIEW_CODEX_DELIVERY=1 plan-review serve --host 127.0.0.1 --port 4317
 plan-review delivery target set plan_123 --adapter codex --thread <threadId> --mode sdk --json
 plan-review delivery list plan_123 --json
 plan-review delivery retry plan_123 --adapter codex --comment cmt_123 --json
 ```
+
+For the packaged service, enable the worker persistently in `~/.config/plan-reviewer/config.json`:
+
+```json
+{
+  "codexDelivery": {
+    "enabled": true,
+    "mode": "sdk",
+    "intervalMs": 10000
+  }
+}
+```
+
+For ad hoc runs, `PLAN_REVIEW_CODEX_DELIVERY=1 plan-review serve ...` still works and overrides the config file.
 
 Registration convenience flags are also available:
 
