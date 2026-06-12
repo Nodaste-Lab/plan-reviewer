@@ -1,0 +1,1220 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan Reviewer Codex Delivery Adapter Plan</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1020;
+      --panel: #111827;
+      --panel-2: #172033;
+      --text: #e5e7eb;
+      --muted: #a7b0c0;
+      --line: #2b364d;
+      --accent: #7dd3fc;
+      --accent-2: #86efac;
+      --warn: #fbbf24;
+      --danger: #fb7185;
+      --code: #dbeafe;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.55;
+    }
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 32px 20px 56px;
+    }
+    header {
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 24px;
+      padding-bottom: 20px;
+    }
+    h1, h2, h3, h4 { line-height: 1.2; letter-spacing: 0; }
+    h1 { font-size: 34px; margin: 0 0 10px; }
+    h2 { font-size: 24px; margin: 32px 0 12px; }
+    h3 { font-size: 18px; margin: 22px 0 8px; }
+    h4 { font-size: 15px; margin: 18px 0 6px; color: var(--accent-2); }
+    p { margin: 0 0 12px; }
+    a { color: var(--accent); }
+    code, pre {
+      color: var(--code);
+      background: #0f172a;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+    }
+    code { padding: 1px 5px; }
+    pre {
+      overflow-x: auto;
+      padding: 12px;
+      margin: 10px 0 14px;
+      white-space: pre;
+    }
+    pre code {
+      background: transparent;
+      border: 0;
+      padding: 0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 12px 0 18px;
+      background: var(--panel);
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 9px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      color: #f8fafc;
+      background: #1e293b;
+    }
+    ul, ol { padding-left: 22px; }
+    li { margin: 5px 0; }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin: 16px 0;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+    }
+    .card strong {
+      display: block;
+      margin-bottom: 6px;
+      color: #f8fafc;
+    }
+    .muted { color: var(--muted); }
+    .pill {
+      display: inline-block;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 2px 8px;
+      margin-right: 6px;
+      color: #cbd5e1;
+      background: #111827;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .status {
+      border-left: 4px solid var(--accent);
+      background: var(--panel);
+      padding: 14px;
+      border-radius: 8px;
+      margin: 14px 0;
+    }
+    .warning { border-left-color: var(--warn); }
+    .danger { border-left-color: var(--danger); }
+    .success { border-left-color: var(--accent-2); }
+    .phase {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      margin: 18px 0;
+      padding: 16px;
+    }
+    .phase h3 { margin-top: 0; }
+    .progress-list {
+      list-style: none;
+      padding-left: 0;
+    }
+    .progress-list li {
+      display: grid;
+      grid-template-columns: 26px minmax(0, 1fr);
+      align-items: start;
+      gap: 8px;
+      margin: 8px 0;
+    }
+    input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      margin-top: 4px;
+      accent-color: var(--accent);
+    }
+    .diagram {
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      margin: 14px 0;
+    }
+    .diagram pre {
+      background: #0b1020;
+      margin-bottom: 0;
+    }
+    .callout-title {
+      color: #f8fafc;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+    @media (max-width: 780px) {
+      .summary-grid { grid-template-columns: 1fr; }
+      h1 { font-size: 28px; }
+      table { display: block; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header id="plan-header">
+      <p class="muted">Implementation Plan</p>
+      <h1>Deliver Plan Reviewer Comments Into Codex Threads</h1>
+      <p>
+        Add an event-driven delivery-adapter path to the local HTML plan reviewer service, with Codex as the first adapter, so browser comments can wake a target agent thread only when actionable feedback exists.
+      </p>
+      <p>
+        <span class="pill">Status: execution-ready</span>
+        <span class="pill">Target worktree: /Users/anichols/code/add-codex-delivery-adapter</span>
+        <span class="pill">Linear: no issue — planning-only spike gate; implementation tracking will be created separately</span>
+        <span class="pill">Primary path: spike-gated generic delivery outbox with Codex SDK/app-server adapter</span>
+      </p>
+    </header>
+
+    <section id="status">
+      <h2>Status</h2>
+      <div class="status warning" id="status-not-ready">
+        <div class="callout-title">Planning status</div>
+        <p>
+          Phase 0 is complete and recorded <code>Verdict: PROCEED</code> in <code>thoughts/discoveries/codex-delivery-spike.md</code>. Review cycle 2 found two remaining Codex readiness edits, now integrated: registration versus target CLI naming is explicit, and transport failures are classified as retryable versus permanent. Claude Code rerun returned <code>PLAN_EXECUTION_READY</code>. Final Codex confirmation returned <code>PLAN_EXECUTION_READY</code>. The plan is execution-ready after re-registration with truthful metadata.
+        </p>
+      </div>
+    </section>
+
+    <section id="solution-narrative">
+      <h2>Solution Narrative</h2>
+      <p>
+        Add a first-party delivery-adapter path inside <code>plan-reviewer</code>, with Codex as the first concrete adapter rather than the only possible destination. Browser comments stay durable in the existing queue, and that queue remains the canonical arbitration point across manual <code>agent next</code> listeners and automatic delivery workers. When a plan has an explicit Codex target and delivery is enabled, comment creation also records one generic delivery outbox row. A background worker must win the same authoritative comment claim as every other consumer before it sends a deterministic prompt to the configured Codex thread; if another listener claims or resolves the comment first, the outbox row records that external outcome instead of duplicating delivery. If delivery fails, the worker releases any active claim when safe, records visible failure state, and leaves the existing <code>agent next</code> manual path intact.
+      </p>
+    </section>
+
+    <section id="authority-inputs">
+      <h2>Authority and Inputs</h2>
+      <ul>
+        <li id="input-user-request">User request: review this HTML plan and continue planning only; no product-code changes.</li>
+        <li id="input-product-intent"><code>thoughts/specs/product_intent.md</code>, especially durable queue delivery, explicit agent instructions, safe recovery, and parity across API/CLI/browser/tests.</li>
+        <li id="input-repo-guidance"><code>AGENTS.md</code> and <code>thoughts/plans/AGENTS.md</code>, including the reviewed HTML workflow and required execution-ready gates.</li>
+        <li id="input-current-code"><code>src/storage/database.ts</code>, <code>src/agentNext.ts</code>, <code>src/server/app.ts</code>, <code>src/cli.ts</code>, <code>src/schemas.ts</code>, and <code>src/__tests__/contracts.test.ts</code>.</li>
+        <li id="input-openai-docs">Official OpenAI Codex SDK and app-server documentation checked on June 12, 2026.</li>
+        <li id="input-phase-0"><code>thoughts/discoveries/codex-delivery-spike.md</code>, which records the completed Phase 0 transport spike verdict.</li>
+      </ul>
+    </section>
+
+    <section id="progress">
+      <h2>Progress</h2>
+      <ul class="progress-list">
+        <li><input type="checkbox" checked disabled><span>Phase 0: Spike Codex transport reliability</span></li>
+        <li><input type="checkbox" checked disabled><span>Phase 1: Lock product contract and registration metadata</span></li>
+        <li><input type="checkbox" checked disabled><span>Phase 2: Add delivery configuration and database state</span></li>
+        <li><input type="checkbox" checked disabled><span>Phase 3: Implement Codex client adapter</span></li>
+        <li><input type="checkbox" checked disabled><span>Phase 4: Implement background outbox worker</span></li>
+        <li><input type="checkbox" checked disabled><span>Phase 5: Wire HTTP and CLI controls</span></li>
+        <li><input type="checkbox" checked disabled><span>Phase 6: Add tests, fixtures, and operator docs</span></li>
+      </ul>
+    </section>
+
+    <section id="goal">
+      <h2>Goal</h2>
+      <p>
+        When a reviewer leaves a browser comment on a registered HTML plan, <code>plan-reviewer</code> should be able to deliver that comment to configured agent channels without asking agents to poll on a timer and without creating a plugin surface. The first implementation targets Codex, but the service remains the durable queue owner and should arbitrate all consumers through the existing claim lifecycle. Codex receives one explicit prompt only after it wins the claim for a real pending comment.
+      </p>
+      <div class="summary-grid">
+        <div class="card" id="goal-token-cost">
+          <strong>Token behavior</strong>
+          No heartbeat turns that say “nothing new.” A background worker sleeps outside Codex and starts a turn only after a comment is pending and claimable.
+        </div>
+        <div class="card" id="goal-queue-authority">
+          <strong>Queue authority</strong>
+          Keep the existing at-least-once queue, claim, lease, ack, release, and resolve semantics in <code>PlanReviewStore</code>.
+        </div>
+        <div class="card" id="goal-user-control">
+          <strong>User control</strong>
+          Delivery is opt-in per plan. The target Codex thread is explicit registration metadata, not guessed from the currently open UI.
+        </div>
+        <div class="card" id="goal-channel-parity">
+          <strong>Channel parity</strong>
+          Automatic delivery workers and manual listeners compete through the same queue claim path; whichever claims first owns that comment, and every delivery channel reflects the resulting state.
+        </div>
+      </div>
+    </section>
+
+    <section id="evidence">
+      <h2>Current Implementation Reality</h2>
+      <table id="evidence-table">
+        <thead>
+          <tr>
+            <th>Area</th>
+            <th>Current fact</th>
+            <th>Implication</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Plan reviewer runtime</td>
+            <td><code>package.json</code> uses Node &gt;=20, ESM TypeScript, Fastify 5, SQLite via <code>better-sqlite3</code>, and <code>bun run build</code>/<code>node --test</code> tests.</td>
+            <td>Implement the adapter in TypeScript as first-party service code; no plugin is needed.</td>
+          </tr>
+          <tr>
+            <td>Comment payload</td>
+            <td><code>PlanReviewStore.buildConversationPayload</code> already emits <code>browser.comment.v1</code> with comment id, review URL, selector, marker number, text preview, screenshot asset id, and body.</td>
+            <td>Codex delivery should reuse this payload instead of inventing a second annotation contract.</td>
+          </tr>
+          <tr>
+            <td>Queue semantics</td>
+            <td><code>claimComments</code>, <code>ackComment</code>, <code>resolveComment</code>, and <code>releaseComment</code> already enforce claim leases and active claim ids.</td>
+            <td>The worker should claim a comment before delivery and should ack/release based on delivery outcome.</td>
+          </tr>
+          <tr>
+            <td>Agent listener CLI</td>
+            <td><code>agent next --wait --json</code> is tested to wake via SSE or poll fallback and claim exactly one comment.</td>
+            <td>The new backend worker should follow the same one-claim-at-a-time discipline.</td>
+          </tr>
+          <tr>
+            <td>Codex programmatic surface</td>
+            <td>Official Codex docs describe a Node-compatible TypeScript SDK with <code>resumeThread(threadId)</code> and <code>thread.run(...)</code>; app-server docs describe initialize, <code>thread/resume</code>, <code>turn/start</code> with <code>input: [{ type: "text", text: "..." }]</code>, streamed notifications, and <code>turn/completed</code>.</td>
+            <td>Use SDK for the first implementation if compatible with the service process; keep an app-server JSON-RPC adapter boundary so the implementation can fall back or be swapped.</td>
+          </tr>
+          <tr>
+            <td>Phase 0 transport spike</td>
+            <td><code>thoughts/discoveries/codex-delivery-spike.md</code> records <code>Verdict: PROCEED</code>. The SDK successfully started and resumed thread <code>019eb93e-3c2a-7353-85d2-a9cc5b19cca1</code>; app-server successfully started and resumed thread <code>019eb940-2af4-7503-b084-26f47371d665</code>.</td>
+            <td>Proceed with SDK primary and app-server fallback, but enforce the spike constraints: verify observed SDK thread id, isolate Codex config from unrelated plugins, use supported effort values, and serialize deliveries per target thread.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="product-intent-alignment">
+      <h2>Product Intent Alignment</h2>
+      <p>
+        This plan advances the product intent by making browser comments durable, queue-visible, recoverable, and deliverable to agents without heartbeat polling. It preserves the existing desired outcome that <code>agent next</code> remains the correctness-critical manual delivery path while adding an opt-in automatic adapter path for comments that should wake a configured agent thread. Codex is the first adapter because it is the current request target, not because the queue lifecycle is Codex-specific.
+      </p>
+      <ul>
+        <li id="pia-queue-canonical">Queue state remains canonical server state; every delivery worker uses <code>claimComments</code>, <code>ackComment</code>, <code>releaseComment</code>, and optional <code>resolveComment</code> instead of bypassing lifecycle semantics.</li>
+        <li id="pia-multi-consumer">Manual listeners and automatic delivery channels are parallel consumers of the same queue, not separate sources of truth. A comment claimed by one consumer must be visible to the other channels as already claimed, delivered, resolved, or externally handled.</li>
+        <li id="pia-safe-default">Delivery is disabled by default and requires an explicit target thread id, matching the product boundary that the MVP is unauthenticated and trusted-network only.</li>
+        <li id="pia-recovery">Recoverable Codex transport failures are visible through API/CLI status and retry controls; manual <code>agent next</code> remains available when automatic delivery is unavailable.</li>
+        <li id="pia-parity">API, CLI, README, fixture tests, and contract tests must describe the same lifecycle semantics before the plan can be complete.</li>
+      </ul>
+    </section>
+
+    <section id="product-decisions">
+      <h2>Locked Decisions</h2>
+      <ul>
+        <li id="decision-adapter-first"><strong>Adapter framework, Codex first.</strong> The storage and worker lifecycle should be adapter-neutral enough to support parallel channels later, while this plan implements only the Codex adapter.</li>
+        <li id="decision-no-plugin"><strong>No plugin for v1.</strong> A plugin would package behavior after the fact, but it does not add the event-driven wakeup primitive.</li>
+        <li id="decision-explicit-thread"><strong>Explicit target thread id.</strong> Registration or a follow-up command must specify the Codex thread using the public field name <code>threadId</code>. The target-management CLI uses <code>--thread</code>; the existing <code>register</code> command uses a Codex-scoped convenience flag <code>--codex-thread</code> so registration flags remain unambiguous next to other metadata. The service must not infer “active session” from UI state.</li>
+        <li id="decision-outbox"><strong>Outbox pattern.</strong> Browser comment creation stores the comment and delivery intent, then returns immediately. Delivery happens in a background worker.</li>
+        <li id="decision-one-claim"><strong>One comment per Codex turn.</strong> Preserve small reviewable work units and avoid long-lived claim batches.</li>
+        <li id="decision-delivery-artifact"><strong>Delivery artifact is a normal Codex turn prompt, proven by Phase 0.</strong> The v1 artifact is not a Codex plugin, generated polling script, or long-lived Codex connection. The <code>plan-reviewer</code> service waits for comments outside Codex; only after it claims one comment does it resume the target thread and submit one ordinary text-input turn containing the comment payload, plan context, and ack guidance. Phase 0 proved this works through both SDK and app-server transports.</li>
+        <li id="decision-text-input"><strong>Use text prompt input for v1.</strong> Pass the <code>browser.comment.v1</code> payload as formatted JSON inside a normal Codex turn. Do not depend on experimental raw item injection for v1.</li>
+        <li id="decision-sdk-thread-identity"><strong>Verify SDK thread identity.</strong> Phase 0 showed <code>resumeThread("not-a-real-thread-id")</code> can start a new SDK thread instead of failing. The adapter must compare the observed thread id with the configured <code>threadId</code> and fail closed before acking if they differ.</li>
+        <li id="decision-controlled-codex-config"><strong>Use controlled Codex config.</strong> Phase 0 showed unrelated user plugin/MCP configuration can break or contaminate transport runs. Delivery mode must provide a controlled config surface and disable unrelated connectors/plugins unless explicitly allowed.</li>
+        <li id="decision-serialize-per-thread"><strong>Serialize per target thread.</strong> Phase 0 showed app-server can accept a second <code>turn/start</code> while another turn is active. The worker must enforce one in-flight delivery per target thread instead of relying on Codex to reject concurrency.</li>
+        <li id="decision-disabled-default"><strong>Disabled by default.</strong> A stored target does not imply automatic delivery unless the plan target is enabled and the service worker is enabled by config.</li>
+        <li id="decision-enable-backfill"><strong>Enablement backfills pending comments.</strong> When delivery is enabled for an adapter, the service enqueues delivery rows for currently pending, unclaimed comments by default so operators do not need to rediscover old browser feedback. It must not enqueue already acknowledged, resolved, deleted, or actively claimed comments.</li>
+        <li id="decision-fail-visible"><strong>Visible failure over silent retry loops.</strong> Failed delivery is stored and exposed in CLI/API so operators can retry, release, or switch to manual delivery.</li>
+      </ul>
+    </section>
+
+    <section id="architecture">
+      <h2>Architecture</h2>
+      <div class="diagram" id="architecture-flow">
+        <div class="callout-title">Delivery flow</div>
+        <pre><code>Browser comment POST
+  -> PlanReviewStore.createComment(...)
+  -> comment.created event
+  -> AgentDeliveryOutbox row queued for adapter="codex"
+  -> DeliveryWorker wakes inside plan-reviewer; Codex is not connected yet
+  -> worker attempts the same queue claim as manual listeners
+  -> PlanReviewStore.claimComments(planId, { mode: "selected", commentIds: [commentId], leaseSeconds })
+  -> if claim is unavailable, mark row externally_claimed / externally_acknowledged / externally_resolved / externally_deleted as appropriate
+  -> CodexClient.resumeThread(threadId) only after the claim succeeds
+  -> CodexClient.run(one-shot prompt containing browser.comment.v1)
+  -> store adapter_turn_id/result_json before acking
+  -> PlanReviewStore.ackComment(commentId, { claimId, action: response metadata })
+  -> if ack fails after Codex completion, retry ack without starting another Codex turn
+  -> optional resolve based on configured policy or explicit Codex result
+</code></pre>
+      </div>
+
+      <section id="architecture-modules">
+        <h3>New Modules</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Module</th>
+              <th>Responsibility</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>src/delivery/types.ts</code></td>
+              <td>Shared adapter-neutral types for delivery channel, target, outbox status, adapter result, prompt inputs, and error shape.</td>
+            </tr>
+            <tr>
+              <td><code>src/codex/prompt.ts</code></td>
+              <td>Builds the exact prompt sent by the Codex adapter from plan, comment, claim, review URL, and ack/resolve guidance.</td>
+            </tr>
+            <tr>
+              <td><code>src/codex/client.ts</code></td>
+              <td>Defines <code>CodexClient</code> interface: <code>deliverComment(input): Promise&lt;CodexDeliveryResult&gt;</code>.</td>
+            </tr>
+            <tr>
+              <td><code>src/codex/sdkClient.ts</code></td>
+              <td>SDK-backed implementation using <code>@openai/codex-sdk</code> when installed and enabled; submits the delivery artifact as a standard text turn.</td>
+            </tr>
+            <tr>
+              <td><code>src/codex/appServerClient.ts</code></td>
+              <td>Optional lower-level JSON-RPC implementation for explicit app-server transport control; also submits a standard <code>type: "text"</code> input turn.</td>
+            </tr>
+            <tr>
+              <td><code>src/delivery/worker.ts</code></td>
+              <td>Adapter-neutral background delivery worker, retry policy, lease selection, status transitions, and graceful shutdown.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="architecture-storage">
+        <h3>Storage Additions</h3>
+        <p>Add two SQLite tables with migration-safe <code>CREATE TABLE IF NOT EXISTS</code> statements inside <code>PlanReviewStore</code> initialization. The tables are adapter-neutral so Codex is the first configured channel, not the durable state model.</p>
+        <pre><code>CREATE TABLE IF NOT EXISTS delivery_targets (
+  plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+  adapter TEXT NOT NULL DEFAULT 'codex',
+  enabled INTEGER NOT NULL DEFAULT 0,
+  mode TEXT NOT NULL DEFAULT 'sdk',
+  target_thread_id TEXT,
+  target_cwd TEXT,
+  sandbox TEXT,
+  model TEXT,
+  effort TEXT,
+  auto_resolve INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY(plan_id, adapter)
+);
+
+CREATE TABLE IF NOT EXISTS delivery_outbox (
+  id TEXT PRIMARY KEY,
+  plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+  comment_id TEXT NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
+  adapter TEXT NOT NULL DEFAULT 'codex',
+  status TEXT NOT NULL,
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at TEXT NOT NULL,
+  claim_id TEXT,
+  target_thread_id TEXT,
+  adapter_turn_id TEXT,
+  last_error_json TEXT,
+  result_json TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(comment_id, adapter)
+);</code></pre>
+      </section>
+
+      <section id="architecture-state-machine">
+        <h3>Outbox State Machine</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Meaning</th>
+              <th>Next statuses</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>pending</code></td>
+              <td>Delivery target exists and a comment is waiting to be processed.</td>
+              <td><code>claiming</code>, <code>paused</code>, <code>failed</code></td>
+            </tr>
+            <tr>
+              <td><code>claiming</code></td>
+              <td>Worker selected the row and is attempting an authoritative queue claim.</td>
+              <td><code>delivering</code>, <code>pending</code> through stale-claiming recovery, <code>externally_claimed</code>, <code>externally_acknowledged</code>, <code>externally_resolved</code>, <code>externally_deleted</code>, <code>retry_wait</code>, <code>failed</code></td>
+            </tr>
+            <tr>
+              <td><code>delivering</code></td>
+              <td>Active claim exists and Codex turn is being started or is running.</td>
+              <td><code>ack_pending</code>, <code>retry_wait</code>, <code>pending</code> through stale-delivering recovery when no Codex result exists and the claim is expired/lost, <code>externally_claimed</code>, <code>externally_acknowledged</code>, <code>externally_resolved</code>, <code>externally_deleted</code>, <code>failed</code></td>
+            </tr>
+            <tr>
+              <td><code>ack_pending</code></td>
+              <td>Codex completed and result metadata is stored, but the queue ack has not succeeded yet.</td>
+              <td><code>delivered</code>, <code>ack_failed</code>, <code>externally_acknowledged</code>, <code>externally_resolved</code>, <code>externally_deleted</code></td>
+            </tr>
+            <tr>
+              <td><code>delivered</code></td>
+              <td>The configured adapter accepted and completed the turn; ack succeeded.</td>
+              <td><code>resolved</code> when auto-resolve is enabled and resolution succeeds.</td>
+            </tr>
+            <tr>
+              <td><code>resolved</code></td>
+              <td>Auto-resolve was enabled, the adapter result explicitly indicated the feedback was fully addressed, and <code>resolveComment</code> succeeded.</td>
+              <td>Terminal.</td>
+            </tr>
+            <tr>
+              <td><code>retry_wait</code></td>
+              <td>Transient failure; the row is scheduled for a later attempt and any active claim has been released if possible.</td>
+              <td><code>pending</code>, <code>failed</code></td>
+            </tr>
+            <tr>
+              <td><code>ack_failed</code></td>
+              <td>Codex completed, but ack failed or the claim expired/lost before ack. The row keeps <code>adapter_turn_id</code> and <code>result_json</code> and must not start a duplicate Codex turn automatically.</td>
+              <td><code>delivered</code> through ack retry while claim is valid, <code>failed</code> when manual intervention is required.</td>
+            </tr>
+            <tr>
+              <td><code>failed</code></td>
+              <td>Permanent failure or retry limit exceeded; requires operator action.</td>
+              <td><code>pending</code> through explicit retry, or manual queue processing.</td>
+            </tr>
+            <tr>
+              <td><code>externally_claimed</code></td>
+              <td>Another queue consumer claimed the comment before this adapter won the claim.</td>
+              <td>Terminal for this adapter unless an operator explicitly retries after the comment returns to pending.</td>
+            </tr>
+            <tr>
+              <td><code>externally_acknowledged</code></td>
+              <td>Another queue consumer acknowledged the comment before this adapter delivered it.</td>
+              <td>Terminal.</td>
+            </tr>
+            <tr>
+              <td><code>externally_resolved</code></td>
+              <td>Another queue consumer resolved the comment before this adapter delivered it.</td>
+              <td>Terminal.</td>
+            </tr>
+            <tr>
+              <td><code>externally_deleted</code></td>
+              <td>The comment was deleted before this adapter delivered it.</td>
+              <td>Terminal.</td>
+            </tr>
+            <tr>
+              <td><code>paused</code></td>
+              <td>Delivery disabled after row creation.</td>
+              <td><code>pending</code> after re-enable.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </section>
+
+    <section id="prompt-contract">
+      <h2>Codex Prompt Contract</h2>
+      <p>The Codex-facing delivery artifact is a deterministic text prompt submitted as a normal Codex turn through the SDK or app-server transport. Phase 0 proved this path with throwaway SDK and app-server threads. It is not a Codex plugin, not a generated polling script, not a long-lived Codex wait loop, and not raw experimental item injection. The prompt must be self-contained and explicit about ack behavior, and it should not rely on hidden session state beyond the target Codex thread history.</p>
+      <div class="status" id="prompt-usage-lifecycle">
+        <div class="callout-title">How the prompt is used</div>
+        <p>
+          Codex never sits open waiting for comments. The always-on component is the <code>plan-reviewer</code> delivery worker, which sleeps in the service process using database/SSE/interval wakeups. When a browser comment is created, the service persists it, queues a delivery row, and the worker tries to claim that exact comment. Only after the claim succeeds does the worker create a short-lived Codex interaction by resuming the configured thread and submitting this prompt once. The Codex turn handles that one comment and exits; the service then acks, resolves, retries, or records failure based on the turn result.
+        </p>
+      </div>
+      <pre><code>New plan-reviewer feedback was claimed for an HTML plan.
+
+Plan ID: {planId}
+Review URL: {absoluteReviewUrl}
+Comment ID: {commentId}
+Claim ID: {claimId}
+
+Task:
+1. Inspect the plan and the comment evidence.
+2. Make the smallest plan change that addresses the feedback.
+3. Run relevant verification if available.
+4. Reply with a concise summary, changed files, and whether the feedback is fully resolved.
+
+Important:
+- The plan-reviewer service owns queue state.
+- Do not start a long polling loop.
+- Do not process unrelated comments.
+- If you cannot address this comment safely, explain why.
+
+browser.comment.v1 payload:
+{conversationPayloadJson}
+
+Ack guidance for tools or shell:
+plan-review ack {commentId} --claim {claimId} --summary "..." --changed-files &lt;paths&gt; --json --url {serviceUrl}
+</code></pre>
+
+      <div class="status warning" id="prompt-ack-policy">
+        <div class="callout-title">Ack policy</div>
+        <p>
+          The first backend version should ack only after the Codex turn completes and the worker can derive a non-empty final response. The service should not auto-resolve unless a per-plan setting enables it and the response explicitly indicates the issue is fully addressed.
+        </p>
+      </div>
+    </section>
+
+    <section id="api-contracts">
+      <h2>API and CLI Contracts</h2>
+
+      <section id="api-registration">
+        <h3>Registration Input</h3>
+        <p>Extend <code>registerPlanSchema</code> with optional delivery metadata. Keep all fields optional so existing clients are unaffected.</p>
+        <pre><code>{
+  "codexDelivery": {
+    "enabled": true,
+    "mode": "sdk",
+    "threadId": "0199...",
+    "cwd": "/Users/anichols/code/target-repo",
+    "sandbox": "workspace-write",
+    "model": "gpt-5.4",
+    "effort": "medium",
+    "autoResolve": false
+  }
+}</code></pre>
+      </section>
+
+      <section id="api-targets">
+        <h3>Target Management Endpoints</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Endpoint</th>
+              <th>Purpose</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>GET /api/plans/:planId/delivery/:adapter</code></td>
+              <td>Return target config, delivery enabled flag, worker-visible status summary, and recent failures for an adapter such as <code>codex</code>.</td>
+            </tr>
+            <tr>
+              <td><code>PUT /api/plans/:planId/delivery/:adapter</code></td>
+              <td>Create or replace target config. Validates <code>threadId</code> presence when enabled and backfills pending, unclaimed comments when transitioning from disabled to enabled.</td>
+            </tr>
+            <tr>
+              <td><code>POST /api/plans/:planId/delivery/:adapter/retry</code></td>
+              <td>Retry failed or retry-wait rows for a plan and adapter.</td>
+            </tr>
+            <tr>
+              <td><code>GET /api/plans/:planId/delivery/outbox</code></td>
+              <td>List delivery rows across adapters for debugging and UI display, including rows externally handled by another consumer.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="cli-controls">
+        <h3>CLI Controls</h3>
+        <pre><code>plan-review delivery target set &lt;planId&gt; --adapter codex --thread &lt;threadId&gt; --mode sdk --url http://127.0.0.1:4317
+plan-review delivery target show &lt;planId&gt; --adapter codex --json
+plan-review delivery list &lt;planId&gt; --json
+plan-review delivery retry &lt;planId&gt; --adapter codex --comment &lt;commentId&gt; --json
+plan-review register thoughts/plans/foo.html --codex-thread &lt;threadId&gt; --codex-delivery enabled</code></pre>
+        <p>Canonical public naming: API JSON uses <code>threadId</code>; SQLite storage may use <code>target_thread_id</code>; target-management CLI commands use <code>plan-review delivery ... --adapter codex --thread &lt;threadId&gt;</code>; registration uses the convenience flag <code>--codex-thread &lt;threadId&gt;</code>. Tests and docs must not introduce <code>codexThreadId</code> as a public API field.</p>
+      </section>
+    </section>
+
+    <section id="implementation-phases">
+      <h2>Implementation Phases</h2>
+
+      <article class="phase" id="phase-0-transport-spike">
+        <h3>Phase 0: Spike Codex Transport Reliability</h3>
+        <h4>End State</h4>
+        <p>Complete. <code>thoughts/discoveries/codex-delivery-spike.md</code> records <code>Verdict: PROCEED</code>: SDK and app-server can both run one-shot text turns after explicit thread start/resume, with implementation constraints for thread identity, config isolation, supported effort values, and per-thread serialization.</p>
+        <h4>Spike Questions</h4>
+        <ul>
+          <li>Can a Node 20 service process load the selected Codex SDK or app-server client without requiring an interactive TUI?</li>
+          <li>Can it resume a known throwaway Codex thread by explicit thread id from the target repo working directory?</li>
+          <li>Can it start a short-lived normal text-input turn containing a small <code>browser.comment.v1</code> payload and observe deterministic turn completion without Codex holding an open wait loop?</li>
+          <li>What identifiers and final-response fields are available for delivery status, ack summaries, and failure diagnosis?</li>
+          <li>What failures occur for missing auth, wrong thread id, active turn, unavailable app-server, and timeout?</li>
+        </ul>
+        <h4>Expected Files</h4>
+        <ul>
+          <li><code>thoughts/discoveries/codex-delivery-spike.md</code></li>
+          <li>Temporary spike script under <code>/tmp</code> or an untracked scratch path only; do not commit spike code unless it becomes a test fixture.</li>
+        </ul>
+        <h4>Required Spike Record Shape</h4>
+        <ul>
+          <li><code>Verdict: PROCEED</code>, <code>Verdict: SWITCH_TRANSPORT</code>, or <code>Verdict: HALT</code>. Only <code>PROCEED</code> allows Phase 1 implementation to start without revising this plan.</li>
+          <li><code>Environment</code>: Node version, plan-reviewer command, repo cwd, auth assumptions, SDK/app-server availability, and exact package or CLI versions.</li>
+          <li><code>SDK result</code>: exact command, thread id source, resume result, turn completion fields, response text fields, and failure if unavailable.</li>
+          <li><code>App-server result</code>: exact JSON-RPC requests/responses for initialize, <code>thread/resume</code>, <code>turn/start</code>, streamed notifications, <code>turn/completed</code>, and failure if unavailable.</li>
+          <li><code>Failure probes</code>: missing auth, wrong thread id, active turn, unavailable app-server, timeout, and whether each is retryable, permanent, or operator-actionable.</li>
+          <li><code>Implementation decision</code>: proceed with SDK, switch to app-server, or halt and replace the transport design.</li>
+        </ul>
+        <h4>Work</h4>
+        <ol>
+          <li>Create a throwaway plan and throwaway Codex thread so the spike cannot affect active work.</li>
+          <li>Run the smallest SDK path experiment: resume thread, submit text prompt, wait for completion, record result shape.</li>
+          <li>If SDK path fails or is unavailable, run the smallest app-server JSON-RPC experiment with <code>input: [{ type: "text", text: prompt }]</code>.</li>
+          <li>Record exact commands, environment assumptions, observed success/failure modes, and whether the plan should proceed, switch transport, or stop.</li>
+          <li>Update this plan's Decisions / Deviations Log with the spike verdict before Phase 1 starts.</li>
+        </ol>
+        <h4>Verify</h4>
+        <pre><code>test -f thoughts/discoveries/codex-delivery-spike.md
+rg -n "^Verdict: (PROCEED|SWITCH_TRANSPORT|HALT)$" thoughts/discoveries/codex-delivery-spike.md
+rg -n "^## (Environment|SDK result|App-server result|Failure probes|Implementation decision)" thoughts/discoveries/codex-delivery-spike.md
+rg -n "spike verdict|codex-delivery-spike" thoughts/plans/codex-delivery-adapter-plan.html</code></pre>
+      </article>
+
+      <article class="phase" id="phase-1-contracts">
+        <h3>Phase 1: Lock Contracts and Dependencies</h3>
+        <h4>End State</h4>
+        <p>Codex delivery is represented as a clear internal contract, with no runtime behavior yet.</p>
+        <h4>Tests First</h4>
+        <ul>
+          <li>Add schema tests for valid and invalid <code>codexDelivery</code> registration input.</li>
+          <li>Add prompt builder tests that snapshot the prompt shape without storing secrets or local tokens.</li>
+        </ul>
+        <h4>Expected Files</h4>
+        <ul>
+          <li><code>src/schemas.ts</code></li>
+          <li><code>src/delivery/types.ts</code></li>
+          <li><code>src/codex/prompt.ts</code></li>
+          <li><code>src/__tests__/contracts.test.ts</code></li>
+        </ul>
+        <h4>Work</h4>
+        <ol>
+          <li>Define <code>deliveryTargetSchema</code> and <code>deliveryTargetUpdateSchema</code> with <code>adapter: "codex"</code> as the first supported adapter.</li>
+          <li>Define adapter-neutral delivery mode, sandbox, effort, and status enums, including <code>externally_claimed</code>.</li>
+          <li>Implement <code>buildCodexDeliveryPrompt</code> using only serializable inputs.</li>
+          <li>Document that <code>threadId</code> is the canonical public API field and is required when delivery is enabled.</li>
+        </ol>
+        <h4>Verify</h4>
+        <pre><code>bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "codex|delivery|prompt|register"</code></pre>
+      </article>
+
+      <article class="phase" id="phase-2-storage">
+        <h3>Phase 2: Add Storage and Queue Integration</h3>
+        <h4>End State</h4>
+        <p>Plans can store Codex delivery targets, and new comments enqueue outbox rows when delivery is enabled.</p>
+        <h4>Tests First</h4>
+        <ul>
+          <li>Register a plan with Codex delivery enabled and assert adapter target metadata persists.</li>
+          <li>Create a comment and assert exactly one Codex outbox row exists for the comment.</li>
+          <li>Create duplicate comment via <code>clientMutationId</code> and assert no duplicate outbox row for the same adapter.</li>
+          <li>Disable delivery and assert comment creation does not enqueue new rows.</li>
+          <li>Enable delivery after comments already exist and assert pending, unclaimed comments are backfilled exactly once while active, acknowledged, resolved, and deleted comments are not.</li>
+        </ul>
+        <h4>Expected Files</h4>
+        <ul>
+          <li><code>src/storage/database.ts</code></li>
+          <li><code>src/server/app.ts</code></li>
+          <li><code>src/schemas.ts</code></li>
+          <li><code>src/__tests__/contracts.test.ts</code></li>
+        </ul>
+        <h4>Work</h4>
+        <ol>
+          <li>Add database tables for targets and outbox rows.</li>
+          <li>Add store methods: <code>upsertDeliveryTarget</code>, <code>getDeliveryTarget</code>, <code>enqueueDelivery</code>, <code>listDeliveryRows</code>, <code>markDeliveryStatus</code>.</li>
+          <li>Call <code>enqueueDelivery</code> from the successful comment creation path only when target config is enabled.</li>
+          <li>When an adapter transitions from disabled to enabled, enqueue delivery rows for currently pending, unclaimed comments with idempotent <code>UNIQUE(comment_id, adapter)</code> protection.</li>
+          <li>Return delivery summary in plan metadata endpoints without exposing sensitive runtime details.</li>
+        </ol>
+        <h4>Verify</h4>
+        <pre><code>bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "codex|delivery|comment"</code></pre>
+      </article>
+
+      <article class="phase" id="phase-3-client-adapter">
+        <h3>Phase 3: Implement Codex Client Adapter</h3>
+        <h4>End State</h4>
+        <p>A fake client is testable, and a real SDK-backed client can resume a thread and run a prompt behind a narrow interface.</p>
+        <h4>Tests First</h4>
+        <ul>
+          <li>Unit test fake adapter success and failure result shapes.</li>
+          <li>Unit test SDK adapter module loads lazily so normal service startup does not fail when the SDK is not installed.</li>
+          <li>Unit test SDK adapter rejects delivery when the observed thread id differs from the configured target thread id.</li>
+          <li>Unit test unsupported effort values are rejected or normalized before invoking Codex.</li>
+          <li>Contract test app-server prompt input uses <code>type: "text"</code>, not experimental raw item injection.</li>
+        </ul>
+        <h4>Expected Files</h4>
+        <ul>
+          <li><code>src/codex/client.ts</code></li>
+          <li><code>src/codex/sdkClient.ts</code></li>
+          <li><code>src/codex/appServerClient.ts</code></li>
+          <li><code>src/config.ts</code></li>
+          <li><code>package.json</code></li>
+        </ul>
+        <h4>Work</h4>
+        <ol>
+          <li>Add <code>@openai/codex-sdk</code> only if the local package is available and compatible with Node 20. Keep the import dynamic.</li>
+          <li>Define <code>deliverComment(input)</code> to return final response text, thread id, optional turn id, and raw lightweight metadata.</li>
+          <li>Use <code>resumeThread(threadId)</code> and <code>thread.run(prompt)</code> for the SDK path, where <code>prompt</code> is the complete delivery artifact; after the first SDK event, verify the observed thread id matches the configured target before treating delivery as valid.</li>
+          <li>Use supported effort values only: <code>low</code>, <code>medium</code>, <code>high</code>, or <code>xhigh</code>. Do not pass <code>minimal</code> for Codex delivery.</li>
+          <li>Build the Codex process environment/config from an allowlisted delivery config so unrelated user plugins, MCP servers, or connector auth failures cannot break automatic delivery by default.</li>
+          <li>Implement app-server path as a fallback or feature flag using the exact wire protocol recorded by Phase 0: initialize, <code>thread/resume</code>, <code>turn/start</code> with <code>input: [{ type: "text", text: prompt }]</code>, streamed notifications, and <code>turn/completed</code>.</li>
+          <li>Normalize retryable transport errors separately from permanent/operator-actionable failures: app-server overload, unavailable app-server, and pre-completion timeout are retryable; missing auth/config, wrong thread id, SDK observed-thread mismatch, unsupported effort, and thread not found are fail-closed operator-actionable failures; active turn or concurrency conflicts are prevented by per-target-thread serialization.</li>
+        </ol>
+        <h4>Verify</h4>
+        <pre><code>bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "codex client|prompt|app-server"</code></pre>
+      </article>
+
+      <article class="phase" id="phase-4-worker">
+        <h3>Phase 4: Implement Background Delivery Worker</h3>
+        <h4>End State</h4>
+        <p>The service can deliver queued comments in-process without blocking browser requests.</p>
+        <h4>Tests First</h4>
+        <ul>
+          <li>Worker claims a pending outbox row and calls fake Codex client once.</li>
+          <li>Worker acks after successful delivery and stores response metadata.</li>
+          <li>Worker releases the claim and schedules retry after retryable transient delivery failure.</li>
+          <li>Worker marks permanent/operator-actionable failures failed without retrying Codex, including missing auth/config, wrong thread id, SDK observed-thread mismatch, unsupported effort, and thread not found.</li>
+          <li>Worker marks permanent failure after retry limit is exceeded.</li>
+          <li>Worker does not pre-claim a second comment while one delivery is in progress for the same plan.</li>
+          <li>Worker enforces one in-flight delivery per target thread, even if multiple comments across plans target the same Codex thread.</li>
+          <li>Worker marks a row <code>externally_claimed</code> when <code>agent next</code> or another consumer wins the canonical queue claim first.</li>
+          <li>Worker resets stale <code>claiming</code> rows to <code>pending</code> during startup and interval sweeps when <code>updated_at</code> is older than the configured claiming timeout.</li>
+          <li>Worker recovers stale <code>delivering</code> rows during startup and interval sweeps: if no Codex result metadata was stored and the queue claim is expired/lost, release when possible and move to <code>retry_wait</code> or <code>pending</code> without duplicate in-flight state; if another consumer already handled the comment, record the matching external terminal state.</li>
+          <li>Worker recovers stale <code>ack_pending</code> rows during startup and interval sweeps by retrying only the queue ack when the original claim is still active; if the claim is expired/lost, mark <code>ack_failed</code> and never start another Codex turn for that row.</li>
+          <li>Worker records <code>ack_failed</code> and does not start a duplicate Codex turn when Codex completed but queue ack failed because the claim expired, was lost, or the service restarted before ack.</li>
+        </ul>
+        <h4>Expected Files</h4>
+        <ul>
+          <li><code>src/delivery/worker.ts</code></li>
+          <li><code>src/server/app.ts</code></li>
+          <li><code>src/server/serve.ts</code></li>
+          <li><code>src/config.ts</code></li>
+          <li><code>src/storage/database.ts</code></li>
+          <li><code>src/__tests__/contracts.test.ts</code></li>
+        </ul>
+        <h4>Work</h4>
+        <ol>
+          <li>Add worker start/stop lifecycle to <code>createApp</code> or <code>serve</code>, guarded by config.</li>
+          <li>Wake the worker from <code>comment.created</code> event emission and from interval fallback.</li>
+          <li>Use a DB status transition to acquire one adapter outbox row atomically.</li>
+          <li>Acquire a per-target-thread in-flight guard before invoking Codex so the service never starts concurrent turns for the same configured thread.</li>
+          <li>Call <code>claimComments(planId, { mode: "selected", commentIds: [commentId], leaseSeconds })</code> with agent id <code>plan-review-delivery:codex</code>.</li>
+          <li>If the queue claim fails because another consumer already claimed or resolved the comment, update the adapter row to <code>externally_claimed</code> or the matching terminal state instead of retrying duplicate delivery.</li>
+          <li>Set default lease high enough for Codex turns, initially 1800 seconds, with max 3600 from <code>claimRequestSchema.leaseSeconds</code> in <code>src/schemas.ts</code>.</li>
+          <li>On Codex completion, store <code>adapter_turn_id</code> and <code>result_json</code> before attempting queue ack.</li>
+          <li>On success, call <code>ackComment</code> with <code>runId</code>, <code>responseSummary</code>, and any changed files extracted from the Codex result if available.</li>
+          <li>On ack failure after Codex completion, retry only the ack while the claim is active; if the claim is expired or lost, mark <code>ack_failed</code>, expose manual recovery, and do not start another Codex turn for the same outbox row.</li>
+          <li>On worker startup and interval sweeps, recover stale <code>delivering</code> and <code>ack_pending</code> rows before acquiring new work: rows without stored Codex result metadata may retry delivery only after the old claim is released, expired, or proven externally handled; rows with stored result metadata may retry only ack or transition to <code>ack_failed</code>.</li>
+          <li>On retryable failure before Codex completion, call <code>releaseComment</code> when an active claim exists, then schedule retry with exponential backoff and jitter.</li>
+          <li>On permanent/operator-actionable failure before Codex completion, release any active claim when safe, mark the outbox row <code>failed</code>, expose the exact safe next action, and leave the comment available for manual <code>agent next</code> fallback when lifecycle state permits.</li>
+        </ol>
+        <h4>Verify</h4>
+        <pre><code>bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "delivery worker|claim|ack|release"</code></pre>
+      </article>
+
+      <article class="phase" id="phase-5-controls">
+        <h3>Phase 5: Wire HTTP and CLI Controls</h3>
+        <h4>End State</h4>
+        <p>Operators can enable, inspect, disable, and retry Codex delivery without editing SQLite manually.</p>
+        <h4>Tests First</h4>
+        <ul>
+          <li>HTTP tests for get/update target endpoints.</li>
+          <li>CLI tests for target set/show and delivery retry commands.</li>
+          <li>Validation tests for missing thread id when enabling delivery.</li>
+        </ul>
+        <h4>Expected Files</h4>
+        <ul>
+          <li><code>src/server/app.ts</code></li>
+          <li><code>src/cli.ts</code></li>
+          <li><code>src/schemas.ts</code></li>
+          <li><code>src/__tests__/contracts.test.ts</code></li>
+        </ul>
+        <h4>Work</h4>
+        <ol>
+          <li>Add target management endpoints under <code>/api/plans/:planId/delivery/:adapter</code> with <code>codex</code> as the only accepted adapter in v1.</li>
+          <li>Add outbox listing and retry endpoints that show cross-channel terminal states such as <code>externally_claimed</code>.</li>
+          <li>Add CLI command group <code>plan-review delivery ...</code>, with convenience registration flags for Codex.</li>
+          <li>Extend registration command with <code>--codex-thread</code>, <code>--codex-delivery enabled|disabled</code>, and optional mode flag; keep target-management commands on <code>--thread</code> and document the intentional flag distinction.</li>
+          <li>Update registration response to include a <code>codexDelivery</code> summary when configured.</li>
+        </ol>
+        <h4>Verify</h4>
+        <pre><code>bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "codex target|codex delivery|register"</code></pre>
+      </article>
+
+      <article class="phase" id="phase-6-docs-e2e">
+        <h3>Phase 6: Documentation, Fixtures, and End-to-End Smoke</h3>
+        <h4>End State</h4>
+        <p>The new feature is documented, manually smoke-testable, and safe to operate when Codex is unavailable.</p>
+        <h4>Tests First</h4>
+        <ul>
+          <li>Add fixture scenario with fake Codex client that creates a comment and confirms delivery/ack metadata.</li>
+          <li>Add failure fixture where Codex client fails and the comment returns to pending or delivery row records failure.</li>
+        </ul>
+        <h4>Expected Files</h4>
+        <ul>
+          <li><code>README.md</code></li>
+          <li><code>src/test-fixtures/run.ts</code></li>
+          <li><code>docs/codex-delivery.md</code></li>
+        </ul>
+        <h4>Work</h4>
+        <ol>
+          <li>Document how to find or copy the target Codex thread id.</li>
+          <li>Document setup for SDK mode and app-server mode.</li>
+          <li>Document manual recovery: list outbox, retry, release claim, disable delivery, and use <code>agent next</code> fallback.</li>
+          <li>Add security warning that the MVP service is unauthenticated and Codex delivery should remain loopback or trusted-network only.</li>
+          <li>Add a fixture smoke scenario that uses a fake adapter by environment variable so CI does not require a real Codex account.</li>
+        </ol>
+        <h4>Verify</h4>
+        <pre><code>bun run test
+bun run test:fixtures -- --scenario codex-delivery-fake
+bun run test:e2e</code></pre>
+      </article>
+    </section>
+
+    <section id="acceptance-criteria">
+      <h2>Acceptance Criteria</h2>
+      <ol>
+        <li id="ac-spike-proven">Before product implementation starts, a documented spike proves the chosen Codex transport can resume a target thread on demand, submit a short-lived normal text turn after a service-side claim, observe completion, and expose enough result/error metadata for reliable ack or retry behavior.</li>
+        <li id="ac-no-polling-tokens">No Codex turn is started when no plan-reviewer comments are pending.</li>
+        <li id="ac-explicit-target">Codex delivery cannot be enabled without an explicit target Codex thread id.</li>
+        <li id="ac-comment-delivery">A browser comment on a delivery-enabled plan creates one outbox row and results in one Codex turn for that comment.</li>
+        <li id="ac-queue-integrity">The existing claim/ack/resolve/release invariants remain true for CLI and HTTP paths.</li>
+        <li id="ac-browser-fast">The browser comment creation endpoint returns without waiting for Codex.</li>
+        <li id="ac-retry-visible">Transient delivery failures are visible in API/CLI and retry without creating duplicate comments or duplicate active claims.</li>
+        <li id="ac-manual-fallback">Manual <code>plan-review agent next</code> remains usable when Codex delivery is disabled or failing.</li>
+        <li id="ac-parallel-consumers">When manual and automatic consumers are active in parallel, the first successful queue claim owns the comment and the other channel records the comment as externally handled without duplicate delivery.</li>
+        <li id="ac-tests">The repository test suite passes, including new fake-adapter delivery tests.</li>
+      </ol>
+    </section>
+
+    <section id="bdd-scenarios">
+      <h2>BDD Scenarios</h2>
+      <article id="bdd-happy-path">
+        <h3>Scenario: Comment is delivered to Codex</h3>
+        <pre><code>Given a registered plan has Codex delivery enabled for thread "thr_123"
+When a reviewer submits a DOM comment
+Then the service stores the comment as pending
+And the service enqueues one Codex delivery row
+And the background worker claims that exact comment
+And the Codex client receives a prompt containing browser.comment.v1
+And the service acknowledges the comment after the Codex turn completes</code></pre>
+      </article>
+
+      <article id="bdd-no-target">
+        <h3>Scenario: Delivery cannot be enabled without a thread</h3>
+        <pre><code>Given a plan exists
+When an API client sends { enabled: true } without threadId
+Then the service returns validation_failed
+And no delivery target is enabled
+And future comments remain manually claimable through agent next</code></pre>
+      </article>
+
+      <article id="bdd-transient-failure">
+        <h3>Scenario: Codex is unavailable</h3>
+        <pre><code>Given a delivery-enabled plan has a pending comment
+And the worker claims the comment
+When Codex app-server or SDK is unavailable
+Then the worker releases the active claim when possible
+And records a retry_wait row with last_error_json
+And the comment is not acknowledged
+And an operator can retry or process the comment manually</code></pre>
+      </article>
+
+      <article id="bdd-duplicate-comment">
+        <h3>Scenario: Duplicate comment mutation does not duplicate delivery</h3>
+        <pre><code>Given a browser retries comment creation with the same clientMutationId
+When the service returns the existing comment
+Then no second outbox row is inserted for that comment
+And no second Codex turn is started</code></pre>
+      </article>
+
+      <article id="bdd-no-pending">
+        <h3>Scenario: No pending comment does not wake Codex</h3>
+        <pre><code>Given Codex delivery is enabled for a plan
+And the outbox has no pending rows
+When the worker wakes from its interval fallback
+Then no queue claim is attempted
+And no Codex turn is started</code></pre>
+      </article>
+
+      <article id="bdd-enable-backfills-pending">
+        <h3>Scenario: Enabling delivery backfills pending comments</h3>
+        <pre><code>Given a plan has pending, unclaimed browser comments
+And other comments are already claimed, acknowledged, resolved, or deleted
+When an operator enables Codex delivery with threadId "thr_123"
+Then the service enqueues one Codex delivery row per pending, unclaimed comment
+And it does not enqueue rows for claimed, acknowledged, resolved, or deleted comments
+And repeated enable/update requests do not duplicate outbox rows</code></pre>
+      </article>
+
+      <article id="bdd-ack-fails-after-codex-success">
+        <h3>Scenario: Ack fails after Codex succeeds</h3>
+        <pre><code>Given a delivery worker claimed a comment
+And Codex completed the one-shot turn
+And the worker stored adapter_turn_id and result_json
+When ackComment fails because the claim expired or was lost
+Then the outbox row becomes ack_failed
+And no duplicate Codex turn is started for that row
+And the operator can inspect the stored result and finish recovery manually</code></pre>
+      </article>
+
+      <article id="bdd-stale-delivering-recovery">
+        <h3>Scenario: Worker recovers stale in-flight delivery rows</h3>
+        <pre><code>Given the service restarts with a stale delivering row for a claimed comment
+And the row has no adapter_turn_id or result_json
+When the worker startup sweep finds the claim expired or lost
+Then it releases the claim when possible and moves the row to retry_wait or pending
+And no duplicate Codex turn starts until that recovery transition completes
+
+Given the service restarts with a stale ack_pending row
+And adapter_turn_id and result_json are already stored
+When the worker startup sweep finds the claim is still active
+Then it retries only ackComment
+And if the claim is expired or lost, the row becomes ack_failed
+And no duplicate Codex turn is started for that row</code></pre>
+      </article>
+
+      <article id="bdd-worker-disabled">
+        <h3>Scenario: Global worker disabled keeps manual path available</h3>
+        <pre><code>Given a plan has Codex delivery target metadata
+And the global delivery worker config is disabled
+When a reviewer submits a browser comment
+Then the comment remains pending for manual agent next processing
+And delivery status explains that automatic delivery is disabled by service config</code></pre>
+      </article>
+
+      <article id="bdd-parallel-consumers">
+        <h3>Scenario: Manual listener and Codex worker race safely</h3>
+        <pre><code>Given a plan has Codex delivery enabled
+And an operator also runs plan-review agent next --wait for the same plan
+When a reviewer submits a browser comment
+Then both consumers attempt to use the same canonical queue claim
+And exactly one consumer claims the comment
+And the losing consumer records the current comment state without starting duplicate delivery
+And API, CLI, and browser-visible delivery status agree about which channel handled the comment</code></pre>
+      </article>
+    </section>
+
+    <section id="test-coverage-matrix">
+      <h2>Test Coverage Matrix</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Acceptance / Scenario</th>
+            <th>Planned coverage</th>
+            <th>Primary files</th>
+            <th>Command</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><a href="#ac-spike-proven">AC spike proven</a></td>
+            <td>Phase 0 discovery document records a throwaway-thread SDK/app-server result, available completion metadata, failure-mode observations, a strict verdict token, and a matching plan log entry before product implementation starts.</td>
+            <td><code>thoughts/discoveries/codex-delivery-spike.md</code>, <code>thoughts/plans/codex-delivery-adapter-plan.html</code></td>
+            <td><code>test -f thoughts/discoveries/codex-delivery-spike.md && rg -n "^Verdict: (PROCEED|SWITCH_TRANSPORT|HALT)$" thoughts/discoveries/codex-delivery-spike.md && rg -n "spike verdict|codex-delivery-spike" thoughts/plans/codex-delivery-adapter-plan.html</code></td>
+          </tr>
+          <tr>
+            <td><a href="#ac-no-polling-tokens">AC no polling tokens</a>, <a href="#bdd-no-pending">BDD no pending</a></td>
+            <td>Worker unit/contract test proves empty outbox wake does not call queue claim or fake Codex client.</td>
+            <td><code>src/delivery/worker.ts</code>, <code>src/__tests__/contracts.test.ts</code></td>
+            <td><code>bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "delivery worker"</code></td>
+          </tr>
+          <tr>
+            <td><a href="#ac-explicit-target">AC explicit target</a>, <a href="#bdd-no-target">BDD no target</a></td>
+            <td>Schema, HTTP, and CLI validation reject enabled delivery without a thread id and keep manual queue state unchanged.</td>
+            <td><code>src/schemas.ts</code>, <code>src/server/app.ts</code>, <code>src/cli.ts</code>, <code>src/__tests__/contracts.test.ts</code></td>
+            <td><code>bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "codex target|codex delivery|register"</code></td>
+          </tr>
+          <tr>
+            <td><a href="#ac-comment-delivery">AC comment delivery</a>, <a href="#bdd-happy-path">BDD happy path</a>, <a href="#bdd-enable-backfills-pending">BDD enable backfill</a></td>
+            <td>Fake adapter fixture creates a browser comment, enqueues one outbox row, backfills existing pending/unclaimed comments on enablement, runs one fake Codex turn, and acks with response metadata.</td>
+            <td><code>src/storage/database.ts</code>, <code>src/delivery/worker.ts</code>, <code>src/test-fixtures/run.ts</code></td>
+            <td><code>bun run test:fixtures -- --scenario codex-delivery-fake</code></td>
+          </tr>
+          <tr>
+            <td><a href="#ac-queue-integrity">AC queue integrity</a>, <a href="#ac-manual-fallback">AC manual fallback</a>, <a href="#bdd-worker-disabled">BDD worker disabled</a></td>
+            <td>Existing queue contract tests remain green; added coverage proves disabled or failed automatic delivery leaves comments claimable by <code>agent next</code>.</td>
+            <td><code>src/storage/database.ts</code>, <code>src/agentNext.ts</code>, <code>src/cli.ts</code>, <code>src/__tests__/contracts.test.ts</code></td>
+            <td><code>bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "agent next|codex delivery|claim"</code></td>
+          </tr>
+          <tr>
+            <td><a href="#ac-browser-fast">AC browser fast</a></td>
+            <td>HTTP/comment contract or fixture asserts comment POST returns after durable enqueue and does not await fake Codex completion.</td>
+            <td><code>src/server/app.ts</code>, <code>src/delivery/worker.ts</code>, <code>src/__tests__/contracts.test.ts</code></td>
+            <td><code>bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "comment|delivery"</code></td>
+          </tr>
+          <tr>
+            <td><a href="#ac-retry-visible">AC retry visible</a>, <a href="#bdd-transient-failure">BDD transient failure</a>, <a href="#bdd-ack-fails-after-codex-success">BDD ack failure</a></td>
+            <td>Fake failing client releases active claims when possible, records retry/failure state, handles Codex-success/ack-failure without duplicate Codex turns, sweeps stale claiming/delivering/ack_pending rows, and exposes retry/list controls through API and CLI.</td>
+            <td><code>src/delivery/worker.ts</code>, <code>src/server/app.ts</code>, <code>src/cli.ts</code>, <code>src/__tests__/contracts.test.ts</code></td>
+            <td><code>bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "retry|release|codex delivery"</code></td>
+          </tr>
+          <tr>
+            <td><a href="#ac-tests">AC tests</a>, all BDD scenarios</td>
+            <td>Final regression gate covers contract, browser shell, source sync, queue fixture, and fake delivery fixture behavior.</td>
+            <td><code>src/__tests__/contracts.test.ts</code>, <code>src/test-fixtures/e2e-run.ts</code>, <code>src/test-fixtures/run.ts</code></td>
+            <td><code>bun run test</code>; <code>bun run test:e2e</code>; <code>bun run test:fixtures -- --scenario seeded-comment-stream</code>; <code>bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated</code>; <code>bun run test:fixtures -- --scenario codex-delivery-fake</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="security">
+      <h2>Security and Operational Risks</h2>
+      <div class="status danger" id="risk-unauthenticated-service">
+        <div class="callout-title">Unauthenticated local service</div>
+        <p>
+          The current README states the MVP has no authentication. Codex delivery turns comments into agent actions. Keep delivery disabled by default and bind service usage to loopback or a trusted network until authentication exists.
+        </p>
+      </div>
+      <ul>
+        <li id="risk-prompt-injection"><strong>Prompt injection:</strong> Treat browser-authored comment bodies and plan HTML as untrusted input. The delivery prompt should constrain Codex to the registered plan and comment.</li>
+        <li id="risk-thread-id"><strong>Thread targeting:</strong> A wrong thread id can send feedback to unrelated work. Show thread id clearly in target config and require explicit operator action to enable it.</li>
+        <li id="risk-lease-expiry"><strong>Lease expiry:</strong> Codex turns can exceed the default 5-minute lease. Use a longer delivery lease and release on failure. Consider a future lease-renew endpoint if long turns are common.</li>
+        <li id="risk-sdk-stability"><strong>SDK/app-server maturity:</strong> App-server is documented as experimental. Keep the adapter isolated and make failures recoverable through the existing manual queue path.</li>
+        <li id="risk-duplicate-delivery"><strong>Duplicate delivery:</strong> At-least-once semantics mean retries can happen. The prompt should include comment id and claim id, and the outbox table must enforce <code>UNIQUE(comment_id, adapter)</code> to prevent duplicate delivery rows per adapter while still allowing future parallel adapters.</li>
+      </ul>
+    </section>
+
+    <section id="non-goals">
+      <h2>Non-Goals</h2>
+      <ul>
+        <li id="non-goal-plugin">Do not build a Codex plugin for the first version.</li>
+        <li id="non-goal-active-ui">Do not depend on private in-app annotation UI internals or active-window state.</li>
+        <li id="non-goal-cloud">Do not support cloud-hosted plan-reviewer delivery until local delivery is proven.</li>
+        <li id="non-goal-batch">Do not batch multiple reviewer comments into one Codex turn in v1.</li>
+        <li id="non-goal-auto-merge">Do not let the service commit, push, or merge changes. Codex remains responsible for editing within its thread.</li>
+      </ul>
+    </section>
+
+    <section id="verification-strategy">
+      <h2>Verification Strategy</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Layer</th>
+            <th>Coverage</th>
+            <th>Command</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Typecheck</td>
+            <td>New schemas, clients, worker, and CLI command wiring compile.</td>
+            <td><code>bun run build</code></td>
+          </tr>
+          <tr>
+            <td>Unit/contract tests</td>
+            <td>Schema validation, prompt builder, outbox state transitions, fake client delivery, retry/release behavior.</td>
+            <td><code>bun run build && node --test dist/__tests__/contracts.test.js</code></td>
+          </tr>
+          <tr>
+            <td>Fixture tests</td>
+            <td>End-to-end fake delivery without requiring a real Codex account.</td>
+            <td><code>bun run test:fixtures -- --scenario codex-delivery-fake</code></td>
+          </tr>
+          <tr>
+            <td>Manual smoke</td>
+            <td>Real SDK/app-server delivery into a known test Codex thread on localhost.</td>
+            <td><code>plan-review delivery target set ... --adapter codex --thread ...</code> then submit a browser comment</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="status" id="final-gate">
+        <div class="callout-title">Final implementation gate</div>
+        <pre><code>bun run test
+bun run test:e2e
+bun run test:fixtures -- --scenario seeded-comment-stream
+bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated
+bun run test:fixtures -- --scenario codex-delivery-fake</code></pre>
+      </div>
+    </section>
+
+    <section id="delivery-order">
+      <h2>Delivery Order</h2>
+      <ol>
+        <li id="delivery-p0">Phase 0 is complete; carry its transport constraints into Phase 1 before locking contracts.</li>
+        <li id="delivery-p1">Complete Phase 1 next so schemas, prompt contract, and transport abstractions are stable before storage or worker code depends on them.</li>
+        <li id="delivery-p2">Add storage and enqueue behavior next, keeping browser comment creation fast and idempotent.</li>
+        <li id="delivery-p3">Implement Codex clients behind the narrow interface with fake-client coverage before enabling any real transport.</li>
+        <li id="delivery-p4">Wire the worker only after queue/outbox state transitions are covered by tests.</li>
+        <li id="delivery-p5">Expose HTTP/CLI controls once the internal lifecycle is reliable.</li>
+        <li id="delivery-p6">Finish with docs, fake fixture, e2e regression, and one real local smoke when credentials and a throwaway thread are available.</li>
+      </ol>
+    </section>
+
+    <section id="rollout">
+      <h2>Rollout Plan</h2>
+      <ol>
+        <li id="rollout-hidden">Ship the storage, prompt, and fake-worker tests behind disabled-by-default config.</li>
+        <li id="rollout-manual">Enable target management commands but keep worker disabled unless <code>PLAN_REVIEW_CODEX_DELIVERY=1</code> or equivalent config is set.</li>
+        <li id="rollout-local">Run real local smoke against one throwaway Codex thread and one sample HTML plan.</li>
+        <li id="rollout-default">After manual success, allow per-plan delivery enablement through registration flags.</li>
+        <li id="rollout-docs">Document recovery path prominently before using the feature on important plans.</li>
+      </ol>
+    </section>
+
+    <section id="resume-instructions">
+      <h2>Resume Instructions</h2>
+      <p>Read this document fully, identify the first unchecked item in <a href="#progress">Progress</a>, and continue phase-by-phase. Before product implementation, verify this plan's execution-ready registration metadata is current. During implementation, preserve the existing queue contract and add the Codex delivery worker as a separate adapter path. Use fake client tests before attempting a real Codex SDK/app-server smoke beyond the Phase 0 proof. Ask the user only if a required product decision cannot be resolved from repo evidence.</p>
+      <pre><code>cd /Users/anichols/code/add-codex-delivery-adapter
+bun run build && node --test dist/__tests__/contracts.test.js</code></pre>
+    </section>
+
+    <section id="references">
+      <h2>References</h2>
+      <ul>
+        <li><a href="https://developers.openai.com/codex/app-server">Codex app-server documentation</a></li>
+        <li><a href="https://developers.openai.com/codex/sdk">Codex SDK documentation</a></li>
+        <li><a href="https://developers.openai.com/codex/plugins">Codex plugins documentation</a></li>
+        <li><code>/Users/anichols/code/add-codex-delivery-adapter/README.md</code></li>
+        <li><code>/Users/anichols/code/add-codex-delivery-adapter/src/storage/database.ts</code></li>
+        <li><code>/Users/anichols/code/add-codex-delivery-adapter/src/agentNext.ts</code></li>
+      </ul>
+    </section>
+
+    <section id="plan-review-gates">
+      <h2>Plan Review Gates</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Gate</th>
+            <th>Latest verdict</th>
+            <th>Disposition</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr id="gate-pm-2026-06-11">
+            <td>PM/product-intent review</td>
+            <td><code>PLAN_EXECUTION_READY</code></td>
+            <td>Product intent alignment remains satisfied after Phase 0: delivery stays queue-backed, local-first, disabled by default, recoverable through manual <code>agent next</code>, and generic across adapters with Codex as the first implementation.</td>
+          </tr>
+          <tr id="gate-codex-2026-06-11">
+            <td>Codex plan review</td>
+            <td><code>PLAN_EXECUTION_READY</code></td>
+            <td>Final confirmation returned <code>PLAN_EXECUTION_READY</code>. Cycle 2 and recovery-rerun findings are integrated: registration intentionally uses <code>--codex-thread</code> while target-management uses <code>--thread</code>, delivery failures are split into retryable transport failures versus permanent/operator-actionable failures, stale <code>delivering</code>/<code>ack_pending</code> recovery has explicit startup/interval sweep behavior and tests, and the Phase 0 verification command matches the checked-in spike headings.</td>
+          </tr>
+          <tr id="gate-claude-2026-06-11">
+            <td>Claude Code plan review</td>
+            <td><code>PLAN_EXECUTION_READY</code></td>
+            <td>Claude Code rerun returned <code>PLAN_EXECUTION_READY</code>; optional clarity notes were non-blocking and do not change phase scope.</td>
+          </tr>
+          <tr id="gate-current-blocker">
+            <td>Execution readiness</td>
+            <td><code>execution-ready</code></td>
+            <td>Phase 0 records <code>Verdict: PROCEED</code>, Claude Code is clean, and final Codex confirmation is clean. No remaining contract, queue lifecycle, recovery, API/CLI, BDD, or verification blockers remain.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="decisions-deviations-log">
+      <h2>Decisions / Deviations Log</h2>
+      <ul>
+        <li id="log-2026-06-11-draft-review">2026-06-11: Planning-only review updated the draft to record the actual worktree path, non-ready status, product intent alignment, official Codex docs evidence, disabled-by-default delivery, runnable verify commands, added edge-case BDD scenarios, and added the required test coverage matrix. No product code was changed.</li>
+        <li id="log-2026-06-11-parallel-consumers">2026-06-11: Browser comment <code>cmt_iPquaEF2JhKz</code> clarified that delivery must not be Codex-limited. Updated the plan so Codex is the first adapter on a generic delivery outbox, with manual listeners and automatic workers racing through the same canonical queue claim and losing channels recording externally handled state.</li>
+        <li id="log-2026-06-11-delivery-artifact">2026-06-11: Browser comment <code>cmt_dAnUSR_h8ra5</code> asked what artifact is made available to Codex. Clarified that v1 uses a normal SDK/app-server text turn containing a deterministic prompt, not a Codex plugin or generated polling script.</li>
+        <li id="log-2026-06-11-spike-required">2026-06-11: Browser comment <code>cmt_esmS_Y5k_PIp</code> challenged whether the normal-turn delivery path has been proven reliable. Updated the plan to be explicit that no implementation may start until Phase 0 records a throwaway-thread SDK/app-server spike verdict in <code>thoughts/discoveries/codex-delivery-spike.md</code>.</li>
+        <li id="log-2026-06-11-no-codex-wait-loop">2026-06-11: Browser comment <code>cmt_BeydVhaI2pbE</code> asked how the prompt is used if Codex cannot hold a long-lived connection. Clarified that <code>plan-reviewer</code>, not Codex, owns the long-lived waiting worker; Codex is resumed only for one claimed comment and then exits that turn.</li>
+        <li id="log-2026-06-11-ai-review-cycle-1">2026-06-11: Browser comment <code>cmt_YAQmp7vbE3_d</code> requested Codex and Claude Code execution-readiness review. Both reviewers returned <code>PLAN_NEEDS_REVISION</code>. Integrated concrete plan fixes for Phase 0 proof criteria, API/CLI naming consistency, outbox terminal states, stale claiming recovery, enablement backfill, post-Codex ack failure recovery, lease-cap citation, security wording, and review-gate tracking. The plan remains blocked until a Phase 0 spike records a <code>PROCEED</code> verdict and both reviewers return clean verdicts.</li>
+        <li id="log-2026-06-12-phase-0-complete">2026-06-12: Executed only Phase 0. Added <code>thoughts/discoveries/codex-delivery-spike.md</code> with <code>Verdict: PROCEED</code>. SDK and app-server both proved one-shot text turns after explicit thread start/resume. Folded the required implementation constraints into the plan: verify SDK thread identity, isolate Codex config/connectors, use supported effort values, serialize delivery per target thread, make SDK turn id optional, and classify auth/thread/timeout/app-server failure modes.</li>
+        <li id="log-2026-06-12-review-cycle-2">2026-06-12: Reran plan reviewers after Phase 0. Claude Code returned <code>PLAN_EXECUTION_READY</code>. Codex returned <code>PLAN_NEEDS_REVISION</code> with two content blockers: clarify <code>--thread</code> versus <code>--codex-thread</code>, and split retryable transport failures from permanent/operator-actionable failures. Both content blockers are integrated.</li>
+        <li id="log-2026-06-12-review-cycle-3">2026-06-12: Final Codex rerun found one remaining recovery blocker: stale <code>delivering</code> and <code>ack_pending</code> rows after service/agent restart. Added explicit startup/interval recovery, state-machine transitions, Phase 4 tests, and BDD coverage so rows without stored Codex results can retry only after claim recovery, while rows with stored results retry only ack or become <code>ack_failed</code> without duplicate Codex turns.</li>
+        <li id="log-2026-06-12-review-cycle-4">2026-06-12: Codex recovery rerun found no remaining contract, queue lifecycle, recovery, public API/CLI, BDD, or verification blockers. Integrated its metadata cleanup by updating stale status/gate text and making the Phase 0 spike verification command match the actual Markdown headings.</li>
+        <li id="log-2026-06-12-execution-ready">2026-06-12: Final Codex confirmation returned <code>PLAN_EXECUTION_READY</code>. PM/product intent, Claude Code, and Codex gates are clean; the plan is ready to register with <code>--execution-ready true</code>.</li>
+        <li id="log-2026-06-12-implementation">2026-06-12: Implemented Phases 1-6. Added delivery schemas, prompt/client modules, SQLite target/outbox state, disabled-by-default delivery worker, HTTP/CLI controls, fake delivery fixture, README guidance, and <code>docs/codex-delivery.md</code>. Focused verification passed: <code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js --test-name-pattern "codex|delivery|prompt|app-server"</code> and <code>bun run test:fixtures -- --scenario codex-delivery-fake</code>.</li>
+        <li id="log-2026-06-12-implementation-review">2026-06-12: Scoped implementation reviews completed. Codex returned <code>PASS_SCOPED</code>. Claude returned <code>PASS_WITH_DEFERRED_FOLLOW_UPS</code>; the ack-failure auto-resolve masking edge was reclassified as in scope and fixed with a regression test so <code>ack_failed</code> rows remain visible. Post-fix Codex returned <code>PASS_SCOPED</code> and post-fix Claude returned <code>PASS_WITH_DEFERRED_FOLLOW_UPS</code>. Deferred follow-ups are readability-only cleanup of duplicate claim-release branches, reusing the already-loaded row id in the auto-resolve block, and optionally adding an explicit call counter to the ack-failure test; none change the delivery state-machine contract.</li>
+        <li id="log-2026-06-12-pr-feedback-events">2026-06-12: Addressed PR feedback that automatic delivery stored comment lifecycle events without emitting them to active SSE clients. Wired the delivery worker to the app event bus, emits automatic <code>comment.claimed</code>, <code>comment.acknowledged</code>, <code>comment.resolved</code>, release, and expired-claim events, and added regression coverage for claim/ack/auto-resolve event emission.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

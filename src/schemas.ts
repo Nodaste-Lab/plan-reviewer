@@ -6,6 +6,26 @@ export const anchorStateSchema = z.enum(['mapped', 'stale', 'unmapped']);
 export const claimModeSchema = z.enum(['one', 'selected', 'bulk']);
 export const planLifecycleStateSchema = z.enum(['active', 'deferred', 'archived']);
 export const noteAuthorSchema = z.object({ displayName: z.string().optional() }).optional();
+export const deliveryAdapterSchema = z.enum(['codex']);
+export const deliveryModeSchema = z.enum(['sdk', 'app-server', 'fake']);
+export const deliverySandboxSchema = z.enum(['read-only', 'workspace-write', 'danger-full-access']);
+export const deliveryEffortSchema = z.enum(['low', 'medium', 'high', 'xhigh']);
+export const deliveryStatusSchema = z.enum([
+  'pending',
+  'claiming',
+  'delivering',
+  'ack_pending',
+  'delivered',
+  'resolved',
+  'retry_wait',
+  'ack_failed',
+  'failed',
+  'externally_claimed',
+  'externally_acknowledged',
+  'externally_resolved',
+  'externally_deleted',
+  'paused'
+]);
 export const eventTypeSchema = z.enum([
   'comment.created',
   'comment.claimed',
@@ -72,6 +92,36 @@ export const planPullRequestSchema = z.object({
   }
 });
 
+const deliveryTargetUpdateBaseSchema = z.object({
+  adapter: deliveryAdapterSchema.default('codex'),
+  enabled: z.boolean().default(false),
+  mode: deliveryModeSchema.default('sdk'),
+  threadId: z.string().trim().min(1).optional(),
+  cwd: z.string().trim().min(1).optional(),
+  sandbox: deliverySandboxSchema.optional(),
+  model: z.string().trim().min(1).optional(),
+  effort: deliveryEffortSchema.optional(),
+  autoResolve: z.boolean().default(false)
+});
+
+function requireDeliveryThreadWhenEnabled(input: { enabled?: boolean; threadId?: string }, context: z.RefinementCtx): void {
+  if (input.enabled && !input.threadId) {
+    context.addIssue({
+      code: 'custom',
+      path: ['threadId'],
+      message: 'threadId is required when delivery is enabled'
+    });
+  }
+}
+
+export const deliveryTargetUpdateSchema = deliveryTargetUpdateBaseSchema.superRefine(requireDeliveryThreadWhenEnabled);
+
+export const deliveryTargetSchema = deliveryTargetUpdateSchema.extend({
+  planId: z.string().min(1),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+});
+
 export const registerPlanSchema = z.object({
   repoKey: z.string().optional(),
   repoName: z.string().min(1),
@@ -93,7 +143,8 @@ export const registerPlanSchema = z.object({
     absolutePath: z.string().optional(),
     bytesBase64: z.string().optional()
   })).optional(),
-  updateMode: z.enum(['upsert', 'new-thread']).default('upsert')
+  updateMode: z.enum(['upsert', 'new-thread']).default('upsert'),
+  codexDelivery: deliveryTargetUpdateBaseSchema.omit({ adapter: true }).superRefine(requireDeliveryThreadWhenEnabled).optional()
 }).superRefine((input, context) => {
   if (input.watchMode === 'filesystem' && !input.sourcePath) {
     context.addIssue({
@@ -177,6 +228,10 @@ export const resumePlanSchema = z.object({
 export type PlanPublicationMetadata = z.infer<typeof planPublicationMetadataSchema>;
 export type PlanPullRequest = z.infer<typeof planPullRequestSchema>;
 export type RegisterPlanInput = z.infer<typeof registerPlanSchema>;
+export type DeliveryAdapter = z.infer<typeof deliveryAdapterSchema>;
+export type DeliveryMode = z.infer<typeof deliveryModeSchema>;
+export type DeliveryStatus = z.infer<typeof deliveryStatusSchema>;
+export type DeliveryTargetInput = z.infer<typeof deliveryTargetUpdateSchema>;
 export type CreateCommentInput = z.infer<typeof createCommentSchema>;
 export type ClaimCommentsInput = z.infer<typeof claimCommentsSchema>;
 export type AckCommentInput = z.infer<typeof ackCommentSchema>;
