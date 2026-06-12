@@ -195,6 +195,36 @@ test('delivery worker fake client claims one comment, prompts Codex once, then a
   }
 });
 
+test('delivery worker emits lifecycle events for automatic claim, ack, and auto-resolve', async () => {
+  const store = new PlanReviewStore(tempDbPath('delivery-worker-events'));
+  try {
+    const payload = registerPlanSchema.parse(sampleRegisterPayload());
+    const rendered = renderPlan(payload);
+    const registered = store.registerPlan(payload, rendered.renderedHtml, rendered.warnings);
+    store.upsertDeliveryTarget(registered.planId, { adapter: 'codex', enabled: true, mode: 'fake', threadId: 'thr_events', autoResolve: true });
+    const comment = store.createComment(registered.planId, {
+      versionId: registered.versionId,
+      body: 'Emit lifecycle events',
+      anchorType: 'dom',
+      anchor: domAnchor()
+    }).comment;
+    const emitted: string[] = [];
+    const fake = new FakeCodexClient({ response: { finalResponse: 'Resolved.', fullyResolved: true } });
+    const worker = new DeliveryWorker(store, {
+      enabled: true,
+      serviceUrl: 'http://127.0.0.1:4317',
+      clientFactory: () => fake,
+      eventBus: { emitEvent: event => { emitted.push(event.eventType); } }
+    });
+    const row = await worker.processOnce();
+    assert.equal(row?.status, 'resolved');
+    assert.equal(store.getComment(comment.id).status, 'resolved');
+    assert.deepEqual(emitted, ['comment.claimed', 'comment.acknowledged', 'comment.resolved']);
+  } finally {
+    store.close();
+  }
+});
+
 test('delivery worker releases claims and schedules retry for retryable Codex failures', async () => {
   const store = new PlanReviewStore(tempDbPath('delivery-worker-retry'));
   try {

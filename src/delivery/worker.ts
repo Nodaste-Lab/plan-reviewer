@@ -5,7 +5,7 @@ import { SdkCodexClient } from '../codex/sdkClient.js';
 import { AppServerCodexClient } from '../codex/appServerClient.js';
 import { deliveryErrorShape, type CodexDeliveryInput, type CodexDeliveryResult, type DeliveryOutboxRow } from './types.js';
 import type { DeliveryMode } from '../schemas.js';
-import { PlanReviewStore } from '../storage/database.js';
+import { PlanReviewStore, type StoredEvent } from '../storage/database.js';
 import { PlanReviewError } from '../util.js';
 
 const DELIVERY_AGENT_ID = 'plan-review-delivery:codex';
@@ -20,6 +20,7 @@ export interface DeliveryWorkerOptions {
   deliveringTimeoutMs?: number;
   ackPendingTimeoutMs?: number;
   clientFactory?: (mode: DeliveryMode) => CodexClient;
+  eventBus?: { emitEvent(event: StoredEvent): void };
 }
 
 export class DeliveryWorker {
@@ -157,6 +158,7 @@ export class DeliveryWorker {
         }
         throw error;
       }
+      this.emitEvents(claimed.events);
       const comment = claimed.claimed[0];
       if (!comment?.claim?.id) {
         this.markExternallyHandled(row);
@@ -185,7 +187,7 @@ export class DeliveryWorker {
       const ackedRow = this.store.getDeliveryRow(row.id)!;
       if (ackedRow.status === 'delivered' && target.autoResolve && result.fullyResolved) {
         const latest = this.store.getDeliveryRow(row.id)!;
-        this.store.resolveComment(row.commentId, {
+        const resolved = this.store.resolveComment(row.commentId, {
           resolutionNote: 'Codex delivery response indicated the feedback was fully resolved.',
           action: {
             runId: result.turnId,
@@ -193,6 +195,7 @@ export class DeliveryWorker {
             changedFiles: result.changedFiles
           }
         });
+        if (resolved.event) this.options.eventBus?.emitEvent(resolved.event);
         this.store.markDeliveryStatus(latest.id, 'resolved');
       }
     } catch (error) {
@@ -262,7 +265,7 @@ export class DeliveryWorker {
     const finalResponse = typeof result.finalResponse === 'string' ? result.finalResponse : 'Codex delivery completed.';
     const changedFiles = Array.isArray(result.changedFiles) ? result.changedFiles.filter(item => typeof item === 'string') as string[] : undefined;
     try {
-      this.store.ackComment(row.commentId, {
+      const acked = this.store.ackComment(row.commentId, {
         claimId: row.claimId,
         action: {
           runId: row.adapterTurnId,
@@ -270,6 +273,8 @@ export class DeliveryWorker {
           changedFiles
         }
       });
+      this.emitEvents(acked.expiredEvents);
+      if ('event' in acked && acked.event) this.options.eventBus?.emitEvent(acked.event);
       this.store.markDeliveryStatus(row.id, 'delivered');
     } catch (error) {
       if (error instanceof PlanReviewError && (error.code === 'claim_required' || error.code === 'invalid_state')) {
@@ -288,8 +293,13 @@ export class DeliveryWorker {
   private async releaseClaimIfActive(row: Pick<DeliveryOutboxRow, 'commentId' | 'claimId'>, reason: string): Promise<void> {
     if (!row.claimId || !this.store.activeClaim(row.claimId, row.commentId)) return;
     try {
-      this.store.releaseComment(row.commentId, row.claimId, reason);
+      const released = this.store.releaseComment(row.commentId, row.claimId, reason);
+      this.options.eventBus?.emitEvent(released.event);
     } catch {}
+  }
+
+  private emitEvents(events: StoredEvent[] | undefined): void {
+    for (const event of events ?? []) this.options.eventBus?.emitEvent(event);
   }
 
   private nextAttemptAt(row: DeliveryOutboxRow): string {

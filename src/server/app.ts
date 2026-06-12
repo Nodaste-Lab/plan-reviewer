@@ -1668,7 +1668,8 @@ export function createApp(options: AppOptions): FastifyInstance {
     enabled: deliveryConfig.enabled,
     intervalMs: deliveryConfig.intervalMs,
     serviceUrl: deliveryConfig.serviceUrl,
-    clientFactory: options.delivery?.clientFactory
+    clientFactory: options.delivery?.clientFactory,
+    eventBus: bus
   });
   void sourceSync.rehydrateFromStore();
   deliveryWorker.start();
