@@ -190,13 +190,58 @@ export const registerPlanSchema = z.object({
   }
 });
 
+export const commentAuthorSchema = z.object({
+  type: z.enum(['reviewer', 'agent']).optional(),
+  displayName: z.string().optional(),
+  agentId: z.string().trim().min(1).optional()
+}).superRefine((input, context) => {
+  if (input.type === 'agent' && !input.displayName?.trim()) {
+    context.addIssue({
+      code: 'custom',
+      path: ['displayName'],
+      message: 'Agent comments require createdBy.displayName'
+    });
+  }
+  if (input.agentId && input.type !== 'agent') {
+    context.addIssue({
+      code: 'custom',
+      path: ['agentId'],
+      message: 'agentId is only valid for agent comments'
+    });
+  }
+});
+
 export const createCommentSchema = z.object({
   versionId: z.string().min(1),
   body: z.string().min(1),
   anchorType: anchorTypeSchema,
   anchor: z.record(z.string(), z.unknown()),
   markerScreenshot: markerScreenshotSchema.optional(),
-  createdBy: z.object({ displayName: z.string().optional() }).optional(),
+  createdBy: commentAuthorSchema.optional(),
+  clientMutationId: z.string().optional()
+});
+
+export const createDomCommentSchema = z.object({
+  body: z.string().trim().min(1),
+  target: z.object({
+    planNodeId: z.string().trim().min(1).optional(),
+    selector: z.string().trim().min(1).optional()
+  }).superRefine((input, context) => {
+    if (!input.planNodeId && !input.selector) {
+      context.addIssue({ code: 'custom', message: 'target requires planNodeId or selector' });
+    }
+    if (input.planNodeId && input.selector) {
+      context.addIssue({ code: 'custom', message: 'target.planNodeId and target.selector are mutually exclusive' });
+    }
+    if (input.selector && !/^#\S+$/.test(input.selector)) {
+      context.addIssue({ code: 'custom', path: ['selector'], message: 'target.selector must be an exact id selector such as #ac-2' });
+    }
+  }),
+  createdBy: z.object({
+    type: z.literal('agent').optional(),
+    displayName: z.string().trim().min(1),
+    agentId: z.string().trim().min(1).optional()
+  }).transform(input => ({ ...input, type: 'agent' as const })),
   clientMutationId: z.string().optional()
 });
 
@@ -284,6 +329,7 @@ export type DeliveryMode = z.infer<typeof deliveryModeSchema>;
 export type DeliveryStatus = z.infer<typeof deliveryStatusSchema>;
 export type DeliveryTargetInput = z.infer<typeof deliveryTargetUpdateSchema>;
 export type CreateCommentInput = z.infer<typeof createCommentSchema>;
+export type CreateDomCommentInput = z.infer<typeof createDomCommentSchema>;
 export type ClaimCommentsInput = z.infer<typeof claimCommentsSchema>;
 export type AckCommentInput = z.infer<typeof ackCommentSchema>;
 export type AppendThreadEntryInput = z.infer<typeof appendThreadEntrySchema>;

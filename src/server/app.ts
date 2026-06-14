@@ -4,6 +4,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 
+import { parse, serialize } from 'parse5';
+import type { DefaultTreeAdapterMap } from 'parse5';
 import { ZodError } from 'zod';
 import {
   ackCommentSchema,
@@ -12,6 +14,7 @@ import {
   claimCommentsSchema,
   claimQueueSchema,
   createCommentSchema,
+  createDomCommentSchema,
   createPlanNoteSchema,
   deferPlanSchema,
   deliveryAdapterSchema,
@@ -2081,6 +2084,221 @@ function sendError(reply: FastifyReply, error: unknown) {
   reply.code(500).send(fail(wrapped));
 }
 
+type HtmlNode = DefaultTreeAdapterMap['node'];
+type HtmlElement = DefaultTreeAdapterMap['element'];
+
+interface AnchorTarget {
+  node: HtmlElement;
+  planNodeId: string;
+  id?: string;
+  selector?: string;
+  tagName: string;
+  domPath: string;
+  xpath: string;
+  headingPath: string[];
+  textPreview: string;
+  outerHtmlPreview: string;
+  anchorCommand: string;
+}
+
+function isHtmlElement(node: HtmlNode): node is HtmlElement {
+  return 'tagName' in node && typeof node.tagName === 'string';
+}
+
+function attr(node: HtmlElement, name: string): string | undefined {
+  return node.attrs.find(item => item.name === name)?.value;
+}
+
+function textContent(node: HtmlNode): string {
+  if ('value' in node && typeof node.value === 'string') return node.value;
+  if ('childNodes' in node && Array.isArray(node.childNodes)) return node.childNodes.map(child => textContent(child as HtmlNode)).join('');
+  return '';
+}
+
+function compactText(value: string, limit: number): string {
+  return value.replace(/\s+/g, ' ').trim().slice(0, limit);
+}
+
+function exactIdFromSelector(selector: string): string {
+  return selector.slice(1).replace(/\\([0-9a-fA-F]{1,6}\s?|.)/g, (_match, escape: string) => {
+    const hex = /^[0-9a-fA-F]/.test(escape) ? escape.trim() : '';
+    return hex ? String.fromCodePoint(Number.parseInt(hex, 16)) : escape;
+  });
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function cssString(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function cssIdentifier(value: string): string {
+  return Array.from(value).map((char, index) => {
+    const leadingDigit = /^\d$/.test(char) && (index === 0 || (index === 1 && value.startsWith('-')));
+    if (leadingDigit) return `\\${(char.codePointAt(0)?.toString(16) ?? '').padStart(6, '0')}`;
+    if (/^[A-Za-z0-9_-]$/.test(char)) return char;
+    return `\\${char}`;
+  }).join('');
+}
+
+function cssIdSelector(value: string): string {
+  return `#${cssIdentifier(value)}`;
+}
+
+function htmlAttribute(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function outerHtml(node: HtmlElement): string {
+  const attributes = node.attrs.map(item => ` ${item.name}="${htmlAttribute(item.value)}"`).join('');
+  const children = serialize(node);
+  const voidTags = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
+  return voidTags.has(node.tagName.toLowerCase()) ? `<${node.tagName}${attributes}>` : `<${node.tagName}${attributes}>${children}</${node.tagName}>`;
+}
+
+function traverseHtml(node: HtmlNode, visitor: (node: HtmlElement, ancestors: HtmlElement[]) => void, ancestors: HtmlElement[] = []): void {
+  const nextAncestors = isHtmlElement(node) ? [...ancestors, node] : ancestors;
+  if (isHtmlElement(node)) visitor(node, ancestors);
+  if ('childNodes' in node && Array.isArray(node.childNodes)) {
+    for (const child of node.childNodes) traverseHtml(child as HtmlNode, visitor, nextAncestors);
+  }
+}
+
+function elementIndexAmongSiblings(node: HtmlElement, ancestors: HtmlElement[]): number {
+  const parent = ancestors.at(-1);
+  if (!parent?.childNodes) return 1;
+  let index = 0;
+  for (const child of parent.childNodes) {
+    if (isHtmlElement(child as HtmlNode) && (child as HtmlElement).tagName === node.tagName) index += 1;
+    if (child === node) return index;
+  }
+  return 1;
+}
+
+function firstDescendantHeadingText(node: HtmlElement): string | undefined {
+  if (!('childNodes' in node) || !Array.isArray(node.childNodes)) return undefined;
+  for (const child of node.childNodes) {
+    if (!isHtmlElement(child as HtmlNode)) continue;
+    const element = child as HtmlElement;
+    if (/^h[1-6]$/i.test(element.tagName)) return compactText(textContent(element), 80);
+    const nested = firstDescendantHeadingText(element);
+    if (nested) return nested;
+  }
+  return undefined;
+}
+
+function headingPathForElement(node: HtmlElement, ancestors: HtmlElement[]): string[] {
+  const headings: string[] = [];
+  for (const element of [node, ...ancestors].reverse()) {
+    const heading = firstDescendantHeadingText(element);
+    if (heading && !headings.includes(heading)) headings.push(heading);
+  }
+  return headings.slice(-5);
+}
+
+function buildAnchorTargets(planId: string, renderedHtml: string): Array<Omit<AnchorTarget, 'node'>> {
+  const document = parse(renderedHtml) as DefaultTreeAdapterMap['document'];
+  const targets: Array<Omit<AnchorTarget, 'node'>> = [];
+  const headingStack: string[] = [];
+  const semanticTags = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'section', 'article', 'figure', 'img', 'table', 'ul', 'ol', 'pre']);
+  traverseHtml(document as unknown as HtmlNode, (node, ancestors) => {
+    const tagName = node.tagName.toLowerCase();
+    const headingLevel = /^h([1-6])$/.exec(tagName)?.[1];
+    const nodeId = attr(node, 'data-plan-node-id');
+    const explicitId = attr(node, 'id');
+    const textPreview = compactText(textContent(node), 160);
+    if (headingLevel && textPreview) {
+      const level = Number(headingLevel);
+      headingStack.splice(level - 1);
+      headingStack[level - 1] = textPreview.slice(0, 80);
+    }
+    if (!nodeId || (!explicitId && !semanticTags.has(tagName))) return;
+    const parts = [...ancestors, node].filter(item => item.tagName).map((item, index, all) => {
+      const parentAncestors = all.slice(0, index);
+      return `${item.tagName.toLowerCase()}[${elementIndexAmongSiblings(item, parentAncestors)}]`;
+    });
+    const selector = explicitId ? cssIdSelector(explicitId) : undefined;
+    targets.push({
+      planNodeId: nodeId,
+      id: explicitId,
+      selector,
+      tagName,
+      domPath: parts.join('/'),
+      xpath: `/${parts.join('/')}`,
+      headingPath: headingPathForElement(node, ancestors),
+      textPreview: tagName === 'img' ? compactText(attr(node, 'alt') ?? attr(node, 'title') ?? '', 160) : textPreview,
+      outerHtmlPreview: compactText(outerHtml(node), 500),
+      anchorCommand: `plan-review comments add ${planId} --plan-node-id ${shellQuote(nodeId)} --body ${shellQuote('<comment>')} --agent ${shellQuote('<agent-name>')} --json`
+    });
+  });
+  return targets;
+}
+
+function resolveDomAnchor(planId: string, renderedHtml: string, target: { planNodeId?: string; selector?: string }) {
+  const document = parse(renderedHtml) as DefaultTreeAdapterMap['document'];
+  const targets = buildAnchorTargets(planId, renderedHtml);
+  const wantedId = target.selector ? exactIdFromSelector(target.selector) : undefined;
+  const matches: AnchorTarget[] = [];
+  traverseHtml(document as unknown as HtmlNode, (node, ancestors) => {
+    const planNodeId = attr(node, 'data-plan-node-id');
+    if (!planNodeId) return;
+    const exactSelectorMatch = wantedId !== undefined && attr(node, 'id') === wantedId;
+    const nodeIdMatch = target.planNodeId !== undefined && planNodeId === target.planNodeId;
+    if (!nodeIdMatch && !exactSelectorMatch) return;
+    const nodeIdAttr = attr(node, 'id');
+    const listed = targets.find(item => item.planNodeId === planNodeId) ?? {
+      planNodeId,
+      id: nodeIdAttr,
+      selector: nodeIdAttr ? cssIdSelector(nodeIdAttr) : undefined,
+      tagName: node.tagName.toLowerCase(),
+      domPath: '',
+      xpath: '',
+      headingPath: headingPathForElement(node, ancestors),
+      textPreview: compactText(textContent(node), 160),
+      outerHtmlPreview: compactText(outerHtml(node), 500),
+      anchorCommand: `plan-review comments add ${planId} --plan-node-id ${shellQuote(planNodeId)} --body ${shellQuote('<comment>')} --agent ${shellQuote('<agent-name>')} --json`
+    };
+    const parts = [...ancestors, node].filter(item => item.tagName).map((item, index, all) => {
+      const parentAncestors = all.slice(0, index);
+      return `${item.tagName.toLowerCase()}[${elementIndexAmongSiblings(item, parentAncestors)}]`;
+    });
+    matches.push({ node, ...listed, domPath: listed.domPath || parts.join('/'), xpath: listed.xpath || `/${parts.join('/')}` });
+  });
+  if (matches.length > 1) {
+    throw new PlanReviewError(
+      'validation_failed',
+      'DOM comment target matched multiple rendered nodes',
+      400,
+      { target, matches: matches.map(item => ({ planNodeId: item.planNodeId, selector: item.selector, textPreview: item.textPreview })) },
+      'Refresh the plan read surface with plan-review show <planId> --json and retry with a unique anchorTargets[].planNodeId.'
+    );
+  }
+  const resolved = matches[0];
+  if (!resolved) {
+    throw new PlanReviewError(
+      'validation_failed',
+      'DOM comment target was not found in the latest rendered plan',
+      400,
+      { target },
+      'Refresh the plan read surface with plan-review show <planId> --json and retry with a current anchorTargets[].planNodeId.'
+    );
+  }
+  return {
+    planNodeId: resolved.planNodeId,
+    cssSelector: resolved.id ? cssIdSelector(resolved.id) : `${resolved.tagName}[data-plan-node-id="${cssString(resolved.planNodeId)}"]`,
+    domPath: resolved.domPath,
+    xpath: resolved.xpath,
+    textQuote: { exact: resolved.textPreview.slice(0, 160), prefix: '', suffix: '' },
+    headingPath: resolved.headingPath,
+    rect: { x: 0, y: 0, width: 1, height: 1 },
+    viewport: { width: 1, height: 1 },
+    textPreview: resolved.textPreview.slice(0, 120),
+    outerHtmlPreview: resolved.outerHtmlPreview
+  };
+}
+
 export function createApp(options: AppOptions): FastifyInstance {
   const app = Fastify({ logger: false });
   const store = new PlanReviewStore(options.dbPath);
@@ -2263,6 +2481,7 @@ export function createApp(options: AppOptions): FastifyInstance {
         latestNote: store.listPlanNotes(plan.id, { limit: 1 })[0],
         notes: store.listPlanNotes(plan.id),
         comments: store.listComments(plan.id),
+        anchorTargets: buildAnchorTargets(plan.id, store.getRenderedHtml(plan.id)),
         delivery: {
           codex: store.getDeliveryTarget(plan.id, 'codex'),
           hermes: store.getDeliveryTarget(plan.id, 'hermes'),
@@ -2512,7 +2731,41 @@ export function createApp(options: AppOptions): FastifyInstance {
     try {
       const { planId } = request.params as { planId: string };
       const { plan } = store.getPlan(planId);
-      const result = store.createComment(plan.id, createCommentSchema.parse(request.body));
+      const input = createCommentSchema.parse(request.body);
+      if (input.createdBy?.type === 'agent') {
+        throw new PlanReviewError(
+          'validation_failed',
+          'Agent-authored comments must use the native DOM comment endpoint',
+          400,
+          {},
+          'Retry with POST /api/plans/:planId/comments/dom or plan-review comments add.'
+        );
+      }
+      const result = store.createComment(plan.id, input);
+      if (result.created) {
+        bus.emitEvent(result.event);
+        deliveryWorker.wake();
+      }
+      return ok(result);
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.post('/api/plans/:planId/comments/dom', async (request, reply) => {
+    try {
+      const { planId } = request.params as { planId: string };
+      const { plan, version } = store.getPlan(planId);
+      const input = createDomCommentSchema.parse(request.body);
+      const anchor = resolveDomAnchor(plan.id, store.getRenderedHtml(plan.id), input.target);
+      const result = store.createComment(plan.id, {
+        versionId: version.id,
+        body: input.body,
+        anchorType: 'dom',
+        anchor,
+        createdBy: input.createdBy,
+        clientMutationId: input.clientMutationId
+      });
       if (result.created) {
         bus.emitEvent(result.event);
         deliveryWorker.wake();
