@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mermaid Diagram Rendering in Plan Viewer</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0b1020; --panel:#111827; --panel-2:#0f172a; --text:#e5e7eb; --muted:#a7b0c0; --accent:#38bdf8; --accent-2:#a78bfa; --border:#2b364d; --ok:#22c55e; --warn:#f59e0b; --bad:#fb7185; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.55; }
+    main { max-width: 1120px; margin: 0 auto; padding: 40px 22px 72px; }
+    header, section, article, figure { border: 1px solid var(--border); background: linear-gradient(180deg, rgba(17,24,39,.96), rgba(15,23,42,.96)); border-radius: 16px; padding: 22px; margin: 18px 0; }
+    header { border-color: rgba(56,189,248,.55); background: radial-gradient(circle at top left, rgba(56,189,248,.18), transparent 36%), var(--panel); }
+    h1, h2, h3, h4 { line-height: 1.2; margin: 0 0 12px; }
+    h1 { font-size: clamp(2rem, 5vw, 3.4rem); letter-spacing: -.035em; }
+    h2 { font-size: 1.45rem; color: #f8fafc; }
+    h3 { margin-top: 18px; color: #dbeafe; }
+    p { margin: 0 0 12px; }
+    a { color: #7dd3fc; }
+    code, pre { background: #020617; color: #dbeafe; border: 1px solid #263246; border-radius: 8px; }
+    code { padding: .12rem .35rem; }
+    pre { padding: 14px; overflow: auto; }
+    ul, ol { margin-top: 8px; }
+    li { margin: 6px 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid var(--border); padding: 10px; vertical-align: top; text-align: left; }
+    th { color: #bfdbfe; background: #0b1220; }
+    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 18px; }
+    .meta div, .callout { background: rgba(15,23,42,.82); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+    .label { display: block; color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; font-weight: 800; }
+    .status { display: inline-flex; gap: 8px; align-items: center; border-radius: 999px; border: 1px solid rgba(245,158,11,.55); color: #fde68a; padding: 4px 10px; font-weight: 800; background: rgba(245,158,11,.10); }
+    .decision { border-left: 4px solid var(--accent); padding-left: 12px; }
+    .non-goal { color: #fecaca; }
+    .progress-list { list-style: none; padding-left: 0; }
+    .progress-list li { display: flex; gap: 10px; align-items: flex-start; }
+    .progress-list input { margin-top: .35rem; }
+    .phase { border-color: rgba(167,139,250,.45); }
+    .phase h3 { color: #ddd6fe; }
+    .success { color: #bbf7d0; }
+    .warning { color: #fde68a; }
+    .muted { color: var(--muted); }
+  </style>
+</head>
+<body>
+<main id="plan-mermaid-rendering">
+  <header id="title">
+    <p class="status">Status: execution-ready · browser, PM, Codex, and Claude plan-review gates passed</p>
+    <h1>Mermaid Diagram Rendering in Plan Viewer</h1>
+    <p id="linear-reference"><strong>Linear issue:</strong> none provided. Do not invent a NOD key for this plan.</p>
+    <div class="meta" id="plan-metadata">
+      <div><span class="label">Plan path</span><code>thoughts/plans/mermaid-diagram-rendering.html</code></div>
+      <div><span class="label">Primary surface</span><code>src/render/render.ts</code>, <code>src/server/app.ts</code>, browser review shell</div>
+      <div><span class="label">Requested outcome</span>Mermaid diagrams render in the viewer and remain commentable at diagram-element granularity.</div>
+    </div>
+  </header>
+
+  <section id="goal">
+    <h2>Goal</h2>
+    <p>Plan documents can include Mermaid diagrams using conventional Mermaid blocks, and the plan viewer renders them as safe, readable SVG diagrams without allowing plan-authored scripts. Reviewers can select a diagram node, edge, label, or the diagram as a whole and submit normal browser comments that agents receive through the existing queue.</p>
+  </section>
+
+  <section id="solution-narrative">
+    <h2>Solution narrative</h2>
+    <p>The viewer should treat Mermaid as a first-class, service-owned rendering feature rather than as arbitrary plan JavaScript. Registration keeps the source HTML safe and script-free, annotates Mermaid source blocks with stable source hashes, and the review shell renders those blocks after the iframe loads by importing the official bundled Mermaid browser ESM file from a local vendor route such as <code>/vendor/mermaid.esm.min.mjs</code>. The iframe remains no-script; only the parent review shell runs trusted viewer code and injects sanitized SVG into the same-origin iframe DOM.</p>
+    <p>The commenter then targets Mermaid SVG sub-elements the same way it targets other plan DOM, with added diagram metadata so anchors can survive source sync and re-rendering. If Mermaid cannot parse a diagram, the viewer shows an inline, commentable error panel next to the original source instead of blanking the plan or replacing the last good synchronized source.</p>
+    <p>The implementation must not expose a brittle package-entry route that leaves Mermaid’s relative module imports unresolved. If the installed package entry is not a single browser-ready bundle, implementation should serve the package’s documented browser bundle path or add a minimal static vendor mount for Mermaid’s required package assets. Browser import success is proven by the e2e viewer scenario that renders an SVG from the vendor route; the dependency smoke test remains a secondary HTTP-level check for route existence, MIME type, and bytes.</p>
+  </section>
+
+  <section id="why-this-exists">
+    <h2>Why this plan exists</h2>
+    <p>Mermaid blocks are currently inert because plan-authored scripts are removed by <code>renderPlan</code> and the rendered iframe is served with <code>script-src 'none'</code>. That is the correct safety baseline, but it means diagrams authored inside plans cannot render. The missing product behavior is a trusted viewer-side Mermaid pipeline that keeps the plan artifact safe while making diagrams useful review targets.</p>
+  </section>
+
+  <section id="authority-inputs">
+    <h2>Authority and inputs</h2>
+    <ul>
+      <li>User request: add Mermaid diagram support inside the viewer, ideally with selectable diagram elements for commenter questions.</li>
+      <li><code>AGENTS.md</code>: rendered-plan safety, comment lifecycle, source sync, and browser UI are product-critical.</li>
+      <li><code>thoughts/specs/product_intent.md</code>: reviewers must select exact plan content, comments must stay durable, and sanitized render output must remain script-free.</li>
+      <li>Mermaid API evidence: <code>mermaid.initialize({ startOnLoad: false })</code> plus <code>mermaid.render()</code>/<code>mermaid.run()</code>; <code>securityLevel: 'strict'</code> is the safe default and disables Mermaid click callbacks.</li>
+      <li>Dependency evidence: npm <code>mermaid</code> is MIT licensed, current version observed as <code>11.15.0</code>, and is the canonical implementation rather than a custom diagram parser.</li>
+    </ul>
+  </section>
+
+  <section id="current-implementation-reality">
+    <h2>Current implementation reality</h2>
+    <ul>
+      <li><code>src/render/render.ts</code> sanitizes registered HTML, removes <code>&lt;script&gt;</code>, rewrites images, and adds <code>data-plan-node-id</code> to rendered nodes.</li>
+      <li><code>/render/:planId</code> in <code>src/server/app.ts</code> serves the plan iframe with <code>script-src 'none'</code> and <code>default-src 'none'</code>; this should remain true for plan-authored content.</li>
+      <li>The parent review shell already serves trusted vendor scripts for <code>html2canvas</code>, <code>@medv/finder</code>, and <code>@washi-ui/core</code>, then reaches into the same-origin iframe to attach selection/comment behavior.</li>
+      <li>Comment anchoring currently supports <code>dom</code>, <code>text_range</code>, and <code>image</code>. SVG diagram elements can use <code>dom</code> anchors if the client assigns stable selectors and metadata.</li>
+      <li>Server-side anchor remapping currently checks stored rendered HTML for <code>data-plan-node-id</code>, text quotes, image hashes, and selectors; dynamic Mermaid anchors need explicit source-container metadata to avoid false stale states.</li>
+    </ul>
+  </section>
+
+  <section id="product-intent-alignment">
+    <h2>Product intent alignment</h2>
+    <p>This plan advances <code>thoughts/specs/product_intent.md</code> by making the simplest reviewer workflow work for diagrams: open a plan, select the exact visual element needing discussion, submit a comment, and trust the agent receives durable context. It preserves the safety bar that rendered output remains script-free from plan authors and that source sync fails safe.</p>
+    <ul>
+      <li><strong>Golden path:</strong> authors write ordinary Mermaid blocks; reviewers do not install browser extensions, run separate renderers, or screenshot diagrams manually.</li>
+      <li><strong>Safe default:</strong> the iframe stays no-script and Mermaid runs only as trusted viewer code with strict Mermaid security, local assets, and post-render SVG hardening.</li>
+      <li><strong>Recovery:</strong> malformed diagrams produce an inline commentable error with the exact source block and next fix, while the rest of the plan remains reviewable.</li>
+      <li><strong>Truthful status:</strong> diagram render failures are visible in the viewer and test-covered; they do not masquerade as successful blank diagrams.</li>
+    </ul>
+  </section>
+
+  <section id="locked-decisions">
+    <h2>Locked decisions</h2>
+    <ul>
+      <li id="decision-no-plan-scripts" class="decision"><strong>Do not enable plan-authored scripts.</strong> Keep <code>/render</code> CSP <code>script-src 'none'</code> and do not add <code>allow-scripts</code> to the plan iframe.</li>
+      <li id="decision-parent-render" class="decision"><strong>Render Mermaid from trusted parent-shell code.</strong> Serve the official browser-ready Mermaid ESM bundle through a local <code>/vendor/mermaid.esm.min.mjs</code>-style route, or serve the required Mermaid static module graph if the bundle imports local chunks, and render after iframe load/source-refresh.</li>
+      <li id="decision-strict-mermaid" class="decision"><strong>Use Mermaid strict security.</strong> Configure <code>startOnLoad:false</code>, <code>securityLevel:'strict'</code>, <code>htmlLabels:false</code>, deterministic IDs, bounded text size, and dark theme variables.</li>
+      <li id="decision-source-hash" class="decision"><strong>Anchor to source and rendered element.</strong> Store Mermaid source-node ID and source hash in comment anchors, then add SVG element IDs for precise in-view reattachment. For Mermaid comments, <code>anchor.diagram.sourcePlanNodeId</code> is the static source block <code>data-plan-node-id</code>, while <code>anchor.planNodeId</code> may identify the rendered SVG sub-element; server remapping must use the source block/hash fields rather than requiring the dynamic SVG node to exist in stored rendered HTML.</li>
+      <li id="decision-error-placeholder" class="decision"><strong>Diagram failure is local, not whole-plan failure.</strong> A malformed Mermaid block renders a visible error placeholder and keeps comments/source sync operational.</li>
+    </ul>
+  </section>
+
+  <section id="acceptance-criteria">
+    <h2>Acceptance criteria</h2>
+    <ol>
+      <li id="ac-1">A plan with <code>&lt;pre class="mermaid"&gt;</code>, <code>&lt;div class="mermaid"&gt;</code>, or <code>&lt;pre&gt;&lt;code class="language-mermaid"&gt;</code> displays a rendered SVG diagram in the viewer.</li>
+      <li id="ac-2">Rendering does not require or permit plan-authored scripts; existing script-blocking warnings and iframe CSP remain effective.</li>
+      <li id="ac-3">Reviewers can click/select a Mermaid node, edge, label, or fallback diagram container and submit a normal comment.</li>
+      <li id="ac-4">Agent-visible comment payloads include useful diagram context through the correctness-critical <code>plan-review agent next --json</code> path: source block node ID, diagram source hash, selected SVG element key/label when available, heading path, selector, preview text, and screenshot when capture succeeds.</li>
+      <li id="ac-5">Existing markers redraw after Mermaid rendering and source refresh; comments on unchanged diagram elements do not become falsely stale merely because SVG is client-rendered.</li>
+      <li id="ac-6">Malformed Mermaid source shows a visible, accessible, commentable error panel while the rest of the plan remains usable.</li>
+      <li id="ac-7">The implementation is covered by contract/dependency tests and browser e2e tests, including comment creation on diagram elements.</li>
+      <li id="ac-8">Rendered Mermaid diagrams use viewer-owned dark card styling that matches the plan-review shell palette instead of showing a mismatched white diagram background.</li>
+    </ol>
+  </section>
+
+  <section id="bdd-scenarios">
+    <h2>BDD scenarios</h2>
+    <article id="bdd-render-happy-path">
+      <h3>Rendered diagram happy path</h3>
+      <p><strong>Given</strong> a registered plan contains a Mermaid flowchart block, <strong>when</strong> the reviewer opens the plan URL, <strong>then</strong> the viewer replaces the source block with an SVG diagram, preserves an accessible fallback/source affordance, and keeps the plan iframe no-script.</p>
+    </article>
+    <article id="bdd-select-node-comment">
+      <h3>Node-level commenting</h3>
+      <p><strong>Given</strong> a rendered Mermaid diagram has visible nodes and edges, <strong>when</strong> the reviewer selects a node and submits “why this transition?”, <strong>then</strong> the comment payload identifies that diagram source and selected node, and the marker reattaches to that node after reload.</p>
+    </article>
+    <article id="bdd-select-edge-comment">
+      <h3>Edge and label commenting</h3>
+      <p><strong>Given</strong> a Mermaid edge or edge label is clicked, <strong>when</strong> the composer opens, <strong>then</strong> the selected target is the nearest meaningful SVG edge/label element rather than the whole iframe body.</p>
+    </article>
+    <article id="bdd-source-sync-refresh">
+      <h3>Source sync refresh</h3>
+      <p><strong>Given</strong> a plan source sync updates text outside an unchanged diagram, <strong>when</strong> the open viewer refreshes the iframe content, <strong>then</strong> Mermaid rendering reruns, markers redraw after render completion, and existing Mermaid comments remain mapped.</p>
+    </article>
+    <article id="bdd-bad-diagram">
+      <h3>Malformed diagram recovery</h3>
+      <p><strong>Given</strong> one Mermaid block has invalid syntax, <strong>when</strong> the viewer renders diagrams, <strong>then</strong> that block shows an error panel with a clear fix path while other diagrams and comments continue working.</p>
+    </article>
+    <article id="bdd-safety">
+      <h3>Safety boundary</h3>
+      <p><strong>Given</strong> a plan contains a Mermaid block plus a <code>&lt;script&gt;</code> tag or unsafe URL, <strong>when</strong> it is registered and opened, <strong>then</strong> the script remains removed, unsafe generated SVG attributes are stripped, and no plan-authored JavaScript executes.</p>
+    </article>
+  </section>
+
+  <section id="progress">
+    <h2>Progress</h2>
+    <ul class="progress-list">
+      <li><input type="checkbox" checked disabled> <span><strong>P1:</strong> Normalize and identify Mermaid source blocks.</span></li>
+      <li><input type="checkbox" checked disabled> <span><strong>P2:</strong> Render safe Mermaid SVG in the viewer.</span></li>
+      <li><input type="checkbox" checked disabled> <span><strong>P3:</strong> Add diagram-element comment anchoring.</span></li>
+      <li><input type="checkbox" checked disabled> <span><strong>P4:</strong> Cover Mermaid rendering and comments with tests.</span></li>
+      <li><input type="checkbox" checked disabled> <span><strong>P5:</strong> Run full verification and implementation review.</span></li>
+    </ul>
+  </section>
+
+  <section id="phase-plan">
+    <h2>Phase-by-phase execution plan</h2>
+
+    <article class="phase" id="phase-p1-source-blocks">
+      <h3>P1 — Normalize and identify Mermaid source blocks</h3>
+      <h4>End State</h4>
+      <p>Registered rendered HTML preserves Mermaid source blocks as inert, safe, stable comment targets with enough metadata for client rendering and server remapping.</p>
+      <h4>Tests first</h4>
+      <ul>
+        <li>Add contract tests in <code>src/__tests__/contracts.test.ts</code> proving Mermaid block variants survive sanitization with <code>data-plan-mermaid-source="true"</code>, a stable <code>data-plan-mermaid-source-hash</code>, and a normal <code>data-plan-node-id</code>.</li>
+        <li>Add a regression assertion that ordinary <code>&lt;script&gt;</code> removal still reports <code>blocked_script</code>.</li>
+      </ul>
+      <h4>Expected files</h4>
+      <ul>
+        <li><code>src/render/render.ts</code></li>
+        <li><code>src/__tests__/contracts.test.ts</code></li>
+      </ul>
+      <h4>Work</h4>
+      <ul>
+        <li>Detect conventional Mermaid authoring forms after sanitization: <code>pre.mermaid</code>, <code>div.mermaid</code>, and <code>pre &gt; code.language-mermaid</code>.</li>
+        <li>Normalize each source block with source hash, source text preview, and a viewer-state attribute such as <code>data-plan-mermaid-status="pending"</code>.</li>
+        <li>Keep source text escaped/inert and do not add script tags or active embeds to plan HTML.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build && node --test dist/__tests__/contracts.test.js</code></pre>
+    </article>
+
+    <article class="phase" id="phase-p2-viewer-renderer">
+      <h3>P2 — Render safe Mermaid SVG in the viewer</h3>
+      <h4>End State</h4>
+      <p>The review shell renders Mermaid diagrams after iframe load and after source-refresh replacement, using trusted parent code while keeping the iframe no-script.</p>
+      <h4>Tests first</h4>
+      <ul>
+        <li>Add dependency smoke coverage for the Mermaid vendor route.</li>
+        <li>Add an e2e scenario with a plan containing a Mermaid block and assert the iframe contains a rendered SVG plus no executable plan scripts.</li>
+      </ul>
+      <h4>Expected files</h4>
+      <ul>
+        <li><code>package.json</code>, lockfile</li>
+        <li><code>src/server/app.ts</code></li>
+        <li><code>src/__tests__/dependency-smoke.test.ts</code></li>
+        <li><code>src/test-fixtures/e2e-run.ts</code></li>
+      </ul>
+      <h4>Work</h4>
+      <ul>
+        <li>Add the official <code>mermaid</code> dependency and serve a browser-importable local bundle route, preferring <code>mermaid/dist/mermaid.esm.min.mjs</code> or the package’s documented bundled ESM artifact over the Node package entry if the entry has unresolved relative imports.</li>
+        <li>Import Mermaid in the parent <code>client.js</code>, initialize once with strict security, no auto-load, no HTML labels, deterministic IDs, bounded text size, and dark theme variables.</li>
+        <li>On iframe load/source refresh, find Mermaid source blocks, render them asynchronously, replace each block with a wrapper containing sanitized SVG, and leave a hidden/collapsible source copy for diagnostics.</li>
+        <li>Harden generated SVG before insertion with an explicit browser-side allowlist pass. Do not rely only on Mermaid’s internal sanitization.</li>
+        <li>Use this hardening contract: retain only Mermaid-required SVG structure and presentation such as <code>svg</code>, <code>g</code>, <code>path</code>, <code>line</code>, <code>polyline</code>, <code>polygon</code>, <code>rect</code>, <code>circle</code>, <code>ellipse</code>, <code>text</code>, <code>tspan</code>, <code>defs</code>, <code>marker</code>, <code>style</code>, <code>title</code>, <code>desc</code>, geometry/presentation attributes, <code>viewBox</code>, <code>role</code>, <code>aria-*</code>, <code>id</code>, <code>class</code>, and <code>data-*</code>. Retained <code>style</code> blocks are accepted only as Mermaid strict-mode theming output; if tests show author-controlled CSS can escape normal presentation styling, strip <code>style</code> blocks and rely on presentation attributes/theme variables instead. Strip all event-handler attributes, <code>script</code>, <code>foreignObject</code>, <code>use</code>, <code>animate</code>, <code>set</code>, <code>image</code> with external or inline hrefs, <code>xlink:href</code>, and <code>href</code> on non-anchor SVG elements. The required support target is flowchart and sequence diagrams first; if Mermaid 11.x output for another diagram type requires <code>use</code>, that type stays out of scope until a narrower safe allowlist is added.</li>
+        <li>Show an accessible inline error panel for render failures with the Mermaid error text and source preview; do not fail whole-plan registration or source sync.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build && node --test dist/__tests__/dependency-smoke.test.js
+bun run build && node dist/test-fixtures/e2e-run.js</code></pre>
+    </article>
+
+    <article class="phase" id="phase-p3-comment-anchors">
+      <h3>P3 — Add diagram-element comment anchoring</h3>
+      <h4>End State</h4>
+      <p>Reviewer clicks and text selections inside rendered Mermaid SVG choose meaningful diagram sub-elements when possible, and comments remain durable across reloads/source refreshes.</p>
+      <h4>Tests first</h4>
+      <ul>
+        <li>Add e2e coverage that clicks a Mermaid node and submits a comment; assert the resulting stored comment has <code>anchorType:"dom"</code> plus Mermaid-specific anchor metadata.</li>
+        <li>Add contract or e2e coverage that claims the same Mermaid comment through <code>plan-review agent next --json</code> and asserts <code>conversationPayload.evidence</code> includes the Mermaid source node ID, source hash, selected element key/label, selector, preview text, and screenshot asset ID when present.</li>
+        <li>Add e2e coverage that reloads or refreshes the rendered plan and confirms the comment marker reattaches after Mermaid rendering completes and the comment remains <code>anchorState:"mapped"</code>.</li>
+        <li>Add contract coverage for server-side remapping with an anchor shaped like <code>{ diagram: { kind:"mermaid", sourcePlanNodeId, sourceHash, elementKey, elementLabel }, planNodeId:"dynamic-svg-node" }</code>. The expected result is <code>anchorState:"mapped"</code> when rendered HTML contains <code>data-plan-node-id="sourcePlanNodeId"</code> and <code>data-plan-mermaid-source-hash="sourceHash"</code>, even if <code>dynamic-svg-node</code> and SVG text quotes are absent.</li>
+      </ul>
+      <h4>Expected files</h4>
+      <ul>
+        <li><code>src/server/app.ts</code></li>
+        <li><code>src/storage/database.ts</code></li>
+        <li><code>src/__tests__/contracts.test.ts</code></li>
+        <li><code>src/test-fixtures/e2e-run.ts</code></li>
+      </ul>
+      <h4>Work</h4>
+      <ul>
+        <li>After SVG insertion, assign stable <code>data-plan-node-id</code> values to the diagram wrapper and meaningful SVG nodes such as Mermaid node groups, clusters, edge paths, edge labels, and text labels. Scope every dynamic SVG ID under the source block ID, for example <code>${sourcePlanNodeId}--svg-${elementKey}</code>, so multiple diagrams cannot collide with each other or with server-assigned IDs.</li>
+        <li>Update comment targeting to prefer the nearest meaningful Mermaid SVG element instead of falling back to the entire SVG or body.</li>
+        <li>Extend <code>anchorForElement</code> to include <code>diagram.kind="mermaid"</code>, <code>sourcePlanNodeId</code>, <code>sourceHash</code>, <code>elementKey</code>, <code>elementLabel</code>, and rendered SVG selector/rect data.</li>
+        <li>Extend <code>PlanReviewStore.buildConversationPayload</code> so Mermaid anchor metadata is copied into <code>conversationPayload.evidence.diagram</code> and therefore appears in <code>plan-review agent next --json</code>, not only in the stored browser comment.</li>
+        <li>Adjust marker redraw ordering so Mermaid rendering completes before <code>redrawMarkers()</code>, and rerender markers after any delayed diagram render settles.</li>
+        <li>Update <code>PlanReviewStore.remapAnchorState()</code> with an explicit Mermaid branch: when <code>anchor.diagram?.kind === "mermaid"</code>, return <code>mapped</code> if stored rendered HTML contains both <code>data-plan-node-id="${sourcePlanNodeId}"</code> for the source block and <code>data-plan-mermaid-source-hash="${sourceHash}"</code>. This branch bypasses the existing quote match requirement because edge/path SVG elements may have no text, and it must not require the dynamic rendered SVG element <code>planNodeId</code> to appear in stored rendered HTML.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build && node --test dist/__tests__/contracts.test.js
+bun run build && node dist/test-fixtures/e2e-run.js</code></pre>
+    </article>
+
+    <article class="phase" id="phase-p4-test-matrix">
+      <h3>P4 — Cover Mermaid rendering and comments with tests</h3>
+      <h4>End State</h4>
+      <p>Automated coverage proves the happy path, safety boundary, malformed diagram recovery, source sync behavior, and commenter integration.</p>
+      <h4>Tests first</h4>
+      <p>This phase consolidates and broadens the tests written in P1-P3 before any final cleanup.</p>
+      <h4>Expected files</h4>
+      <ul>
+        <li><code>src/__tests__/contracts.test.ts</code></li>
+        <li><code>src/__tests__/dependency-smoke.test.ts</code></li>
+        <li><code>src/test-fixtures/e2e-run.ts</code></li>
+      </ul>
+      <h4>Work</h4>
+      <ul>
+        <li>Add fixture HTML that includes valid flowchart, sequence, and a malformed diagram block. Other Mermaid diagram types are not required for this first slice unless their output passes the same hardening contract without broadening the SVG allowlist.</li>
+        <li>Assert stored comment payload context and <code>agent next</code> claimed payload context for node-level and fallback container-level comments.</li>
+        <li>Assert source sync refresh rerenders diagrams and does not replace a valid plan with unsafe or blank output.</li>
+        <li>Assert SVG hardening with a browser e2e fixture that injects or stubs Mermaid output containing <code>onclick</code>, <code>foreignObject</code>, <code>use href</code>, <code>animate</code>, <code>set</code>, <code>xlink:href</code>, and external <code>image href</code>; verify the post-render iframe DOM contains none of those elements/attributes while normal Mermaid geometry remains visible.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build && node --test dist/__tests__/contracts.test.js
+bun run build && node dist/test-fixtures/e2e-run.js</code></pre>
+    </article>
+
+    <article class="phase" id="phase-p5-final-verification">
+      <h3>P5 — Run full verification and scoped implementation review</h3>
+      <h4>End State</h4>
+      <p>The branch is ready for handoff with Mermaid support verified across build, unit/contract tests, e2e browser workflow, and an implementation review focused on safety and comment durability.</p>
+      <h4>Tests first</h4>
+      <p>No new product behavior starts here. This phase only runs final gates and fixes findings without widening scope.</p>
+      <h4>Expected files</h4>
+      <ul>
+        <li>Only files already touched by P1-P4, unless review finds a direct readiness bug.</li>
+      </ul>
+      <h4>Work</h4>
+      <ul>
+        <li>Run the repo quality gates for UI/comment-shell work.</li>
+        <li>Run a scoped implementation review focused on Mermaid security, source sync, and comment anchoring.</li>
+        <li>Update this plan’s Progress and Decisions / Deviations Log with final verification evidence.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build
+bun run test
+bun run test:e2e</code></pre>
+    </article>
+  </section>
+
+  <section id="test-coverage-matrix">
+    <h2>Test coverage matrix</h2>
+    <table>
+      <thead><tr><th>Acceptance / scenario</th><th>Test layer</th><th>Target files or suites</th><th>Evidence command</th></tr></thead>
+      <tbody>
+        <tr><td><a href="#ac-1">AC-1</a>, <a href="#bdd-render-happy-path">render happy path</a></td><td>Contract + e2e</td><td><code>contracts.test.ts</code>, <code>e2e-run.ts</code></td><td><code>bun run test:e2e</code></td></tr>
+        <tr><td><a href="#ac-2">AC-2</a>, <a href="#bdd-safety">safety boundary</a></td><td>Contract + e2e</td><td><code>render/render.ts</code> script-blocking and CSP assertions; browser e2e assertions for client-side SVG hardening</td><td><code>bun run test && bun run test:e2e</code></td></tr>
+        <tr><td><a href="#ac-3">AC-3</a>, <a href="#bdd-select-node-comment">node comments</a>, <a href="#bdd-select-edge-comment">edge comments</a></td><td>Browser e2e</td><td><code>e2e-run.ts</code></td><td><code>bun run test:e2e</code></td></tr>
+        <tr><td><a href="#ac-4">AC-4</a></td><td>API/contract + e2e</td><td>Stored comment and <code>plan-review agent next --json</code> payload assertions in contract/e2e tests</td><td><code>bun run test</code></td></tr>
+        <tr><td><a href="#ac-5">AC-5</a>, <a href="#bdd-source-sync-refresh">source sync refresh</a></td><td>Contract + e2e</td><td><code>database.ts</code> remap tests, source-sync e2e path</td><td><code>bun run test:e2e</code></td></tr>
+        <tr><td><a href="#ac-6">AC-6</a>, <a href="#bdd-bad-diagram">malformed diagram</a></td><td>Browser e2e</td><td>Malformed Mermaid fixture in <code>e2e-run.ts</code></td><td><code>bun run test:e2e</code></td></tr>
+        <tr><td><a href="#ac-7">AC-7</a></td><td>Full repo gates</td><td>All touched suites</td><td><code>bun run build && bun run test && bun run test:e2e</code></td></tr>
+        <tr><td><a href="#ac-8">AC-8</a></td><td>Browser e2e + live demo</td><td><code>e2e-run.ts</code> compares iframe Mermaid card styling to the shell palette</td><td><code>bun run test:e2e</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="verification-strategy">
+    <h2>Verification strategy</h2>
+    <ul>
+      <li>Use contract tests for deterministic render metadata, sanitizer behavior, dependency vendor route, and anchor remapping rules.</li>
+      <li>Use e2e tests for the shipped reviewer workflow: registration, open viewer, Mermaid render, select diagram element, submit comment, reload/refresh, marker reattachment.</li>
+      <li>Run the full UI/comment-shell gate because this touches browser interaction and rendered-plan safety.</li>
+      <li>Run a scoped implementation review before marking any phase complete beyond P3 because SVG injection and comment lifecycle are product-critical.</li>
+    </ul>
+  </section>
+
+  <section id="delivery-order">
+    <h2>Delivery order</h2>
+    <ol>
+      <li>Land inert source-block metadata first; this is low risk and supports remapping.</li>
+      <li>Add trusted viewer rendering with visible error fallback while preserving no-script iframe policy.</li>
+      <li>Add specific Mermaid element anchors and marker redraw sequencing.</li>
+      <li>Expand fixture coverage and run full gates/review.</li>
+    </ol>
+  </section>
+
+  <section id="non-goals">
+    <h2>Non-goals</h2>
+    <ul>
+      <li class="non-goal">Do not make plan documents a general scripting environment.</li>
+      <li class="non-goal">Do not enable Mermaid click callbacks, external resource loading, or arbitrary HTML labels in diagrams.</li>
+      <li class="non-goal">Do not add a general markdown renderer or convert all plans to Markdown.</li>
+      <li class="non-goal">Do not build a custom Mermaid parser or diagram layout engine.</li>
+      <li class="non-goal">Do not change queue claim/ack/resolve semantics except for tests needed to prove comment payloads remain durable.</li>
+    </ul>
+  </section>
+
+  <section id="resume-instructions">
+    <h2>Resume instructions</h2>
+    <p>Read this plan fully, then start with the first unchecked item in <a href="#progress">Progress</a>. Execute one phase at a time. For each phase, write or update the listed failing tests before product changes where practical, run that phase’s verify command, and update Progress plus the Decisions / Deviations Log with evidence. Ask the user only if implementation uncovers a product decision that conflicts with the locked decisions or product intent.</p>
+  </section>
+
+  <section id="decisions-deviations-log">
+    <h2>Decisions / Deviations log</h2>
+    <ul>
+      <li id="log-2026-06-14-created"><time datetime="2026-06-14">2026-06-14</time>: Created browser-review draft. Chose trusted parent-shell Mermaid rendering to preserve the existing no-script iframe safety boundary while enabling selectable diagrams.</li>
+      <li id="log-2026-06-14-pm-review"><time datetime="2026-06-14">2026-06-14</time>: PM/product-intent pass tightened the vendor-loading decision: implementation must serve a browser-ready Mermaid bundle or tested static module graph, not a brittle Node package entry route, and must harden SVG output independently of Mermaid’s internal sanitization.</li>
+      <li id="log-2026-06-14-codex-review-1"><time datetime="2026-06-14">2026-06-14</time>: Codex plan review found a readiness blocker that Mermaid anchor metadata could be stored on comments but omitted from the agent-visible <code>conversationPayload</code>/<code>agent next</code> path. P3 and AC-4 now explicitly require enriching <code>PlanReviewStore.buildConversationPayload</code> and testing <code>plan-review agent next --json</code> output.</li>
+      <li id="log-2026-06-14-claude-review-1"><time datetime="2026-06-14">2026-06-14</time>: Claude plan review found a readiness blocker in Mermaid remapping. P3 now specifies the exact <code>remapAnchorState()</code> branch using <code>anchor.diagram.sourcePlanNodeId</code> and <code>anchor.diagram.sourceHash</code>, plus tests that prove comments remain <code>mapped</code> even when the dynamic SVG node/text is absent from server-stored rendered HTML. Optional SVG hardening clarity was also integrated with an allowlist/denylist and e2e fixture requirement.</li>
+      <li id="log-2026-06-14-final-reviews"><time datetime="2026-06-14">2026-06-14</time>: Codex rerun returned <code>VERDICT: PLAN_EXECUTION_READY</code>. Claude rerun returned <code>VERDICT: PLAN_EXECUTION_READY</code>; optional clarity was integrated for <code>style</code> handling, browser import proof, <code>use</code>-dependent diagram scope, and SVG element ID namespacing. Plan promoted to execution-ready.</li>
+      <li id="log-2026-06-14-implementation"><time datetime="2026-06-14">2026-06-14</time>: Implemented P1-P4 and ran final pre-review verification: <code>bun run build && bun run test && bun run test:e2e</code> passed. Scoped Codex and Claude implementation reviews are next before PR handoff.</li>
+      <li id="log-2026-06-14-implementation-review-fixes"><time datetime="2026-06-14">2026-06-14</time>: Scoped implementation reviews completed. Codex returned <code>FIX_IN_SCOPE_FINDINGS</code> for Mermaid v11 edge targeting and overly broad SVG style retention; Claude returned <code>PASS_WITH_DEFERRED_FOLLOW_UPS</code> with no blocker. Fixed edge targeting for <code>flowchart-link</code>/marker-backed edges, stripped generated <code>style</code> elements/attributes instead of retaining author-controlled CSS, added e2e coverage for edge comments and style hardening, and reran <code>bun run build && bun run test && bun run test:e2e</code> successfully.</li>
+      <li id="log-2026-06-14-visual-regression-fix"><time datetime="2026-06-14">2026-06-14</time>: Demo review exposed a visual regression: stripping all Mermaid CSS left safe diagrams technically rendered but unreadable. Updated SVG hardening to preserve Mermaid <code>&lt;style&gt;</code> blocks and <code>style</code> attributes only when they pass the same no-external-resource/no-script CSS safety checks; unsafe CSS is still removed. Added e2e assertions that normal Mermaid styles survive and unsafe CSS does not, verified the MBP test instance rendering, and reran <code>bun run build && bun run test && bun run test:e2e</code> successfully.</li>
+      <li id="log-2026-06-14-viewer-matched-styling"><time datetime="2026-06-14">2026-06-14</time>: Follow-up demo review found the diagram card still visually mismatched the plan-review viewer because Mermaid content sat on a white authored-plan background. Added viewer-owned iframe CSS for Mermaid wrappers/error panels using the shell dark panel, border, code, and accent palette; added e2e assertions comparing the Mermaid wrapper border to the outer shell border and checking the dark gradient/radius; verified the MBP test instance screenshot and reran <code>bun run build && bun run test && bun run test:e2e</code> successfully.</li>
+      <li id="log-2026-06-14-remap-same-source"><time datetime="2026-06-14">2026-06-14</time>: Fresh Codex PR review found Mermaid remapping could combine a source node match from one diagram with a source hash match from another. Fixed remapping so <code>mapped</code> requires the Mermaid source node ID and source hash on the same rendered source element; if the source node remains with a changed hash the comment is <code>stale</code>. Added a two-diagram regression in <code>contracts.test.ts</code> and verified with <code>bun run build && node --test dist/__tests__/contracts.test.js</code>.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>

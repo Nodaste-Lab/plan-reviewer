@@ -171,6 +171,10 @@ function stableJson(value: unknown): string {
   return JSON.stringify(normalizeJsonValue(parseJson(JSON.stringify(value), null)));
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function inferAssetContentType(sourceUrl: string, bytes: Buffer): string | null {
   const ext = path.extname(sourceUrl.split(/[?#]/, 1)[0] || '').toLowerCase();
   if (bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) || ext === '.png') return 'image/png';
@@ -1754,6 +1758,18 @@ export class PlanReviewStore {
   ) {
     const textPreview =
       String(input.anchor.textPreview ?? input.anchor.selectedText ?? input.anchor.cssSelector ?? input.anchorType);
+    const diagram = input.anchor.diagram && typeof input.anchor.diagram === 'object'
+      ? input.anchor.diagram as Record<string, unknown>
+      : undefined;
+    const diagramEvidence = diagram?.kind === 'mermaid'
+      ? {
+          kind: 'mermaid',
+          sourcePlanNodeId: diagram.sourcePlanNodeId,
+          sourceHash: diagram.sourceHash,
+          elementKey: diagram.elementKey,
+          elementLabel: diagram.elementLabel
+        }
+      : undefined;
     return {
       type: 'browser.comment.v1',
       commentId,
@@ -1765,9 +1781,12 @@ export class PlanReviewStore {
       evidence: {
         reviewUrl: `/p/${planId}`,
         selector: input.anchor.cssSelector,
+        planNodeId: input.anchor.planNodeId,
         markerNumber,
         textPreview,
-        screenshotAssetId
+        headingPath: input.anchor.headingPath,
+        screenshotAssetId,
+        diagram: diagramEvidence
       },
       body: input.body
     };
@@ -1828,6 +1847,19 @@ export class PlanReviewStore {
       : undefined;
     const selectedText = typeof anchor.selectedText === 'string' ? anchor.selectedText : undefined;
     const textPreview = typeof anchor.textPreview === 'string' ? anchor.textPreview : undefined;
+
+    const diagram = anchor.diagram && typeof anchor.diagram === 'object' ? anchor.diagram as Record<string, unknown> : undefined;
+    if (diagram?.kind === 'mermaid') {
+      const sourcePlanNodeId = typeof diagram.sourcePlanNodeId === 'string' ? diagram.sourcePlanNodeId : undefined;
+      const sourceHash = typeof diagram.sourceHash === 'string' ? diagram.sourceHash : undefined;
+      const sourceNodeMatches = Boolean(sourcePlanNodeId && renderedHtml.includes(`data-plan-node-id="${sourcePlanNodeId}"`));
+      const sourceElementMatches = Boolean(sourcePlanNodeId && sourceHash && new RegExp(
+        `<[^>]+\\bdata-plan-node-id="${escapeRegExp(sourcePlanNodeId)}"[^>]*\\bdata-plan-mermaid-source-hash="${escapeRegExp(sourceHash)}"|<[^>]+\\bdata-plan-mermaid-source-hash="${escapeRegExp(sourceHash)}"[^>]*\\bdata-plan-node-id="${escapeRegExp(sourcePlanNodeId)}"`
+      ).test(renderedHtml));
+      if (sourceElementMatches) return { ...comment, anchorState: 'mapped' };
+      if (sourceNodeMatches) return { ...comment, anchorState: 'stale' };
+      return { ...comment, anchorState: 'unmapped' };
+    }
 
     const nodeMatches = Boolean(planNodeId && renderedHtml.includes(`data-plan-node-id="${planNodeId}"`));
     const quoteMatches = Boolean(

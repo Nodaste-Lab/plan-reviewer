@@ -443,6 +443,158 @@ try {
       };
     });
     await page.waitForSelector('#plan-frame');
+
+    const mermaidSource = 'flowchart TD\n  Start[Start] --> Done[Done]';
+    const mermaidHtml = `<!doctype html><html><head><title>Mermaid E2E</title></head><body><main><h1>Mermaid E2E</h1><pre class="mermaid">${mermaidSource}</pre><pre class="mermaid">not-a-real-diagram</pre><p id="mermaid-side-text">Mermaid side text v1</p></main></body></html>`;
+    const mermaidRegister = await context.post('/api/plans/register', {
+      data: {
+        repoKey: 'e2e-mermaid-repo',
+        repoName: 'e2e-mermaid',
+        rootPath: '/tmp/e2e-mermaid',
+        branch: 'main',
+        commitSha: 'e2e-mermaid-v1',
+        planPath: 'thoughts/plans/e2e-mermaid.html',
+        slug: 'e2e-mermaid',
+        html: mermaidHtml,
+        fileHash: sha256(mermaidHtml),
+        publicationMetadata: { worktreePath: '/tmp/e2e-mermaid', branch: 'main', linearIssue: 'NOD-E2E', executionReady: false, executionReadyBasis: 'agent-review-results' },
+        updateMode: 'upsert'
+      }
+    });
+    assert.equal(mermaidRegister.ok(), true);
+    const mermaidPlan = (await mermaidRegister.json()).data as { planId: string; versionId: string };
+    const mermaidPage = await browser.newPage();
+    await mermaidPage.addInitScript(() => {
+      const globals = window as typeof window & { html2canvas?: unknown };
+      globals.html2canvas = async (element: HTMLElement) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 360;
+        canvas.height = 220;
+        const ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#0f172a';
+        ctx.fillText(element.textContent?.trim().slice(0, 80) || element.tagName, 16, 40);
+        return canvas;
+      };
+    });
+    await mermaidPage.goto(`${baseUrl}/p/${mermaidPlan.planId}`);
+    await mermaidPage.waitForFunction(() => Boolean(document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('.plan-mermaid-rendered svg')), undefined, { timeout: 15000 });
+    assert.equal(await mermaidPage.evaluate(() => Boolean(document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('script'))), false);
+    assert.equal(await mermaidPage.evaluate(() => Boolean(document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('.plan-mermaid-error'))), true);
+    const mermaidVisual = await mermaidPage.evaluate(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const doc = iframe.contentDocument!;
+      const wrapper = doc.querySelector<HTMLElement>('.plan-mermaid-rendered')!;
+      const rect = doc.querySelector<SVGElement>('.plan-mermaid-rendered svg .node rect, .plan-mermaid-rendered svg rect')!;
+      const wrapperStyle = doc.defaultView!.getComputedStyle(wrapper);
+      return {
+        styleCount: doc.querySelectorAll('.plan-mermaid-rendered svg style').length,
+        rectFill: doc.defaultView!.getComputedStyle(rect).fill,
+        wrapperBackground: wrapperStyle.backgroundImage,
+        wrapperBorderColor: wrapperStyle.borderTopColor,
+        wrapperBorderRadius: wrapperStyle.borderTopLeftRadius,
+        shellBorderColor: getComputedStyle(document.querySelector<HTMLElement>('#sidebar')!).borderLeftColor
+      };
+    });
+    assert.equal(mermaidVisual.styleCount > 0, true);
+    assert.notEqual(mermaidVisual.rectFill, 'rgb(0, 0, 0)');
+    assert.match(mermaidVisual.wrapperBackground, /rgba?\(17, 24, 39(?:, 0\.96)?\).*rgba?\(15, 23, 42(?:, 0\.96)?\)/);
+    assert.equal(mermaidVisual.wrapperBorderColor, mermaidVisual.shellBorderColor);
+    assert.equal(mermaidVisual.wrapperBorderRadius, '16px');
+    const clickedMermaid = await mermaidPage.evaluate(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const doc = iframe.contentDocument!;
+      const target = doc.querySelector<SVGElement>('[data-plan-mermaid-element="true"][data-plan-mermaid-element-key].flowchart-link,path[data-plan-mermaid-element="true"][data-plan-mermaid-element-key][class*="edge"],path[data-plan-mermaid-element="true"][data-plan-mermaid-element-key][marker-end]')!;
+      target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: iframe.contentWindow ?? window }));
+      return { nodeId: target.getAttribute('data-plan-node-id'), key: target.getAttribute('data-plan-mermaid-element-key'), label: target.getAttribute('data-plan-mermaid-element-label') };
+    });
+    assert.ok(clickedMermaid.nodeId?.includes('--svg-'));
+    await mermaidPage.waitForFunction(() => document.querySelector<HTMLElement>('#composer')?.hidden === false);
+    await mermaidPage.fill('#comment-body', 'Explain this Mermaid edge');
+    await mermaidPage.click('#submit-comment');
+    await mermaidPage.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('Explain this Mermaid edge'));
+    const mermaidCommentsResponse = await context.get(`/api/plans/${mermaidPlan.planId}/comments`);
+    assert.equal(mermaidCommentsResponse.ok(), true);
+    const mermaidComment = (await mermaidCommentsResponse.json()).data.comments[0];
+    assert.equal(mermaidComment.anchorType, 'dom');
+    assert.equal(mermaidComment.anchor.diagram.kind, 'mermaid');
+    assert.equal(mermaidComment.anchor.diagram.elementKey, clickedMermaid.key);
+    assert.equal(mermaidComment.conversationPayload.evidence.diagram.elementKey, clickedMermaid.key);
+    assert.ok(mermaidComment.conversationPayload.evidence.screenshotAssetId);
+    await mermaidPage.reload();
+    await mermaidPage.waitForFunction(() => (document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelectorAll('.comment-anchor').length ?? 0) >= 1, undefined, { timeout: 15000 });
+    const mermaidUpdatedHtml = `<!doctype html><html><head><title>Mermaid E2E</title></head><body><main><h1>Mermaid E2E</h1><pre class="mermaid">${mermaidSource}</pre><pre class="mermaid">not-a-real-diagram</pre><p id="mermaid-side-text">Mermaid side text v2</p></main></body></html>`;
+    const mermaidUpdated = await context.post('/api/plans/register', {
+      data: {
+        repoKey: 'e2e-mermaid-repo',
+        repoName: 'e2e-mermaid',
+        rootPath: '/tmp/e2e-mermaid',
+        branch: 'main',
+        commitSha: 'e2e-mermaid-v2',
+        planPath: 'thoughts/plans/e2e-mermaid.html',
+        slug: 'e2e-mermaid',
+        html: mermaidUpdatedHtml,
+        fileHash: sha256(mermaidUpdatedHtml),
+        publicationMetadata: { worktreePath: '/tmp/e2e-mermaid', branch: 'main', linearIssue: 'NOD-E2E', executionReady: false, executionReadyBasis: 'agent-review-results' },
+        updateMode: 'upsert'
+      }
+    });
+    assert.equal(mermaidUpdated.ok(), true);
+    await mermaidPage.waitForFunction(() => {
+      const doc = document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument;
+      return Boolean(doc?.body.textContent?.includes('Mermaid side text v2') && doc.querySelector('.plan-mermaid-rendered svg') && doc.querySelector('.comment-anchor'));
+    }, undefined, { timeout: 15000 });
+
+    const hardeningHtml = '<!doctype html><html><body><main><pre class="mermaid">flowchart TD; A-->B;</pre></main></body></html>';
+    const hardeningRegister = await context.post('/api/plans/register', {
+      data: {
+        repoKey: 'e2e-mermaid-hardening-repo',
+        repoName: 'e2e-mermaid-hardening',
+        rootPath: '/tmp/e2e-mermaid-hardening',
+        branch: 'main',
+        commitSha: 'e2e-mermaid-hardening',
+        planPath: 'thoughts/plans/e2e-mermaid-hardening.html',
+        slug: 'e2e-mermaid-hardening',
+        html: hardeningHtml,
+        fileHash: sha256(hardeningHtml),
+        publicationMetadata: { worktreePath: '/tmp/e2e-mermaid-hardening', branch: 'main', linearIssue: 'NOD-E2E', executionReady: false, executionReadyBasis: 'agent-review-results' },
+        updateMode: 'upsert'
+      }
+    });
+    assert.equal(hardeningRegister.ok(), true);
+    const hardeningPlan = (await hardeningRegister.json()).data as { planId: string; versionId: string };
+    const hardeningPage = await browser.newPage();
+    await hardeningPage.route('**/vendor/mermaid.esm.min.mjs', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/javascript',
+        body: `export default { initialize(){}, async render(){ return { svg: '<svg viewBox="0 0 100 50" onclick="alert(1)"><style>.safe{fill:#fff;stroke:#000}</style><style>.bad{fill:url(https://example.com/x)}</style><g class="node" id="safe-node"><rect class="safe" width="80" height="30" style="fill:url(javascript:bad)"/><text>Safe</text></g><foreignObject><div>bad</div></foreignObject><use href="#safe-node"></use><animate attributeName="x"></animate><set attributeName="x"></set><image href="https://example.com/x.png"/><path xlink:href="javascript:bad" d="M0 0L10 10"/></svg>' }; } };`
+      });
+    });
+    await hardeningPage.goto(`${baseUrl}/p/${hardeningPlan.planId}`);
+    await hardeningPage.waitForFunction(() => Boolean(document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('.plan-mermaid-rendered svg')), undefined, { timeout: 15000 });
+    const hardened = await hardeningPage.evaluate(() => {
+      const doc = document.querySelector<HTMLIFrameElement>('#plan-frame')!.contentDocument!;
+      const svg = doc.querySelector('.plan-mermaid-rendered svg')!;
+      return {
+        hasRect: Boolean(svg.querySelector('rect')),
+        hasOnclick: Boolean(svg.querySelector('[onclick]')),
+        hasForeignObject: Boolean(svg.querySelector('foreignObject')),
+        hasUse: Boolean(svg.querySelector('use')),
+        hasAnimate: Boolean(svg.querySelector('animate')),
+        hasSet: Boolean(svg.querySelector('set')),
+        hasImage: Boolean(svg.querySelector('image')),
+        hasHref: Boolean(svg.querySelector('[href],[xlink\\:href]')),
+        safeStyleText: svg.querySelector('style')?.textContent || '',
+        hasUnsafeStyleText: /https?:|javascript:|url\(/i.test([...svg.querySelectorAll('style')].map(style => style.textContent || '').join('\n')),
+        hasStyleAttribute: Boolean(svg.querySelector('[style]'))
+      };
+    });
+    assert.deepEqual(hardened, { hasRect: true, hasOnclick: false, hasForeignObject: false, hasUse: false, hasAnimate: false, hasSet: false, hasImage: false, hasHref: false, safeStyleText: '.safe{fill:#fff;stroke:#000}', hasUnsafeStyleText: false, hasStyleAttribute: false });
+    await hardeningPage.close();
+    await mermaidPage.close();
+
     const commentAnchorCount = () => page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelectorAll('.comment-anchor').length ?? 0);
     const selectionBoxState = (selector: string, targetSelector: string) => page.evaluate(({ selector, targetSelector }) => {
       const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;

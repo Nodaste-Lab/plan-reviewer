@@ -424,7 +424,7 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
       ? `<a href="/deferred">← Deferred</a>${reviewButton}${buildButton}<span id="archive-status" class="archive-status">Deferred</span><button id="resume-plan" type="button">${resumeLabel}</button><button id="archive-plan" type="button">${archiveLabel}</button>${commentsButton}`
       : `${indexLink}${reviewButton}${buildButton}<span id="archive-status" class="archive-status" hidden></span>${deferAction}<button id="archive-plan" type="button">${archiveLabel}</button>${commentsButton}`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapedShellTitle}</title>
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="stylesheet" href="/client.css?v=${clientAssetVersion}">
   </head><body data-plan-id="${escapedPlanId}" data-review-mode="${escapeHtml(plan.reviewMode)}" data-plan-title-fallback="${encodedTitleFallback}">
@@ -478,6 +478,7 @@ body{--comments-width:48px;margin:0;background:#0b1020;color:#e5e7eb;font-family
 const clientJs = `
 import { finder } from '/vendor/finder.js';
 import { Washi } from '/vendor/washi.js';
+import mermaid from '/vendor/mermaid.esm.min.mjs';
 
 const planId = document.body.dataset.planId;
 const isCollaborationMode = document.body.dataset.reviewMode === 'collaboration';
@@ -554,6 +555,8 @@ let touchStart = null;
 let touchScrollStart = null;
 let suppressSyntheticClickUntil = 0;
 let washi = null;
+let mermaidInitialized = false;
+let mermaidRenderGeneration = 0;
 function isMobileShell(){ return window.matchMedia('(max-width: 760px)').matches; }
 function debugTouch(label, data = {}){
 }
@@ -808,6 +811,7 @@ async function refreshPlanFrameContent(nextVersionId, options = {}){
   replaceAttributes(doc.body, parsed.body);
   doc.head.replaceChildren(...[...parsed.head.childNodes].map(node => doc.importNode(node, true)));
   doc.body.replaceChildren(...[...parsed.body.childNodes].map(node => doc.importNode(node, true)));
+  await renderMermaidDiagrams();
   scheduleFrameImageReflows();
   versionId = nextVersionId;
   hovered = null;
@@ -1010,6 +1014,18 @@ function ensureFrameAnchorStyles(){
   }
   return doc;
 }
+function ensureFrameMermaidStyles(){
+  const doc = frame.contentDocument;
+  if (!doc) return null;
+  let style = doc.getElementById('plan-review-mermaid-styles');
+  if (!style) {
+    style = doc.createElement('style');
+    style.id = 'plan-review-mermaid-styles';
+    style.textContent = '.plan-mermaid-rendered{display:block;max-width:min(100%,980px);margin:1.4rem auto;padding:18px;background:linear-gradient(180deg,rgba(17,24,39,.96),rgba(15,23,42,.96));border:1px solid #2b364d;border-radius:16px;color:#e5e7eb;box-shadow:0 18px 45px rgba(15,23,42,.22);overflow:auto}.plan-mermaid-rendered svg{display:block;max-width:100%;height:auto;margin:0 auto;background:transparent}.plan-mermaid-rendered .plan-mermaid-source-copy{margin-top:12px;padding-top:10px;border-top:1px solid #2b364d;color:#a7b0c0;font-size:.92rem}.plan-mermaid-rendered .plan-mermaid-source-copy summary{cursor:pointer;color:#7dd3fc;font-weight:800}.plan-mermaid-rendered .plan-mermaid-source-copy pre{margin-top:8px;padding:10px;white-space:pre-wrap;background:#020617;color:#dbeafe;border:1px solid #263246;border-radius:8px}.plan-mermaid-error{display:block;margin:1.4rem auto;padding:16px;max-width:min(100%,980px);background:#2b1320;color:#ffe4e6;border:1px solid #fb7185;border-radius:16px}.plan-mermaid-error pre{white-space:pre-wrap;background:#020617;color:#fecaca;border:1px solid #7f1d1d;border-radius:8px;padding:10px}';
+    (doc.head || doc.documentElement).appendChild(style);
+  }
+  return doc;
+}
 function clearCommentAnchors(){
   document.querySelectorAll('.comment-anchor').forEach(marker => marker.remove());
   try {
@@ -1047,6 +1063,15 @@ function currentRectForComment(comment){
     if (doc) {
       const byNodeId = anchor.planNodeId ? doc.querySelector(selectorForPlanNodeId(anchor.planNodeId)) : null;
       if (byNodeId) return rectForTarget(byNodeId);
+      const diagram = anchor.diagram || {};
+      const diagramSource = diagram.kind === 'mermaid' && diagram.sourcePlanNodeId
+        ? doc.querySelector('[data-plan-mermaid-source-node-id=' + JSON.stringify(String(diagram.sourcePlanNodeId)) + '],[data-plan-node-id=' + JSON.stringify(String(diagram.sourcePlanNodeId)) + ']')
+        : null;
+      const diagramElement = diagramSource && diagram.elementKey
+        ? doc.querySelector('[data-plan-mermaid-source-node-id=' + JSON.stringify(String(diagram.sourcePlanNodeId)) + '][data-plan-mermaid-element-key=' + JSON.stringify(String(diagram.elementKey)) + ']')
+        : null;
+      if (diagramElement) return rectForTarget(diagramElement);
+      if (diagramSource) return rectForTarget(diagramSource);
       const bySelector = anchor.cssSelector ? doc.querySelector(anchor.cssSelector) : null;
       if (bySelector && anchorTextMatches(bySelector, anchor)) return rectForTarget(bySelector);
       const byXpath = anchor.xpath ? xpathTarget(doc, anchor.xpath) : null;
@@ -1084,6 +1109,139 @@ function scheduleFrameImageReflows(){
     image.addEventListener('error', scheduleMarkerReflow, { once: true });
     if (typeof image.decode === 'function') void image.decode().then(scheduleMarkerReflow, scheduleMarkerReflow);
   }
+}
+function mermaidSourceText(source){
+  const code = source.matches?.('pre') ? source.querySelector(':scope > code.language-mermaid') : null;
+  return (code?.textContent || source.textContent || '').trim();
+}
+function initializeMermaid(){
+  if (mermaidInitialized) return;
+  mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', htmlLabels: false, deterministicIds: true, deterministicIDSeed: planId, maxTextSize: 50000, theme: 'dark', themeVariables: { background: '#0f172a', primaryColor: '#1e3a8a', primaryTextColor: '#e5e7eb', primaryBorderColor: '#38bdf8', lineColor: '#93c5fd', textColor: '#e5e7eb' } });
+  mermaidInitialized = true;
+}
+const allowedSvgTags = new Set(['svg','g','path','line','polyline','polygon','rect','circle','ellipse','text','tspan','defs','marker','style','title','desc']);
+const allowedSvgAttrs = new Set(['id','class','style','role','viewBox','viewbox','xmlns','x','y','x1','y1','x2','y2','cx','cy','r','rx','ry','width','height','d','points','transform','marker-end','marker-start','marker-mid','orient','refX','refY','refx','refy','markerWidth','markerHeight','markerwidth','markerheight','text-anchor','dominant-baseline','font-size','font-family','font-weight','fill','stroke','stroke-width','stroke-dasharray','stroke-linecap','stroke-linejoin','opacity','fill-opacity','stroke-opacity','dy','dx','startOffset']);
+function hasUnsafeSvgCss(text){
+  const css = String(text || '');
+  if (/@import|javascript:|data:|https?:|\\/\\/|expression\\(|-moz-binding/i.test(css)) return true;
+  return /url\\(/i.test(css.replace(/url\\(\\s*['"]?#[a-zA-Z0-9_-]+['"]?\\s*\\)/gi, ''));
+}
+function isSafeSvgAttributeValue(name, value){
+  const text = String(value || '').trim();
+  if (/^(?:href|xlink:href|src)$/i.test(name)) return false;
+  if (String(name || '').toLowerCase() === 'style') return !hasUnsafeSvgCss(text);
+  if (/javascript:|data:|https?:|\\/\\//i.test(text)) return false;
+  if (/url\\(/i.test(text) && !/^url\\(['"]?#[a-zA-Z0-9_-]+['"]?\\)$/i.test(text)) return false;
+  return true;
+}
+function hardenMermaidSvg(svgText){
+  const parsed = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+  const svg = parsed.documentElement;
+  if (!svg || svg.tagName.toLowerCase() === 'parsererror') throw new Error('Mermaid returned invalid SVG');
+  const nodes = [...svg.querySelectorAll('*'), svg];
+  for (const node of nodes) {
+    const tag = node.tagName.toLowerCase();
+    if (!allowedSvgTags.has(tag)) {
+      node.remove();
+      continue;
+    }
+    if (tag === 'style' && hasUnsafeSvgCss(node.textContent || '')) {
+      node.remove();
+      continue;
+    }
+    for (const attr of [...node.attributes]) {
+      const name = attr.name;
+      const lower = name.toLowerCase();
+      if (lower.startsWith('on') || lower === 'xlink:href' || (lower === 'href' && tag !== 'a') || lower === 'src') {
+        node.removeAttribute(name);
+        continue;
+      }
+      if (lower.startsWith('aria-') || lower.startsWith('data-')) continue;
+      if ((!allowedSvgAttrs.has(name) && !allowedSvgAttrs.has(lower)) || !isSafeSvgAttributeValue(name, attr.value)) node.removeAttribute(name);
+    }
+  }
+  return new XMLSerializer().serializeToString(svg);
+}
+function mermaidElementLabel(element){
+  return (element.getAttribute('data-id') || element.getAttribute('id') || element.textContent || element.tagName || '').replace(/\\s+/g, ' ').trim().slice(0, 120);
+}
+function isMajorMermaidElement(element){
+  return element.matches('g.node,g.cluster,g.edgePath,g.edgeLabel,.node,.cluster,.edgePath,.edgeLabel,.flowchart-link,path.flowchart-link,path[class*="edge"],path[marker-end],path[marker-start],line[marker-end],polyline[marker-end],polygon[marker-end]');
+}
+function prepareMermaidSvg(svg, wrapper, sourceNodeId){
+  const candidates = [...svg.querySelectorAll('g.node,g.cluster,g.edgePath,g.edgeLabel,.node,.cluster,.edgePath,.edgeLabel,.flowchart-link,path.flowchart-link,path[class*="edge"],path[marker-end],path[marker-start],line[marker-end],polyline[marker-end],polygon[marker-end],text')];
+  let index = 0;
+  for (const element of candidates) {
+    if (element.closest('[data-plan-mermaid-element="true"]') && !isMajorMermaidElement(element)) continue;
+    const label = mermaidElementLabel(element);
+    const existing = element.getAttribute('id') || element.getAttribute('data-id') || '';
+    const keyBase = (existing || element.className?.baseVal || element.className || element.tagName || 'element') + '-' + index + '-' + hashString(label || element.outerHTML || String(index));
+    const key = keyBase.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'element-' + index;
+    element.setAttribute('data-plan-mermaid-element', 'true');
+    element.setAttribute('data-plan-mermaid-source-node-id', sourceNodeId);
+    element.setAttribute('data-plan-mermaid-element-key', key);
+    element.setAttribute('data-plan-mermaid-element-label', label);
+    element.setAttribute('data-plan-node-id', sourceNodeId + '--svg-' + key);
+    index += 1;
+  }
+  wrapper.setAttribute('data-plan-mermaid-element', 'true');
+  wrapper.setAttribute('data-plan-mermaid-source-node-id', sourceNodeId);
+  wrapper.setAttribute('data-plan-mermaid-element-key', 'diagram');
+  wrapper.setAttribute('data-plan-mermaid-element-label', 'Mermaid diagram');
+}
+function mermaidErrorPanel(doc, source, error){
+  const panel = doc.createElement('div');
+  panel.className = 'plan-mermaid-error';
+  panel.setAttribute('role', 'group');
+  panel.setAttribute('aria-label', 'Mermaid render error');
+  for (const attr of source.attributes) {
+    if (attr.name.startsWith('data-plan-')) panel.setAttribute(attr.name, attr.value);
+  }
+  panel.setAttribute('data-plan-mermaid-status', 'error');
+  panel.innerHTML = '<strong>Mermaid diagram could not render.</strong><pre></pre><p></p>';
+  panel.querySelector('pre').textContent = mermaidSourceText(source).slice(0, 1200);
+  panel.querySelector('p').textContent = String(error?.message || error || 'Unknown Mermaid error').slice(0, 500);
+  return panel;
+}
+async function renderMermaidDiagrams(){
+  const doc = frame.contentDocument;
+  if (!doc) return;
+  ensureFrameMermaidStyles();
+  const generation = ++mermaidRenderGeneration;
+  const sources = [...doc.querySelectorAll('[data-plan-mermaid-source="true"]')].filter(source => !source.closest('.plan-mermaid-rendered'));
+  if (sources.length === 0) return;
+  initializeMermaid();
+  for (const source of sources) {
+    const sourceNodeId = source.getAttribute('data-plan-node-id') || 'mermaid-' + hashString(mermaidSourceText(source));
+    const sourceHash = source.getAttribute('data-plan-mermaid-source-hash') || hashString(mermaidSourceText(source));
+    try {
+      const renderId = 'plan-mermaid-' + sourceNodeId.replace(/[^a-zA-Z0-9_-]+/g, '-') + '-' + sourceHash.slice(0, 12);
+      const result = await mermaid.render(renderId, mermaidSourceText(source));
+      if (generation !== mermaidRenderGeneration || !source.isConnected) return;
+      const wrapper = doc.createElement('figure');
+      wrapper.className = 'plan-mermaid-rendered';
+      wrapper.setAttribute('data-plan-node-id', sourceNodeId);
+      wrapper.setAttribute('data-plan-mermaid-source', 'true');
+      wrapper.setAttribute('data-plan-mermaid-source-hash', sourceHash);
+      wrapper.setAttribute('data-plan-mermaid-status', 'rendered');
+      wrapper.innerHTML = hardenMermaidSvg(result.svg);
+      const svg = wrapper.querySelector('svg');
+      if (!svg) throw new Error('Mermaid did not return an SVG');
+      svg.setAttribute('role', svg.getAttribute('role') || 'img');
+      svg.setAttribute('aria-label', svg.getAttribute('aria-label') || 'Mermaid diagram');
+      prepareMermaidSvg(svg, wrapper, sourceNodeId);
+      const details = doc.createElement('details');
+      details.className = 'plan-mermaid-source-copy';
+      details.innerHTML = '<summary>Mermaid source</summary><pre></pre>';
+      details.querySelector('pre').textContent = mermaidSourceText(source);
+      wrapper.appendChild(details);
+      source.replaceWith(wrapper);
+    } catch (error) {
+      if (generation !== mermaidRenderGeneration || !source.isConnected) return;
+      source.replaceWith(mermaidErrorPanel(doc, source, error));
+    }
+  }
+  scheduleMarkerReflow();
 }
 async function markerScreenshot(anchor){
   if (typeof html2canvas !== 'function' || !frame.contentDocument || !frame.contentWindow) {
@@ -1264,20 +1422,23 @@ function interactiveTargetFromTouchPoint(doc, point){
   if (!point) return null;
   return interactiveTargetFromElement(doc.elementFromPoint(point.x, point.y));
 }
+function mermaidCommentTarget(element){
+  return element?.closest?.('[data-plan-mermaid-element="true"],[data-plan-mermaid-source="true"]') || null;
+}
 function commentTargetFromEvent(event){
   const element = elementFromEvent(event);
-  return element?.closest?.('[data-plan-node-id]') || element || null;
+  return mermaidCommentTarget(element) || element?.closest?.('[data-plan-node-id]') || element || null;
 }
 function commentTargetFromPoint(doc, event){
   const touch = event.changedTouches?.[0] || event.touches?.[0];
   if (!touch) return commentTargetFromEvent(event);
   const element = doc.elementFromPoint(touch.clientX, touch.clientY);
-  return element?.closest?.('[data-plan-node-id]') || element || commentTargetFromEvent(event);
+  return mermaidCommentTarget(element) || element?.closest?.('[data-plan-node-id]') || element || commentTargetFromEvent(event);
 }
 function commentTargetFromTouchPoint(doc, point, fallbackTarget){
   if (!point) return fallbackTarget;
   const element = doc.elementFromPoint(point.x, point.y);
-  return element?.closest?.('[data-plan-node-id]') || element || fallbackTarget;
+  return mermaidCommentTarget(element) || element?.closest?.('[data-plan-node-id]') || element || fallbackTarget;
 }
 function frameTouchPoint(event){
   const point = eventPoint(event);
@@ -1336,7 +1497,7 @@ function openElementComposer(element, event){
     debugTouch('open-blocked', { submitInFlight, hasElement: Boolean(element), tag: element?.tagName || null });
     return false;
   }
-  selected = element.closest?.('[data-plan-node-id]') || element;
+  selected = mermaidCommentTarget(element) || element.closest?.('[data-plan-node-id]') || element;
   selectedForScreenshot = selected;
   pendingAnchor = anchorForElement(selected, event);
   updateSelectionBoxes();
@@ -1390,6 +1551,11 @@ function anchorForElement(element, event){
   const rect = element.getBoundingClientRect();
   const isImage = element.tagName.toLowerCase() === 'img';
   const point = isImage ? imagePointFor(element, event) : undefined;
+  const mermaidWrapper = element.closest?.('.plan-mermaid-rendered,.plan-mermaid-error');
+  const sourcePlanNodeId = mermaidWrapper?.getAttribute('data-plan-mermaid-source-node-id') || mermaidWrapper?.getAttribute('data-plan-node-id');
+  const sourceHash = mermaidWrapper?.getAttribute('data-plan-mermaid-source-hash');
+  const elementKey = element.getAttribute('data-plan-mermaid-element-key') || (mermaidWrapper ? 'diagram' : undefined);
+  const elementLabel = element.getAttribute('data-plan-mermaid-element-label') || (mermaidWrapper ? mermaidElementLabel(element) : undefined);
   return {
     type: isImage ? 'image' : 'dom',
     anchor: {
@@ -1409,7 +1575,8 @@ function anchorForElement(element, event){
       naturalSize: isImage ? { width: element.naturalWidth, height: element.naturalHeight } : undefined,
       displayedRect: isImage ? displayedRectFor(element) : undefined,
       zoomState: isImage ? { scale: zoom, panX, panY } : undefined,
-      normalizedPoint: point
+      normalizedPoint: point,
+      diagram: sourcePlanNodeId && sourceHash ? { kind: 'mermaid', sourcePlanNodeId, sourceHash, elementKey, elementLabel } : undefined
     },
     rect
   };
@@ -1572,7 +1739,7 @@ function attachFrameListeners(){
   frame.contentWindow?.addEventListener('scroll', scheduleMarkerReflow);
   frame.contentWindow?.addEventListener('resize', scheduleMarkerReflow);
 }
-frame.addEventListener('load', () => { frameListenersAttached = false; attachFrameListeners(); mountWashiOverlay(); redrawMarkers(); });
+frame.addEventListener('load', () => { frameListenersAttached = false; attachFrameListeners(); void renderMermaidDiagrams().finally(() => { mountWashiOverlay(); redrawMarkers(); }); });
 frame.addEventListener('touchstart', event => {
   const point = frameTouchPoint(event);
   touchStart = point ? { ...point, moved: false } : null;
@@ -1640,7 +1807,7 @@ planTouchLayer?.addEventListener('click', event => {
   }
 }, true);
 window.addEventListener('resize', scheduleMarkerReflow);
-if (frame.contentDocument && frame.contentDocument.readyState !== 'loading') setTimeout(attachFrameListeners, 0);
+if (frame.contentDocument && frame.contentDocument.readyState !== 'loading') setTimeout(() => { attachFrameListeners(); void renderMermaidDiagrams().finally(() => { mountWashiOverlay(); redrawMarkers(); }); }, 0);
 document.getElementById('close-lightbox').addEventListener('click', () => { lightbox.hidden = true; });
 document.getElementById('zoom-in').addEventListener('click', () => { zoom = Math.min(4, zoom + .25); applyImageTransform(); });
 document.getElementById('zoom-out').addEventListener('click', () => { zoom = Math.max(.5, zoom - .25); applyImageTransform(); });
@@ -1894,6 +2061,14 @@ export function createApp(options: AppOptions): FastifyInstance {
   });
   app.get('/vendor/washi.js', async (_request, reply) => {
     reply.type('application/javascript').send(fs.readFileSync(resolvedModuleFile('@washi-ui/core')));
+  });
+  app.get('/vendor/mermaid.esm.min.mjs', async (_request, reply) => {
+    reply.type('application/javascript').send(fs.readFileSync(resolvedModuleFile('mermaid/dist/mermaid.esm.min.mjs')));
+  });
+  app.get('/vendor/chunks/mermaid.esm.min/:file', async (request, reply) => {
+    const file = String((request.params as { file?: string }).file ?? '');
+    if (!/^[a-zA-Z0-9._-]+\.mjs$/.test(file)) throw new PlanReviewError('not_found', 'Mermaid vendor chunk was not found', 404);
+    reply.type('application/javascript').send(fs.readFileSync(path.join(path.dirname(resolvedModuleFile('mermaid/dist/mermaid.esm.min.mjs')), 'chunks', 'mermaid.esm.min', file)));
   });
 
   app.get('/', async (request, reply) => {
