@@ -483,15 +483,25 @@ try {
     assert.equal(await mermaidPage.evaluate(() => Boolean(document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('script'))), false);
     assert.equal(await mermaidPage.evaluate(() => Boolean(document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('.plan-mermaid-error'))), true);
     const mermaidVisual = await mermaidPage.evaluate(() => {
-      const doc = document.querySelector<HTMLIFrameElement>('#plan-frame')!.contentDocument!;
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const doc = iframe.contentDocument!;
+      const wrapper = doc.querySelector<HTMLElement>('.plan-mermaid-rendered')!;
       const rect = doc.querySelector<SVGElement>('.plan-mermaid-rendered svg .node rect, .plan-mermaid-rendered svg rect')!;
+      const wrapperStyle = doc.defaultView!.getComputedStyle(wrapper);
       return {
         styleCount: doc.querySelectorAll('.plan-mermaid-rendered svg style').length,
-        rectFill: doc.defaultView!.getComputedStyle(rect).fill
+        rectFill: doc.defaultView!.getComputedStyle(rect).fill,
+        wrapperBackground: wrapperStyle.backgroundImage,
+        wrapperBorderColor: wrapperStyle.borderTopColor,
+        wrapperBorderRadius: wrapperStyle.borderTopLeftRadius,
+        shellBorderColor: getComputedStyle(document.querySelector<HTMLElement>('#sidebar')!).borderLeftColor
       };
     });
     assert.equal(mermaidVisual.styleCount > 0, true);
     assert.notEqual(mermaidVisual.rectFill, 'rgb(0, 0, 0)');
+    assert.match(mermaidVisual.wrapperBackground, /rgba?\(17, 24, 39(?:, 0\.96)?\).*rgba?\(15, 23, 42(?:, 0\.96)?\)/);
+    assert.equal(mermaidVisual.wrapperBorderColor, mermaidVisual.shellBorderColor);
+    assert.equal(mermaidVisual.wrapperBorderRadius, '16px');
     const clickedMermaid = await mermaidPage.evaluate(() => {
       const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
       const doc = iframe.contentDocument!;

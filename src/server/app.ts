@@ -1014,6 +1014,18 @@ function ensureFrameAnchorStyles(){
   }
   return doc;
 }
+function ensureFrameMermaidStyles(){
+  const doc = frame.contentDocument;
+  if (!doc) return null;
+  let style = doc.getElementById('plan-review-mermaid-styles');
+  if (!style) {
+    style = doc.createElement('style');
+    style.id = 'plan-review-mermaid-styles';
+    style.textContent = '.plan-mermaid-rendered{display:block;max-width:min(100%,980px);margin:1.4rem auto;padding:18px;background:linear-gradient(180deg,rgba(17,24,39,.96),rgba(15,23,42,.96));border:1px solid #2b364d;border-radius:16px;color:#e5e7eb;box-shadow:0 18px 45px rgba(15,23,42,.22);overflow:auto}.plan-mermaid-rendered svg{display:block;max-width:100%;height:auto;margin:0 auto;background:transparent}.plan-mermaid-rendered .plan-mermaid-source-copy{margin-top:12px;padding-top:10px;border-top:1px solid #2b364d;color:#a7b0c0;font-size:.92rem}.plan-mermaid-rendered .plan-mermaid-source-copy summary{cursor:pointer;color:#7dd3fc;font-weight:800}.plan-mermaid-rendered .plan-mermaid-source-copy pre{margin-top:8px;padding:10px;white-space:pre-wrap;background:#020617;color:#dbeafe;border:1px solid #263246;border-radius:8px}.plan-mermaid-error{display:block;margin:1.4rem auto;padding:16px;max-width:min(100%,980px);background:#2b1320;color:#ffe4e6;border:1px solid #fb7185;border-radius:16px}.plan-mermaid-error pre{white-space:pre-wrap;background:#020617;color:#fecaca;border:1px solid #7f1d1d;border-radius:8px;padding:10px}';
+    (doc.head || doc.documentElement).appendChild(style);
+  }
+  return doc;
+}
 function clearCommentAnchors(){
   document.querySelectorAll('.comment-anchor').forEach(marker => marker.remove());
   try {
@@ -1194,6 +1206,7 @@ function mermaidErrorPanel(doc, source, error){
 async function renderMermaidDiagrams(){
   const doc = frame.contentDocument;
   if (!doc) return;
+  ensureFrameMermaidStyles();
   const generation = ++mermaidRenderGeneration;
   const sources = [...doc.querySelectorAll('[data-plan-mermaid-source="true"]')].filter(source => !source.closest('.plan-mermaid-rendered'));
   if (sources.length === 0) return;

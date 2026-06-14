@@ -3582,7 +3582,7 @@ test('Mermaid comments remap by source metadata and expose diagram evidence to a
   const app = createApp({ dbPath: tempDbPath('mermaid-anchor-remap') });
   try {
     const source = 'flowchart TD\n  Start[Start] --> Done[Done]';
-    const html = `<!doctype html><html><body><main><h1>Mermaid Plan</h1><pre class="mermaid">${source}</pre><p>Side text.</p></main></body></html>`;
+    const html = `<!doctype html><html><body><main><h1>Mermaid Plan</h1><pre id="main-diagram" class="mermaid">${source}</pre><p>Side text.</p></main></body></html>`;
     const registered = await app.inject({
       method: 'POST',
       url: '/api/plans/register',
@@ -3630,7 +3630,7 @@ test('Mermaid comments remap by source metadata and expose diagram evidence to a
     assert.equal(claim.json().data.status, 'claimed');
     assert.deepEqual(claim.json().data.conversationPayload.evidence.diagram, { kind: 'mermaid', sourcePlanNodeId, sourceHash, elementKey: 'node-start', elementLabel: 'Start' });
 
-    const updatedHtml = `<!doctype html><html><body><main><h1>Mermaid Plan</h1><pre class="mermaid">${source}</pre><p>Changed side text.</p></main></body></html>`;
+    const updatedHtml = `<!doctype html><html><body><main><h1>Mermaid Plan</h1><pre id="main-diagram" class="mermaid">${source}</pre><p>Changed side text.</p></main></body></html>`;
     const updated = await app.inject({
       method: 'POST',
       url: '/api/plans/register',
@@ -3639,6 +3639,17 @@ test('Mermaid comments remap by source metadata and expose diagram evidence to a
     assert.equal(updated.statusCode, 200);
     const comments = await app.inject({ method: 'GET', url: `/api/plans/${planId}/comments` });
     assert.equal(comments.json().data.comments[0].anchorState, 'mapped');
+
+    const changedSource = 'flowchart TD\n  Start[Start] --> Review[Review] --> Done[Done]';
+    const ambiguousHtml = `<!doctype html><html><body><main><h1>Mermaid Plan</h1><pre id="main-diagram" class="mermaid">${changedSource}</pre><pre id="other-diagram" class="mermaid">${source}</pre><p>Another diagram still has the old source.</p></main></body></html>`;
+    const ambiguous = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload({ html: ambiguousHtml, fileHash: sha256(ambiguousHtml), slug: 'mermaid-anchor', planPath: 'thoughts/plans/mermaid-anchor.html' })
+    });
+    assert.equal(ambiguous.statusCode, 200);
+    const staleComments = await app.inject({ method: 'GET', url: `/api/plans/${planId}/comments` });
+    assert.equal(staleComments.json().data.comments[0].anchorState, 'stale');
   } finally {
     await app.close();
   }
