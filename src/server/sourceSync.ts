@@ -30,6 +30,50 @@ class IncompleteSourceWriteError extends Error {
   }
 }
 
+class StaleSourceSnapshotError extends Error {
+  code = 'stale_source_snapshot';
+
+  constructor(sourcePath: string) {
+    super(`Source file changed during source sync for ${sourcePath}; kept serving the last good render and will retry.`);
+  }
+}
+
+export interface StableSourceSnapshot {
+  html: string;
+  fileHash: string;
+  sourceMtimeMs: number;
+  sourceSize: number;
+}
+
+export function readStableSourceSnapshot(sourcePath: string): StableSourceSnapshot {
+  const before = fs.statSync(sourcePath);
+  if (!before.isFile()) throw new Error(`Source path is not a file: ${sourcePath}`);
+  const bytes = fs.readFileSync(sourcePath);
+  const after = fs.statSync(sourcePath);
+  if (!after.isFile()) throw new Error(`Source path is not a file: ${sourcePath}`);
+  if (before.size !== after.size || before.mtimeMs !== after.mtimeMs || bytes.byteLength !== after.size) {
+    throw new StaleSourceSnapshotError(sourcePath);
+  }
+  const html = bytes.toString('utf8');
+  return {
+    html,
+    fileHash: sha256(html),
+    sourceMtimeMs: after.mtimeMs,
+    sourceSize: after.size
+  };
+}
+
+function assertSourceSnapshotCurrent(sourcePath: string, snapshot: StableSourceSnapshot): void {
+  const current = readStableSourceSnapshot(sourcePath);
+  if (
+    current.fileHash !== snapshot.fileHash ||
+    current.sourceMtimeMs !== snapshot.sourceMtimeMs ||
+    current.sourceSize !== snapshot.sourceSize
+  ) {
+    throw new StaleSourceSnapshotError(sourcePath);
+  }
+}
+
 function trimTrailingWhitespaceAndComments(value: string): string {
   let current = value.trimEnd();
   while (current.endsWith('-->')) {
@@ -193,14 +237,11 @@ export class SourceSyncService {
     const { plan, version } = this.store.getPlan(planId);
     if (plan.archivedAt || plan.lifecycleState === 'deferred' || plan.watchMode !== 'filesystem' || !plan.sourcePath) return;
     try {
-      const stat = fs.statSync(plan.sourcePath);
-      if (!stat.isFile()) throw new Error(`Source path is not a file: ${plan.sourcePath}`);
-      const html = fs.readFileSync(plan.sourcePath, 'utf8');
-      if (!isCompleteHtmlSource(html)) throw new IncompleteSourceWriteError(plan.sourcePath);
-      const fileHash = sha256(html);
-      const htmlChanged = fileHash !== version.fileHash;
+      const snapshot = readStableSourceSnapshot(plan.sourcePath);
+      if (!isCompleteHtmlSource(snapshot.html)) throw new IncompleteSourceWriteError(plan.sourcePath);
+      const htmlChanged = snapshot.fileHash !== version.fileHash;
       const needsWatcherRefresh = this.recoveryWatchers.has(plan.id);
-      const assets = discoverSourceAssets(html, plan.sourcePath);
+      const assets = discoverSourceAssets(snapshot.html, plan.sourcePath);
       const payload: RegisterPlanInput = {
         repoKey: plan.repoKey,
         repoName: plan.repoName,
@@ -212,28 +253,47 @@ export class SourceSyncService {
         publicationMetadata: plan.publicationMetadata,
         reviewMode: plan.reviewMode,
         slug: plan.slug,
-        html,
-        fileHash,
+        html: snapshot.html,
+        fileHash: snapshot.fileHash,
         sourcePath: plan.sourcePath,
-        sourceMtimeMs: stat.mtimeMs,
-        sourceSize: stat.size,
+        sourceMtimeMs: snapshot.sourceMtimeMs,
+        sourceSize: snapshot.sourceSize,
         watchMode: 'filesystem',
         assets,
         updateMode: 'upsert'
       };
       const rendered = renderPlan(payload);
-      if (fileHash === version.fileHash && sha256(rendered.renderedHtml) === sha256(this.store.getRenderedHtml(plan.id, version.id))) {
+      const renderedUnchanged = sha256(rendered.renderedHtml) === sha256(this.store.getRenderedHtml(plan.id, version.id));
+      const sourceMetadataUnchanged = version.sourceMtimeMs === snapshot.sourceMtimeMs && version.sourceSize === snapshot.sourceSize;
+      if (snapshot.fileHash === version.fileHash && renderedUnchanged && sourceMetadataUnchanged) {
         if (this.store.getPlan(plan.id).plan.lifecycleState !== 'active') return;
+        assertSourceSnapshotCurrent(plan.sourcePath, snapshot);
         this.bus.emitEvent(this.store.markPlanSyncSucceeded(plan.id, version.id));
         if (needsWatcherRefresh) await this.register(plan.id);
         return;
       }
       if (this.store.getPlan(plan.id).plan.lifecycleState !== 'active') return;
-      const result = this.store.registerPlan(payload, rendered.renderedHtml, rendered.warnings, 'filesystem_watch');
+      const result = this.store.registerPlan(
+        payload,
+        rendered.renderedHtml,
+        rendered.warnings,
+        'filesystem_watch',
+        () => assertSourceSnapshotCurrent(plan.sourcePath!, snapshot)
+      );
+      const committed = this.store.getPlan(plan.id);
+      if (
+        committed.version.fileHash !== snapshot.fileHash ||
+        committed.version.sourceMtimeMs !== snapshot.sourceMtimeMs ||
+        committed.version.sourceSize !== snapshot.sourceSize ||
+        sha256(this.store.getRenderedHtml(plan.id, committed.version.id)) !== sha256(rendered.renderedHtml)
+      ) {
+        throw new StaleSourceSnapshotError(plan.sourcePath);
+      }
       this.bus.emitEvent(result.event);
       if (htmlChanged || needsWatcherRefresh) await this.register(plan.id);
     } catch (error) {
       this.fail(plan.id, error, reason);
+      if (error instanceof StaleSourceSnapshotError) this.schedule(plan.id);
     }
   }
 
@@ -243,7 +303,9 @@ export class SourceSyncService {
     const code = error && typeof error === 'object' && 'code' in error ? String((error as { code?: unknown }).code) : undefined;
     const nextAction = code === 'incomplete_source_write'
       ? 'The last good render is still being served. Finish the source write with closing </body> and </html> tags; source sync will retry on the next stable complete change.'
-      : 'Fix source file permissions/path or run plan-review register <path> --snapshot to keep a detached review.';
+      : code === 'stale_source_snapshot'
+        ? 'The last good render is still being served. Source sync observed the file changing during ingestion and will retry automatically on the next stable read.'
+        : 'Fix source file permissions/path or run plan-review register <path> --snapshot to keep a detached review.';
     const event = this.store.markPlanSyncFailed(planId, {
       message,
       code,

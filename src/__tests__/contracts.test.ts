@@ -11,7 +11,7 @@ import { claimCommentsSchema, createCommentSchema, deliveryTargetUpdateSchema, p
 import { renderPlan } from '../render/render.js';
 import { normalizeLinearIssueKey, PlanReviewStore, type StoredComment } from '../storage/database.js';
 import { createApp } from '../server/app.js';
-import { SourceSyncService } from '../server/sourceSync.js';
+import { SourceSyncService, readStableSourceSnapshot } from '../server/sourceSync.js';
 import { findImageSources } from '../htmlImages.js';
 import { resolveDeliveryWorkerConfig, resolveServiceUrl } from '../config.js';
 import { discoverImageAssets } from '../cli.js';
@@ -3966,6 +3966,134 @@ function sourceSyncRegisterPayload(sourcePath: string, html: string, slug: strin
   });
 }
 
+test('source snapshot read rejects stale bytes that do not match current stat', () => {
+  const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-review-source-stale-snapshot-'));
+  const sourcePath = path.join(sourceDir, 'stale-snapshot.html');
+  const initialHtml = sourceSyncSentinelHtml('snapshot-initial');
+  const changedHtml = sourceSyncSentinelHtml('snapshot-changed', '<section><p>Extra bytes make this write larger.</p></section>');
+  fs.writeFileSync(sourcePath, changedHtml);
+  const originalReadFileSync = fs.readFileSync;
+  try {
+    fs.readFileSync = ((target: fs.PathOrFileDescriptor, options?: BufferEncoding | { encoding?: BufferEncoding | null; flag?: string } | null) => {
+      if (target === sourcePath) return Buffer.from(initialHtml);
+      return originalReadFileSync(target, options as never) as never;
+    }) as typeof fs.readFileSync;
+
+    assert.throws(() => readStableSourceSnapshot(sourcePath), /changed during source sync|stale source snapshot/i);
+  } finally {
+    fs.readFileSync = originalReadFileSync;
+    fs.rmSync(sourceDir, { recursive: true, force: true });
+  }
+});
+
+test('source sync repairs stale latest source metadata instead of reporting no-op success', async () => {
+  const store = new PlanReviewStore(tempDbPath('source-stale-metadata-repair'));
+  const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-review-source-stale-metadata-'));
+  const sourcePath = path.join(sourceDir, 'stale-metadata.html');
+  const html = sourceSyncSentinelHtml('metadata-current');
+  fs.writeFileSync(sourcePath, html);
+  const stat = fs.statSync(sourcePath);
+  const events: Array<{ eventType: string }> = [];
+  const sourceSync = new SourceSyncService(store, { emitEvent(event) { events.push(event); } });
+  try {
+    const payload = {
+      ...sourceSyncRegisterPayload(sourcePath, html, 'stale-metadata'),
+      sourceMtimeMs: Math.max(0, stat.mtimeMs - 1000),
+      sourceSize: Math.max(0, stat.size - 1)
+    };
+    const rendered = renderPlan(payload);
+    const registered = store.registerPlan(payload, rendered.renderedHtml, rendered.warnings);
+
+    await sourceSync.syncNow(registered.planId, 'manual');
+
+    const synced = store.getPlan(registered.planId);
+    assert.equal(synced.version.sourceSize, stat.size);
+    assert.equal(synced.version.sourceMtimeMs, stat.mtimeMs);
+    assert.equal(synced.plan.lastSyncStatus, 'synced');
+    assert.equal(synced.plan.lastSyncError, null);
+    assert.match(store.getRenderedHtml(registered.planId), /BOTTOM metadata-current/);
+    assert.equal(events.filter(event => event.eventType === 'plan.version.synced').length, 1);
+  } finally {
+    await sourceSync.close();
+    store.close();
+    fs.rmSync(sourceDir, { recursive: true, force: true });
+  }
+});
+
+test('source sync does not commit when disk changes after render before register', async () => {
+  const store = new PlanReviewStore(tempDbPath('source-change-before-register'));
+  const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-review-source-change-before-register-'));
+  const sourcePath = path.join(sourceDir, 'change-before-register.html');
+  const initialHtml = sourceSyncSentinelHtml('before-register-initial');
+  fs.writeFileSync(sourcePath, initialHtml);
+  const events: Array<{ eventType: string }> = [];
+  const sourceSync = new SourceSyncService(store, { emitEvent(event) { events.push(event); } });
+  try {
+    const payload = sourceSyncRegisterPayload(sourcePath, initialHtml, 'change-before-register');
+    const rendered = renderPlan(payload);
+    const registered = store.registerPlan(payload, rendered.renderedHtml, rendered.warnings);
+    const candidateHtml = sourceSyncSentinelHtml('before-register-candidate');
+    const laterHtml = sourceSyncSentinelHtml('before-register-later', '<section><p>Later write changes disk before commit.</p></section>');
+    fs.writeFileSync(sourcePath, candidateHtml);
+
+    const originalGetPlan = store.getPlan.bind(store);
+    let getPlanCalls = 0;
+    store.getPlan = ((identifier: string) => {
+      getPlanCalls += 1;
+      if (getPlanCalls === 2) fs.writeFileSync(sourcePath, laterHtml);
+      return originalGetPlan(identifier);
+    }) as typeof store.getPlan;
+
+    await sourceSync.syncNow(registered.planId, 'manual');
+
+    const failed = originalGetPlan(registered.planId);
+    assert.equal(failed.version.id, registered.versionId);
+    assert.equal(failed.plan.lastSyncStatus, 'failed');
+    assert.equal(failed.plan.lastSyncError?.code, 'stale_source_snapshot');
+    assert.equal(events.some(event => event.eventType === 'plan.version.synced'), false);
+    assert.match(store.getRenderedHtml(registered.planId), /BOTTOM before-register-initial/);
+    assert.doesNotMatch(store.getRenderedHtml(registered.planId), /before-register-candidate|before-register-later/);
+  } finally {
+    await sourceSync.close();
+    store.close();
+    fs.rmSync(sourceDir, { recursive: true, force: true });
+  }
+});
+
+test('register plan validation failure rolls back staged synced version and event', () => {
+  const store = new PlanReviewStore(tempDbPath('source-register-validation-rollback'));
+  const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-review-register-validation-rollback-'));
+  const sourcePath = path.join(sourceDir, 'validation-rollback.html');
+  const initialHtml = sourceSyncSentinelHtml('validation-rollback-initial');
+  fs.writeFileSync(sourcePath, initialHtml);
+  try {
+    const initialPayload = sourceSyncRegisterPayload(sourcePath, initialHtml, 'validation-rollback');
+    const initialRendered = renderPlan(initialPayload);
+    const registered = store.registerPlan(initialPayload, initialRendered.renderedHtml, initialRendered.warnings);
+    const lastSequence = Math.max(...store.eventsAfter(registered.planId).map(event => event.sequence));
+    const candidateHtml = sourceSyncSentinelHtml('validation-rollback-candidate');
+    fs.writeFileSync(sourcePath, candidateHtml);
+    const candidatePayload = sourceSyncRegisterPayload(sourcePath, candidateHtml, 'validation-rollback');
+    const candidateRendered = renderPlan(candidatePayload);
+
+    assert.throws(
+      () => store.registerPlan(candidatePayload, candidateRendered.renderedHtml, candidateRendered.warnings, 'filesystem_watch', () => {
+        throw new Error('source changed before transaction commit');
+      }),
+      /source changed before transaction commit/
+    );
+
+    const current = store.getPlan(registered.planId);
+    assert.equal(current.version.id, registered.versionId);
+    assert.equal(store.eventsAfter(registered.planId, lastSequence).length, 0);
+    assert.match(store.getRenderedHtml(registered.planId), /BOTTOM validation-rollback-initial/);
+    assert.doesNotMatch(store.getRenderedHtml(registered.planId), /validation-rollback-candidate/);
+  } finally {
+    store.close();
+    fs.rmSync(sourceDir, { recursive: true, force: true });
+  }
+});
+
 test('source sync rejects incomplete partial source writes and recovers complete source', async () => {
   const store = new PlanReviewStore(tempDbPath('source-incomplete-recovery'));
   const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-review-source-incomplete-'));
@@ -4382,16 +4510,19 @@ test('filesystem source changes create a synced latest version and failures keep
     const planId = registered.json().data.planId;
     const firstVersionId = registered.json().data.versionId;
 
-    const changedHtml = sampleHtml().replace('Reviewers can select this section.', 'Reviewers see live synced content.');
+    const changedHtml = sampleHtml().replace('Reviewers can select this section.', 'Reviewers see live synced content with an issue 33 sentinel and extra bytes.');
     fs.writeFileSync(sourcePath, changedHtml);
+    const changedStat = fs.statSync(sourcePath);
     await waitFor(async () => {
       const meta = await app.inject({ method: 'GET', url: `/api/plans/${planId}` });
       return meta.json().data.latestVersion.id !== firstVersionId;
     });
     const synced = await app.inject({ method: 'GET', url: `/api/plans/${planId}` });
     assert.equal(synced.json().data.latestVersion.syncOrigin, 'filesystem_watch');
+    assert.equal(synced.json().data.latestVersion.sourceSize, changedStat.size);
+    assert.equal(synced.json().data.latestVersion.sourceMtimeMs, changedStat.mtimeMs);
     const rendered = await app.inject({ method: 'GET', url: `/render/${planId}?versionId=${synced.json().data.latestVersion.id}` });
-    assert.match(rendered.body, /Reviewers see live synced content/);
+    assert.match(rendered.body, /Reviewers see live synced content with an issue 33 sentinel/);
 
     fs.rmSync(sourcePath);
     await waitFor(async () => {
