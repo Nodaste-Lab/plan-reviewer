@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Issue 33 Filesystem Live-Link Stale Sync Plan</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07111f;
+      --panel: #101b2d;
+      --panel-2: #0b1526;
+      --text: #e6edf7;
+      --muted: #a9b6c8;
+      --accent: #7dd3fc;
+      --accent-2: #c4b5fd;
+      --border: #26364f;
+      --warn: #fbbf24;
+      --ok: #34d399;
+      --bad: #fb7185;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.58 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    main { max-width: 1120px; margin: 0 auto; padding: 32px 20px 64px; }
+    section, article { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 20px; margin: 16px 0; }
+    article { background: var(--panel-2); }
+    h1, h2, h3, h4 { color: #f8fafc; line-height: 1.22; }
+    h1 { margin: 0 0 10px; font-size: 34px; }
+    h2 { margin-top: 0; }
+    h4 { margin-bottom: 0.35rem; }
+    a { color: var(--accent); }
+    code, pre { background: #020617; color: #dbeafe; border-radius: 6px; }
+    code { padding: 0.1rem 0.35rem; }
+    pre { padding: 14px; overflow: auto; border: 1px solid #1e293b; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid var(--border); padding: 9px; vertical-align: top; }
+    th { background: #0f172a; color: #f8fafc; }
+    li { margin: 0.35rem 0; }
+    .status { display: inline-block; border: 1px solid var(--warn); color: #fde68a; border-radius: 999px; padding: 4px 10px; font-weight: 700; }
+    .muted { color: var(--muted); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+    .callout { border-left: 4px solid var(--accent); padding-left: 14px; color: var(--muted); }
+  </style>
+</head>
+<body>
+<main>
+  <h1 id="title">Issue 33: Filesystem Live-Link Stale Sync Plan</h1>
+  <p class="status" id="status">Status: validation-complete; implementation reviews and regression gates passed</p>
+  <p class="muted" id="issue-reference">Source issue: <a href="https://github.com/Nodaste-Lab/plan-reviewer/issues/33">GitHub issue #33</a>. No Linear issue exists for this GitHub-only intake.</p>
+
+  <section id="goal">
+    <h2>Goal</h2>
+    <p>Make filesystem live-link sync trustworthy: whenever a sync reports <code>synced</code>, advances <code>lastSyncAt</code>, or exposes a latest version, the stored source metadata and rendered HTML must match the current on-disk source file that triggered the sync.</p>
+  </section>
+
+  <section id="solution-narrative">
+    <h2>Solution narrative</h2>
+    <p>Fix the bug by making source sync commit from a verified fresh source snapshot, not merely from a watcher event. The sync path should read the source and stat information together, reject or retry unstable snapshots, render only those verified bytes, commit version metadata from the same snapshot, then verify the stored latest version still matches that snapshot before reporting success. The existing last-good-render safety behavior remains: if the source is missing, incomplete, unsafe, or mutating under the service, keep serving the previous good render and surface actionable sync metadata instead of claiming success.</p>
+  </section>
+
+  <section id="why-this-plan-exists">
+    <h2>Why this plan exists</h2>
+    <p>Issue #33 reports silent staleness: after editing a registered live-linked HTML file, <code>GET /api/plans</code> showed <code>lastSyncStatus: synced</code>, a fresh <code>lastSyncAt</code>, and a new version signal, while <code>latestVersion.sourceSize</code> stayed at the old byte count and <code>GET /render/&lt;planId&gt;</code> continued serving previous content. A manual <code>plan-review register</code> ingested the edit, proving the source file was valid and the automatic ingestion path was the problem.</p>
+  </section>
+
+  <section id="authority-and-inputs">
+    <h2>Authority and inputs</h2>
+    <ul>
+      <li>Primary request: review <a href="https://github.com/Nodaste-Lab/plan-reviewer/issues/33">Nodaste-Lab/plan-reviewer#33</a> and make a fix plan.</li>
+      <li>Repo guidance: <code>AGENTS.md</code> and <code>thoughts/plans/AGENTS.md</code>.</li>
+      <li>Product intent: <code>thoughts/specs/product_intent.md</code>, especially “live source sync updates open review pages only when the source is complete and safe to render; failures keep serving the last good version with truthful status.”</li>
+      <li>Current implementation inspected: <code>src/server/sourceSync.ts</code>, <code>src/server/app.ts</code>, <code>src/storage/database.ts</code>, and source-sync tests in <code>src/__tests__/contracts.test.ts</code>.</li>
+      <li>Related prior plan: <code>thoughts/plans/issue-10-partial-source-write-guard.html</code>, which already established last-good-render behavior for incomplete source writes.</li>
+    </ul>
+  </section>
+
+  <section id="current-implementation-reality">
+    <h2>Current implementation reality</h2>
+    <div class="grid">
+      <article id="reality-source-sync">
+        <h3>Source sync flow</h3>
+        <p><code>SourceSyncService.register()</code> watches the source file and discovered local assets with chokidar. Change events debounce for 500ms and call <code>syncNow(planId, 'filesystem_watch')</code>.</p>
+      </article>
+      <article id="reality-perform-sync">
+        <h3>Commit path</h3>
+        <p><code>performSync()</code> stats and reads <code>plan.sourcePath</code>, computes a hash, renders the payload, and calls <code>store.registerPlan(..., 'filesystem_watch')</code> when the hash or rendered output differs from the latest stored version.</p>
+      </article>
+      <article id="reality-success-branch">
+        <h3>Success metadata path</h3>
+        <p>When the read hash and rendered output match the current latest version, <code>performSync()</code> calls <code>markPlanSyncSucceeded()</code>, which advances sync metadata and emits <code>plan.version.synced</code> without re-validating source size or render content against disk.</p>
+      </article>
+      <article id="reality-storage">
+        <h3>Storage contract</h3>
+        <p><code>registerPlan()</code> stores <code>source_mtime_ms</code>, <code>source_size</code>, raw HTML blob, rendered blob, and <code>sync_origin</code> on <code>plan_versions</code>. <code>/render/:planId</code> serves the stored rendered blob for the latest version.</p>
+      </article>
+      <article id="reality-tests">
+        <h3>Existing coverage</h3>
+        <p>Contract tests cover missing sources, partial/incomplete writes, startup rehydration, image-asset watches, and ordinary source changes. They do not yet assert the invariant from issue #33: every successful automatic sync must make <code>latestVersion.sourceSize</code> equal the current on-disk byte count and render the latest sentinel.</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="progress">
+    <h2>Progress</h2>
+    <ul>
+      <li><label><input type="checkbox" checked> P1 lock the stale-success invariant with tests</label></li>
+      <li><label><input type="checkbox" checked> P2 commit from verified source snapshots</label></li>
+      <li><label><input type="checkbox" checked> P3 preserve browser/API truthfulness</label></li>
+      <li><label><input type="checkbox" checked> P4 run regression and implementation review gates</label></li>
+    </ul>
+  </section>
+
+  <section id="resume-instructions">
+    <h2>Resume instructions (agent)</h2>
+    <p>Implementation is validation-complete. Resume by reviewing the Decisions / Deviations log and latest git status, then proceed with scoped commit, push, PR creation, and PR monitoring. Stay scoped to GitHub issue #33. Preserve the issue #10 incomplete-write guard and existing source recovery behavior.</p>
+  </section>
+
+  <section id="product-intent-alignment">
+    <h2>Product intent alignment</h2>
+    <ul>
+      <li><strong>Desired outcome advanced:</strong> plan authors can trust live-linked HTML plans to stay synchronized with source files while preserving review context and safe rendered output.</li>
+      <li><strong>Truthful status:</strong> <code>synced</code> must mean the service ingested and serves the latest safe source snapshot; it cannot mean “a watcher event fired.”</li>
+      <li><strong>Safe default:</strong> if the service cannot prove the source snapshot is fresh and stable, keep serving the last good render and report a retryable sync state.</li>
+      <li><strong>Self-healing:</strong> routine race or partial-write conditions should automatically retry on the next stable change; manual re-registration remains an escape hatch, not the normal recovery path.</li>
+      <li><strong>Actionable errors:</strong> failure metadata should say whether the source was missing, incomplete, unsafe, or changed during sync, what the service already did, and that the last good render is still being served.</li>
+    </ul>
+  </section>
+
+  <section id="locked-decisions">
+    <h2>Locked decisions</h2>
+    <ol>
+      <li id="decision-source-of-truth"><strong>The filesystem source remains authoritative.</strong> The service cache/history is derived state for live-linked plans.</li>
+      <li id="decision-success-invariant"><strong>Successful sync requires a post-commit invariant.</strong> After automatic sync, latest stored <code>sourceSize</code> and rendered output must correspond to the source snapshot that was read from disk.</li>
+      <li id="decision-last-good"><strong>Last good render remains the fail-safe.</strong> Do not overwrite a good rendered plan with stale, incomplete, or unverified bytes.</li>
+      <li id="decision-no-manual-normalization"><strong>Manual re-register is not the fix path.</strong> The automatic watcher path must self-heal normal edits without asking users or agents to rerun <code>plan-review register</code>.</li>
+      <li id="decision-asset-parity"><strong>Asset-only changes remain supported.</strong> Verifying HTML source freshness must not break existing relative-image watch behavior.</li>
+      <li id="decision-no-cache-assumption"><strong>Do not trust cached version metadata as proof of disk freshness.</strong> The success branch must compare against a fresh source snapshot and current stored version metadata before claiming <code>synced</code>.</li>
+    </ol>
+  </section>
+
+  <section id="acceptance-criteria">
+    <h2>Acceptance criteria</h2>
+    <ul>
+      <li id="ac-1"><strong>AC1:</strong> After any successful filesystem-watch sync, <code>GET /api/plans/:planId</code> reports <code>latestVersion.sourceSize</code> equal to <code>fs.statSync(sourcePath).size</code> for the synced source snapshot.</li>
+      <li id="ac-2"><strong>AC2:</strong> After editing the source file to include a unique sentinel, <code>GET /render/:planId</code> for the latest version contains that sentinel before sync status is reported as successful for the edit.</li>
+      <li id="ac-3"><strong>AC3:</strong> If the source changes while a sync is reading or committing, the service does not emit a misleading success for the old bytes; it either retries or records a retryable failure while keeping the last good render.</li>
+      <li id="ac-4"><strong>AC4:</strong> The unchanged-content success path may advance <code>lastSyncAt</code> only when the latest stored <code>sourceMtimeMs</code> and <code>sourceSize</code> both match the current disk snapshot; if either field changed since the stored version, treat the read as potentially stale and do not call <code>markPlanSyncSucceeded()</code>.</li>
+      <li id="ac-5"><strong>AC5:</strong> Missing, incomplete, parse-invalid, and unsafe source states continue to keep the last good render with actionable failure metadata.</li>
+      <li id="ac-6"><strong>AC6:</strong> Complete smaller rewrites and asset-only changes still sync automatically and refresh already-open review pages.</li>
+      <li id="ac-7"><strong>AC7:</strong> Startup rehydration uses the same fresh-snapshot invariant as watcher sync and cannot mark stale cached content as newly synced.</li>
+      <li id="ac-8"><strong>AC8:</strong> Manual <code>plan-review register</code> remains compatible and continues to update the same plan thread with correct source metadata.</li>
+    </ul>
+  </section>
+
+  <section id="bdd-scenarios">
+    <h2>BDD scenarios</h2>
+    <article id="bdd-larger-edit">
+      <h3>BDD1: larger edit becomes rendered latest content</h3>
+      <p><strong>Given</strong> a live-linked filesystem plan is registered, <strong>when</strong> its source file is edited to a larger complete HTML document containing a unique sentinel, <strong>then</strong> the latest plan metadata reports the new byte size and <code>/render/&lt;planId&gt;</code> contains the sentinel.</p>
+    </article>
+    <article id="bdd-stale-success-blocked">
+      <h3>BDD2: stale success is blocked</h3>
+      <p><strong>Given</strong> a sync observes or attempts to commit bytes that no longer match the current source file, <strong>when</strong> the sync completes, <strong>then</strong> it does not report <code>synced</code> for that stale snapshot and does not expose a latest version whose <code>sourceSize</code> differs from disk.</p>
+    </article>
+    <article id="bdd-retry-recovers">
+      <h3>BDD3: stable source recovers automatically</h3>
+      <p><strong>Given</strong> a sync was rejected because the source changed during ingestion, <strong>when</strong> the file is stable on the next watcher cycle, <strong>then</strong> source sync ingests it, clears the warning, and serves the new render without manual registration.</p>
+    </article>
+    <article id="bdd-unchanged-content">
+      <h3>BDD4: no-op sync is truthful</h3>
+      <p><strong>Given</strong> a live-linked source file has not changed since the latest stored version, <strong>when</strong> a watcher event fires anyway, <strong>then</strong> the service may update <code>lastSyncAt</code> only after confirming the stored metadata still equals the fresh disk snapshot.</p>
+    </article>
+    <article id="bdd-incomplete-source">
+      <h3>BDD5: incomplete source remains last-good</h3>
+      <p><strong>Given</strong> a source file is missing terminal HTML structure or cannot be rendered safely, <strong>when</strong> source sync runs, <strong>then</strong> the service keeps the last good render and reports actionable failed sync metadata.</p>
+    </article>
+    <article id="bdd-assets">
+      <h3>BDD6: asset-only sync still works</h3>
+      <p><strong>Given</strong> HTML source is unchanged and a watched relative image changes, <strong>when</strong> source sync runs, <strong>then</strong> the rendered asset hash changes and the sync status remains truthful.</p>
+    </article>
+    <article id="bdd-startup">
+      <h3>BDD7: startup does not bless stale cache</h3>
+      <p><strong>Given</strong> a filesystem plan exists in the database and the source file changed while the service was down, <strong>when</strong> startup rehydrates source sync, <strong>then</strong> the service reads the current file and either serves that current content or reports a truthful failure; it does not mark the old cached render as newly synced.</p>
+    </article>
+  </section>
+
+  <section id="test-coverage-matrix">
+    <h2>Test coverage matrix</h2>
+    <table>
+      <thead><tr><th>Acceptance</th><th>Scenarios</th><th>Test layer</th><th>Likely file</th></tr></thead>
+      <tbody>
+        <tr><td>AC1, AC2</td><td>BDD1</td><td>Contract test registering a filesystem plan, writing a larger complete source with a sentinel, waiting for watcher sync, then asserting <code>latestVersion.sourceSize</code> equals disk size and latest render contains sentinel.</td><td><code>src/__tests__/contracts.test.ts</code></td></tr>
+        <tr><td>AC3</td><td>BDD2, BDD3</td><td>Focused source-sync test for a stale or mutating source snapshot. If needed, introduce a tiny source snapshot validator seam and first add compile-failing tests for the expected stale-snapshot rejection contract.</td><td><code>src/__tests__/contracts.test.ts</code>, <code>src/server/sourceSync.ts</code></td></tr>
+        <tr><td>AC4</td><td>BDD4</td><td>Unit/contract test where the source hash is unchanged and metadata matches, proving <code>markPlanSyncSucceeded()</code> is used only after disk-vs-version metadata validation.</td><td><code>src/__tests__/contracts.test.ts</code></td></tr>
+        <tr><td>AC5</td><td>BDD5</td><td>Existing issue #10 tests for incomplete writes and failed renders stay green; add assertions that no stale-success event is emitted on rejected source states.</td><td><code>src/__tests__/contracts.test.ts</code></td></tr>
+        <tr><td>AC6</td><td>BDD6</td><td>Existing image watch and complete smaller rewrite tests stay green; add size/render invariant assertions after asset sync.</td><td><code>src/__tests__/contracts.test.ts</code></td></tr>
+        <tr><td>AC7</td><td>BDD7</td><td>Startup/recovery test where source changes while service is closed; assert rehydration ingests current bytes or reports failure, never stale success.</td><td><code>src/__tests__/contracts.test.ts</code></td></tr>
+        <tr><td>AC8</td><td>Manual register parity</td><td>Existing CLI/API register tests stay green; no behavior change beyond shared invariant language.</td><td><code>src/__tests__/contracts.test.ts</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="phase-plan">
+    <h2>Phase-by-phase execution plan</h2>
+
+    <article id="phase-p1-stale-invariant-tests">
+      <h3>P1: lock the stale-success invariant with tests</h3>
+      <h4>End State</h4>
+      <p>Regression tests fail against the current stale-success gap and encode issue #33’s reliable invariant: successful sync metadata, latest source size, and rendered content all correspond to the current source file.</p>
+      <h4>Tests first</h4>
+      <ul>
+        <li>Add a contract test beside existing source-sync tests that registers a filesystem plan through <code>createApp()</code>, writes a larger complete HTML document with a unique sentinel, waits for automatic sync, then asserts <code>latestVersion.sourceSize === fs.statSync(sourcePath).size</code> and <code>/render/:planId</code> contains the sentinel.</li>
+        <li>Add a deterministic stale-snapshot test for the source-sync invariant. Prefer a small exported validator such as <code>assertFreshSourceSnapshot()</code> or <code>readStableSourceSnapshot()</code>; the first RED can be a compile failure for that helper plus a stale snapshot fixture where disk size/hash changed.</li>
+        <li>Add assertions to existing incomplete-source tests that rejected source states do not emit misleading <code>plan.version.synced</code> events for stale bytes.</li>
+      </ul>
+      <h4>Expected files</h4>
+      <ul>
+        <li><code>src/__tests__/contracts.test.ts</code></li>
+        <li><code>src/server/sourceSync.ts</code> only if a helper export is introduced for deterministic tests</li>
+      </ul>
+      <h4>Work</h4>
+      <p>No product behavior change except any minimal helper surface needed to make the regression deterministic. Keep the tests focused on source-sync truthfulness, not broad UI redesign.</p>
+      <h4>Verify</h4>
+      <pre><code>bun run build
+node --test dist/__tests__/contracts.test.js --test-name-pattern "source sync|filesystem source|stale"</code></pre>
+    </article>
+
+    <article id="phase-p2-verified-source-snapshot">
+      <h3>P2: commit from verified source snapshots</h3>
+      <h4>End State</h4>
+      <p><code>performSync()</code> reads, renders, stores, and reports success from a single verified source snapshot. It does not mark stale cached content as synced.</p>
+      <h4>Tests first</h4>
+      <p>Run P1 tests and confirm the stale-success cases fail before implementation.</p>
+      <h4>Expected files</h4>
+      <ul>
+        <li><code>src/server/sourceSync.ts</code></li>
+        <li><code>src/storage/database.ts</code> only if a narrow store helper is needed to compare latest version metadata without widening public API</li>
+      </ul>
+      <h4>Work</h4>
+      <ul>
+        <li>Introduce a small source snapshot helper that performs <code>stat → readFile → stat</code>, computes <code>fileHash</code>, and rejects/retries if size or mtime changes across the read.</li>
+        <li>Keep the existing complete-HTML guard from issue #10 in the same path, so incomplete writes and startup rehydration remain fail-safe.</li>
+        <li>Build the <code>RegisterPlanInput</code> only from the verified snapshot: <code>html</code>, <code>fileHash</code>, <code>sourceMtimeMs</code>, <code>sourceSize</code>, and discovered assets must describe the same bytes.</li>
+        <li>For the “unchanged content/render” branch, confirm the latest stored source metadata still matches the fresh snapshot before calling <code>markPlanSyncSucceeded()</code>. If metadata differs, re-register/update the version metadata or fail and schedule retry; do not silently claim synced.</li>
+        <li>After <code>store.registerPlan()</code>, re-read the stored latest version and assert its <code>sourceSize</code> and rendered blob correspond to the snapshot before emitting the success event. Do not call <code>this.bus.emitEvent(result.event)</code> until that post-commit check confirms the stored version matches the snapshot.</li>
+        <li>If the source changed during sync, record a retryable failure such as <code>stale_source_snapshot</code> with next-action text that says the last good render is still served and source sync will retry on the next stable change.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build
+node --test dist/__tests__/contracts.test.js --test-name-pattern "source sync|filesystem source|stale|incomplete"</code></pre>
+    </article>
+
+    <article id="phase-p3-browser-api-truthfulness">
+      <h3>P3: preserve browser/API truthfulness</h3>
+      <h4>End State</h4>
+      <p>API metadata and browser refresh events remain truthful: accepted complete changes refresh review pages; rejected stale/incomplete states keep the previous iframe content and expose actionable status.</p>
+      <h4>Tests first</h4>
+      <ul>
+        <li>Extend the source-sync event assertions to verify stale/incomplete rejections do not emit a refresh-worthy <code>plan.version.synced</code> event with a misleading version.</li>
+        <li>If contract-level event assertions cannot prove already-open page behavior, add a minimal e2e fixture assertion around an open review page receiving complete-source refresh but not stale-source refresh.</li>
+      </ul>
+      <h4>Expected files</h4>
+      <ul>
+        <li><code>src/__tests__/contracts.test.ts</code></li>
+        <li><code>src/test-fixtures/e2e-run.ts</code> only if required for browser refresh coverage</li>
+        <li><code>src/server/sourceSync.ts</code></li>
+      </ul>
+      <h4>Work</h4>
+      <ul>
+        <li>Keep event emission aligned with commit success: emit <code>plan.version.synced</code> only for verified latest content.</li>
+        <li>Ensure failure metadata remains visible through existing <code>/api/plans</code>, <code>/api/plans/:planId</code>, and index status surfaces without adding new manual recovery steps.</li>
+        <li>Preserve source asset watcher refresh behavior after any watcher re-registration caused by HTML changes.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build
+node --test dist/__tests__/contracts.test.js --test-name-pattern "source sync|filesystem source|event|asset"
+# Run if e2e browser coverage changed:
+bun run test:e2e</code></pre>
+    </article>
+
+    <article id="phase-p4-final-gates">
+      <h3>P4: run regression and implementation review gates</h3>
+      <h4>End State</h4>
+      <p>The issue #33 fix is verified against targeted source-sync tests, the repo baseline, and a scoped implementation review.</p>
+      <h4>Tests first</h4>
+      <p>No new tests first in this phase; it is the verification and review phase after implementation is green.</p>
+      <h4>Expected files</h4>
+      <ul>
+        <li><code>thoughts/plans/issue-33-filesystem-live-link-stale-sync.html</code> progress updates only</li>
+        <li>Any touched production/test files from P1–P3</li>
+      </ul>
+      <h4>Work</h4>
+      <ul>
+        <li>Run the targeted contract test command and full repo test gate.</li>
+        <li>Run <code>bun run test:e2e</code> if browser refresh/event behavior changed beyond contract-level coverage.</li>
+        <li>Run a scoped implementation review focused on source-sync truthfulness, last-good safety, and regression coverage for issue #33.</li>
+        <li>Update this plan’s Progress and Decisions / Deviations Log with RED → GREEN evidence and any reviewed deviations.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build
+bun run test
+# Required if browser fixture coverage was touched or event refresh semantics changed:
+bun run test:e2e</code></pre>
+    </article>
+  </section>
+
+  <section id="verification-strategy">
+    <h2>Verification strategy</h2>
+    <ul>
+      <li>Primary proof: contract tests assert the issue #33 invariant directly against API metadata and rendered output.</li>
+      <li>Safety proof: existing issue #10 partial-write, failed-render, missing-source, startup recovery, and asset-watch tests remain green.</li>
+      <li>Workflow proof: if client refresh semantics change, e2e verifies an already-open review page refreshes on complete changes and does not refresh to stale/incomplete content.</li>
+      <li>Final repo gate: <code>bun run build</code> and <code>bun run test</code>.</li>
+    </ul>
+  </section>
+
+  <section id="delivery-order">
+    <h2>Delivery order</h2>
+    <ol>
+      <li>Write failing regression tests for stale-success invariants.</li>
+      <li>Implement verified source snapshots and success gating in <code>SourceSyncService</code>.</li>
+      <li>Confirm API/event/browser truthfulness remains aligned.</li>
+      <li>Run targeted and full gates, then complete scoped implementation review before handoff.</li>
+    </ol>
+  </section>
+
+  <section id="non-goals">
+    <h2>Non-goals</h2>
+    <ul>
+      <li>Do not replace filesystem live-link with snapshot-only registration.</li>
+      <li>Do not require users or agents to manually re-register after normal source edits.</li>
+      <li>Do not redesign the browser shell, comment queue, or plan index beyond truthful existing status surfaces.</li>
+      <li>Do not introduce authentication or multi-tenant security changes.</li>
+      <li>Do not broaden accepted plan formats beyond complete HTML documents already required by source-sync safety work.</li>
+    </ul>
+  </section>
+
+  <section id="decisions-deviations-log">
+    <h2>Decisions / Deviations log</h2>
+    <ul>
+      <li id="log-2026-06-14-created"><strong>2026-06-14:</strong> Created plan from GitHub issue #33. Initial direction is to enforce a verified source-snapshot invariant around filesystem sync success instead of treating watcher activity as sufficient proof of publication.</li>
+      <li id="log-2026-06-14-review-gates"><strong>2026-06-14:</strong> PM/product-intent review found the plan aligned with live-source authority, truthful status, self-healing retry, and last-good-render safety. Codex returned <code>VERDICT: PLAN_EXECUTION_READY</code> with no blocking findings. Claude returned <code>VERDICT: PLAN_EXECUTION_READY</code> with no blocking findings; integrated its optional clarifications naming <code>sourceMtimeMs</code>/<code>sourceSize</code> as the no-op metadata fields and delaying event emission until post-commit verification passes.</li>
+      <li id="log-2026-06-14-p1-p3-green"><strong>2026-06-14:</strong> P1 RED evidence: <code>bun run build</code> failed because <code>readStableSourceSnapshot</code> did not exist after adding the stale-snapshot regression tests. P1–P3 GREEN evidence: implemented stable source snapshot reads, no-op metadata repair, post-commit verification before event emission, and retryable stale-source failures; <code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js --test-name-pattern "source sync|filesystem source|stale"</code> passed with 97 tests.</li>
+      <li id="log-2026-06-14-review-fix-1"><strong>2026-06-14:</strong> Codex implementation review found an in-scope race where source could change after render/register and before success emission. Added <code>assertSourceSnapshotCurrent()</code> checks before no-op success, before registration, and before success event emission, plus a regression test proving stale-source failure keeps the prior render. Targeted gate passed with 98 tests.</li>
+      <li id="log-2026-06-14-review-fix-2"><strong>2026-06-14:</strong> Codex rerun found an in-scope post-register race: a stale version/event could be committed before the final freshness check threw. Added a narrow <code>validateBeforeCommit</code> callback to <code>PlanReviewStore.registerPlan()</code>, invoked inside the SQLite transaction before commit, and passed the disk freshness check from source sync so stale filesystem-watch commits roll back atomically. Added rollback regression coverage. Targeted gate passed with 99 tests.</li>
+      <li id="log-2026-06-14-p4-green"><strong>2026-06-14:</strong> P4 GREEN evidence: <code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js --test-name-pattern "source sync|filesystem source|stale|register plan validation"</code> passed with 99 tests; <code>bun run test</code> passed with 100 tests; <code>bun run test:e2e</code> passed. Final scoped implementation reviews passed: Codex <code>VERDICT: PASS_SCOPED</code>; Claude <code>VERDICT: PASS_SCOPED</code> with only out-of-scope follow-ups.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>

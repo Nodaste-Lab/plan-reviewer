@@ -1020,7 +1020,7 @@ export class PlanReviewStore {
     return row ?? null;
   }
 
-  registerPlan(input: RegisterPlanInput, renderedHtml: string, renderWarnings: unknown[], syncOrigin: 'manual_register' | 'filesystem_watch' = 'manual_register') {
+  registerPlan(input: RegisterPlanInput, renderedHtml: string, renderWarnings: unknown[], syncOrigin: 'manual_register' | 'filesystem_watch' = 'manual_register', validateBeforeCommit?: () => void) {
     const tx = this.db.transaction(() => {
       const now = nowIso();
       const repoKey =
@@ -1129,6 +1129,7 @@ export class PlanReviewStore {
         reviewMode,
         lastSyncStatus
       });
+      validateBeforeCommit?.();
 
       return {
         planId,
