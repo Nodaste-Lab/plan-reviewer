@@ -822,6 +822,7 @@ async function refreshPlanFrameContent(nextVersionId, options = {}){
   doc.head.replaceChildren(...[...parsed.head.childNodes].map(node => doc.importNode(node, true)));
   doc.body.replaceChildren(...[...parsed.body.childNodes].map(node => doc.importNode(node, true)));
   await renderMermaidDiagrams();
+  ensureFrameTapTargets(doc);
   syncFrameHeight();
   scheduleFrameImageReflows();
   versionId = nextVersionId;
@@ -1016,7 +1017,6 @@ function selectorForPlanNodeId(planNodeId){
 function ensureFrameAnchorStyles(){
   const doc = frame.contentDocument;
   if (!doc) return null;
-  ensureFrameTapTargets(doc);
   let style = doc.getElementById('plan-review-comment-anchor-styles');
   if (!style) {
     style = doc.createElement('style');
