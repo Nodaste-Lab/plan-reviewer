@@ -96,6 +96,7 @@ try {
   const clientJsResponse = await context.get('/client.js');
   assert.equal(clientJsResponse.ok(), true);
   assert.equal(clientJsResponse.headers()['cache-control'], 'no-store');
+  const clientJsText = await clientJsResponse.text();
   const clientCssResponse = await context.get('/client.css');
   assert.equal(clientCssResponse.ok(), true);
   assert.equal(clientCssResponse.headers()['cache-control'], 'no-store');
@@ -106,6 +107,19 @@ try {
   assert.match(clientCssText, /\.selection-box\.hover\{[^}]*border:2px dotted/);
   assert.match(clientCssText, /\.selection-box\.active\{[^}]*border:2px dotted/);
   assert.match(clientCssText, /@media\(prefers-reduced-motion:reduce\)\{\.selection-box\{transition:none\}\}/);
+  // Mobile review surface contract: the parent #review is the native scroll
+  // container, the iframe is laid out at full content height (so #review can
+  // scroll it natively), and #plan-touch-layer sits on top as the tap surface.
+  // This is load-bearing: iOS Safari never delivers iframe touch events to
+  // parent-registered listeners, so the overlay (a parent element) must be the
+  // tap surface, and native scroll must come from #review (touch-action), not
+  // from JS emulation or from the iframe being the input target.
+  assert.match(clientCssText, /#review\{height:calc\(100dvh - 88px\);overflow-y:auto;[^}]*-webkit-overflow-scrolling:touch\}/);
+  assert.match(clientCssText, /#plan-frame\{width:100%;min-height:calc\(100dvh - 88px\);border:0;display:block;pointer-events:none\}/);
+  assert.match(clientCssText, /#plan-touch-layer\{display:block;[^}]*touch-action:pan-y;pointer-events:auto\}/);
+  // The old JS scroll-emulation must stay gone (it produced janky non-native scroll).
+  assert.doesNotMatch(clientJsText, /touchScrollStart\.scrollY \+ touchScrollStart\.clientY - raw\.clientY/);
+  assert.doesNotMatch(clientJsText, /frame\.contentWindow\.scrollBy/);
 
   const rendered = await context.get(`/render/${registered.planId}`);
   assert.equal(rendered.ok(), true);
@@ -1245,23 +1259,219 @@ try {
       const touchPage = await touchContext.newPage();
       await touchPage.goto(`${baseUrl}/p/${registered.planId}`);
       await touchPage.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#plan-test-link'));
+      // Mobile native scroll requires the iframe to be laid out at its full
+      // content height inside the scrollable #review container.
+      await touchPage.waitForFunction(() => {
+        const frame = document.querySelector<HTMLIFrameElement>('#plan-frame');
+        const review = document.querySelector<HTMLElement>('#review');
+        if (!frame || !review || !frame.contentDocument) return false;
+        const content = frame.contentDocument.documentElement.scrollHeight;
+        return content > 0 && Math.abs(frame.offsetHeight - content) <= 2 && review.scrollHeight - review.clientHeight > 200;
+      }, undefined, { timeout: 3000 });
+      const frameBox = await touchPage.locator('#plan-frame').boundingBox();
+      assert.ok(frameBox);
+      const mobileSurface = await touchPage.evaluate(() => {
+        const frame = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+        const layer = document.querySelector<HTMLElement>('#plan-touch-layer')!;
+        const review = document.querySelector<HTMLElement>('#review')!;
+        const rect = frame.getBoundingClientRect();
+        // The element under a tap point must be the parent overlay, never the
+        // iframe: iOS Safari does not deliver iframe touches to parent listeners,
+        // so the overlay is the only reliable tap surface across engines.
+        const topElement = document.elementFromPoint(rect.left + rect.width / 2, rect.top + Math.min(240, rect.height / 2));
+        return {
+          framePointerEvents: getComputedStyle(frame).pointerEvents,
+          layerDisplay: getComputedStyle(layer).display,
+          layerPointerEvents: getComputedStyle(layer).pointerEvents,
+          layerTouchAction: getComputedStyle(layer).touchAction,
+          reviewOverflowY: getComputedStyle(review).overflowY,
+          reviewScrollable: review.scrollHeight - review.clientHeight > 200,
+          topElementId: (topElement as HTMLElement | null)?.id ?? ''
+        };
+      });
+      assert.deepEqual(mobileSurface, {
+        framePointerEvents: 'none',
+        layerDisplay: 'block',
+        layerPointerEvents: 'auto',
+        layerTouchAction: 'pan-y',
+        reviewOverflowY: 'auto',
+        reviewScrollable: true,
+        topElementId: 'plan-touch-layer'
+      });
+      // A real finger drag must scroll #review natively (momentum scroll), NOT
+      // the iframe's internal scroll and NOT JS emulation, and must NOT open the
+      // composer. Use trusted CDP touch events — mouse.wheel is unsupported in
+      // mobile WebKit and would be a false-green.
+      const cdp = await touchContext.newCDPSession(touchPage);
+      const trustedTap = async (x: number, y: number) => {
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+        await touchPage.waitForTimeout(40);
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      };
+      // Wait for any momentum/fling scroll to settle, then pin #review to the top
+      // so freshly measured tap targets do not drift out from under the touch.
+      const settleScrollTop = async () => {
+        await touchPage.evaluate(() => document.querySelector<HTMLElement>('#review')!.scrollTo(0, 0));
+        await touchPage.waitForFunction(() => {
+          const review = document.querySelector<HTMLElement>('#review')!;
+          if (review.scrollTop !== 0) { review.scrollTo(0, 0); return false; }
+          return true;
+        }, undefined, { timeout: 3000 });
+      };
+      await settleScrollTop();
+      await touchPage.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')!.contentWindow?.scrollTo(0, 0));
+      const dragX = frameBox.x + frameBox.width / 2;
+      const dragStartY = frameBox.y + Math.min(560, Math.max(200, frameBox.height - 80));
+      const dragEndY = frameBox.y + 120;
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: dragX, y: dragStartY }] });
+      const dragSteps = 14;
+      for (let step = 1; step <= dragSteps; step += 1) {
+        const y = dragStartY + ((dragEndY - dragStartY) * step) / dragSteps;
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: dragX, y }] });
+        await touchPage.waitForTimeout(10);
+      }
+      // Hold the finger still before lifting so the gesture ends with ~zero
+      // velocity (no fling), keeping the assertion deterministic.
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: dragX, y: dragEndY }] });
+      await touchPage.waitForTimeout(140);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await touchPage.waitForFunction(() => (document.querySelector<HTMLElement>('#review')?.scrollTop ?? 0) > 0, undefined, { timeout: 3000 });
+      const mobileDragState = await touchPage.evaluate(() => ({
+        reviewScrollTop: document.querySelector<HTMLElement>('#review')?.scrollTop ?? 0,
+        frameInternalScrollY: document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollY ?? 0,
+        composerOpen: document.querySelector<HTMLElement>('#composer')?.hidden === false
+      }));
+      assert.equal(mobileDragState.reviewScrollTop > 0, true);
+      assert.equal(mobileDragState.frameInternalScrollY, 0);
+      assert.equal(mobileDragState.composerOpen, false);
+      await settleScrollTop();
+      // A real tap on an in-plan link navigates the iframe and does NOT comment.
       const linkBox = await touchPage.frameLocator('#plan-frame').locator('#plan-test-link').boundingBox();
       assert.ok(linkBox);
-      await touchPage.touchscreen.tap(linkBox.x + linkBox.width / 2, linkBox.y + linkBox.height / 2);
-      await touchPage.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.location.hash === '#link-target');
+      await trustedTap(linkBox.x + linkBox.width / 2, linkBox.y + linkBox.height / 2);
+      await touchPage.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.location.hash === '#link-target', undefined, { timeout: 3000 });
       await touchPage.waitForTimeout(180);
       assert.equal(await touchPage.evaluate(() => document.querySelector<HTMLElement>('#composer')?.hidden), true);
       await touchPage.evaluate(() => {
         const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
         iframe.contentWindow?.history.replaceState(null, '', iframe.contentWindow.location.pathname);
-        iframe.contentWindow?.scrollTo(0, 0);
       });
+      await settleScrollTop();
+      // A real tap on plain plan text opens the composer anchored to that element.
       const adjacentBox = await touchPage.frameLocator('#plan-frame').locator('#link-adjacent-text').boundingBox();
       assert.ok(adjacentBox);
-      await touchPage.touchscreen.tap(adjacentBox.x + adjacentBox.width / 2, adjacentBox.y + adjacentBox.height / 2);
-      await touchPage.waitForFunction(() => document.querySelector<HTMLElement>('#composer')?.hidden === false);
+      await trustedTap(adjacentBox.x + adjacentBox.width / 2, adjacentBox.y + adjacentBox.height / 2);
+      await touchPage.waitForFunction(() => document.querySelector<HTMLElement>('#composer')?.hidden === false, undefined, { timeout: 3000 });
+      const mobileTapState = await touchPage.evaluate(() => {
+        const activeBox = document.querySelector<HTMLElement>('#active-selection-box')!;
+        const target = document.querySelector<HTMLIFrameElement>('#plan-frame')!.contentDocument!.querySelector<HTMLElement>('#link-adjacent-text')!;
+        const frameRect = document.querySelector<HTMLIFrameElement>('#plan-frame')!.getBoundingClientRect();
+        const activeRect = activeBox.getBoundingClientRect();
+        const targetRect = target.getBoundingClientRect();
+        return {
+          composerOpen: document.querySelector<HTMLElement>('#composer')?.hidden === false,
+          activeSelectionVisible: !activeBox.hidden,
+          leftDelta: Math.abs(activeRect.left - (frameRect.left + targetRect.left)),
+          topDelta: Math.abs(activeRect.top - (frameRect.top + targetRect.top)),
+          widthDelta: Math.abs(activeRect.width - targetRect.width),
+          heightDelta: Math.abs(activeRect.height - targetRect.height)
+        };
+      });
+      assert.equal(mobileTapState.composerOpen, true);
+      assert.equal(mobileTapState.activeSelectionVisible, true);
+      assert.equal(mobileTapState.leftDelta <= 1, true);
+      assert.equal(mobileTapState.topDelta <= 1, true);
+      assert.equal(mobileTapState.widthDelta <= 1, true);
+      assert.equal(mobileTapState.heightDelta <= 1, true);
     } finally {
       await touchContext.close();
+    }
+
+    // iPad / phone landscape regression: the viewport is wider than 760px but the
+    // pointer is coarse, so the CSS mobile layout (overlay + #review native scroll)
+    // is active. The iframe must still be sized to its full content height so the
+    // lower plan content is reachable — keying the JS off width alone left it
+    // unsized and the bottom of the plan unscrollable.
+    const tabletContext = await browser.newContext({ hasTouch: true, isMobile: true, viewport: { width: 1194, height: 834 } });
+    try {
+      const tabletPage = await tabletContext.newPage();
+      await tabletPage.goto(`${baseUrl}/p/${registered.planId}`);
+      await tabletPage.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#plan-test-link'));
+      await tabletPage.waitForFunction(() => {
+        const frame = document.querySelector<HTMLIFrameElement>('#plan-frame');
+        const review = document.querySelector<HTMLElement>('#review');
+        if (!frame || !review || !frame.contentDocument) return false;
+        const content = frame.contentDocument.documentElement.scrollHeight;
+        return content > 0 && Math.abs(frame.offsetHeight - content) <= 2 && review.scrollHeight - review.clientHeight > 200;
+      }, undefined, { timeout: 3000 });
+      const tabletSurface = await tabletPage.evaluate(() => {
+        const frame = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+        const review = document.querySelector<HTMLElement>('#review')!;
+        return {
+          wideViewport: window.innerWidth > 760,
+          coarsePointer: window.matchMedia('(pointer: coarse)').matches,
+          mobileLayoutActive: getComputedStyle(document.querySelector<HTMLElement>('#plan-touch-layer')!).display === 'block',
+          frameSizedToContent: Math.abs(frame.offsetHeight - frame.contentDocument!.documentElement.scrollHeight) <= 2,
+          reviewScrollable: review.scrollHeight - review.clientHeight > 200
+        };
+      });
+      assert.deepEqual(tabletSurface, {
+        wideViewport: true,
+        coarsePointer: true,
+        mobileLayoutActive: true,
+        frameSizedToContent: true,
+        reviewScrollable: true
+      });
+      // A real finger drag must scroll the full content (reach the bottom region).
+      const tabletCdp = await tabletContext.newCDPSession(tabletPage);
+      await tabletPage.evaluate(() => document.querySelector<HTMLElement>('#review')!.scrollTo(0, 0));
+      const tabletFrameBox = await tabletPage.locator('#plan-frame').boundingBox();
+      assert.ok(tabletFrameBox);
+      const tx = tabletFrameBox.x + tabletFrameBox.width / 2;
+      const tStartY = tabletFrameBox.y + Math.min(560, Math.max(200, tabletFrameBox.height - 80));
+      const tEndY = tabletFrameBox.y + 100;
+      await tabletCdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: tx, y: tStartY }] });
+      for (let step = 1; step <= 14; step += 1) {
+        await tabletCdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: tx, y: tStartY + ((tEndY - tStartY) * step) / 14 }] });
+        await tabletPage.waitForTimeout(10);
+      }
+      await tabletCdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: tx, y: tEndY }] });
+      await tabletPage.waitForTimeout(140);
+      await tabletCdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await tabletPage.waitForFunction(() => (document.querySelector<HTMLElement>('#review')?.scrollTop ?? 0) > 0, undefined, { timeout: 3000 });
+      const tabletScroll = await tabletPage.evaluate(() => ({
+        reviewScrollTop: document.querySelector<HTMLElement>('#review')?.scrollTop ?? 0,
+        frameInternalScrollY: document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollY ?? 0
+      }));
+      assert.equal(tabletScroll.reviewScrollTop > 0, true);
+      assert.equal(tabletScroll.frameInternalScrollY, 0);
+      // Trackpad / wheel scroll must use the browser's NATIVE wheel scrolling so
+      // iPadOS momentum (inertial gliding) is preserved. The app must therefore
+      // NOT preventDefault the wheel and hand-roll scrollBy — that opts out of the
+      // native scroller and makes trackpad scrolling stop abruptly. Assert the
+      // wheel still scrolls #review (not the iframe) and is left un-cancelled.
+      await tabletPage.evaluate(() => {
+        (window as typeof window & { __wheelDefaultPrevented?: boolean | null }).__wheelDefaultPrevented = null;
+        // Bubble-phase window listener runs after any app wheel handler, so it
+        // observes whether the app cancelled the event.
+        window.addEventListener('wheel', event => {
+          (window as typeof window & { __wheelDefaultPrevented?: boolean | null }).__wheelDefaultPrevented = event.defaultPrevented;
+        }, { once: true });
+        document.querySelector<HTMLElement>('#review')!.scrollTo(0, 0);
+      });
+      await tabletPage.mouse.move(tabletFrameBox.x + tabletFrameBox.width / 2, tabletFrameBox.y + 200);
+      await tabletPage.mouse.wheel(0, 320);
+      await tabletPage.waitForFunction(() => (document.querySelector<HTMLElement>('#review')?.scrollTop ?? 0) > 0, undefined, { timeout: 3000 });
+      const tabletWheel = await tabletPage.evaluate(() => ({
+        reviewScrollTop: document.querySelector<HTMLElement>('#review')?.scrollTop ?? 0,
+        frameInternalScrollY: document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollY ?? 0,
+        wheelDefaultPrevented: (window as typeof window & { __wheelDefaultPrevented?: boolean | null }).__wheelDefaultPrevented
+      }));
+      assert.equal(tabletWheel.reviewScrollTop > 0, true);
+      assert.equal(tabletWheel.frameInternalScrollY, 0);
+      assert.equal(tabletWheel.wheelDefaultPrevented, false);
+    } finally {
+      await tabletContext.close();
     }
 
     const mobilePlanNote = await context.post(`/api/plans/${registered.planId}/notes`, { data: { body: 'Mobile plan note remains visible.' } });

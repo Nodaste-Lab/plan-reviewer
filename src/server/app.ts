@@ -402,7 +402,7 @@ function filterPlans(plans: ReturnType<PlanReviewStore['listPlans']>, query: { q
 }
 
 const executionReviewRequestBody = 'Review this plan with both codex and claude code, iterating on the plan until both agents agree it is execution ready';
-const clientAssetVersion = 'mobile-touch-layer-v7';
+const clientAssetVersion = 'mobile-overlay-native-scroll-v5';
 
 function buildPlanRequestBody(planPath: string): string {
   return `/skill:scoped-plan-run thoughts/plans/${path.basename(planPath)}`;
@@ -477,7 +477,7 @@ body{--comments-width:48px;margin:0;background:#0b1020;color:#e5e7eb;font-family
 #composer textarea{width:260px;height:90px;background:#020617;color:#e5e7eb;border:1px solid #2b364d;border-radius:6px;padding:8px;display:block;pointer-events:auto;touch-action:manipulation;-webkit-user-select:text;user-select:text}
 #composer button{margin-top:8px;margin-right:8px}#plan-notes-panel{border:1px solid #2b364d;border-radius:10px;background:#0f172a;padding:10px;margin:0 0 14px}#plan-notes-panel h2{font-size:15px;margin:0 0 8px}#plan-notes .note-row{border-top:1px solid #263246;padding:8px 0}#plan-notes .note-row:first-child{border-top:0}#plan-note-body{width:100%;min-height:70px;box-sizing:border-box;background:#020617;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px}#add-plan-note{margin-top:8px;background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px 10px;cursor:pointer}.plan-review-selected{outline:2px dotted #38bdf8!important;box-shadow:none!important}.lightbox{position:fixed;inset:36px calc(var(--comments-width) + 40px) 36px 36px;background:#020617;border:1px solid #38bdf8;z-index:12;display:grid;grid-template-rows:auto 1fr}.lightbox[hidden]{display:none}.lightbox header{display:flex;gap:8px;padding:10px;border-bottom:1px solid #2b364d}.lightbox img{max-width:100%;max-height:100%;place-self:center;transform-origin:center}.lightbox-stage{display:grid;overflow:hidden;position:relative}#image-selection-box{position:absolute;border:2px solid #38bdf8;background:rgba(56,189,248,.2);pointer-events:none}#mobile-comments-toggle{display:none}
 @media(prefers-reduced-motion:reduce){.selection-box{transition:none}}
-@media(max-width:760px),(pointer:coarse){body{overflow:hidden;--comments-width:0}#plan-navbar{position:sticky;top:0;z-index:30;min-height:88px;box-sizing:border-box;gap:6px;padding:8px;overflow-x:auto;overscroll-behavior-x:contain}#plan-navbar-actions{justify-content:flex-start;gap:8px}#plan-navbar a,#plan-navbar button{flex:0 0 auto;min-height:40px;padding:8px 10px;font-size:13px;line-height:1.15;white-space:normal}#current-plan-bar{font-size:13px}#request-execution-review{max-width:170px}#build-plan{max-width:120px}#desktop-comments-toggle{display:none}#app{display:block;min-height:calc(100dvh - 88px)}#plan-list-nav{display:none}#review{height:calc(100dvh - 88px);overflow:hidden}#plan-frame{width:100%;height:100%;border:0;pointer-events:none}#plan-touch-layer{display:block;position:absolute;inset:0;z-index:22;background:transparent;touch-action:none;pointer-events:auto}#sidebar{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:24;max-height:min(72dvh,620px);box-sizing:border-box;border-left:0;border-top:1px solid #2b364d;border-radius:18px 18px 0 0;padding:12px 16px calc(16px + env(safe-area-inset-bottom));background:#111827;box-shadow:0 -16px 40px rgba(0,0,0,.45);overflow:auto;transform:translateY(100%);transition:transform .18s ease}#sidebar>h1,#sidebar>#sync-warning,#sidebar>#plan-notes-panel,#sidebar>#deferred-refresh-notice,#sidebar>#comments{display:block}body.comments-open #sidebar{transform:translateY(0)}#sidebar h1{position:sticky;top:-12px;margin:0 0 12px;padding:8px 0 10px;background:#111827;font-size:20px;z-index:1}.comment-row{padding:12px;margin:10px 0}.comment-row p{margin:.55rem 0}.comments-empty{margin:0;color:#a7b0c0;font-size:14px}#mobile-comments-toggle{display:flex;position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:25;min-height:44px;align-items:center;gap:6px;border:1px solid #38bdf8;border-radius:999px;background:#075985;color:#e0f2fe;padding:0 14px;font-weight:800;box-shadow:0 12px 28px rgba(0,0,0,.35)}body.comments-open #mobile-comments-toggle{background:#0f172a;border-color:#64748b}#composer{left:0;right:0;bottom:0;top:auto;z-index:60;box-sizing:border-box;border-left:0;border-right:0;border-bottom:0;border-radius:18px 18px 0 0;padding:14px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -16px 40px rgba(0,0,0,.48)}#composer textarea{width:100%;height:122px;box-sizing:border-box;font-size:16px}#composer button{min-height:44px;padding:8px 12px}.lightbox{inset:0;z-index:50;border:0}.lightbox header{flex-wrap:wrap}.selection-box{border-radius:4px}.marker{width:28px;height:28px}}
+@media(max-width:760px),(pointer:coarse){body{overflow:hidden;--comments-width:0}#plan-navbar{position:sticky;top:0;z-index:30;min-height:88px;box-sizing:border-box;gap:6px;padding:8px;overflow-x:auto;overscroll-behavior-x:contain}#plan-navbar-actions{justify-content:flex-start;gap:8px}#plan-navbar a,#plan-navbar button{flex:0 0 auto;min-height:40px;padding:8px 10px;font-size:13px;line-height:1.15;white-space:normal}#current-plan-bar{font-size:13px}#request-execution-review{max-width:170px}#build-plan{max-width:120px}#desktop-comments-toggle{display:none}#app{display:block;min-height:calc(100dvh - 88px)}#plan-list-nav{display:none}#review{height:calc(100dvh - 88px);overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}#plan-frame{width:100%;min-height:calc(100dvh - 88px);border:0;display:block;pointer-events:none}#plan-touch-layer{display:block;position:absolute;top:0;left:0;width:100%;min-height:calc(100dvh - 88px);z-index:22;background:transparent;touch-action:pan-y;pointer-events:auto}#sidebar{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:24;max-height:min(72dvh,620px);box-sizing:border-box;border-left:0;border-top:1px solid #2b364d;border-radius:18px 18px 0 0;padding:12px 16px calc(16px + env(safe-area-inset-bottom));background:#111827;box-shadow:0 -16px 40px rgba(0,0,0,.45);overflow:auto;transform:translateY(100%);transition:transform .18s ease}#sidebar>h1,#sidebar>#sync-warning,#sidebar>#plan-notes-panel,#sidebar>#deferred-refresh-notice,#sidebar>#comments{display:block}body.comments-open #sidebar{transform:translateY(0)}#sidebar h1{position:sticky;top:-12px;margin:0 0 12px;padding:8px 0 10px;background:#111827;font-size:20px;z-index:1}.comment-row{padding:12px;margin:10px 0}.comment-row p{margin:.55rem 0}.comments-empty{margin:0;color:#a7b0c0;font-size:14px}#mobile-comments-toggle{display:flex;position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:25;min-height:44px;align-items:center;gap:6px;border:1px solid #38bdf8;border-radius:999px;background:#075985;color:#e0f2fe;padding:0 14px;font-weight:800;box-shadow:0 12px 28px rgba(0,0,0,.35)}body.comments-open #mobile-comments-toggle{background:#0f172a;border-color:#64748b}#composer{left:0;right:0;bottom:0;top:auto;z-index:60;box-sizing:border-box;border-left:0;border-right:0;border-bottom:0;border-radius:18px 18px 0 0;padding:14px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -16px 40px rgba(0,0,0,.48)}#composer textarea{width:100%;height:122px;box-sizing:border-box;font-size:16px}#composer button{min-height:44px;padding:8px 12px}.lightbox{inset:0;z-index:50;border:0}.lightbox header{flex-wrap:wrap}.selection-box{border-radius:4px}.marker{width:28px;height:28px}}
 `;
 
 const clientJs = `
@@ -557,12 +557,17 @@ let deferredPlanRefresh = null;
 let lightboxDragStart = null;
 let lightboxPanStart = null;
 let touchStart = null;
-let touchScrollStart = null;
+let pointerStart = null;
 let suppressSyntheticClickUntil = 0;
 let washi = null;
 let mermaidInitialized = false;
 let mermaidRenderGeneration = 0;
-function isMobileShell(){ return window.matchMedia('(max-width: 760px)').matches; }
+// Must match the CSS mobile layout media query exactly: the overlay tap surface
+// and #review native-scroll layout (and the iframe-to-content-height sizing in
+// syncFrameHeight) activate on narrow widths OR any coarse-pointer device. iPad
+// and phone landscape are wider than 760px but still coarse-pointer, so keying
+// off width alone left the iframe unsized and the lower plan content unreachable.
+function isMobileShell(){ return window.matchMedia('(max-width: 760px), (pointer: coarse)').matches; }
 function debugTouch(label, data = {}){
 }
 function updateCommentsToggles(){
@@ -817,6 +822,8 @@ async function refreshPlanFrameContent(nextVersionId, options = {}){
   doc.head.replaceChildren(...[...parsed.head.childNodes].map(node => doc.importNode(node, true)));
   doc.body.replaceChildren(...[...parsed.body.childNodes].map(node => doc.importNode(node, true)));
   await renderMermaidDiagrams();
+  ensureFrameTapTargets(doc);
+  syncFrameHeight();
   scheduleFrameImageReflows();
   versionId = nextVersionId;
   hovered = null;
@@ -1031,6 +1038,21 @@ function ensureFrameMermaidStyles(){
   }
   return doc;
 }
+function ensureFrameTapTargets(doc = frame.contentDocument){
+  if (!doc) return;
+  let style = doc.getElementById('plan-review-tap-target-styles');
+  if (!style) {
+    style = doc.createElement('style');
+    style.id = 'plan-review-tap-target-styles';
+    style.textContent = '[data-plan-node-id]{cursor:pointer;-webkit-tap-highlight-color:rgba(56,189,248,.18)}';
+    (doc.head || doc.documentElement).appendChild(style);
+  }
+  doc.querySelectorAll('[data-plan-node-id]').forEach(element => {
+    if (element.dataset.planReviewTapTarget === 'true') return;
+    element.dataset.planReviewTapTarget = 'true';
+    element.addEventListener('click', () => {}, false);
+  });
+}
 function clearCommentAnchors(){
   document.querySelectorAll('.comment-anchor').forEach(marker => marker.remove());
   try {
@@ -1105,14 +1127,40 @@ function scheduleMarkerReflow(){
     updateSelectionBoxes();
   });
 }
+// On mobile the parent #review element is the native scroll container and the
+// iframe is laid out at its full content height (no internal iframe scroll), so
+// a finger drag on #plan-touch-layer scrolls #review natively while taps still
+// reach the overlay. Touch events do NOT reach parent-registered listeners on
+// the iframe document in iOS Safari, so the overlay is the only reliable tap
+// surface there — keep it on top with pointer-events:auto + touch-action:pan-y.
+function syncFrameHeight(){
+  const doc = frame.contentDocument;
+  if (isMobileShell() && doc) {
+    const height = Math.max(
+      doc.documentElement?.scrollHeight || 0,
+      doc.body?.scrollHeight || 0
+    );
+    if (height > 0) {
+      frame.style.height = height + 'px';
+      if (planTouchLayer) planTouchLayer.style.height = height + 'px';
+    }
+  } else {
+    frame.style.height = '';
+    if (planTouchLayer) planTouchLayer.style.height = '';
+  }
+}
+function reflowAfterContentChange(){
+  syncFrameHeight();
+  scheduleMarkerReflow();
+}
 function scheduleFrameImageReflows(){
   const doc = frame.contentDocument;
   if (!doc) return;
   for (const image of [...doc.images]) {
     if (image.complete) continue;
-    image.addEventListener('load', scheduleMarkerReflow, { once: true });
-    image.addEventListener('error', scheduleMarkerReflow, { once: true });
-    if (typeof image.decode === 'function') void image.decode().then(scheduleMarkerReflow, scheduleMarkerReflow);
+    image.addEventListener('load', reflowAfterContentChange, { once: true });
+    image.addEventListener('error', reflowAfterContentChange, { once: true });
+    if (typeof image.decode === 'function') void image.decode().then(reflowAfterContentChange, reflowAfterContentChange);
   }
 }
 function mermaidSourceText(source){
@@ -1658,9 +1706,10 @@ function attachFrameListeners(){
   if (frameListenersAttached || !frame.contentDocument) return;
   frameListenersAttached = true;
   const doc = frame.contentDocument;
+  ensureFrameTapTargets(doc);
   debugTouch('listeners-attached', { readyState: doc.readyState, url: doc.location.href });
   const adoptTextSelection = () => {
-    if (submitInFlight) return false;
+    if (submitInFlight || !composer.hidden) return false;
     const selection = doc.getSelection();
     if (!selection || selection.isCollapsed || !selection.toString().trim()) return false;
     pendingAnchor = anchorForSelection(selection);
@@ -1715,6 +1764,25 @@ function attachFrameListeners(){
       if (adoptTextSelection()) debugTouch('adopt-selection-deferred');
     }, 120);
   }, true);
+  doc.addEventListener('pointerdown', event => {
+    if (event.pointerType !== 'touch' && event.pointerType !== 'pen') return;
+    const point = touchPoint(event);
+    pointerStart = point ? { ...point, moved: false } : null;
+  }, true);
+  doc.addEventListener('pointermove', event => {
+    if (!pointerStart || (event.pointerType !== 'touch' && event.pointerType !== 'pen')) return;
+    if (touchMoved(pointerStart, event)) pointerStart.moved = true;
+  }, true);
+  doc.addEventListener('pointerup', event => {
+    if (event.pointerType !== 'touch' && event.pointerType !== 'pen') return;
+    const endPoint = touchPoint(event);
+    const start = pointerStart;
+    pointerStart = null;
+    if (touchMovedToPoint(start, endPoint) || Date.now() < suppressSyntheticClickUntil) return;
+    if (interactiveTargetFromEvent(event)) return;
+    if (adoptTextSelection()) return;
+    if (openElementComposer(commentTargetFromEvent(event), event)) suppressSyntheticClickUntil = Date.now() + 700;
+  }, true);
   doc.addEventListener('mousemove', event => {
     if (interactiveTargetFromEvent(event)) {
       hovered = null;
@@ -1744,7 +1812,7 @@ function attachFrameListeners(){
   frame.contentWindow?.addEventListener('scroll', scheduleMarkerReflow);
   frame.contentWindow?.addEventListener('resize', scheduleMarkerReflow);
 }
-frame.addEventListener('load', () => { frameListenersAttached = false; attachFrameListeners(); void renderMermaidDiagrams().finally(() => { mountWashiOverlay(); redrawMarkers(); }); });
+frame.addEventListener('load', () => { frameListenersAttached = false; attachFrameListeners(); void renderMermaidDiagrams().finally(() => { mountWashiOverlay(); syncFrameHeight(); redrawMarkers(); }); });
 frame.addEventListener('touchstart', event => {
   const point = frameTouchPoint(event);
   touchStart = point ? { ...point, moved: false } : null;
@@ -1778,19 +1846,12 @@ frame.addEventListener('click', event => {
 planTouchLayer?.addEventListener('touchstart', event => {
   const point = frameTouchPoint(event);
   touchStart = point ? { ...point, moved: false } : null;
-  const raw = eventPoint(event);
-  touchScrollStart = raw ? { clientY: raw.clientY, scrollY: frame.contentWindow?.scrollY || 0 } : null;
   debugTouch('layer-touchstart', { point });
 }, true);
 planTouchLayer?.addEventListener('touchmove', event => {
   if (!touchStart) return;
   const point = frameTouchPoint(event);
   if (touchMovedToPoint(touchStart, point)) touchStart.moved = true;
-  const raw = eventPoint(event);
-  if (raw && touchScrollStart && frame.contentWindow) {
-    frame.contentWindow.scrollTo(0, touchScrollStart.scrollY + touchScrollStart.clientY - raw.clientY);
-    scheduleMarkerReflow();
-  }
   debugTouch('layer-touchmove', { point, moved: Boolean(touchStart?.moved) });
 }, true);
 planTouchLayer?.addEventListener('touchend', event => {
@@ -1798,7 +1859,6 @@ planTouchLayer?.addEventListener('touchend', event => {
   const start = touchStart;
   const moved = touchMovedToPoint(start, point);
   touchStart = null;
-  touchScrollStart = null;
   debugTouch('layer-touchend', { point, start, moved });
   if (moved) return;
   if (openComposerFromFramePoint(point, 'layer-open')) suppressSyntheticClickUntil = Date.now() + 700;
@@ -1811,8 +1871,14 @@ planTouchLayer?.addEventListener('click', event => {
     event.stopPropagation();
   }
 }, true);
-window.addEventListener('resize', scheduleMarkerReflow);
-if (frame.contentDocument && frame.contentDocument.readyState !== 'loading') setTimeout(() => { attachFrameListeners(); void renderMermaidDiagrams().finally(() => { mountWashiOverlay(); redrawMarkers(); }); }, 0);
+// No custom wheel handler: #review is the native scroll container, so wheel and
+// trackpad scrolling over the overlay are handled natively, preserving iPadOS
+// momentum/inertia. preventDefault + manual scrollBy would opt out of the native
+// scroller and make trackpad scrolling stop abruptly. Marker reflow is driven by
+// the #review scroll listener below.
+document.getElementById('review')?.addEventListener('scroll', scheduleMarkerReflow, { passive: true });
+window.addEventListener('resize', () => { syncFrameHeight(); scheduleMarkerReflow(); });
+if (frame.contentDocument && frame.contentDocument.readyState !== 'loading') setTimeout(() => { attachFrameListeners(); void renderMermaidDiagrams().finally(() => { mountWashiOverlay(); syncFrameHeight(); redrawMarkers(); }); }, 0);
 document.getElementById('close-lightbox').addEventListener('click', () => { lightbox.hidden = true; });
 document.getElementById('zoom-in').addEventListener('click', () => { zoom = Math.min(4, zoom + .25); applyImageTransform(); });
 document.getElementById('zoom-out').addEventListener('click', () => { zoom = Math.max(.5, zoom - .25); applyImageTransform(); });
