@@ -72,6 +72,34 @@ function textContent(node: Node): string {
   return '';
 }
 
+function hasClass(node: ElementNode, className: string): boolean {
+  return (getAttr(node, 'class') ?? '').split(/\s+/).includes(className);
+}
+
+function childElements(node: ElementNode): ElementNode[] {
+  return (node.childNodes ?? []).filter(isElement);
+}
+
+function mermaidSourceFor(node: ElementNode): string | undefined {
+  if ((node.tagName === 'pre' || node.tagName === 'div') && hasClass(node, 'mermaid')) {
+    return textContent(node).trim();
+  }
+  if (node.tagName !== 'pre') return undefined;
+  const code = childElements(node).find(child => child.tagName === 'code' && hasClass(child, 'language-mermaid'));
+  return code ? textContent(code).trim() : undefined;
+}
+
+function markMermaidSourceBlocks(document: DefaultTreeAdapterMap['document']): void {
+  walk(document as unknown as Node, node => {
+    const source = mermaidSourceFor(node);
+    if (!source) return;
+    setAttr(node, 'data-plan-mermaid-source', 'true');
+    setAttr(node, 'data-plan-mermaid-source-hash', sha256(source));
+    setAttr(node, 'data-plan-mermaid-source-preview', source.replace(/\s+/g, ' ').slice(0, 160));
+    setAttr(node, 'data-plan-mermaid-status', 'pending');
+  });
+}
+
 function walk(node: Node, visitor: (node: ElementNode, path: number[]) => void, path: number[] = []): void {
   if (isElement(node)) visitor(node, path);
   if ('childNodes' in node && Array.isArray(node.childNodes)) {
@@ -158,6 +186,7 @@ export function renderPlan(input: RegisterPlanInput): RenderResult {
     used.set(base, count + 1);
     setAttr(node, 'data-plan-node-id', count === 0 ? base : `${base}-${count + 1}`);
   });
+  markMermaidSourceBlocks(document);
 
   return {
     renderedHtml: serialize(document),

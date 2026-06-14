@@ -1081,6 +1081,17 @@ test('renderer strips active content, rewrites images, and adds deterministic no
   assert.equal(output.renderedHtml.includes('data-plan-image-hash='), true);
   assert.equal(output.renderedHtml.includes('data-plan-node-id="phase-p1"'), true);
 
+  const mermaidHtml = '<!doctype html><html><body><main><pre class="mermaid">graph TD; A-->B;</pre><div class="mermaid">sequenceDiagram\nAlice->>Bob: Hi</div><pre><code class="language-mermaid">flowchart LR\nC-->D</code></pre><script>alert("blocked")</script></main></body></html>';
+  const mermaid = renderPlan(sampleRegisterPayload({ html: mermaidHtml, fileHash: sha256(mermaidHtml) }));
+  assert.equal(mermaid.warnings.some(item => item.code === 'blocked_script'), true);
+  assert.equal(mermaid.renderedHtml.includes('<script>'), false);
+  assert.equal((mermaid.renderedHtml.match(/data-plan-mermaid-source="true"/g) ?? []).length, 3);
+  assert.equal((mermaid.renderedHtml.match(/data-plan-mermaid-status="pending"/g) ?? []).length, 3);
+  assert.equal((mermaid.renderedHtml.match(/data-plan-mermaid-source-hash="[a-f0-9]{64}"/g) ?? []).length, 3);
+  assert.match(mermaid.renderedHtml, /<pre[^>]*class="mermaid"[^>]*data-plan-node-id="[^"]+"[^>]*data-plan-mermaid-source="true"/);
+  assert.match(mermaid.renderedHtml, /<div[^>]*class="mermaid"[^>]*data-plan-node-id="[^"]+"[^>]*data-plan-mermaid-source="true"/);
+  assert.match(mermaid.renderedHtml, /<pre[\s\S]*?data-plan-node-id="[^"]+"[\s\S]*?data-plan-mermaid-source="true"[\s\S]*?><code[^>]*class="language-mermaid"/);
+
   const repeated = renderPlan(sampleRegisterPayload({ html: sampleHtml() }));
   assert.equal(output.renderedHtml, repeated.renderedHtml);
 
@@ -2325,6 +2336,11 @@ test('HTTP API registers plans, creates comments, claims, acks, resolves, and po
     const washi = await app.inject({ method: 'GET', url: '/vendor/washi.js' });
     assert.equal(washi.statusCode, 200);
     assert.match(washi.body, /export \{\s*Washi\s*\}/);
+    const mermaidVendor = await app.inject({ method: 'GET', url: '/vendor/mermaid.esm.min.mjs' });
+    assert.equal(mermaidVendor.statusCode, 200);
+    assert.match(String(mermaidVendor.headers['content-type']), /application\/javascript/);
+    assert.match(mermaidVendor.body, /mermaid/);
+    assert.match(mermaidVendor.body, /\.\/chunks\/mermaid\.esm\.min\//);
 
     const commentResponse = await app.inject({
       method: 'POST',
@@ -3557,6 +3573,72 @@ test('new plan versions remap changed anchors to stale or unmapped', async () =>
 
     const unmappedComments = await app.inject({ method: 'GET', url: `/api/plans/${planId}/comments` });
     assert.equal(unmappedComments.json().data.comments[0].anchorState, 'unmapped');
+  } finally {
+    await app.close();
+  }
+});
+
+test('Mermaid comments remap by source metadata and expose diagram evidence to agent next', async () => {
+  const app = createApp({ dbPath: tempDbPath('mermaid-anchor-remap') });
+  try {
+    const source = 'flowchart TD\n  Start[Start] --> Done[Done]';
+    const html = `<!doctype html><html><body><main><h1>Mermaid Plan</h1><pre class="mermaid">${source}</pre><p>Side text.</p></main></body></html>`;
+    const registered = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload({ html, fileHash: sha256(html), slug: 'mermaid-anchor', planPath: 'thoughts/plans/mermaid-anchor.html' })
+    });
+    assert.equal(registered.statusCode, 200);
+    const { planId, versionId } = registered.json().data;
+    const rendered = await app.inject({ method: 'GET', url: `/render/${planId}` });
+    const sourcePlanNodeId = rendered.body.match(/data-plan-node-id="([^"]+)"[^>]*data-plan-mermaid-source="true"/)?.[1];
+    const sourceHash = rendered.body.match(/data-plan-mermaid-source-hash="([a-f0-9]{64})"/)?.[1];
+    assert.ok(sourcePlanNodeId);
+    assert.ok(sourceHash);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: `/api/plans/${planId}/comments`,
+      payload: {
+        versionId,
+        body: 'Explain this diagram node.',
+        anchorType: 'dom',
+        anchor: {
+          planNodeId: `${sourcePlanNodeId}--svg-node-start`,
+          cssSelector: `[data-plan-node-id="${sourcePlanNodeId}--svg-node-start"]`,
+          textPreview: 'Start',
+          headingPath: ['Mermaid Plan'],
+          diagram: { kind: 'mermaid', sourcePlanNodeId, sourceHash, elementKey: 'node-start', elementLabel: 'Start' }
+        },
+        markerScreenshot: {
+          contentType: 'image/png',
+          bytesBase64: Buffer.from('mermaid-screen').toString('base64'),
+          width: 20,
+          height: 10,
+          captureRect: { x: 0, y: 0, width: 20, height: 10 },
+          viewport: { width: 1280, height: 800 }
+        }
+      }
+    });
+    assert.equal(created.statusCode, 200);
+    assert.deepEqual(created.json().data.comment.conversationPayload.evidence.diagram, { kind: 'mermaid', sourcePlanNodeId, sourceHash, elementKey: 'node-start', elementLabel: 'Start' });
+    assert.equal(created.json().data.comment.conversationPayload.evidence.selector, `[data-plan-node-id="${sourcePlanNodeId}--svg-node-start"]`);
+    assert.equal(created.json().data.comment.conversationPayload.evidence.screenshotAssetId, created.json().data.comment.screenshotAssetId);
+
+    const claim = await app.inject({ method: 'POST', url: '/api/agent/queue/claim', payload: { planId } });
+    assert.equal(claim.statusCode, 200);
+    assert.equal(claim.json().data.status, 'claimed');
+    assert.deepEqual(claim.json().data.conversationPayload.evidence.diagram, { kind: 'mermaid', sourcePlanNodeId, sourceHash, elementKey: 'node-start', elementLabel: 'Start' });
+
+    const updatedHtml = `<!doctype html><html><body><main><h1>Mermaid Plan</h1><pre class="mermaid">${source}</pre><p>Changed side text.</p></main></body></html>`;
+    const updated = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload({ html: updatedHtml, fileHash: sha256(updatedHtml), slug: 'mermaid-anchor', planPath: 'thoughts/plans/mermaid-anchor.html' })
+    });
+    assert.equal(updated.statusCode, 200);
+    const comments = await app.inject({ method: 'GET', url: `/api/plans/${planId}/comments` });
+    assert.equal(comments.json().data.comments[0].anchorState, 'mapped');
   } finally {
     await app.close();
   }
