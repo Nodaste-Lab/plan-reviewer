@@ -301,6 +301,44 @@ async function getPlanApi(serviceUrl: string, plan: string): Promise<PlanApiReco
   return requestJson<PlanApiRecord>(`${serviceUrl}/api/plans/${encodeURIComponent(plan)}`);
 }
 
+async function showPlan(plan: string, options: { url?: string; json?: boolean }) {
+  const serviceUrl = resolveServiceUrl(options.url);
+  const data = await requestJson<unknown>(`${serviceUrl}/api/plans/${encodeURIComponent(plan)}`);
+  if (options.json) printJson(data);
+  else process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
+}
+
+async function addDomComment(planId: string, options: { url?: string; planNodeId?: string; selector?: string; body?: string; agent?: string; agentId?: string; clientMutationId?: string; json?: boolean }) {
+  if (options.planNodeId && options.selector) {
+    throw new PlanReviewError('validation_failed', 'comments add cannot use both --plan-node-id and --selector', 1, { planNodeId: options.planNodeId, selector: options.selector });
+  }
+  if (!options.planNodeId && !options.selector) {
+    throw new PlanReviewError('validation_failed', 'comments add requires --plan-node-id <id> or --selector #id', 1, { planId }, 'Run plan-review show <planId> --json and choose anchorTargets[].planNodeId.');
+  }
+  if (!options.body?.trim()) {
+    throw new PlanReviewError('validation_failed', 'comments add requires --body <text>', 1, { planId });
+  }
+  if (!options.agent?.trim()) {
+    throw new PlanReviewError('validation_failed', 'comments add requires --agent <name>', 1, { planId }, 'Pass the durable agent display name explicitly; environment fallback is not used for agent comments.');
+  }
+  if (options.selector && !/^#\S+$/.test(options.selector)) {
+    throw new PlanReviewError('validation_failed', '--selector must be an exact id selector such as #ac-2', 1, { selector: options.selector });
+  }
+  const serviceUrl = resolveServiceUrl(options.url);
+  const data = await requestJson<unknown>(`${serviceUrl}/api/plans/${encodeURIComponent(planId)}/comments/dom`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      body: options.body,
+      target: options.planNodeId ? { planNodeId: options.planNodeId } : { selector: options.selector },
+      createdBy: { type: 'agent', displayName: options.agent, agentId: options.agentId },
+      clientMutationId: options.clientMutationId
+    })
+  });
+  if (options.json) printJson(data);
+  else process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
+}
+
 async function persistPullRequest(serviceUrl: string, planId: string, pullRequest: PlanPullRequest): Promise<{ planId: string; pullRequest: PlanPullRequest }> {
   return requestJson<{ planId: string; pullRequest: PlanPullRequest }>(`${serviceUrl}/api/plans/${encodeURIComponent(planId)}/pull-request`, {
     method: 'PUT',
@@ -924,6 +962,23 @@ export async function main(argv: string[] = process.argv.slice(2)) {
     .option('--cursor <cursor>')
     .option('--json')
     .action(printIndex);
+
+  program.command('show <planId>')
+    .option('--url <url>')
+    .option('--json')
+    .action(showPlan);
+
+  const comments = program.command('comments');
+  comments.command('add <planId>')
+    .option('--url <url>')
+    .option('--plan-node-id <id>')
+    .option('--selector <selector>', 'exact id selector such as #ac-2')
+    .option('--body <text>')
+    .option('--agent <name>')
+    .option('--agent-id <id>')
+    .option('--client-mutation-id <id>')
+    .option('--json')
+    .action(addDomComment);
 
   const pr = program.command('pr');
   pr.command('link <plan>')

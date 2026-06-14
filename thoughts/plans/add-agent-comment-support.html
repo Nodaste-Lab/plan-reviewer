@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Native Agent Comment Support Plan</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1020;
+      --panel: #111827;
+      --panel-2: #0f172a;
+      --text: #e5e7eb;
+      --muted: #a7b0c0;
+      --accent: #7dd3fc;
+      --accent-2: #c084fc;
+      --border: #2b364d;
+      --good: #86efac;
+      --warn: #fde68a;
+      --bad: #fecaca;
+      --code: #dbeafe;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top left, rgba(56,189,248,.12), transparent 28rem), var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.55;
+    }
+    main { max-width: 1120px; margin: 0 auto; padding: 40px 20px 72px; }
+    section, article { border: 1px solid var(--border); background: rgba(17,24,39,.92); border-radius: 16px; padding: 22px; margin: 18px 0; }
+    article { background: rgba(15,23,42,.85); }
+    h1, h2, h3, h4 { line-height: 1.2; color: #f8fafc; }
+    h1 { font-size: clamp(2rem, 4vw, 3.2rem); margin: 0 0 10px; }
+    h2 { margin-top: 0; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+    a { color: var(--accent); }
+    code, pre { color: var(--code); background: #020617; border-radius: 6px; }
+    code { padding: .12rem .3rem; }
+    pre { padding: 14px; overflow: auto; border: 1px solid #263246; }
+    .meta { color: var(--muted); margin: 0 0 22px; }
+    .pill { display: inline-block; border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; margin: 2px 6px 2px 0; font-weight: 800; font-size: .85rem; }
+    .pill.status { border-color: var(--warn); color: var(--warn); }
+    .pill.ready { border-color: var(--good); color: var(--good); }
+    .callout { border-left: 4px solid var(--accent); padding: 12px 14px; background: rgba(14,165,233,.10); border-radius: 10px; }
+    .warning { border-left-color: #f59e0b; background: rgba(245,158,11,.10); }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+    th, td { border: 1px solid var(--border); padding: 10px; text-align: left; vertical-align: top; }
+    th { background: #0f172a; color: #f8fafc; }
+    ul, ol { padding-left: 1.35rem; }
+    .phase h3 { margin-top: 0; }
+    .checkbox-list { list-style: none; padding-left: 0; }
+    .checkbox-list li { margin: 8px 0; }
+    .muted { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <main>
+    <header id="title">
+      <h1>Native Agent Comment Support</h1>
+      <p class="meta">
+        <span class="pill ready">Status: execution-ready</span>
+        <span class="pill">Plan path: <code>thoughts/plans/add-agent-comment-support.html</code></span>
+        <span class="pill">Linear: no Linear issue exists for this request</span>
+      </p>
+      <p class="callout" id="solution-narrative"><strong>Solution narrative:</strong> add a native plan-review command/API path that lets an agent target a stable rendered-plan DOM node, submit a comment through the existing comment creation pipeline, and persist the first thread entry with an agent identity instead of pretending it came from a human reviewer.</p>
+    </header>
+
+    <section id="goal">
+      <h2>Goal</h2>
+      <p>Agents can add review comments to registered plans without using the browser UI, while preserving the existing comment lifecycle, queue visibility, document comment history, anchor remapping behavior, and rendered sidebar markers.</p>
+    </section>
+
+    <section id="why-this-exists">
+      <h2>Why this plan exists</h2>
+      <p>The current browser path already lets humans select plan content and submit anchored comments. Agents can process, ack, resolve, and reply to comments from the CLI, but there is no first-class command for an agent reviewer to create a new anchored comment with its own identity. This creates an unnecessary gap in agent plan-review workflows and encourages ad hoc notes instead of durable review comments.</p>
+    </section>
+
+    <section id="authority-inputs">
+      <h2>Authority and inputs</h2>
+      <ul>
+        <li>User request: add native comment support to planner commands so agents can add comments like humans, using DOM-based anchor selection, preserving comment history, and recording agent identity.</li>
+        <li>Repo guidance: <code>AGENTS.md</code> requires reviewed HTML plans, queue/comment lifecycle care, source sync safety, and aligned API/CLI/README/tests.</li>
+        <li>Product intent: <code>thoughts/specs/product_intent.md</code> defines durable browser comments, queue-backed delivery, and API/CLI/browser lifecycle parity as product-critical.</li>
+        <li>Planning guidance: <code>thoughts/plans/AGENTS.md</code>, <code>reviewed-html-plan</code>, <code>planning-workflow</code>, <code>html-plan-reviewer</code>, and <code>product-principles</code>.</li>
+      </ul>
+    </section>
+
+    <section id="current-implementation-reality">
+      <h2>Current implementation reality</h2>
+      <ul>
+        <li><code>src/server/app.ts</code> renders the browser review shell. The browser client computes anchors in <code>anchorForElement</code> and <code>anchorForSelection</code>, then posts to <code>POST /api/plans/:planId/comments</code>.</li>
+        <li><code>src/render/render.ts</code> sanitizes registered HTML and adds stable <code>data-plan-node-id</code> values to rendered DOM nodes, which is the right canonical target for agent-created DOM comments.</li>
+        <li><code>src/storage/database.ts</code> <code>createComment</code> already owns comment IDs, sequence numbers, duplicate guards, events, conversation payloads, queue delivery, and the first <code>comment_thread_entries</code> row.</li>
+        <li>Today <code>createComment</code> normalizes all creators to <code>{ type: "reviewer", displayName }</code> and always creates the first thread entry with role <code>human</code>. That hides agent-authored comments.</li>
+        <li><code>src/cli.ts</code> exposes <code>agent next</code>, <code>ack</code>, <code>resolve</code>, <code>reply</code>, and plan notes, but no command that creates a new anchored comment.</li>
+        <li><code>README.md</code>, <code>src/__tests__/contracts.test.ts</code>, and <code>src/test-fixtures/e2e-run.ts</code> already document and test the human comment path, lifecycle, queue claims, duplicate guards, and browser marker behavior.</li>
+      </ul>
+    </section>
+
+    <section id="product-intent-alignment">
+      <h2>Product intent alignment</h2>
+      <p>This plan advances the product intent outcomes that review comments are durable, queue-visible, recoverable, and consistent across browser, CLI, service, and agent workflows.</p>
+      <ul>
+        <li><strong>Golden path:</strong> an agent can run one copy-paste command with a plan id, stable DOM target, body, and identity.</li>
+        <li><strong>Safe defaults:</strong> the command targets the latest rendered safe plan version; source sync remains the source of truth, and the service fails closed when the target is missing or ambiguous.</li>
+        <li><strong>Recovery:</strong> duplicate retries reuse <code>clientMutationId</code> and the existing fingerprint protections; if the same mutation id is retried with a different agent identity but the same version/body/anchor fingerprint, first-create-wins and the API returns the original stored identity. Target errors explain how to find a stable <code>data-plan-node-id</code>.</li>
+        <li><strong>Parity:</strong> agent-created comments use the same persisted comment rows, thread history, events, queue delivery, sidebar rendering, and ack/resolve lifecycle as browser comments.</li>
+      </ul>
+    </section>
+
+    <section id="progress">
+      <h2>Progress</h2>
+      <ul class="checkbox-list">
+        <li><label><input type="checkbox" checked disabled> P1 — Lock agent author and DOM-anchor contracts</label></li>
+        <li><label><input type="checkbox" checked disabled> P2 — Add native API and CLI comment creation</label></li>
+        <li><label><input type="checkbox" checked disabled> P3 — Align UI history, docs, and fixtures</label></li>
+        <li><label><input type="checkbox" checked disabled> P4 — Run verification and implementation review</label></li>
+      </ul>
+    </section>
+
+    <section id="resume-instructions">
+      <h2>Resume instructions (agent)</h2>
+      <p>Implementation is complete and verified. Continue from repository handoff: audit the scoped diff, commit and push the branch, open a PR, then monitor PR feedback until mergeable with the required external Codex approval.</p>
+    </section>
+
+    <section id="locked-decisions">
+      <h2>Locked decisions</h2>
+      <ol>
+        <li id="decision-normal-comment"><strong>Agent-created comments are normal comments.</strong> They remain pending, queue-visible, ackable, resolvable, and visible in the sidebar using the existing comment lifecycle.</li>
+        <li id="decision-identity"><strong>Agent identity is first-class comment metadata.</strong> Store <code>createdBy.type = "agent"</code>, a non-empty display name, and optional stable <code>agentId</code> when provided. The first thread entry uses role <code>agent</code>.</li>
+        <li id="decision-dom-target"><strong>First slice targets DOM nodes, not text ranges or image regions.</strong> Native agent creation resolves a rendered plan DOM node by <code>data-plan-node-id</code> or an exact element id selector. Text selection and image rectangle authoring stay browser-only for now.</li>
+        <li id="decision-server-resolves"><strong>The service resolves anchors.</strong> The CLI sends intent; the server resolves the latest rendered HTML into the same anchor shape used by browser DOM comments before calling <code>createComment</code>.</li>
+        <li id="decision-native-endpoint"><strong>The native endpoint is fixed before execution.</strong> Implement <code>POST /api/plans/:planId/comments/dom</code> for this slice; do not leave endpoint naming or request shape to implementation discretion.</li>
+        <li id="decision-anchor-inventory"><strong>Plan read surfaces must expose anchor targets.</strong> Agents must be able to discover usable DOM anchors from API/CLI reads without opening the browser review page.</li>
+        <li id="decision-no-migration"><strong>No SQLite schema migration is required.</strong> Comment author data and anchors are already JSON-backed; the change is schema validation, normalization, API/CLI behavior, and tests.</li>
+      </ol>
+    </section>
+
+    <section id="native-contract">
+      <h2>Native agent comment contract</h2>
+      <p>The public API for this slice is <code>POST /api/plans/:planId/comments/dom</code>. It targets the latest rendered version for the plan and returns the same envelope shape as the existing browser comment creation endpoint: <code>{ comment, event, created }</code>.</p>
+      <pre><code>{
+  "body": "Clarify this acceptance criterion.",
+  "target": { "planNodeId": "ac-2" },
+  "createdBy": { "type": "agent", "displayName": "Codex", "agentId": "codex-review-1" },
+  "clientMutationId": "optional-idempotency-key"
+}</code></pre>
+      <p>Plan read surfaces must expose enough anchor inventory for agents to choose a target without a browser view. <code>GET /api/plans/:planId</code> and the new <code>plan-review show &lt;planId&gt; --json</code> command return <code>anchorTargets</code> derived from the latest rendered HTML. Each target includes <code>planNodeId</code>, exact id <code>selector</code> when available, <code>tagName</code>, <code>headingPath</code>, <code>textPreview</code>, <code>outerHtmlPreview</code>, and <code>anchorCommand</code> showing the copy-paste <code>comments add</code> form for that target. The inventory omits active content and does not require browser execution. Because the renderer assigns <code>data-plan-node-id</code> to every node, inventory must prioritize useful semantic comment targets—explicit IDs, headings, sections/articles, figures/images, tables, lists, and code blocks—and avoid redundant low-value descendants unless needed for exact targeting.</p>
+      <ul>
+        <li><code>target.planNodeId</code> is the primary selector and resolves against <code>[data-plan-node-id="..."]</code> in the current rendered plan.</li>
+        <li><code>target.selector</code> is optional and allowed only for exact element id selectors such as <code>#ac-2</code>; broad CSS selectors are rejected to avoid ambiguous agent targeting.</li>
+        <li>Resolved comments call the existing <code>createComment</code> path with <code>anchorType: "dom"</code> and an anchor containing <code>planNodeId</code>, <code>cssSelector</code>, <code>domPath</code>, <code>xpath</code>, <code>textQuote</code>, <code>headingPath</code>, <code>textPreview</code>, <code>outerHtmlPreview</code>, <code>rect</code>, and <code>viewport</code>.</li>
+        <li>Identity placement is part of the public contract: <code>comment.createdBy</code> is <code>{ type: "agent", displayName, agentId? }</code>; the first <code>comment.threadEntries[0]</code> has <code>role: "agent"</code> and matching <code>createdBy</code>; top-level <code>comment.conversationPayload.createdBy</code> carries the same identity so <code>agent next</code> claims are self-describing without a second API lookup.</li>
+        <li>Human/browser comments continue to store <code>comment.createdBy.type = "reviewer"</code>, first thread role <code>human</code>, and no agent identity requirement.</li>
+      </ul>
+    </section>
+
+    <section id="acceptance-criteria">
+      <h2>Acceptance criteria</h2>
+      <article id="ac-1"><h3>AC-1: Native agent command creates anchored comments</h3><p><code>plan-review comments add &lt;planId&gt; --plan-node-id &lt;id&gt; --body &lt;text&gt; --agent &lt;name&gt; --json</code> creates a pending comment on the latest rendered version with <code>anchorType: "dom"</code> and a browser-compatible anchor.</p></article>
+      <article id="ac-2"><h3>AC-2: Agent identity is durable and visible</h3><p>The comment record, first thread entry, API responses, queue payload, and sidebar history identify the creator as an agent with the supplied display name instead of a human reviewer.</p></article>
+      <article id="ac-3"><h3>AC-3: Existing human comment behavior is unchanged</h3><p>Browser-created comments still default to reviewer/human identity, keep duplicate-submit protections, render anchors, and enter the queue as before.</p></article>
+      <article id="ac-4"><h3>AC-4: Target resolution fails closed</h3><p>Missing, stale, unsupported, or ambiguous DOM targets return actionable validation errors and create no comment, event, delivery outbox row, or thread entry.</p></article>
+      <article id="ac-5"><h3>AC-5: Public contracts stay aligned</h3><p>README, CLI help, API schemas, contract tests, and e2e/fixture coverage all describe the same agent comment creation lifecycle.</p></article>
+      <article id="ac-6"><h3>AC-6: Agents can discover anchors from read surfaces</h3><p><code>GET /api/plans/:planId</code> and <code>plan-review show &lt;planId&gt; --json</code> expose current <code>anchorTargets</code> with stable <code>planNodeId</code>, context previews, heading path, and copy-paste comment command guidance so agents do not need a browser view to choose an anchor.</p></article>
+    </section>
+
+    <section id="bdd-scenarios">
+      <h2>BDD scenarios</h2>
+      <article id="bdd-agent-adds-comment"><h3>BDD-1: Agent adds a DOM comment</h3><p><strong>Given</strong> a registered plan whose rendered HTML contains <code>data-plan-node-id="ac-2"</code>, <strong>when</strong> an agent runs <code>plan-review comments add plan_123 --plan-node-id ac-2 --body "Clarify this" --agent Codex --json</code>, <strong>then</strong> the service creates one pending <code>browser.comment.v1</code> comment with a DOM anchor, creator type <code>agent</code>, thread role <code>agent</code>, and queue-visible event.</p></article>
+      <article id="bdd-history-visible"><h3>BDD-2: Sidebar shows agent history</h3><p><strong>Given</strong> an agent-created comment exists, <strong>when</strong> the browser review page loads comments, <strong>then</strong> the comment row shows the agent display name and an <code>agent</code> thread role while using the same marker and status rendering as human comments.</p></article>
+      <article id="bdd-human-unchanged"><h3>BDD-3: Human path remains human</h3><p><strong>Given</strong> a reviewer selects plan text or a DOM node in the browser, <strong>when</strong> they submit a comment, <strong>then</strong> the stored creator remains a reviewer and the first thread entry remains role <code>human</code>.</p></article>
+      <article id="bdd-missing-identity"><h3>BDD-4: Missing agent identity fails</h3><p><strong>Given</strong> no <code>--agent</code> value, <strong>when</strong> an agent tries to create a comment, <strong>then</strong> the CLI exits with an actionable error and the service stores nothing. Environment-variable identity fallback is intentionally out of scope for this slice.</p></article>
+      <article id="bdd-target-fail-closed"><h3>BDD-5: Missing target fails closed</h3><p><strong>Given</strong> the target DOM node no longer exists in the latest rendered plan, <strong>when</strong> an agent submits a comment for that target, <strong>then</strong> the service returns <code>validation_failed</code> with guidance to refresh/read the current rendered plan and no lifecycle event is emitted.</p></article>
+      <article id="bdd-remap-after-source-sync"><h3>BDD-6: Agent comment remaps after source sync</h3><p><strong>Given</strong> an agent-created comment is anchored by <code>planNodeId</code>, <strong>when</strong> source sync registers a new version, <strong>then</strong> existing DOM remap semantics are preserved: <code>anchorState: "mapped"</code> only when the node id and quote/preview text still match, <code>"stale"</code> when only the node id remains, and <code>"unmapped"</code> when neither target nor quote remains.</p></article>
+      <article id="bdd-agent-discovers-anchor"><h3>BDD-7: Agent discovers anchors without browser view</h3><p><strong>Given</strong> a registered plan contains <code>id="solution-narrative"</code>, <strong>when</strong> an agent reads <code>GET /api/plans/:planId</code> or runs <code>plan-review show plan_123 --json</code>, <strong>then</strong> the response includes an <code>anchorTargets</code> entry for <code>solution-narrative</code> with heading/context preview and a copy-paste <code>plan-review comments add ... --plan-node-id solution-narrative</code> command.</p></article>
+    </section>
+
+    <section id="phase-plan">
+      <h2>Phase-by-phase execution plan</h2>
+
+      <article class="phase" id="phase-p1-contracts">
+        <h3>P1 — Lock agent author and DOM-anchor contracts</h3>
+        <h4>End State</h4>
+        <p>Core schemas and store tests define how agent-created comments differ from human-created comments without changing storage tables or lifecycle semantics.</p>
+        <h4>Tests first</h4>
+        <ul>
+          <li>Add contract tests in <code>src/__tests__/contracts.test.ts</code> proving agent comment input normalizes to <code>createdBy.type = "agent"</code> and first thread entry role <code>agent</code>.</li>
+          <li>Add negative tests for missing agent display name on native agent comment creation and for human browser comments staying role <code>human</code>.</li>
+        </ul>
+        <h4>Expected files</h4>
+        <ul><li><code>src/schemas.ts</code></li><li><code>src/storage/database.ts</code></li><li><code>src/__tests__/contracts.test.ts</code></li></ul>
+        <h4>Work</h4>
+        <ul>
+          <li>Add a comment author schema that supports reviewer and agent creators without changing plan-note author behavior unless reuse is safe and explicit.</li>
+          <li>Teach <code>createComment</code> to preserve the creator type and choose the first thread entry role from creator type.</li>
+          <li>Include agent author metadata at top-level <code>conversationPayload.createdBy</code> so claimed comments are self-describing through <code>agent next</code> without requiring a second comment lookup; contract tests must assert this field appears in claimed-comment payloads.</li>
+        </ul>
+        <h4>Verify</h4>
+        <pre><code>bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "agent comment|comment thread|schemas"</code></pre>
+      </article>
+
+      <article class="phase" id="phase-p2-api-cli">
+        <h3>P2 — Add native API and CLI comment creation</h3>
+        <h4>End State</h4>
+        <p>A stable service endpoint resolves a rendered DOM target and the CLI exposes a copy-paste agent command that creates a normal pending comment.</p>
+        <h4>Tests first</h4>
+        <ul>
+          <li>Add API contract tests for <code>POST /api/plans/:planId/comments/dom</code> creating one comment through <code>store.createComment</code>, returning <code>{ comment, event, created }</code>, and exposing identity at <code>comment.createdBy</code>, <code>comment.threadEntries[0]</code>, and <code>comment.conversationPayload.createdBy</code>. Add an idempotent retry test proving first-create-wins when the same <code>clientMutationId</code> is retried with a different agent identity but the same version/body/anchor fingerprint.</li>
+          <li>Add API/CLI read-surface tests proving <code>GET /api/plans/:planId</code> and <code>plan-review show &lt;planId&gt; --json</code> include <code>anchorTargets</code> entries with <code>planNodeId</code>, context, and copy-paste <code>comments add</code> guidance.</li>
+          <li>Add CLI tests proving help text exposes <code>comments add</code> and <code>show</code>, missing identity fails, and successful command posts the native payload shape from <a href="#native-contract">Native agent comment contract</a>.</li>
+        </ul>
+        <h4>Expected files</h4>
+        <ul><li><code>src/server/app.ts</code></li><li><code>src/cli.ts</code></li><li><code>src/schemas.ts</code></li><li><code>src/__tests__/contracts.test.ts</code></li></ul>
+        <h4>Work</h4>
+        <ul>
+          <li>Create a small server-side DOM anchor resolver for latest rendered HTML that supports <code>planNodeId</code> and exact <code>#id</code> targets, computes <code>planNodeId</code>, <code>cssSelector</code>, <code>domPath</code>, <code>xpath</code>, <code>textQuote</code>, <code>headingPath</code>, <code>textPreview</code>, <code>outerHtmlPreview</code>, and a minimal rect/viewport fallback. Use the existing latest-rendered HTML access path, <code>store.getRenderedHtml(plan.id)</code>, for target resolution, and call <code>store.getPlan(planId)</code> to obtain the latest <code>version.id</code> passed into <code>createComment</code>. Copy the anchor field structure from browser <code>anchorForElement</code> in <code>src/server/app.ts</code>; do not import that browser-shell function into Node server code.</li>
+          <li>Add <code>POST /api/plans/:planId/comments/dom</code> exactly as specified in <a href="#native-contract">Native agent comment contract</a>: resolve target, apply agent identity, call existing <code>createComment</code>, emit <code>comment.created</code>, and wake delivery.</li>
+          <li>Add an anchor inventory builder that derives <code>anchorTargets</code> from the same latest rendered HTML and exposes it on <code>GET /api/plans/:planId</code>; keep the target shape small, sanitized, and agent-legible by prioritizing explicit IDs and semantic comment targets while suppressing redundant low-value descendants.</li>
+          <li>Add <code>plan-review show &lt;planId&gt; --json</code> as a read surface over <code>GET /api/plans/:planId</code>, including <code>anchorTargets</code>, so agents can inspect targets and choose <code>--plan-node-id</code> without browser scraping.</li>
+          <li>Add <code>plan-review comments add &lt;planId&gt; --plan-node-id &lt;id&gt; --body &lt;text&gt; --agent &lt;name&gt; --json --url &lt;url&gt;</code>, with an optional <code>--client-mutation-id</code> for idempotent retries and an optional exact <code>--selector #id</code> convenience path. <code>--plan-node-id</code> and <code>--selector</code> are mutually exclusive; the CLI fails before posting if both are supplied.</li>
+        </ul>
+        <h4>Verify</h4>
+        <pre><code>bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "native agent comment|CLI help"</code></pre>
+      </article>
+
+      <article class="phase" id="phase-p3-ui-docs-fixtures">
+        <h3>P3 — Align UI history, docs, and fixtures</h3>
+        <h4>End State</h4>
+        <p>The browser sidebar, README, and e2e fixtures make agent-created comments understandable without introducing a parallel notes system or special lifecycle.</p>
+        <h4>Tests first</h4>
+        <ul>
+          <li>Add e2e coverage that creates an agent comment through the native endpoint/CLI-equivalent API and verifies sidebar display, marker rendering, queue counts, and anchor remapping.</li>
+          <li>Extend fixture smoke coverage only if the new command changes agent listener assumptions; otherwise keep fixtures focused on existing queue semantics.</li>
+        </ul>
+        <h4>Expected files</h4>
+        <ul><li><code>src/server/app.ts</code></li><li><code>src/test-fixtures/e2e-run.ts</code></li><li><code>src/test-fixtures/run.ts</code> if needed</li><li><code>README.md</code></li></ul>
+        <h4>Work</h4>
+        <ul>
+          <li>Verify the existing sidebar thread rendering already shows <code>entry.createdBy.displayName</code> and <code>entry.role</code> for agent-created comments; make minimal CSS/copy changes only if e2e evidence shows the current rendering is ambiguous.</li>
+          <li>Document native agent comment creation alongside the Agent Listener Contract and Browser Comment Bridge, including <code>plan-review show &lt;planId&gt; --json</code> anchor discovery, target selection guidance, and failure modes.</li>
+          <li>Keep text-range and image-region native authoring documented as non-goals for this slice.</li>
+        </ul>
+        <h4>Verify</h4>
+        <pre><code>bun run build && bun run test:e2e</code></pre>
+      </article>
+
+      <article class="phase" id="phase-p4-verification-review">
+        <h3>P4 — Run verification and implementation review</h3>
+        <h4>End State</h4>
+        <p>The completed implementation is validated across API, CLI, browser, queue, docs, and repo guidance before handoff.</p>
+        <h4>Tests first</h4>
+        <p>Not applicable; this is the verification and review phase after implementation phases have passed their targeted RED/GREEN checks.</p>
+        <h4>Expected files</h4>
+        <ul><li>All files touched in P1–P3</li><li><code>thoughts/plans/add-agent-comment-support.html</code> progress and decisions log</li></ul>
+        <h4>Work</h4>
+        <ul>
+          <li>Run the full build and test gates required for comment lifecycle/CLI/browser work.</li>
+          <li>Run a scoped implementation review focused on data loss, queue lifecycle, identity correctness, and public contract drift.</li>
+          <li>Update this plan progress and append any deviations before final handoff.</li>
+        </ul>
+        <h4>Verify</h4>
+        <pre><code>bun run build
+bun run test
+bun run test:e2e
+bun run test:fixtures -- --scenario seeded-comment-stream
+bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated</code></pre>
+      </article>
+    </section>
+
+    <section id="verification-strategy">
+      <h2>Verification strategy</h2>
+      <p>Use targeted contract tests while changing schemas/store/API/CLI, then run full browser and queue fixtures because comment lifecycle and rendered-plan anchors are product-critical.</p>
+      <table id="test-coverage-matrix">
+        <thead><tr><th>Acceptance</th><th>BDD</th><th>Test layer</th><th>Command</th></tr></thead>
+        <tbody>
+          <tr><td><a href="#ac-1">AC-1</a></td><td>BDD-1</td><td>API + CLI contract tests</td><td><code>bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "native agent comment"</code></td></tr>
+          <tr><td><a href="#ac-2">AC-2</a></td><td>BDD-2</td><td>Store + e2e sidebar tests</td><td><code>bun run test:e2e</code></td></tr>
+          <tr><td><a href="#ac-3">AC-3</a></td><td>BDD-3</td><td>Existing browser comment e2e + contracts</td><td><code>bun run test:e2e</code></td></tr>
+          <tr><td><a href="#ac-4">AC-4</a></td><td>BDD-4, BDD-5</td><td>Contract negative tests</td><td><code>bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "agent identity|target"</code></td></tr>
+          <tr><td><a href="#ac-5">AC-5</a></td><td>BDD-6</td><td>Full tests + fixture smoke</td><td><code>bun run test && bun run test:e2e && bun run test:fixtures -- --scenario seeded-comment-stream</code></td></tr>
+          <tr><td><a href="#ac-6">AC-6</a></td><td>BDD-7</td><td>API + CLI read-surface contract tests</td><td><code>bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "anchorTargets|plan-review show"</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="delivery-order">
+      <h2>Delivery order</h2>
+      <ol>
+        <li>Lock schema/store behavior first so agent identity cannot be lost.</li>
+        <li>Add server-side DOM target resolution and native comment creation endpoint.</li>
+        <li>Add CLI command as a thin client of the native endpoint.</li>
+        <li>Update browser-visible history, docs, and e2e coverage.</li>
+        <li>Run full queue/comment verification and implementation review.</li>
+      </ol>
+    </section>
+
+    <section id="non-goals">
+      <h2>Non-goals</h2>
+      <ul>
+        <li>No authentication or permission model changes.</li>
+        <li>No native text-range or image-region authoring in this slice.</li>
+        <li>No environment-variable fallback for agent identity in this slice; callers must pass <code>--agent</code> or the native API <code>createdBy.displayName</code>.</li>
+        <li>No separate agent notes system and no alternate comment storage.</li>
+        <li>No change to claim, ack, release, resolve, delete, source sync, or delivery semantics except carrying agent identity through existing payloads.</li>
+        <li>No generated <code>dist/</code> edits during planning; implementation edits TypeScript source first.</li>
+      </ul>
+    </section>
+
+    <section id="decisions-deviations-log">
+      <h2>Decisions / Deviations Log</h2>
+      <ul>
+        <li><strong>2026-06-14:</strong> Initial browser-review plan created from repo inspection. Chose server-side DOM target resolution plus a CLI command so agents get a native path without duplicating browser-only anchor code in every client.</li>
+        <li><strong>2026-06-14:</strong> Integrated Codex and Claude plan-review blockers by locking <code>POST /api/plans/:planId/comments/dom</code>, exact request/response and identity placement, <code>conversationPayload.createdBy</code>, no env-var identity fallback, mutually exclusive target flags, and <code>anchorForElement</code> as the anchor field-format reference.</li>
+        <li><strong>2026-06-14:</strong> Integrated Codex round-2 blockers by aligning BDD-6 with existing DOM remap semantics and specifying first-create-wins identity behavior for idempotent retries with the same comment fingerprint.</li>
+        <li><strong>2026-06-14:</strong> Integrated Claude round-2 clarity by naming <code>store.getRenderedHtml(plan.id)</code> for server target resolution, clarifying that <code>anchorForElement</code> is a browser-shell field-format reference rather than importable server code, and limiting sidebar work to evidence-driven UI changes.</li>
+        <li><strong>2026-06-14:</strong> Integrated final Codex/Claude optional clarity by narrowing identity to optional <code>agentId</code> only and naming <code>store.getPlan(planId).version.id</code> as the <code>createComment</code> version source. Final Codex and Claude verdicts were <code>PLAN_EXECUTION_READY</code>.</li>
+        <li><strong>2026-06-14:</strong> Integrated browser feedback requiring non-browser anchor discovery by adding <code>anchorTargets</code> to plan read surfaces and <code>plan-review show &lt;planId&gt; --json</code> as the CLI path for agents to choose stable comment anchors.</li>
+        <li><strong>2026-06-14:</strong> Integrated final anchor-read review clarity by specifying semantic inclusion rules for <code>anchorTargets</code> so the inventory stays useful despite renderer-generated node ids on every element. Claude and Codex both returned <code>PLAN_EXECUTION_READY</code>.</li>
+        <li><strong>2026-06-14:</strong> Completed P1–P3 implementation: schemas/store now preserve agent creators and agent first-thread roles; native DOM endpoint and <code>comments add</code>/<code>show</code> CLI read surfaces are implemented; README and e2e fixture coverage document and exercise native agent comments.</li>
+        <li><strong>2026-06-14:</strong> Completed P4 verification after selector and heading-path review fixes. Final gate passed: <code>bun run build &amp;&amp; bun run test &amp;&amp; bun run test:e2e &amp;&amp; bun run test:fixtures -- --scenario seeded-comment-stream &amp;&amp; bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated</code>. Codex implementation review r5 returned <code>PASS_SCOPED</code>; Claude implementation review r6 returned <code>PASS_WITH_DEFERRED_FOLLOW_UPS</code> with no blocking in-scope findings. The noted CLI show coverage concern is already covered by <code>CLI show and comments add expose native agent comment contract</code>; the double parse in DOM resolution remains a non-blocking efficiency follow-up.</li>
+        <li><strong>2026-06-14:</strong> Addressed PR Codex feedback requiring idempotent native comment retries to survive source sync or re-registration between first success and retry. Native DOM endpoint now replays an existing <code>clientMutationId</code> before resolving latest rendered HTML, while still rejecting deleted or conflicting duplicate submissions. Added regression coverage where the original target disappears after re-registration and the retry returns the first-created comment and identity.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

@@ -282,6 +282,55 @@ try {
 
   const browser = await chromium.launch({ headless: true });
   try {
+    const nativeHtmlV1 = '<!doctype html><html><head><title>Native Agent Comment E2E</title></head><body><main><section id="native-target"><h1>Native target</h1><p>Original native agent target text.</p></section></main></body></html>';
+    const nativeRegistrationPayload = {
+      repoKey: 'e2e-native-agent-repo',
+      repoName: 'e2e-native-agent',
+      rootPath: '/tmp/e2e-native-agent',
+      branch: 'main',
+      commitSha: 'e2e-native-agent-v1',
+      planPath: 'thoughts/plans/native-agent.html',
+      slug: 'native-agent',
+      html: nativeHtmlV1,
+      fileHash: sha256(nativeHtmlV1),
+      publicationMetadata: { worktreePath: '/tmp/e2e-native-agent', branch: 'main', executionReady: false, executionReadyBasis: 'agent-review-results' },
+      updateMode: 'upsert'
+    };
+    const nativeRegister = await context.post('/api/plans/register', { data: nativeRegistrationPayload });
+    assert.equal(nativeRegister.ok(), true);
+    const nativePlan = (await nativeRegister.json()).data as { planId: string; versionId: string };
+    const nativeDetailBefore = await context.get(`/api/plans/${nativePlan.planId}`);
+    assert.equal(nativeDetailBefore.ok(), true);
+    const nativeTargets = (await nativeDetailBefore.json()).data.anchorTargets as Array<{ planNodeId: string; anchorCommand: string }>;
+    assert.equal(nativeTargets.some(target => target.planNodeId === 'native-target' && /comments add/.test(target.anchorCommand)), true);
+    const nativeComment = await context.post(`/api/plans/${nativePlan.planId}/comments/dom`, {
+      data: {
+        body: 'Native agent DOM annotation comment',
+        target: { planNodeId: 'native-target' },
+        createdBy: { type: 'agent', displayName: 'Codex E2E', agentId: 'codex-e2e' },
+        clientMutationId: 'native-agent-e2e-1'
+      }
+    });
+    assert.equal(nativeComment.ok(), true);
+    const nativeDetailAfter = await context.get(`/api/plans/${nativePlan.planId}`);
+    assert.equal(nativeDetailAfter.ok(), true);
+    assert.equal((await nativeDetailAfter.json()).data.counts.pending, 1);
+    const nativePage = await browser.newPage();
+    await nativePage.goto(`${baseUrl}/p/${nativePlan.planId}`);
+    await nativePage.click('#desktop-comments-toggle');
+    await nativePage.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('Native agent DOM annotation comment'));
+    assert.match(await nativePage.locator('#comments').innerText(), /Codex E2E/);
+    assert.match(await nativePage.locator('#comments').innerText(), /agent/);
+    await nativePage.waitForFunction(() => (document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelectorAll('.comment-anchor').length ?? 0) === 1);
+    await nativePage.close();
+    const nativeHtmlV2 = nativeHtmlV1.replace('Original native agent target text.', 'Updated native agent target text.');
+    const nativeReregister = await context.post('/api/plans/register', { data: { ...nativeRegistrationPayload, commitSha: 'e2e-native-agent-v2', html: nativeHtmlV2, fileHash: sha256(nativeHtmlV2) } });
+    assert.equal(nativeReregister.ok(), true);
+    const nativeCommentsAfterSync = await context.get(`/api/plans/${nativePlan.planId}/comments`);
+    assert.equal(nativeCommentsAfterSync.ok(), true);
+    assert.equal((await nativeCommentsAfterSync.json()).data.comments[0].anchorState, 'stale');
+    assert.equal((await context.post(`/api/plans/${nativePlan.planId}/archive`)).ok(), true);
+
     const historical = await registerStormPlan('event-storm-historical');
     for (let index = 0; index < 350; index += 1) {
       const response = await createStormComment(historical.planId, historical.versionId, index, 'Historical storm comment');

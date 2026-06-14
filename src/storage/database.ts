@@ -204,6 +204,14 @@ function noteAuthor(input?: { displayName?: string }): Record<string, unknown> {
   return { type: 'operator', displayName: input?.displayName?.trim() || 'Plan reviewer' };
 }
 
+function commentAuthor(input?: { type?: 'reviewer' | 'agent'; displayName?: string; agentId?: string }): Record<string, unknown> {
+  const type = input?.type === 'agent' ? 'agent' : 'reviewer';
+  const displayName = input?.displayName?.trim() || (type === 'agent' ? 'Agent' : 'Anonymous reviewer');
+  return input?.agentId && type === 'agent'
+    ? { type, displayName, agentId: input.agentId }
+    : { type, displayName };
+}
+
 function metadataFromRow(row: Record<string, unknown>, reviewMode: ReviewMode): PlanPublicationMetadata | undefined {
   if (reviewMode === 'collaboration') return undefined;
   const parsed = parseJson<PlanPublicationMetadata | null>(row.publicationMetadataJson as string | null, null);
@@ -1622,6 +1630,12 @@ export class PlanReviewStore {
     });
   }
 
+  getCommentByClientMutationId(planId: string, clientMutationId: string): { comment: StoredComment; event: StoredEvent } | undefined {
+    const duplicate = this.db.prepare('SELECT id FROM comments WHERE plan_id = ? AND client_mutation_id = ?').get(planId, clientMutationId) as { id: string } | undefined;
+    if (!duplicate) return undefined;
+    return { comment: this.getComment(duplicate.id), event: this.getCommentCreatedEvent(duplicate.id) };
+  }
+
   createComment(planId: string, input: CreateCommentInput): { comment: StoredComment; event: StoredEvent; created: boolean } {
     const tx = this.db.transaction(() => {
       const version = this.db
@@ -1691,8 +1705,9 @@ export class PlanReviewStore {
         };
       }
 
-      const createdByName = input.createdBy?.displayName?.trim() || 'Anonymous reviewer';
-      const conversationPayload = this.buildConversationPayload(planId, commentId, sequence, input, screenshotAssetId);
+      const createdBy = commentAuthor(input.createdBy);
+      const firstThreadRole: ThreadEntryRole = createdBy.type === 'agent' ? 'agent' : 'human';
+      const conversationPayload = this.buildConversationPayload(planId, commentId, sequence, input, screenshotAssetId, createdBy);
       this.db
         .prepare(`INSERT INTO comments
           (id, plan_id, version_id, sequence, status, body, anchor_type, anchor_state, anchor_json,
@@ -1708,15 +1723,15 @@ export class PlanReviewStore {
           JSON.stringify(input.anchor),
           screenshotAssetId ?? null,
           JSON.stringify(conversationPayload),
-          JSON.stringify({ type: 'reviewer', displayName: createdByName }),
+          JSON.stringify(createdBy),
           input.clientMutationId ?? null,
           now,
           now
         );
       this.db.prepare(`INSERT INTO comment_thread_entries
         (id, plan_id, comment_id, sequence, role, body, created_by_json, created_at, updated_at)
-        VALUES (?, ?, ?, 1, 'human', ?, ?, ?, ?)`)
-        .run(id('cte'), planId, commentId, input.body, JSON.stringify({ type: 'reviewer', displayName: createdByName }), now, now);
+        VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?)`)
+        .run(id('cte'), planId, commentId, firstThreadRole, input.body, JSON.stringify(createdBy), now, now);
       if (screenshotAssetId && screenshotAsset) {
         this.db
           .prepare(`INSERT INTO comment_assets
@@ -1755,7 +1770,8 @@ export class PlanReviewStore {
     commentId: string,
     markerNumber: number,
     input: CreateCommentInput,
-    screenshotAssetId?: string
+    screenshotAssetId?: string,
+    createdBy?: Record<string, unknown>
   ) {
     const textPreview =
       String(input.anchor.textPreview ?? input.anchor.selectedText ?? input.anchor.cssSelector ?? input.anchorType);
@@ -1779,6 +1795,7 @@ export class PlanReviewStore {
         title: `Comment ${markerNumber} on ${textPreview.slice(0, 80)}`,
         summary: input.body.slice(0, 240)
       },
+      createdBy,
       evidence: {
         reviewUrl: `/p/${planId}`,
         selector: input.anchor.cssSelector,

@@ -129,6 +129,221 @@ test('review modes infer, override, expose, and change without source edits', as
   }
 });
 
+test('agent comment authors persist through comment, thread, and queue payloads', () => {
+  const parsedAgent = createCommentSchema.parse({
+    versionId: 'ver_1',
+    body: 'Agent-authored comment',
+    anchorType: 'dom',
+    anchor: domAnchor(),
+    createdBy: { type: 'agent', displayName: 'Codex', agentId: 'codex-review-1' }
+  });
+  assert.equal(parsedAgent.createdBy?.type, 'agent');
+  assert.throws(() => createCommentSchema.parse({
+    versionId: 'ver_1',
+    body: 'Missing identity',
+    anchorType: 'dom',
+    anchor: domAnchor(),
+    createdBy: { type: 'agent' }
+  }), /Agent comments require createdBy.displayName/);
+
+  const store = new PlanReviewStore(tempDbPath('agent-comment-author'));
+  try {
+    const payload = registerPlanSchema.parse(sampleRegisterPayload());
+    const rendered = renderPlan(payload);
+    const registered = store.registerPlan(payload, rendered.renderedHtml, rendered.warnings);
+    const agentComment = store.createComment(registered.planId, { ...parsedAgent, versionId: registered.versionId }).comment;
+    assert.deepEqual(agentComment.createdBy, { type: 'agent', displayName: 'Codex', agentId: 'codex-review-1' });
+    assert.equal(agentComment.threadEntries[0].role, 'agent');
+    assert.deepEqual(agentComment.threadEntries[0].createdBy, agentComment.createdBy);
+    assert.deepEqual(agentComment.conversationPayload.createdBy, agentComment.createdBy);
+
+    const humanComment = store.createComment(registered.planId, {
+      versionId: registered.versionId,
+      body: 'Human-authored comment',
+      anchorType: 'dom',
+      anchor: domAnchor(),
+      createdBy: { displayName: 'Aaron' }
+    }).comment;
+    assert.deepEqual(humanComment.createdBy, { type: 'reviewer', displayName: 'Aaron' });
+    assert.equal(humanComment.threadEntries[0].role, 'human');
+  } finally {
+    store.close();
+  }
+});
+
+test('native agent DOM comments resolve rendered anchors and preserve first-create identity', async () => {
+  const app = createApp({ dbPath: tempDbPath('native-agent-dom-comment'), delivery: { enabled: false } });
+  try {
+    const registered = await app.inject({ method: 'POST', url: '/api/plans/register', payload: sampleRegisterPayload() });
+    assert.equal(registered.statusCode, 200, registered.body);
+    const { planId } = registered.json().data;
+
+    const detail = await app.inject({ method: 'GET', url: `/api/plans/${planId}` });
+    assert.equal(detail.statusCode, 200, detail.body);
+    const targets = detail.json().data.anchorTargets as Array<{ planNodeId: string; selector?: string; textPreview: string; outerHtmlPreview: string; headingPath: string[]; anchorCommand: string }>;
+    const phaseTarget = targets.find(target => target.planNodeId === 'phase-p1');
+    assert.ok(phaseTarget, JSON.stringify(targets, null, 2));
+    assert.equal(phaseTarget.selector, '#phase-p1');
+    assert.match(phaseTarget.textPreview, /Phase 1/);
+    assert.deepEqual(phaseTarget.headingPath, ['Phase 1']);
+    assert.match(phaseTarget.outerHtmlPreview, /<section[^>]+id="phase-p1"/);
+    assert.match(phaseTarget.outerHtmlPreview, /data-plan-node-id="phase-p1"/);
+    assert.match(phaseTarget.anchorCommand, /plan-review comments add/);
+    assert.match(phaseTarget.anchorCommand, /--plan-node-id 'phase-p1'/);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: `/api/plans/${planId}/comments/dom`,
+      payload: {
+        body: 'Clarify this acceptance criterion.',
+        target: { planNodeId: 'phase-p1' },
+        createdBy: { type: 'agent', displayName: 'Codex', agentId: 'codex-review-1' },
+        clientMutationId: 'native-agent-comment-1'
+      }
+    });
+    assert.equal(created.statusCode, 200, created.body);
+    const comment = created.json().data.comment;
+    assert.equal(created.json().data.created, true);
+    assert.equal(comment.anchorType, 'dom');
+    assert.equal(comment.anchor.planNodeId, 'phase-p1');
+    assert.equal(comment.anchor.cssSelector, '#phase-p1');
+    assert.deepEqual(comment.anchor.headingPath, ['Phase 1']);
+    assert.match(comment.anchor.outerHtmlPreview, /<section[^>]+id="phase-p1"/);
+    assert.deepEqual(comment.createdBy, { type: 'agent', displayName: 'Codex', agentId: 'codex-review-1' });
+    assert.equal(comment.threadEntries[0].role, 'agent');
+    assert.deepEqual(comment.conversationPayload.createdBy, comment.createdBy);
+
+    const retry = await app.inject({
+      method: 'POST',
+      url: `/api/plans/${planId}/comments/dom`,
+      payload: {
+        body: 'Clarify this acceptance criterion.',
+        target: { planNodeId: 'phase-p1' },
+        createdBy: { type: 'agent', displayName: 'Different Agent' },
+        clientMutationId: 'native-agent-comment-1'
+      }
+    });
+    assert.equal(retry.statusCode, 200, retry.body);
+    assert.equal(retry.json().data.created, false);
+    assert.deepEqual(retry.json().data.comment.createdBy, { type: 'agent', displayName: 'Codex', agentId: 'codex-review-1' });
+
+    const missingIdentity = await app.inject({
+      method: 'POST',
+      url: `/api/plans/${planId}/comments/dom`,
+      payload: { body: 'No identity', target: { planNodeId: 'phase-p1' }, createdBy: { type: 'agent' } }
+    });
+    assert.equal(missingIdentity.statusCode, 400);
+
+    const missingTarget = await app.inject({
+      method: 'POST',
+      url: `/api/plans/${planId}/comments/dom`,
+      payload: { body: 'Missing target', target: { planNodeId: 'does-not-exist' }, createdBy: { type: 'agent', displayName: 'Codex' } }
+    });
+    assert.equal(missingTarget.statusCode, 400);
+    assert.match(missingTarget.json().error.nextAction, /plan-review show/);
+  } finally {
+    await app.close();
+  }
+});
+
+test('native agent DOM comment retries replay before latest-version target resolution', async () => {
+  const app = createApp({ dbPath: tempDbPath('native-agent-dom-comment-retry'), delivery: { enabled: false } });
+  try {
+    const registered = await app.inject({ method: 'POST', url: '/api/plans/register', payload: sampleRegisterPayload() });
+    assert.equal(registered.statusCode, 200, registered.body);
+    const { planId, versionId } = registered.json().data;
+    const created = await app.inject({
+      method: 'POST',
+      url: `/api/plans/${planId}/comments/dom`,
+      payload: {
+        body: 'Clarify this acceptance criterion.',
+        target: { planNodeId: 'phase-p1' },
+        createdBy: { type: 'agent', displayName: 'Codex' },
+        clientMutationId: 'native-agent-retry-after-sync'
+      }
+    });
+    assert.equal(created.statusCode, 200, created.body);
+    const originalComment = created.json().data.comment;
+    assert.equal(originalComment.versionId, versionId);
+
+    const changedHtml = '<!doctype html><html><body><main><section id="replacement"><h2>Replacement</h2><p>The original target is gone.</p></section></main></body></html>';
+    const updated = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload({ html: changedHtml, fileHash: sha256(changedHtml) })
+    });
+    assert.equal(updated.statusCode, 200, updated.body);
+    assert.notEqual(updated.json().data.versionId, versionId);
+
+    const retry = await app.inject({
+      method: 'POST',
+      url: `/api/plans/${planId}/comments/dom`,
+      payload: {
+        body: 'Clarify this acceptance criterion.',
+        target: { planNodeId: 'phase-p1' },
+        createdBy: { type: 'agent', displayName: 'Different Agent' },
+        clientMutationId: 'native-agent-retry-after-sync'
+      }
+    });
+    assert.equal(retry.statusCode, 200, retry.body);
+    assert.equal(retry.json().data.created, false);
+    assert.equal(retry.json().data.comment.id, originalComment.id);
+    assert.equal(retry.json().data.comment.versionId, versionId);
+    assert.deepEqual(retry.json().data.comment.createdBy, { type: 'agent', displayName: 'Codex' });
+
+    const conflictingRetry = await app.inject({
+      method: 'POST',
+      url: `/api/plans/${planId}/comments/dom`,
+      payload: {
+        body: 'Different body',
+        target: { planNodeId: 'phase-p1' },
+        createdBy: { type: 'agent', displayName: 'Codex' },
+        clientMutationId: 'native-agent-retry-after-sync'
+      }
+    });
+    assert.equal(conflictingRetry.statusCode, 409, conflictingRetry.body);
+    assert.equal(conflictingRetry.json().error.code, 'duplicate_comment_conflict');
+  } finally {
+    await app.close();
+  }
+});
+
+test('native agent DOM comments escape ids and reject ambiguous selectors before creating rows', async () => {
+  const app = createApp({ dbPath: tempDbPath('native-agent-dom-comment-targets'), delivery: { enabled: false } });
+  try {
+    const specialIdHtml = '<!doctype html><html><body><main><section id="123:foo.bar"><h2>Escaped id</h2><p>Comment target.</p></section></main></body></html>';
+    const special = await app.inject({ method: 'POST', url: '/api/plans/register', payload: sampleRegisterPayload({ slug: 'special-id', planPath: 'thoughts/plans/special-id.html', html: specialIdHtml, fileHash: sha256(specialIdHtml) }) });
+    assert.equal(special.statusCode, 200, special.body);
+    const specialPlanId = special.json().data.planId;
+    const specialDetail = await app.inject({ method: 'GET', url: `/api/plans/${specialPlanId}` });
+    const specialTarget = specialDetail.json().data.anchorTargets.find((target: { selector?: string }) => target.selector === '#\\00003123\\:foo\\.bar');
+    assert.ok(specialTarget, JSON.stringify(specialDetail.json().data.anchorTargets, null, 2));
+    const specialComment = await app.inject({
+      method: 'POST',
+      url: `/api/plans/${specialPlanId}/comments/dom`,
+      payload: { body: 'Special id comment', target: { selector: specialTarget.selector }, createdBy: { type: 'agent', displayName: 'Codex' } }
+    });
+    assert.equal(specialComment.statusCode, 200, specialComment.body);
+    assert.equal(specialComment.json().data.comment.anchor.cssSelector, '#\\00003123\\:foo\\.bar');
+
+    const duplicateHtml = '<!doctype html><html><body><main><section id="dup"><p>One</p></section><section id="dup"><p>Two</p></section></main></body></html>';
+    const duplicate = await app.inject({ method: 'POST', url: '/api/plans/register', payload: sampleRegisterPayload({ slug: 'duplicate-id', planPath: 'thoughts/plans/duplicate-id.html', html: duplicateHtml, fileHash: sha256(duplicateHtml) }) });
+    assert.equal(duplicate.statusCode, 200, duplicate.body);
+    const duplicatePlanId = duplicate.json().data.planId;
+    const ambiguous = await app.inject({
+      method: 'POST',
+      url: `/api/plans/${duplicatePlanId}/comments/dom`,
+      payload: { body: 'Ambiguous target', target: { selector: '#dup' }, createdBy: { type: 'agent', displayName: 'Codex' } }
+    });
+    assert.equal(ambiguous.statusCode, 400, ambiguous.body);
+    assert.match(ambiguous.json().error.message, /multiple rendered nodes/);
+    const comments = await app.inject({ method: 'GET', url: `/api/plans/${duplicatePlanId}/comments` });
+    assert.equal(comments.json().data.comments.length, 0);
+  } finally {
+    await app.close();
+  }
+});
+
 test('comment thread entries persist visible replies separately from ack lifecycle', () => {
   const store = new PlanReviewStore(tempDbPath('thread-entries'));
   try {
@@ -2869,6 +3084,58 @@ function runCli(args: string[]): Promise<{ code: number | null; stdout: string; 
     child.on('close', code => resolve({ code, stdout, stderr }));
   });
 }
+
+test('CLI show and comments add expose native agent comment contract', async () => {
+  const requests: Array<{ url?: string; body?: unknown }> = [];
+  const server = http.createServer((request, response) => {
+    if (request.url === '/api/plans/plan_1' && request.method === 'GET') {
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ ok: true, data: { plan: { id: 'plan_1' }, anchorTargets: [{ planNodeId: 'phase-p1', anchorCommand: 'plan-review comments add plan_1 --plan-node-id phase-p1 --body ... --agent ... --json' }] } }));
+      return;
+    }
+    if (request.url === '/api/plans/plan_1/comments/dom' && request.method === 'POST') {
+      let body = '';
+      request.on('data', chunk => { body += chunk; });
+      request.on('end', () => {
+        requests.push({ url: request.url, body: JSON.parse(body) });
+        response.setHeader('content-type', 'application/json');
+        response.end(JSON.stringify({ ok: true, data: { comment: { id: 'cmt_1' }, event: { id: 'evt_1' }, created: true } }));
+      });
+      return;
+    }
+    response.statusCode = 404;
+    response.end('not found');
+  });
+
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address();
+    assert(address && typeof address !== 'string');
+    const serviceUrl = `http://127.0.0.1:${address.port}`;
+    const show = await runCli(['show', 'plan_1', '--json', '--url', serviceUrl]);
+    assert.equal(show.code, 0, show.stderr);
+    assert.equal(JSON.parse(show.stdout).anchorTargets[0].planNodeId, 'phase-p1');
+
+    const added = await runCli(['comments', 'add', 'plan_1', '--plan-node-id', 'phase-p1', '--body', 'Clarify this', '--agent', 'Codex', '--agent-id', 'codex-1', '--client-mutation-id', 'mut-1', '--json', '--url', serviceUrl]);
+    assert.equal(added.code, 0, added.stderr);
+    assert.deepEqual(requests[0].body, {
+      body: 'Clarify this',
+      target: { planNodeId: 'phase-p1' },
+      createdBy: { type: 'agent', displayName: 'Codex', agentId: 'codex-1' },
+      clientMutationId: 'mut-1'
+    });
+
+    const missingAgent = await runCli(['comments', 'add', 'plan_1', '--plan-node-id', 'phase-p1', '--body', 'Clarify this', '--json', '--url', serviceUrl]);
+    assert.equal(missingAgent.code, 1);
+    assert.match(missingAgent.stderr, /comments add requires --agent/);
+
+    const conflictingTargets = await runCli(['comments', 'add', 'plan_1', '--plan-node-id', 'phase-p1', '--selector', '#phase-p1', '--body', 'Clarify this', '--agent', 'Codex', '--json', '--url', serviceUrl]);
+    assert.equal(conflictingTargets.code, 1);
+    assert.match(conflictingTargets.stderr, /cannot use both/);
+  } finally {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
 
 test('CLI agent next --no-wait returns empty when claim API has no pending comments', async () => {
   const server = http.createServer((request, response) => {

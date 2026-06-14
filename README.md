@@ -48,6 +48,20 @@ plan-review register thoughts/plans/my-plan.html --snapshot --execution-ready fa
 
 The browser shell renders sanitized HTML in a no-script iframe and keeps the comment UI in the parent page. Selecting a DOM element opens the composer; image and text comments use the same comment API with `anchorType: "image"` or `anchorType: "text_range"`. Each open select → comment composer gets one browser-generated `clientMutationId`; retries from that same composer reuse the identifier, so repeated Submit clicks, keyboard submit, or network retries create at most one comment. If the service cannot read a live-linked source file, it keeps serving the last good rendered version and exposes the sync failure in the API and sidebar.
 
+Agents can discover stable DOM targets without opening the browser by reading plan detail metadata:
+
+```bash
+plan-review show plan_123 --json --url http://127.0.0.1:4317
+```
+
+The JSON includes `anchorTargets` from the latest rendered HTML. Each target has a stable `planNodeId`, optional exact `#id` selector, heading/context previews, sanitized outer HTML preview, and an `anchorCommand` template. Native agent-created comments use the same pending comment lifecycle, queue delivery, sidebar markers, duplicate guards, and thread history as browser comments:
+
+```bash
+plan-review comments add plan_123 --plan-node-id ac-2 --body "Clarify this acceptance criterion" --agent Codex --json --url http://127.0.0.1:4317
+```
+
+Use `--selector #id` only as an exact-id convenience alternative to `--plan-node-id`; the two target flags are mutually exclusive. Agent identity is required and stored durably as `createdBy.type = "agent"`, the first thread entry role `agent`, and `conversationPayload.createdBy`. Native text-range and image-region authoring remain browser-only for this slice.
+
 ## Deferred Plans and Plan Notes
 
 Use deferred state when a plan should leave the active queue but remain easy to pick up later. Deferring requires a durable note so operators and agents can see why work paused and what should happen next:
@@ -143,13 +157,13 @@ plan-review queue claim plan_123 --ids cmt_123 --json
 
 Direct ack without an active matching claim returns `409 claim_required`. Claims have a default 5-minute lease and expired claims return to `pending`.
 
-Duplicate comment creation is idempotent only for the same `clientMutationId` and the same fingerprint: `versionId`, `body`, `anchorType`, and canonicalized `anchor`. Canonicalized anchors compare JSON values with recursively sorted object keys, preserved array order, exact primitive values, and no dropped fields. `markerScreenshot` and `createdBy` differences are treated as retry noise; the first stored screenshot and creator win. A mismatched fingerprint returns `409 duplicate_comment_conflict` with an actionable next step. If the original comment for that `clientMutationId` was soft-deleted, retrying returns `409 duplicate_comment_deleted` and does not recreate or undelete it.
+Duplicate comment creation is idempotent only for the same `clientMutationId` and the same fingerprint: `versionId`, `body`, `anchorType`, and canonicalized `anchor`. Canonicalized anchors compare JSON values with recursively sorted object keys, preserved array order, exact primitive values, and no dropped fields. `markerScreenshot` and `createdBy` differences are treated as retry noise; the first stored screenshot and creator win, including for agent comments retried with a different display name. A mismatched fingerprint returns `409 duplicate_comment_conflict` with an actionable next step. If the original comment for that `clientMutationId` was soft-deleted, retrying returns `409 duplicate_comment_deleted` and does not recreate or undelete it.
 
 Pending unclaimed comments can be deleted from the browser UI or with `DELETE /api/comments/:commentId`. Claimed, acknowledged, resolved, and already deleted comments return `409 invalid_state`. Deletion is API/browser-only in this scope; there is no CLI delete command.
 
 ## Browser Comment Bridge
 
-Every comment event carries `conversationPayload.type = "browser.comment.v1"`. The original browser comment creates the first durable human thread entry. Agent replies should be appended with `POST /api/comments/:commentId/replies` or `plan-review reply`; ack/resolve remain lifecycle metadata and do not replace visible replies. Legacy `agent_response_json` response summaries remain display metadata for older integrations.
+Every comment event carries `conversationPayload.type = "browser.comment.v1"`. The original browser comment creates the first durable human thread entry. Native agent comments created through `POST /api/plans/:planId/comments/dom` or `plan-review comments add` create the first durable agent thread entry and carry the same agent identity in `comment.createdBy`, `threadEntries[0].createdBy`, and `conversationPayload.createdBy`. Agent replies should be appended with `POST /api/comments/:commentId/replies` or `plan-review reply`; ack/resolve remain lifecycle metadata and do not replace visible replies. Legacy `agent_response_json` response summaries remain display metadata for older integrations.
 
 ## Codex Delivery
 
