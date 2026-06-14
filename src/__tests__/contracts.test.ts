@@ -246,6 +246,68 @@ test('native agent DOM comments resolve rendered anchors and preserve first-crea
   }
 });
 
+test('native agent DOM comment retries replay before latest-version target resolution', async () => {
+  const app = createApp({ dbPath: tempDbPath('native-agent-dom-comment-retry'), delivery: { enabled: false } });
+  try {
+    const registered = await app.inject({ method: 'POST', url: '/api/plans/register', payload: sampleRegisterPayload() });
+    assert.equal(registered.statusCode, 200, registered.body);
+    const { planId, versionId } = registered.json().data;
+    const created = await app.inject({
+      method: 'POST',
+      url: `/api/plans/${planId}/comments/dom`,
+      payload: {
+        body: 'Clarify this acceptance criterion.',
+        target: { planNodeId: 'phase-p1' },
+        createdBy: { type: 'agent', displayName: 'Codex' },
+        clientMutationId: 'native-agent-retry-after-sync'
+      }
+    });
+    assert.equal(created.statusCode, 200, created.body);
+    const originalComment = created.json().data.comment;
+    assert.equal(originalComment.versionId, versionId);
+
+    const changedHtml = '<!doctype html><html><body><main><section id="replacement"><h2>Replacement</h2><p>The original target is gone.</p></section></main></body></html>';
+    const updated = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload({ html: changedHtml, fileHash: sha256(changedHtml) })
+    });
+    assert.equal(updated.statusCode, 200, updated.body);
+    assert.notEqual(updated.json().data.versionId, versionId);
+
+    const retry = await app.inject({
+      method: 'POST',
+      url: `/api/plans/${planId}/comments/dom`,
+      payload: {
+        body: 'Clarify this acceptance criterion.',
+        target: { planNodeId: 'phase-p1' },
+        createdBy: { type: 'agent', displayName: 'Different Agent' },
+        clientMutationId: 'native-agent-retry-after-sync'
+      }
+    });
+    assert.equal(retry.statusCode, 200, retry.body);
+    assert.equal(retry.json().data.created, false);
+    assert.equal(retry.json().data.comment.id, originalComment.id);
+    assert.equal(retry.json().data.comment.versionId, versionId);
+    assert.deepEqual(retry.json().data.comment.createdBy, { type: 'agent', displayName: 'Codex' });
+
+    const conflictingRetry = await app.inject({
+      method: 'POST',
+      url: `/api/plans/${planId}/comments/dom`,
+      payload: {
+        body: 'Different body',
+        target: { planNodeId: 'phase-p1' },
+        createdBy: { type: 'agent', displayName: 'Codex' },
+        clientMutationId: 'native-agent-retry-after-sync'
+      }
+    });
+    assert.equal(conflictingRetry.statusCode, 409, conflictingRetry.body);
+    assert.equal(conflictingRetry.json().error.code, 'duplicate_comment_conflict');
+  } finally {
+    await app.close();
+  }
+});
+
 test('native agent DOM comments escape ids and reject ambiguous selectors before creating rows', async () => {
   const app = createApp({ dbPath: tempDbPath('native-agent-dom-comment-targets'), delivery: { enabled: false } });
   try {

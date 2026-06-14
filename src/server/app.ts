@@ -2236,6 +2236,12 @@ function buildAnchorTargets(planId: string, renderedHtml: string): Array<Omit<An
   return targets;
 }
 
+function nativeTargetMatchesAnchor(target: { planNodeId?: string; selector?: string }, anchor: Record<string, unknown>): boolean {
+  if (target.planNodeId && target.planNodeId === anchor.planNodeId) return true;
+  if (!target.selector || typeof anchor.cssSelector !== 'string') return false;
+  return exactIdFromSelector(target.selector) === exactIdFromSelector(anchor.cssSelector);
+}
+
 function resolveDomAnchor(planId: string, renderedHtml: string, target: { planNodeId?: string; selector?: string }) {
   const document = parse(renderedHtml) as DefaultTreeAdapterMap['document'];
   const targets = buildAnchorTargets(planId, renderedHtml);
@@ -2757,6 +2763,28 @@ export function createApp(options: AppOptions): FastifyInstance {
       const { planId } = request.params as { planId: string };
       const { plan, version } = store.getPlan(planId);
       const input = createDomCommentSchema.parse(request.body);
+      const existing = input.clientMutationId ? store.getCommentByClientMutationId(plan.id, input.clientMutationId) : undefined;
+      if (existing) {
+        if (existing.comment.deletedAt) {
+          throw new PlanReviewError(
+            'duplicate_comment_deleted',
+            'This comment draft was already submitted and then deleted.',
+            409,
+            { commentId: existing.comment.id, clientMutationId: input.clientMutationId },
+            'Refresh the comments list and start a new comment if you still need to submit feedback.'
+          );
+        }
+        if (existing.comment.body !== input.body || existing.comment.anchorType !== 'dom' || !nativeTargetMatchesAnchor(input.target, existing.comment.anchor)) {
+          throw new PlanReviewError(
+            'duplicate_comment_conflict',
+            'This comment draft identifier was already used for different comment content.',
+            409,
+            { commentId: existing.comment.id, clientMutationId: input.clientMutationId },
+            'Refresh the comments list before retrying, or start a new comment from the current selection.'
+          );
+        }
+        return ok({ comment: existing.comment, event: existing.event, created: false });
+      }
       const anchor = resolveDomAnchor(plan.id, store.getRenderedHtml(plan.id), input.target);
       const result = store.createComment(plan.id, {
         versionId: version.id,

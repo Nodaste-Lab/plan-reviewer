@@ -1629,6 +1629,12 @@ export class PlanReviewStore {
     });
   }
 
+  getCommentByClientMutationId(planId: string, clientMutationId: string): { comment: StoredComment; event: StoredEvent } | undefined {
+    const duplicate = this.db.prepare('SELECT id FROM comments WHERE plan_id = ? AND client_mutation_id = ?').get(planId, clientMutationId) as { id: string } | undefined;
+    if (!duplicate) return undefined;
+    return { comment: this.getComment(duplicate.id), event: this.getCommentCreatedEvent(duplicate.id) };
+  }
+
   createComment(planId: string, input: CreateCommentInput): { comment: StoredComment; event: StoredEvent; created: boolean } {
     const tx = this.db.transaction(() => {
       const version = this.db
