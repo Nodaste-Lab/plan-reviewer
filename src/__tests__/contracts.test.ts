@@ -1000,9 +1000,8 @@ test('registration API returns agent instructions additively across registration
     assert.match(snapshotData.agentInstructions.nextAction, /Drain pending comments/);
     assert.equal(snapshotData.agentInstructions.serviceUrlRequired, true);
     assert.match(snapshotData.agentInstructions.serviceUrlInstruction, /debug-only/);
-    assert.match(snapshotData.agentInstructions.preferredCommand, /agent next .* --wait --json/);
-    assert.match(snapshotData.agentInstructions.drainCommand, /agent next .* --no-wait --json/);
-    assert.doesNotMatch(snapshotData.agentInstructions.preferredCommand, /--url/);
+    assert.match(snapshotData.agentInstructions.preferredCommand, /agent next .* --wait --json --url http:\/\/localhost:80/);
+    assert.match(snapshotData.agentInstructions.drainCommand, /agent next .* --no-wait --json --url http:\/\/localhost:80/);
     assert.equal(snapshotData.agentInstructions.reviewUrl, snapshotData.reviewUrl);
     assert.equal(snapshotData.watchCommand, `plan-review watch ${snapshotData.planId} --mode queue`);
     assert.equal(snapshotData.sourceSync.watchMode, 'snapshot');
@@ -1033,6 +1032,7 @@ test('registration API returns agent instructions additively across registration
     assert.equal(filesystem.statusCode, 200);
     const filesystemData = filesystem.json().data;
     assert.equal(filesystemData.agentInstructions.planId, filesystemData.planId);
+    assert.match(filesystemData.agentInstructions.preferredCommand, /--url http:\/\/localhost:80/);
     assert.equal(filesystemData.sourceSync.watchMode, 'filesystem');
     assert.equal(filesystemData.sourceSync.sourcePath, sourcePath);
     assert.equal(filesystemData.sourceSync.active, true);

@@ -70,6 +70,11 @@ function encodeClientData(value: string): string {
   return Buffer.from(value, 'utf8').toString('base64');
 }
 
+function requestServiceUrl(request: { headers: { host?: string | string[] } }, fallback: string): string {
+  const host = Array.isArray(request.headers.host) ? request.headers.host[0] : request.headers.host;
+  return host ? `http://${host}` : fallback;
+}
+
 function progressHtml(progress: ReturnType<PlanReviewStore['listPlans']>[number]['progress']): string {
   if (!progress.totalPhases) return '<p class="progress-empty">No phase progress markers found.</p>';
   const label = `${progress.completedPhases} of ${progress.totalPhases} phases complete`;
@@ -2143,7 +2148,7 @@ export function createApp(options: AppOptions): FastifyInstance {
         codexDelivery: store.getDeliveryTarget(plan.id, 'codex'),
         hermesDelivery: store.getDeliveryTarget(plan.id, 'hermes'),
         renderedWithWarnings: rendered.warnings,
-        agentInstructions: buildRegistrationAgentInstructions({ planId: result.planId, reviewUrl: result.reviewUrl })
+        agentInstructions: buildRegistrationAgentInstructions({ planId: result.planId, reviewUrl: result.reviewUrl, serviceUrl: requestServiceUrl(request, deliveryConfig.serviceUrl) })
       });
     } catch (error) {
       sendError(reply, error);
@@ -2551,7 +2556,7 @@ export function createApp(options: AppOptions): FastifyInstance {
       const comment = result.claimed[0];
       if (!comment?.claim?.id) return ok({ ...buildAgentNextEmpty('all'), skipped: result.skipped ?? [] });
       const { plan } = store.getPlan(comment.planId);
-      const host = request.headers.host ? `http://${request.headers.host}` : deliveryConfig.serviceUrl;
+      const host = requestServiceUrl(request, deliveryConfig.serviceUrl);
       return ok({
         ...buildAgentNextClaimed({
           planId: plan.id,

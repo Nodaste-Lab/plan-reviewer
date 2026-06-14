@@ -35,8 +35,8 @@ export interface RenderedRegistrationInstructionCommands {
 
 const instructionType = 'plan-review.registration.instructions.v1' as const;
 
-export function buildRegistrationAgentInstructions(input: { planId: string; reviewUrl: string }): RegistrationAgentInstructions {
-  const commands = renderRegistrationInstructionCommands({ planId: input.planId }, undefined);
+export function buildRegistrationAgentInstructions(input: { planId: string; reviewUrl: string; serviceUrl?: string }): RegistrationAgentInstructions {
+  const commands = renderRegistrationInstructionCommands({ planId: input.planId }, input.serviceUrl);
   return {
     type: instructionType,
     required: true,
