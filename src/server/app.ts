@@ -1107,13 +1107,19 @@ function initializeMermaid(){
   mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', htmlLabels: false, deterministicIds: true, deterministicIDSeed: planId, maxTextSize: 50000, theme: 'dark', themeVariables: { background: '#0f172a', primaryColor: '#1e3a8a', primaryTextColor: '#e5e7eb', primaryBorderColor: '#38bdf8', lineColor: '#93c5fd', textColor: '#e5e7eb' } });
   mermaidInitialized = true;
 }
-const allowedSvgTags = new Set(['svg','g','path','line','polyline','polygon','rect','circle','ellipse','text','tspan','defs','marker','title','desc']);
-const allowedSvgAttrs = new Set(['id','class','role','viewBox','viewbox','xmlns','x','y','x1','y1','x2','y2','cx','cy','r','rx','ry','width','height','d','points','transform','marker-end','marker-start','marker-mid','orient','refX','refY','refx','refy','markerWidth','markerHeight','markerwidth','markerheight','text-anchor','dominant-baseline','font-size','font-family','font-weight','fill','stroke','stroke-width','stroke-dasharray','stroke-linecap','stroke-linejoin','opacity','fill-opacity','stroke-opacity','dy','dx','startOffset']);
+const allowedSvgTags = new Set(['svg','g','path','line','polyline','polygon','rect','circle','ellipse','text','tspan','defs','marker','style','title','desc']);
+const allowedSvgAttrs = new Set(['id','class','style','role','viewBox','viewbox','xmlns','x','y','x1','y1','x2','y2','cx','cy','r','rx','ry','width','height','d','points','transform','marker-end','marker-start','marker-mid','orient','refX','refY','refx','refy','markerWidth','markerHeight','markerwidth','markerheight','text-anchor','dominant-baseline','font-size','font-family','font-weight','fill','stroke','stroke-width','stroke-dasharray','stroke-linecap','stroke-linejoin','opacity','fill-opacity','stroke-opacity','dy','dx','startOffset']);
+function hasUnsafeSvgCss(text){
+  const css = String(text || '');
+  if (/@import|javascript:|data:|https?:|\\/\\/|expression\\(|-moz-binding/i.test(css)) return true;
+  return /url\\(/i.test(css.replace(/url\\(\\s*['"]?#[a-zA-Z0-9_-]+['"]?\\s*\\)/gi, ''));
+}
 function isSafeSvgAttributeValue(name, value){
   const text = String(value || '').trim();
+  if (/^(?:href|xlink:href|src)$/i.test(name)) return false;
+  if (String(name || '').toLowerCase() === 'style') return !hasUnsafeSvgCss(text);
   if (/javascript:|data:|https?:|\\/\\//i.test(text)) return false;
   if (/url\\(/i.test(text) && !/^url\\(['"]?#[a-zA-Z0-9_-]+['"]?\\)$/i.test(text)) return false;
-  if (/^(?:href|xlink:href|src)$/i.test(name)) return false;
   return true;
 }
 function hardenMermaidSvg(svgText){
@@ -1124,6 +1130,10 @@ function hardenMermaidSvg(svgText){
   for (const node of nodes) {
     const tag = node.tagName.toLowerCase();
     if (!allowedSvgTags.has(tag)) {
+      node.remove();
+      continue;
+    }
+    if (tag === 'style' && hasUnsafeSvgCss(node.textContent || '')) {
       node.remove();
       continue;
     }

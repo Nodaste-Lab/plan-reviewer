@@ -482,6 +482,16 @@ try {
     await mermaidPage.waitForFunction(() => Boolean(document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('.plan-mermaid-rendered svg')), undefined, { timeout: 15000 });
     assert.equal(await mermaidPage.evaluate(() => Boolean(document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('script'))), false);
     assert.equal(await mermaidPage.evaluate(() => Boolean(document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('.plan-mermaid-error'))), true);
+    const mermaidVisual = await mermaidPage.evaluate(() => {
+      const doc = document.querySelector<HTMLIFrameElement>('#plan-frame')!.contentDocument!;
+      const rect = doc.querySelector<SVGElement>('.plan-mermaid-rendered svg .node rect, .plan-mermaid-rendered svg rect')!;
+      return {
+        styleCount: doc.querySelectorAll('.plan-mermaid-rendered svg style').length,
+        rectFill: doc.defaultView!.getComputedStyle(rect).fill
+      };
+    });
+    assert.equal(mermaidVisual.styleCount > 0, true);
+    assert.notEqual(mermaidVisual.rectFill, 'rgb(0, 0, 0)');
     const clickedMermaid = await mermaidPage.evaluate(() => {
       const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
       const doc = iframe.contentDocument!;
@@ -549,7 +559,7 @@ try {
       await route.fulfill({
         status: 200,
         contentType: 'application/javascript',
-        body: `export default { initialize(){}, async render(){ return { svg: '<svg viewBox="0 0 100 50" onclick="alert(1)"><style>.bad{fill:url(https://example.com/x)}</style><g class="node" id="safe-node"><rect width="80" height="30" style="fill:url(javascript:bad)"/><text>Safe</text></g><foreignObject><div>bad</div></foreignObject><use href="#safe-node"></use><animate attributeName="x"></animate><set attributeName="x"></set><image href="https://example.com/x.png"/><path xlink:href="javascript:bad" d="M0 0L10 10"/></svg>' }; } };`
+        body: `export default { initialize(){}, async render(){ return { svg: '<svg viewBox="0 0 100 50" onclick="alert(1)"><style>.safe{fill:#fff;stroke:#000}</style><style>.bad{fill:url(https://example.com/x)}</style><g class="node" id="safe-node"><rect class="safe" width="80" height="30" style="fill:url(javascript:bad)"/><text>Safe</text></g><foreignObject><div>bad</div></foreignObject><use href="#safe-node"></use><animate attributeName="x"></animate><set attributeName="x"></set><image href="https://example.com/x.png"/><path xlink:href="javascript:bad" d="M0 0L10 10"/></svg>' }; } };`
       });
     });
     await hardeningPage.goto(`${baseUrl}/p/${hardeningPlan.planId}`);
@@ -566,11 +576,12 @@ try {
         hasSet: Boolean(svg.querySelector('set')),
         hasImage: Boolean(svg.querySelector('image')),
         hasHref: Boolean(svg.querySelector('[href],[xlink\\:href]')),
-        hasStyleElement: Boolean(svg.querySelector('style')),
+        safeStyleText: svg.querySelector('style')?.textContent || '',
+        hasUnsafeStyleText: /https?:|javascript:|url\(/i.test([...svg.querySelectorAll('style')].map(style => style.textContent || '').join('\n')),
         hasStyleAttribute: Boolean(svg.querySelector('[style]'))
       };
     });
-    assert.deepEqual(hardened, { hasRect: true, hasOnclick: false, hasForeignObject: false, hasUse: false, hasAnimate: false, hasSet: false, hasImage: false, hasHref: false, hasStyleElement: false, hasStyleAttribute: false });
+    assert.deepEqual(hardened, { hasRect: true, hasOnclick: false, hasForeignObject: false, hasUse: false, hasAnimate: false, hasSet: false, hasImage: false, hasHref: false, safeStyleText: '.safe{fill:#fff;stroke:#000}', hasUnsafeStyleText: false, hasStyleAttribute: false });
     await hardeningPage.close();
     await mermaidPage.close();
 
