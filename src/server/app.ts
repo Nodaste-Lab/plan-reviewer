@@ -1478,6 +1478,29 @@ function interactiveTargetFromTouchPoint(doc, point){
   if (!point) return null;
   return interactiveTargetFromElement(doc.elementFromPoint(point.x, point.y));
 }
+function planShellUrlForAnchor(anchor){
+  if (!anchor?.href) return null;
+  const targetName = anchor.getAttribute?.('target');
+  if (targetName && targetName !== '_self') return null;
+  let url;
+  try {
+    url = new URL(anchor.href, frame.contentWindow?.location.href || window.location.href);
+  } catch {
+    return null;
+  }
+  if (url.origin !== window.location.origin) return null;
+  const pathParts = url.pathname.split('/').filter(Boolean);
+  if (pathParts.length !== 2 || pathParts[0] !== 'p') return null;
+  return url.pathname + url.search + url.hash;
+}
+function navigatePlanShellLink(anchor, event){
+  const url = planShellUrlForAnchor(anchor);
+  if (!url) return false;
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+  window.location.assign(url);
+  return true;
+}
 function mermaidCommentTarget(element){
   return element?.closest?.('[data-plan-mermaid-element="true"],[data-plan-mermaid-source="true"]') || null;
 }
@@ -1524,6 +1547,7 @@ function activateFrameInteractiveTarget(point, sourceLabel){
   debugTouch(sourceLabel + '-interactive', { tag: target.tagName, id: target.id || '', href: target.getAttribute?.('href') || '' });
   const anchor = target.closest?.('a[href],area[href]');
   if (anchor) {
+    if (navigatePlanShellLink(anchor, null)) return true;
     const href = anchor.href;
     const targetName = anchor.getAttribute('target');
     if (targetName && targetName !== '_self') {
@@ -1804,7 +1828,12 @@ function attachFrameListeners(){
   }, true);
   doc.addEventListener('click', event => {
     debugTouch('click', { target: elementFromEvent(event)?.tagName || null, id: elementFromEvent(event)?.id || '', suppressed: Date.now() < suppressSyntheticClickUntil });
-    if (interactiveTargetFromEvent(event)) return;
+    const interactiveTarget = interactiveTargetFromEvent(event);
+    if (interactiveTarget) {
+      const anchor = interactiveTarget.closest?.('a[href],area[href]');
+      if (anchor && navigatePlanShellLink(anchor, event)) return;
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     if (Date.now() < suppressSyntheticClickUntil) return;
