@@ -445,6 +445,29 @@ try {
     assert.match(await page.locator('.plan-card:not([hidden])').innerText(), /Source missing/);
     assert.match(await page.locator('.plan-card:not([hidden])').innerText(), /Showing cached copy/);
     const navSwitch = await registerTinyPlan('nav-switch');
+    const linkedPlanHtml = `<!doctype html><html><body><main><section id="linked-plan-source"><h1>Linked plan source</h1><p><a id="linked-plan-link" href="${baseUrl}/p/${navSwitch.planId}">Open linked plan</a></p></section></main></body></html>`;
+    const linkedPlanResponse = await context.post('/api/plans/register', {
+      data: {
+        repoKey: 'e2e-linked-plan-repo',
+        repoName: 'e2e-linked-plan',
+        rootPath: '/tmp/e2e-linked-plan',
+        branch: 'main',
+        commitSha: 'e2e-linked-plan',
+        planPath: 'thoughts/plans/linked-plan.html',
+        slug: 'linked-plan',
+        html: linkedPlanHtml,
+        fileHash: sha256(linkedPlanHtml),
+        publicationMetadata: {
+          worktreePath: '/tmp/e2e-linked-plan',
+          branch: 'main',
+          executionReady: false,
+          executionReadyBasis: 'agent-review-results'
+        },
+        updateMode: 'upsert'
+      }
+    });
+    assert.equal(linkedPlanResponse.ok(), true);
+    const linkedPlan = (await linkedPlanResponse.json()).data as { planId: string; versionId: string };
     await page.goto(`${baseUrl}/p/${registered.planId}`);
     assert.equal(await page.title(), 'E2E Plan · Plan Review');
     await page.waitForSelector('#plan-list-nav');
@@ -461,6 +484,25 @@ try {
     await page.click(`#plan-list-nav a[href="/p/${navSwitch.planId}"]`);
     await page.waitForURL(`${baseUrl}/p/${navSwitch.planId}`);
     assert.equal(await page.locator('#plan-list-nav [aria-current="page"]').getAttribute('data-plan-id'), navSwitch.planId);
+    await page.goto(`${baseUrl}/p/${linkedPlan.planId}`);
+    await page.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#linked-plan-link'));
+    const modifiedPlanLinkDefaultPrevented = await page.evaluate(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const link = iframe.contentDocument!.querySelector<HTMLElement>('#linked-plan-link')!;
+      let defaultPrevented = true;
+      link.addEventListener('click', event => { defaultPrevented = event.defaultPrevented; }, { once: true });
+      link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, metaKey: true, view: iframe.contentWindow ?? window }));
+      return defaultPrevented;
+    });
+    assert.equal(modifiedPlanLinkDefaultPrevented, false);
+    assert.equal(page.url(), `${baseUrl}/p/${linkedPlan.planId}`);
+    assert.equal(await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.getAttribute('src')), `/render/${linkedPlan.planId}`);
+    await page.frameLocator('#plan-frame').locator('#linked-plan-link').click();
+    await page.waitForURL(`${baseUrl}/p/${navSwitch.planId}`);
+    assert.equal(await page.locator('#plan-navbar').count(), 1);
+    assert.equal(await page.evaluate(() => Boolean(document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#plan-navbar'))), false);
+    assert.equal(await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.getAttribute('src')), `/render/${navSwitch.planId}`);
+    assert.equal(await page.evaluate(() => Boolean(document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#nav-switch'))), true);
     await page.goto(`${baseUrl}/p/${registered.planId}`);
     assert.equal((await context.post(`/api/plans/${navSwitch.planId}/archive`)).ok(), true);
     let planListRequests = 0;

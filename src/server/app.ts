@@ -1478,6 +1478,35 @@ function interactiveTargetFromTouchPoint(doc, point){
   if (!point) return null;
   return interactiveTargetFromElement(doc.elementFromPoint(point.x, point.y));
 }
+function planShellUrlForAnchor(anchor){
+  if (!anchor?.href) return null;
+  const targetName = anchor.getAttribute?.('target');
+  if (targetName && targetName !== '_self') return null;
+  let url;
+  try {
+    url = new URL(anchor.href, frame.contentWindow?.location.href || window.location.href);
+  } catch {
+    return null;
+  }
+  if (url.origin !== window.location.origin) return null;
+  const pathParts = url.pathname.split('/').filter(Boolean);
+  if (pathParts.length !== 2 || pathParts[0] !== 'p') return null;
+  return url.pathname + url.search + url.hash;
+}
+function shouldPreserveBrowserLinkActivation(event){
+  if (!event) return false;
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return true;
+  return typeof event.button === 'number' && event.button !== 0;
+}
+function navigatePlanShellLink(anchor, event){
+  if (shouldPreserveBrowserLinkActivation(event)) return false;
+  const url = planShellUrlForAnchor(anchor);
+  if (!url) return false;
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+  window.location.assign(url);
+  return true;
+}
 function mermaidCommentTarget(element){
   return element?.closest?.('[data-plan-mermaid-element="true"],[data-plan-mermaid-source="true"]') || null;
 }
@@ -1516,7 +1545,7 @@ function touchMoved(start, event){
 function eventForTouchPoint(point, fallbackEvent){
   return point ? { clientX: point.x, clientY: point.y } : fallbackEvent;
 }
-function activateFrameInteractiveTarget(point, sourceLabel){
+function activateFrameInteractiveTarget(point, sourceLabel, event){
   const doc = frame.contentDocument;
   if (!doc || !point) return false;
   const target = interactiveTargetFromTouchPoint(doc, point);
@@ -1524,6 +1553,8 @@ function activateFrameInteractiveTarget(point, sourceLabel){
   debugTouch(sourceLabel + '-interactive', { tag: target.tagName, id: target.id || '', href: target.getAttribute?.('href') || '' });
   const anchor = target.closest?.('a[href],area[href]');
   if (anchor) {
+    if (shouldPreserveBrowserLinkActivation(event)) return false;
+    if (navigatePlanShellLink(anchor, event)) return true;
     const href = anchor.href;
     const targetName = anchor.getAttribute('target');
     if (targetName && targetName !== '_self') {
@@ -1536,7 +1567,7 @@ function activateFrameInteractiveTarget(point, sourceLabel){
   target.click?.();
   return true;
 }
-function openComposerFromFramePoint(point, sourceLabel){
+function openComposerFromFramePoint(point, sourceLabel, event){
   const doc = frame.contentDocument;
   if (!doc || !point) {
     debugTouch(sourceLabel + '-blocked', { hasDoc: Boolean(doc), point });
@@ -1545,8 +1576,8 @@ function openComposerFromFramePoint(point, sourceLabel){
   const interactive = interactiveTargetFromTouchPoint(doc, point);
   const target = commentTargetFromTouchPoint(doc, point, doc.body);
   debugTouch(sourceLabel, { point, interactive: Boolean(interactive), target: target?.tagName || null, id: target?.id || '', node: target?.getAttribute?.('data-plan-node-id') || null });
-  if (interactive) return activateFrameInteractiveTarget(point, sourceLabel);
-  return openElementComposer(target, eventForTouchPoint(point, null));
+  if (interactive) return activateFrameInteractiveTarget(point, sourceLabel, event);
+  return openElementComposer(target, eventForTouchPoint(point, event || null));
 }
 function openElementComposer(element, event){
   if (submitInFlight || !element || typeof element.getBoundingClientRect !== 'function') {
@@ -1804,7 +1835,12 @@ function attachFrameListeners(){
   }, true);
   doc.addEventListener('click', event => {
     debugTouch('click', { target: elementFromEvent(event)?.tagName || null, id: elementFromEvent(event)?.id || '', suppressed: Date.now() < suppressSyntheticClickUntil });
-    if (interactiveTargetFromEvent(event)) return;
+    const interactiveTarget = interactiveTargetFromEvent(event);
+    if (interactiveTarget) {
+      const anchor = interactiveTarget.closest?.('a[href],area[href]');
+      if (anchor && navigatePlanShellLink(anchor, event)) return;
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     if (Date.now() < suppressSyntheticClickUntil) return;
@@ -1836,12 +1872,12 @@ frame.addEventListener('touchend', event => {
   const moved = touchMovedToPoint(start, point);
   debugTouch('frame-touchend', { point, start, moved });
   if (moved) return;
-  if (openComposerFromFramePoint(point, 'frame-open')) suppressSyntheticClickUntil = Date.now() + 700;
+  if (openComposerFromFramePoint(point, 'frame-open', event)) suppressSyntheticClickUntil = Date.now() + 700;
 }, true);
 frame.addEventListener('click', event => {
   if (Date.now() < suppressSyntheticClickUntil) return;
   const point = frameTouchPoint(event);
-  if (openComposerFromFramePoint(point, 'frame-click-open')) {
+  if (openComposerFromFramePoint(point, 'frame-click-open', event)) {
     event.preventDefault();
     event.stopPropagation();
   }
@@ -1864,12 +1900,12 @@ planTouchLayer?.addEventListener('touchend', event => {
   touchStart = null;
   debugTouch('layer-touchend', { point, start, moved });
   if (moved) return;
-  if (openComposerFromFramePoint(point, 'layer-open')) suppressSyntheticClickUntil = Date.now() + 700;
+  if (openComposerFromFramePoint(point, 'layer-open', event)) suppressSyntheticClickUntil = Date.now() + 700;
 }, true);
 planTouchLayer?.addEventListener('click', event => {
   if (Date.now() < suppressSyntheticClickUntil) return;
   const point = frameTouchPoint(event);
-  if (openComposerFromFramePoint(point, 'layer-click-open')) {
+  if (openComposerFromFramePoint(point, 'layer-click-open', event)) {
     event.preventDefault();
     event.stopPropagation();
   }
