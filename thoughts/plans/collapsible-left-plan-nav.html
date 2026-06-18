@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Collapsible left-hand plan navigator</title>
+  <style>
+    :root { color-scheme: dark; --bg:#070b16; --panel:#0f172a; --panel-2:#111827; --panel-3:#172033; --text:#e5e7eb; --muted:#a7b0c0; --soft:#cbd5e1; --accent:#7dd3fc; --accent-2:#a78bfa; --ok:#86efac; --warn:#fde68a; --danger:#fecaca; --border:#334155; --border-2:#475569; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:linear-gradient(135deg,#070b16 0%,#111827 58%,#1e1b4b 100%); color:var(--text); font:16px/1.6 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    main { max-width:1180px; margin:0 auto; padding:44px 24px 72px; }
+    header, section, article, figure { background:rgba(15,23,42,.9); border:1px solid var(--border); border-radius:18px; padding:24px; margin:18px 0; box-shadow:0 18px 50px rgba(0,0,0,.26); }
+    header { background:linear-gradient(135deg,rgba(14,165,233,.16),rgba(167,139,250,.16)); }
+    h1,h2,h3,h4 { line-height:1.2; margin:0 0 12px; }
+    h1 { font-size:clamp(2rem,4vw,3.35rem); }
+    h2 { color:#f8fafc; }
+    h3 { color:#dbeafe; }
+    h4 { color:#bae6fd; margin-top:18px; }
+    p { margin:8px 0 0; }
+    a { color:var(--accent); }
+    code { background:#020617; border:1px solid #1e293b; border-radius:6px; padding:1px 5px; color:#bae6fd; }
+    pre { overflow:auto; background:#020617; border:1px solid #1e293b; border-radius:12px; padding:14px; }
+    ul,ol { margin:8px 0 0; padding-left:22px; }
+    li { margin:6px 0; }
+    table { width:100%; border-collapse:collapse; margin-top:12px; }
+    th,td { border:1px solid var(--border); padding:10px; vertical-align:top; }
+    th { background:#0b1220; text-align:left; }
+    figcaption, .muted { color:var(--muted); }
+    .pill { display:inline-block; border:1px solid var(--border-2); border-radius:999px; padding:4px 10px; margin:4px 6px 0 0; color:#dbeafe; background:rgba(15,23,42,.8); }
+    .status { color:var(--warn); font-weight:800; }
+    .phase { border-color:#475569; }
+    .callout { border:1px solid rgba(125,211,252,.42); background:rgba(14,165,233,.08); border-radius:12px; padding:14px; margin-top:12px; }
+    .mockup { background:#050816; border:1px solid #273449; border-radius:16px; padding:14px; overflow:auto; }
+    .full-width-panel { width:min(1480px,calc(100vw - 48px)); margin:28px 0 28px 50%; transform:translateX(-50%); padding:18px; }
+    .full-width-panel h3 { margin:0 0 10px; }
+    .prototype-note { color:#a7b0c0; font-size:14px; margin:0 0 12px; }
+    .screen { width:100%; min-width:760px; border:1px solid #334155; border-radius:14px; overflow:hidden; background:#0b1020; box-shadow:0 22px 48px rgba(0,0,0,.35); }
+    .topbar { min-height:86px; display:grid; grid-template-columns:1fr; gap:8px; padding:10px 14px; background:#0f172a; border-bottom:1px solid #2b364d; }
+    .actions { display:flex; gap:8px; align-items:center; justify-content:flex-end; flex-wrap:wrap; min-width:0; }
+    .actions .left { margin-right:auto; }
+    .btn { display:inline-flex; align-items:center; gap:6px; border:1px solid #475569; border-radius:8px; padding:7px 10px; background:#172033; color:#e5e7eb; font-size:12px; font-weight:800; white-space:nowrap; }
+    .btn.primary { border-color:#38bdf8; color:#bae6fd; }
+    .btn.icon { width:36px; height:36px; justify-content:center; padding:0; border-radius:10px; font-size:17px; flex:0 0 auto; }
+    .current-plan { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-top:8px; border-top:1px solid rgba(71,85,105,.55); color:#cbd5e1; }
+    .shell { display:grid; grid-template-columns:260px minmax(0,1fr) 48px; height:520px; transition:grid-template-columns .18s ease; }
+    .shell.collapsed-left { grid-template-columns:0 minmax(0,1fr) 48px; }
+    .shell.comments-expanded { grid-template-columns:0 minmax(0,1fr) 320px; }
+    .leftnav { background:#0b1220; border-right:1px solid #2b364d; padding:14px; overflow:hidden; }
+    .collapsed-left .leftnav { padding:0; border-right:0; }
+    .leftnav h3 { font-size:13px; text-transform:uppercase; letter-spacing:.08em; color:#a7b0c0; }
+    .plan-item { display:grid; gap:5px; padding:10px; margin:8px 0; border:1px solid #253248; border-radius:10px; background:#101827; }
+    .plan-item.active { border-color:#38bdf8; background:linear-gradient(135deg,rgba(14,165,233,.18),rgba(16,24,39,.95)); }
+    .plan-title { font-size:13px; font-weight:850; color:#f8fafc; line-height:1.25; }
+    .plan-meta { display:flex; gap:6px; align-items:center; flex-wrap:wrap; color:#a7b0c0; font-size:11px; }
+    .badge { border:1px solid #475569; border-radius:999px; padding:1px 6px; background:#0b1220; }
+    .badge.ready { border-color:#22c55e; color:#bbf7d0; }
+    .badge.not-ready { border-color:#f59e0b; color:#fde68a; }
+    .content { background:#eef2f7; color:#0f172a; overflow:hidden; position:relative; }
+    .page { max-width:680px; margin:26px auto 80px; background:white; border-radius:12px; box-shadow:0 14px 32px rgba(15,23,42,.18); padding:28px; }
+    .page h3 { color:#0f172a; }
+    .right-rail { background:#0f172a; border-left:1px solid #2b364d; }
+    .comments-panel { background:#111827; border-left:1px solid #2b364d; padding:14px; color:#e5e7eb; overflow:hidden; }
+    .comments-panel h3 { font-size:18px; color:#f8fafc; margin-bottom:8px; }
+    .comment-card { border:1px solid #334155; border-radius:10px; padding:10px; margin-top:10px; background:#0f172a; font-size:12px; }
+    .matrix td:first-child, .matrix th:first-child { width:22%; }
+    @media(max-width:760px){ main{padding:28px 14px 56px}.screen{min-width:760px} }
+  </style>
+</head>
+<body>
+<main id="plan-root">
+  <header id="title">
+    <div class="muted">Implementation plan</div>
+    <h1>Collapsible left-hand plan navigator</h1>
+    <p>Add a top-left control that collapses and restores the existing left plan navigator so reviewers can temporarily use the full browser width for the rendered plan, while keeping the navigator expanded by default.</p>
+    <p><span class="pill">Repo: plan-reviewer</span><span class="pill">Surface: browser review shell</span><span class="pill">Status: execution-ready</span><span class="pill">Linear: no issue provided</span></p>
+  </header>
+
+  <section id="status">
+    <h2>Status</h2>
+    <p><strong class="status">Execution-ready.</strong> Browser feedback requested Codex and Claude Code review gates. First-pass findings were integrated, final Codex and Claude re-reviews both returned <code>PLAN_EXECUTION_READY</code>, and the plan contains no unresolved product questions.</p>
+  </section>
+
+  <section id="goal">
+    <h2>Goal</h2>
+    <p>On desktop review pages at <code>/p/:planId</code>, the left-hand plan navigator should remain visible by default. A button at the top left of the plan-review toolbar should collapse the navigator out of the grid and expand the rendered plan area. Pressing the same button again should restore the navigator. The interaction should mirror the existing right comments toggle pattern: local page state, clear <code>aria-expanded</code> state, no default persistence, and no loss of comment/review behavior.</p>
+  </section>
+
+  <section id="why-this-plan-exists">
+    <h2>Why this plan exists</h2>
+    <p>The left navigator is useful for moving between active plans, but long or wide HTML plans sometimes need more horizontal room. Reviewers should not have to open a separate route, zoom out, or rely on browser full-screen mode to focus on the plan body. A top-left collapse control gives an obvious “full width plan” mode while preserving the existing default navigator context.</p>
+  </section>
+
+  <section id="solution-narrative">
+    <h2>Solution narrative</h2>
+    <p>Add a desktop <code>#desktop-plan-nav-toggle</code> button as the first control in <code>#plan-navbar-actions</code>, before the Plan Index / Document Index link. The body starts without a collapsed class, so the navigator is expanded by default. Clicking the button toggles <code>body.plan-nav-collapsed</code>, updates <code>aria-expanded</code> and the accessible label, and lets CSS change the shell grid from <code>260px minmax(0,1fr) var(--comments-width)</code> to <code>0 minmax(0,1fr) var(--comments-width)</code>. Mobile remains unchanged because the left navigator is already hidden in the mobile/coarse-pointer layout.</p>
+  </section>
+
+  <section id="authority-and-inputs">
+    <h2>Authority and inputs</h2>
+    <ul>
+      <li>User request: collapse the left-hand plan nav the same way comments can collapse; do not collapse by default; put the control in the top left for full-width plan viewing.</li>
+      <li><code>thoughts/specs/product_intent.md</code>: the browser reviewer should make the simplest review workflow obvious and keep review comments precise and reliable.</li>
+      <li><code>AGENTS.md</code> and <code>thoughts/plans/AGENTS.md</code>: non-trivial repo work needs a semantic HTML plan, product-intent alignment, stable IDs, and review registration before implementation.</li>
+      <li><code>src/server/app.ts</code>: <code>reviewShell()</code> renders the top toolbar, <code>planNavigatorHtml()</code>, <code>#review</code>, and the comments <code>#sidebar</code>.</li>
+      <li><code>src/server/app.ts</code>: current CSS uses <code>--comments-width</code> and <code>body.comments-open</code> to collapse/expand the right comments rail.</li>
+      <li><code>src/server/app.ts</code>: current client JS already has <code>setCommentsOpen()</code> and <code>updateCommentsToggles()</code>; the left nav should follow that small-state pattern rather than introduce stored preferences.</li>
+      <li><code>src/test-fixtures/e2e-run.ts</code> and <code>src/__tests__/contracts.test.ts</code>: existing coverage asserts the left navigator is present and desktop comments are collapsed by default; these are the right places to add left-nav collapse coverage.</li>
+    </ul>
+  </section>
+
+  <section id="current-implementation-reality">
+    <h2>Current implementation reality</h2>
+    <table>
+      <thead><tr><th>Area</th><th>Current behavior</th><th>Planning implication</th></tr></thead>
+      <tbody>
+        <tr><td>Desktop shell grid</td><td><code>#app</code> is <code>260px minmax(0,1fr) var(--comments-width)</code>. Comments default to a 48px right rail and expand to 320px via <code>body.comments-open</code>.</td><td>Add a matching left-nav width variable and body class without changing comments semantics.</td></tr>
+        <tr><td>Left navigator</td><td><code>#plan-list-nav</code> is always visible on desktop and hidden entirely in the mobile media query.</td><td>Desktop needs a collapsible state; mobile should stay unchanged.</td></tr>
+        <tr><td>Toolbar placement</td><td><code>#plan-navbar-actions</code> right-aligns plan actions, with the index link pushed left using <code>margin-right:auto</code>.</td><td>Place the nav toggle before the index link and give the toggle the leftmost position; keep existing plan actions and comments toggle order after that.</td></tr>
+        <tr><td>Comment overlays</td><td>Selection boxes and comment anchors are positioned relative to the iframe and viewport, then redrawn during existing metadata/render flows.</td><td>After the shell width changes, redraw markers and active selection boxes or listen for the grid transition to avoid stale overlay positions.</td></tr>
+        <tr><td>Tests</td><td>E2E coverage already opens <code>/p/:planId</code>, checks <code>#plan-list-nav</code>, toggles comments, and switches plans through the nav.</td><td>Extend that scenario to prove the left nav starts expanded, collapses on click, restores on click, and plan switching still works after restoration.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="ui-prototypes">
+    <h2>Full-width UI prototypes</h2>
+    <p>These prototypes use the existing plan-review shell design: dark top toolbar, dark left/right chrome, compact pill buttons, the white rendered-plan iframe canvas, and the same collapsed right comments rail. They are intentionally full-width panels in this plan so reviewers can inspect the intended desktop proportions.</p>
+
+    <figure class="full-width-panel" id="prototype-default-expanded">
+      <h3>Default state — left navigator visible, comments collapsed</h3>
+      <p class="prototype-note">The navigator is not collapsed by default. The new top-left button is the first toolbar control and advertises the current expanded state.</p>
+      <div class="mockup" role="img" aria-label="Default desktop review shell with left navigator expanded and comments collapsed">
+        <div class="screen">
+          <div class="topbar">
+            <div class="actions"><span class="btn icon left" title="Collapse plan navigator">☰</span><span class="btn">← Plan index</span><span class="btn primary">Request execution-ready review</span><span class="btn">Build Plan</span><span class="btn">Archive plan</span><span class="btn icon" title="Open comments">💬</span></div>
+            <div class="current-plan"><strong>Collapsible left-hand plan navigator</strong> <span class="badge not-ready">Execution not ready</span></div>
+          </div>
+          <div class="shell">
+            <aside class="leftnav">
+              <h3>Active plans</h3>
+              <div class="plan-item"><div class="plan-title">Queue-backed agent next comment delivery</div><div class="plan-meta"><span class="badge ready">Ready</span><span>4/4</span></div></div>
+              <div class="plan-item active"><div class="plan-title">Collapsible left-hand plan navigator</div><div class="plan-meta"><span class="badge not-ready">Not ready</span><span>0/3</span></div></div>
+              <div class="plan-item"><div class="plan-title">Browser tab plan title</div><div class="plan-meta"><span class="badge ready">Ready</span><span>2/2</span></div></div>
+            </aside>
+            <main class="content">
+              <div class="page"><h3>Implementation plan</h3><h2>Collapsible left-hand plan navigator</h2><p>The rendered plan remains centered in the iframe. The left nav is available for switching plans, while comments stay collapsed to the right rail.</p><p style="height:190px;background:#eef2ff;border-radius:10px;padding:18px;">Wide plan content, diagrams, and reviewable sections.</p></div>
+            </main>
+            <aside class="right-rail" aria-label="Comments collapsed"></aside>
+          </div>
+        </div>
+      </div>
+      <figcaption>Default desktop view preserves current discoverability: plan navigation is visible, the comments panel remains collapsed by default, and the button scope is visually obvious because it is leftmost.</figcaption>
+    </figure>
+
+    <figure class="full-width-panel" id="prototype-left-collapsed-full-width">
+      <h3>Full-width plan mode — left navigator collapsed</h3>
+      <p class="prototype-note">After clicking the top-left button, the left navigator collapses to zero width and the rendered plan area expands across that space. The right comments rail remains independently collapsed.</p>
+      <div class="mockup" role="img" aria-label="Desktop review shell with left navigator collapsed for full width plan viewing">
+        <div class="screen">
+          <div class="topbar">
+            <div class="actions"><span class="btn icon left" title="Show plan navigator">☰</span><span class="btn">← Plan index</span><span class="btn primary">Request execution-ready review</span><span class="btn">Build Plan</span><span class="btn">Archive plan</span><span class="btn icon" title="Open comments">💬</span></div>
+            <div class="current-plan"><strong>Collapsible left-hand plan navigator</strong> <span class="badge not-ready">Execution not ready</span></div>
+          </div>
+          <div class="shell collapsed-left">
+            <aside class="leftnav" aria-hidden="true"></aside>
+            <main class="content">
+              <div class="page" style="max-width:880px"><h3>Implementation plan</h3><h2>Full-width viewing</h2><p>The plan canvas gets the space previously occupied by the navigator. Existing comment markers and selection outlines should reflow after the layout transition.</p><p style="height:210px;background:linear-gradient(90deg,#eef2ff,#dbeafe);border-radius:10px;padding:18px;">Large tables, diagrams, and full-width visual artifacts have more horizontal breathing room.</p></div>
+            </main>
+            <aside class="right-rail" aria-label="Comments collapsed"></aside>
+          </div>
+        </div>
+      </div>
+      <figcaption>This is the requested “full width” view: no persistent preference, no alternate route, just the same shell with the left column removed until the reviewer restores it.</figcaption>
+    </figure>
+
+    <figure class="full-width-panel" id="prototype-left-collapsed-comments-open">
+      <h3>Independent toggles — comments can still open</h3>
+      <p class="prototype-note">The left-nav state and right-comments state are independent. Opening comments should not restore the left navigator, and restoring the navigator should not close comments.</p>
+      <div class="mockup" role="img" aria-label="Desktop review shell with left navigator collapsed and right comments expanded">
+        <div class="screen">
+          <div class="topbar">
+            <div class="actions"><span class="btn icon left" title="Show plan navigator">☰</span><span class="btn">← Plan index</span><span class="btn primary">Request execution-ready review</span><span class="btn">Build Plan</span><span class="btn">Archive plan</span><span class="btn icon" title="Close comments">💬</span></div>
+            <div class="current-plan"><strong>Collapsible left-hand plan navigator</strong> <span class="badge not-ready">Execution not ready</span></div>
+          </div>
+          <div class="shell collapsed-left comments-expanded">
+            <aside class="leftnav" aria-hidden="true"></aside>
+            <main class="content">
+              <div class="page" style="max-width:760px"><h3>Implementation plan</h3><h2>Review with comments open</h2><p>The plan remains readable when comments are expanded. The left nav stays hidden until the reviewer explicitly uses the top-left control again.</p><p style="height:160px;background:#eef2ff;border-radius:10px;padding:18px;">Plan section with highlighted comment context.</p></div>
+            </main>
+            <aside class="comments-panel"><h3>Comments</h3><div class="comment-card"><strong>#1 pending</strong><p>Can we make sure the button starts expanded?</p><small>dom · mapped</small></div><div class="comment-card"><strong>#2 resolved</strong><p>Clarified mobile non-goal.</p><small>dom · mapped</small></div></aside>
+          </div>
+        </div>
+      </div>
+      <figcaption>Both side panels use the same shell language and state model, but each toggle owns only its side of the layout.</figcaption>
+    </figure>
+  </section>
+
+  <section id="product-intent-alignment">
+    <h2>Product intent alignment</h2>
+    <p>This plan advances <code>thoughts/specs/product_intent.md</code> by improving the browser reviewer’s golden path: reviewers can keep the active-plan navigator available by default, then intentionally enter a wider plan-reading mode without leaving the review shell. The change preserves durable comment behavior because it only affects shell chrome and does not alter comment creation, queue delivery, source sync, or rendered-plan sanitization.</p>
+    <ul>
+      <li><strong>Obvious workflow:</strong> the leftmost toolbar control affects the leftmost shell panel.</li>
+      <li><strong>Safe default:</strong> the navigator stays expanded on every page load, matching the user request and preserving current discoverability.</li>
+      <li><strong>Recovery:</strong> the same button restores the navigator; no hidden preference can strand a reviewer in collapsed mode.</li>
+      <li><strong>Truthful status:</strong> <code>aria-expanded</code>, visible label/title, and shell layout stay in sync.</li>
+    </ul>
+  </section>
+
+  <section id="locked-decisions">
+    <h2>Locked decisions</h2>
+    <ul>
+      <li id="decision-default-expanded">The left navigator is expanded by default on desktop page load.</li>
+      <li id="decision-top-left">The collapse/expand button is the first control in the top toolbar, visually and DOM-order left of the index link.</li>
+      <li id="decision-no-persistence">The collapsed state is not persisted across page loads, matching the current comments toggle pattern and preventing surprising hidden navigation.</li>
+      <li id="decision-mobile-unchanged">Mobile/coarse-pointer layout remains unchanged; <code>#plan-list-nav</code> stays hidden and no separate mobile left-nav drawer is introduced.</li>
+      <li id="decision-no-route-change">Plan switching still uses existing <code>/p/:planId</code> navigation; no client-side route reuse is added.</li>
+    </ul>
+  </section>
+
+  <section id="acceptance-criteria">
+    <h2>Acceptance criteria</h2>
+    <ol>
+      <li id="ac-1">Desktop review pages render a top-left <code>desktop-plan-nav-toggle</code> button with <code>aria-controls="plan-list-nav"</code> and initial <code>aria-expanded="true"</code>.</li>
+      <li id="ac-2">On initial desktop load, the left plan navigator is visible at its current usable width and the current plan remains highlighted.</li>
+      <li id="ac-3">Clicking the top-left button collapses the left navigator out of the grid, increases the rendered plan width, hides navigator content from sighted users and assistive tech, and updates the button state to collapsed.</li>
+      <li id="ac-4">Clicking the button again restores the navigator, preserves the existing active-plan highlight, and updates the button state to expanded.</li>
+      <li id="ac-5">The right comments toggle continues to work independently while the left navigator is expanded or collapsed.</li>
+      <li id="ac-6">Existing plan commenting behavior remains intact: selecting plan content, showing markers, submitting comments, and rendering comments still work after collapsing/restoring the left nav.</li>
+      <li id="ac-7">Mobile/coarse-pointer layout remains unchanged: no desktop left-nav button is shown, the left navigator remains hidden, and the existing mobile comments drawer still works.</li>
+    </ol>
+  </section>
+
+  <section id="bdd-scenarios">
+    <h2>BDD scenarios</h2>
+    <article id="bdd-default-expanded">
+      <h3>Default desktop state</h3>
+      <p><strong>Given</strong> a reviewer opens <code>/p/:planId</code> on a desktop viewport, <strong>when</strong> the shell loads, <strong>then</strong> the left plan navigator is visible, the toggle reports <code>aria-expanded="true"</code>, and the right comments panel remains collapsed by default.</p>
+    </article>
+    <article id="bdd-collapse-expand">
+      <h3>Collapse and expand</h3>
+      <p><strong>Given</strong> the left navigator is visible, <strong>when</strong> the reviewer clicks the top-left nav toggle, <strong>then</strong> the navigator collapses and the plan iframe gains horizontal space. <strong>When</strong> the reviewer clicks it again, <strong>then</strong> the navigator returns with the same active plan highlighted.</p>
+    </article>
+    <article id="bdd-independent-comments">
+      <h3>Independent side panels</h3>
+      <p><strong>Given</strong> the left navigator is collapsed, <strong>when</strong> the reviewer opens and closes the right comments panel, <strong>then</strong> the left navigator remains collapsed until the reviewer explicitly restores it.</p>
+    </article>
+    <article id="bdd-comment-precision">
+      <h3>Comment precision after layout changes</h3>
+      <p><strong>Given</strong> a reviewer collapses or restores the left navigator, <strong>when</strong> they select a DOM section or view existing comment markers, <strong>then</strong> selection outlines and markers align to the rendered iframe content after the layout transition.</p>
+    </article>
+    <article id="bdd-mobile-unchanged">
+      <h3>Mobile remains unchanged</h3>
+      <p><strong>Given</strong> a coarse-pointer or narrow viewport, <strong>when</strong> the shell loads, <strong>then</strong> the left plan navigator remains hidden as it does today, the desktop left-nav toggle is not displayed, and the mobile comments toggle remains the active drawer control.</p>
+    </article>
+  </section>
+
+  <section id="test-coverage-matrix">
+    <h2>Test coverage matrix</h2>
+    <table class="matrix">
+      <thead><tr><th>Coverage</th><th>Acceptance / BDD</th><th>Test layer</th><th>Verification command</th></tr></thead>
+      <tbody>
+        <tr><td>Shell contract</td><td><a href="#ac-1">AC1</a>, <a href="#ac-2">AC2</a>, <a href="#bdd-default-expanded">default state</a></td><td><code>src/__tests__/contracts.test.ts</code> assertions on shell HTML and CSS/JS assets.</td><td><code>bun run build && node --test dist/__tests__/contracts.test.js</code></td></tr>
+        <tr><td>Desktop interaction</td><td><a href="#ac-2">AC2</a>–<a href="#ac-5">AC5</a>, collapse/expand and independent comments scenarios</td><td><code>src/test-fixtures/e2e-run.ts</code> Playwright scenario around the existing plan navigator / comments toggle checks.</td><td><code>bun run build && node dist/test-fixtures/e2e-run.js</code></td></tr>
+        <tr><td>Comment precision</td><td><a href="#ac-6">AC6</a>, <a href="#bdd-comment-precision">comment precision</a></td><td>Extend existing E2E comment-marker/selection checks to run after a left-nav collapse or restore.</td><td><code>bun run test:e2e</code></td></tr>
+        <tr><td>Mobile non-regression</td><td><a href="#ac-7">AC7</a>, <a href="#bdd-mobile-unchanged">mobile unchanged</a></td><td>Existing mobile/coarse-pointer E2E assertions plus a negative assertion that the desktop left-nav toggle is hidden.</td><td><code>bun run test:e2e</code></td></tr>
+        <tr><td>Full repo gate</td><td>All criteria</td><td>Build and unit/contract test suite after implementation.</td><td><code>bun run build && bun run test</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="progress">
+    <h2>Progress</h2>
+    <ul>
+      <li><label><input type="checkbox" checked disabled> P1 — Add shell contract tests</label></li>
+      <li><label><input type="checkbox" checked disabled> P2 — Implement desktop nav collapse</label></li>
+      <li><label><input type="checkbox" checked disabled> P3 — Verify e2e layout behavior</label></li>
+    </ul>
+  </section>
+
+  <section id="phases">
+    <h2>Phase-by-phase execution plan</h2>
+
+    <article class="phase" id="phase-p1-contract-tests">
+      <h3>P1 — Add shell contract tests</h3>
+      <h4>End State</h4>
+      <p>Automated tests fail until the review shell exposes the left-nav toggle and CSS/JS contract needed to collapse the left navigator.</p>
+      <h4>Tests first</h4>
+      <p>Update <code>src/__tests__/contracts.test.ts</code> near the existing review-shell assertions to require <code>id="desktop-plan-nav-toggle"</code>, <code>aria-controls="plan-list-nav"</code>, initial <code>aria-expanded="true"</code>, a default left nav width variable, and a collapsed body class that reduces the left grid column.</p>
+      <h4>Expected files</h4>
+      <ul><li><code>src/__tests__/contracts.test.ts</code></li></ul>
+      <h4>Work</h4>
+      <p>Keep tests focused on user-visible shell contract and asset strings. Do not require a specific icon glyph; require accessible state and the layout contract.</p>
+      <h4>Verify</h4>
+      <pre><code>bun run build && node --test dist/__tests__/contracts.test.js</code></pre>
+    </article>
+
+    <article class="phase" id="phase-p2-implementation">
+      <h3>P2 — Implement desktop nav collapse</h3>
+      <h4>End State</h4>
+      <p>The left navigator is expanded by default and can be collapsed/restored from the top-left toolbar button without changing right comments, plan switching, or mobile behavior.</p>
+      <h4>Tests first</h4>
+      <p>Run the P1 contract test and confirm it fails for the missing left-nav toggle and CSS/JS state before changing implementation.</p>
+      <h4>Expected files</h4>
+      <ul><li><code>src/server/app.ts</code></li></ul>
+      <h4>Work</h4>
+      <ol>
+        <li>Add the toggle button in <code>reviewShell()</code> before the existing index link in <code>navActions</code>. Use a visible compact label or icon plus an accessible label such as “Collapse plan navigator”.</li>
+        <li>Change shell CSS to use <code>--plan-nav-width:260px</code> and <code>body.plan-nav-collapsed{--plan-nav-width:0}</code>, then update <code>#app</code> grid columns to use that variable.</li>
+        <li>Hide <code>#plan-list-nav</code> content and remove padding/border in collapsed mode. Set <code>inert</code> and <code>aria-hidden="true"</code> on <code>#plan-list-nav</code> from JS when collapsing; remove both when restoring. <code>inert</code> is required, not optional, because a zero-width grid column does not remove the navigator links from keyboard focus order.</li>
+        <li>Add small JS helpers mirroring <code>setCommentsOpen()</code>: <code>updatePlanNavToggle()</code> and <code>setPlanNavOpen(open)</code>. Default state must be open.</li>
+        <li>After <code>setPlanNavOpen()</code> applies the body class, add a one-shot <code>transitionend</code> listener on <code>#app</code> for the <code>grid-template-columns</code> transition, then call <code>reflowAfterContentChange()</code> so comment overlays align after the resized iframe has actually moved. Skip the listener when no marker comments or active selection overlays exist. Add the same transitionend-driven reflow to <code>setCommentsOpen()</code> for right-rail parity; this closes an existing overlay-latency gap exposed by this layout work.</li>
+        <li>Keep the mobile media query unchanged except hiding the desktop left-nav toggle alongside the existing desktop comments toggle.</li>
+        <li>Bump <code>clientAssetVersion</code> in <code>src/server/app.ts</code>, for example to <code>left-nav-collapse-v1</code>, so browsers invalidate cached shell CSS/JS.</li>
+      </ol>
+      <h4>Verify</h4>
+      <pre><code>bun run build && node --test dist/__tests__/contracts.test.js</code></pre>
+    </article>
+
+    <article class="phase" id="phase-p3-e2e-verification">
+      <h3>P3 — Verify e2e layout behavior</h3>
+      <h4>End State</h4>
+      <p>Browser-level tests prove the navigator default, collapse/restore behavior, comments independence, plan switching, and mobile non-regression.</p>
+      <h4>Tests first</h4>
+      <p>Extend <code>src/test-fixtures/e2e-run.ts</code> in the existing desktop navigator section before completing P2 if practical. At minimum, add the E2E assertions immediately after implementation and verify they fail if the toggle is removed.</p>
+      <h4>Expected files</h4>
+      <ul><li><code>src/test-fixtures/e2e-run.ts</code></li></ul>
+      <h4>Work</h4>
+      <ol>
+        <li>Assert the left nav is visible by default, the toggle is first/leftmost enough for the user contract, and <code>aria-expanded</code> starts <code>true</code>.</li>
+        <li>Click the toggle, assert the body collapsed class, <code>#plan-list-nav</code> has <code>inert</code> and <code>aria-hidden="true"</code>, navigator links are not focusable, and the plan review area is larger.</li>
+        <li>With active markers visible, assert marker positions update after the grid transition completes when the left nav collapses/restores and when the right comments rail opens/closes.</li>
+        <li>Open/close right comments while left nav is collapsed and assert the left state does not change.</li>
+        <li>Restore the nav and switch to another plan through the navigator to prove existing links still work.</li>
+        <li>In the mobile/coarse-pointer section, assert the desktop left-nav toggle is hidden and existing mobile comments behavior still passes.</li>
+      </ol>
+      <h4>Verify</h4>
+      <pre><code>bun run build && node dist/test-fixtures/e2e-run.js
+bun run test:e2e
+bun run build && bun run test</code></pre>
+    </article>
+  </section>
+
+  <section id="verification-strategy">
+    <h2>Verification strategy</h2>
+    <p>Use contract tests for the server-rendered shell and asset contracts, then use Playwright E2E coverage for the real browser layout behavior. Because this is UI shell work, the final implementation handoff should run the full build/test gate and <code>bun run test:e2e</code>. Queue/comment fixture smoke tests are not required unless implementation unexpectedly changes comment delivery, queue APIs, or agent listener behavior.</p>
+  </section>
+
+  <section id="delivery-order">
+    <h2>Delivery order</h2>
+    <ol>
+      <li>P1 locks the expected shell contract before implementation.</li>
+      <li>P2 implements the minimal desktop state, CSS, and accessibility changes.</li>
+      <li>P3 proves the shipped browser workflow and runs the final gates.</li>
+    </ol>
+  </section>
+
+  <section id="non-goals">
+    <h2>Non-goals</h2>
+    <ul>
+      <li>No persistence of the collapsed state across reloads, tabs, or plans.</li>
+      <li>No mobile left-navigation drawer or mobile plan switcher.</li>
+      <li>No changes to plan navigator sorting, filtering, data loading, archive/defer behavior, or plan index pages.</li>
+      <li>No changes to comment queue semantics, agent delivery, source sync, or rendered-plan sanitization.</li>
+      <li>No redesign of the top toolbar beyond adding the leftmost nav toggle.</li>
+    </ul>
+  </section>
+
+  <section id="resume-instructions">
+    <h2>Resume instructions (agent)</h2>
+    <p>Read this plan fully, then start with the first unchecked item in <a href="#progress">Progress</a>. Keep product changes scoped to <code>src/server/app.ts</code> and the named tests unless implementation evidence proves another file is required. Preserve the default-expanded navigator contract, mobile non-regression, and independence from the comments toggle. After each phase, update the Progress section and append any real deviation to the Decisions / Deviations Log.</p>
+  </section>
+
+  <section id="decisions-deviations-log">
+    <h2>Decisions / Deviations Log</h2>
+    <ul>
+      <li id="log-2026-06-18-initial">2026-06-18: Initial plan created from user request. Scope is limited to a desktop left-nav collapse toggle with default-expanded behavior and no persisted state.</li>
+      <li id="log-2026-06-18-prototypes">2026-06-18: Added full-width UI prototype panels showing default expanded nav, full-width collapsed plan mode, and independent comments-expanded behavior using the existing plan-review shell design.</li>
+      <li id="log-2026-06-18-codex-prototype-fix">2026-06-18: Codex plan review found the independent-toggles prototype did not combine the collapsed-left and comments-expanded classes. Updated that prototype to show both states together.</li>
+      <li id="log-2026-06-18-claude-review-fixes">2026-06-18: Claude plan review required making <code>inert</code> non-optional for collapsed nav accessibility, specifying transitionend-timed overlay reflow for left and right side panel changes, and adding a <code>clientAssetVersion</code> bump to implementation work.</li>
+      <li id="log-2026-06-18-status-ready">2026-06-18: Updated plan status to execution-ready after integrating first-pass Codex and Claude review findings.</li>
+      <li id="log-2026-06-18-final-reviews">2026-06-18: Final Codex and Claude re-reviews both returned <code>PLAN_EXECUTION_READY</code>. Plan is ready for <code>--execution-ready true</code> registration and scoped implementation handoff.</li>
+      <li id="log-2026-06-18-implementation-red-green">2026-06-18: Scoped implementation completed P1–P3. RED evidence: <code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code> failed on missing <code>desktop-plan-nav-toggle</code>. GREEN evidence: targeted contract gate, targeted e2e fixture, <code>bun run test:e2e</code>, and <code>bun run build &amp;&amp; bun run test</code> all passed after implementation.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>
