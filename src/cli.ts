@@ -308,6 +308,77 @@ async function showPlan(plan: string, options: { url?: string; json?: boolean })
   else process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
 }
 
+function filenameFromContentDisposition(value: string | null): string | undefined {
+  if (!value) return undefined;
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(value)?.[1];
+  if (encoded) {
+    try { return decodeURIComponent(encoded); } catch {}
+  }
+  const quoted = /filename="([^"]+)"/i.exec(value)?.[1];
+  if (quoted) return quoted;
+  return /filename=([^;]+)/i.exec(value)?.[1]?.trim();
+}
+
+function safeDownloadFilename(value: string | undefined, fallback: string): string {
+  const filename = path.basename(String(value || fallback).replace(/\0/g, ''));
+  return filename && filename !== '.' && filename !== '..' ? filename : fallback;
+}
+
+async function downloadPlan(plan: string, options: { url?: string; output?: string; versionId?: string }) {
+  const serviceUrl = resolveServiceUrl(options.url);
+  const params = new URLSearchParams();
+  if (options.versionId) params.set('versionId', options.versionId);
+  const downloadUrl = `${serviceUrl}/download/${encodeURIComponent(plan)}${params.toString() ? `?${params}` : ''}`;
+  let response: Response;
+  try {
+    response = await fetch(downloadUrl);
+  } catch (error) {
+    throw new PlanReviewError('network_error', `Unable to reach ${downloadUrl}`, 503, {
+      cause: error instanceof Error ? error.message : String(error)
+    }, 'Start plan-reviewer or pass --url / PLAN_REVIEW_URL for the running service.');
+  }
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    try {
+      const json = JSON.parse(text);
+      const apiError = json.error ?? {};
+      throw new PlanReviewError(apiError.code ?? 'api_error', apiError.message ?? `Download failed: ${response.status}`, response.status, apiError.details, apiError.nextAction);
+    } catch (error) {
+      if (error instanceof PlanReviewError) throw error;
+      throw new PlanReviewError('download_failed', `Download failed: ${response.status}`, response.status, { bodyPreview: text.slice(0, 240) });
+    }
+  }
+  const filename = safeDownloadFilename(filenameFromContentDisposition(response.headers.get('content-disposition')), `${plan}.html`);
+  const outputDir = path.resolve(options.output ?? process.cwd());
+  if (fs.existsSync(outputDir) && !fs.statSync(outputDir).isDirectory()) {
+    throw new PlanReviewError('output_not_directory', '--output must be a directory', 1, { output: outputDir }, 'Pass a directory path. Exact output file paths are not supported for download.');
+  }
+  fs.mkdirSync(outputDir, { recursive: true });
+  const target = path.join(outputDir, filename);
+  let fd: number | undefined;
+  try {
+    fd = fs.openSync(target, 'wx');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+      await response.body?.cancel().catch(() => undefined);
+      throw new PlanReviewError('file_exists', `Refusing to overwrite existing download target: ${target}`, 1, { target }, 'Move or delete the existing file, or choose a different output directory.');
+    }
+    throw error;
+  }
+  try {
+    const buffer = Buffer.from(await response.arrayBuffer());
+    fs.writeFileSync(fd, buffer);
+  } catch (error) {
+    fs.closeSync(fd);
+    fd = undefined;
+    fs.rmSync(target, { force: true });
+    throw error;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+  process.stdout.write(`${target}\n`);
+}
+
 async function addDomComment(planId: string, options: { url?: string; planNodeId?: string; selector?: string; body?: string; agent?: string; agentId?: string; clientMutationId?: string; json?: boolean }) {
   if (options.planNodeId && options.selector) {
     throw new PlanReviewError('validation_failed', 'comments add cannot use both --plan-node-id and --selector', 1, { planNodeId: options.planNodeId, selector: options.selector });
@@ -967,6 +1038,13 @@ export async function main(argv: string[] = process.argv.slice(2)) {
     .option('--url <url>')
     .option('--json')
     .action(showPlan);
+
+  program.command('download <plan>')
+    .description('Download a dated raw HTML plan, or a portable ZIP when the plan has assets')
+    .option('--url <url>', 'plan-review service URL')
+    .option('--output <directory>', 'output directory; created when missing')
+    .option('--version-id <id>', 'download a specific displayed version')
+    .action(downloadPlan);
 
   const comments = program.command('comments');
   comments.command('add <planId>')

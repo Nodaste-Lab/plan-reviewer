@@ -46,6 +46,16 @@ Use `--snapshot` only when you want a detached historical review that will not w
 plan-review register thoughts/plans/my-plan.html --snapshot --execution-ready false
 ```
 
+Use the review shell's compact **Download raw plan** action, or the matching CLI command, to save a dated copy of the current source artifact for email or file sharing:
+
+```bash
+plan-review download plan_123 --output ./exports --url http://127.0.0.1:4317
+```
+
+Plans without copied local image assets download as `<slug>-YYYY-MM-DD-HHmmssZ.html`. Plans with supported copied local image assets download as `<slug>-YYYY-MM-DD-HHmmssZ.zip`; the archive contains one root directory with `<root>/<root>.html` and copied images under `<root>/assets/`, and the HTML references those relative asset paths. The CLI always treats `--output` as a directory, creates it when missing, uses the server-provided filename, prints the saved path, and refuses to overwrite an existing target file.
+
+Exports are generated from the stored source HTML for the displayed version, not from the review shell, comments sidebar, screenshots, or sanitized iframe wrapper. Missing local images, external/protocol-relative/absolute/blob asset references, and unsupported local asset-bearing references such as stylesheets, scripts, media/object/embed refs, `srcset`, or CSS `url(...)` fail with `export_not_portable`; fix or inline those assets and re-register before downloading again.
+
 The browser shell renders sanitized HTML in a no-script iframe and keeps the comment UI in the parent page. Selecting a DOM element opens the composer; image and text comments use the same comment API with `anchorType: "image"` or `anchorType: "text_range"`. Each open select → comment composer gets one browser-generated `clientMutationId`; retries from that same composer reuse the identifier, so repeated Submit clicks, keyboard submit, or network retries create at most one comment. If the service cannot read a live-linked source file, it keeps serving the last good rendered version and exposes the sync failure in the API and sidebar.
 
 Agents can discover stable DOM targets without opening the browser by reading plan detail metadata:

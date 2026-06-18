@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import http from 'node:http';
+import { unzipSync, strFromU8 } from 'fflate';
 import Database from 'better-sqlite3';
 import { spawn, spawnSync } from 'node:child_process';
 import test from 'node:test';
@@ -19,6 +20,7 @@ import { discoverPullRequest, parseGitHubPrUrl, pullRequestStatus } from '../git
 import { buildRegistrationAgentInstructions, renderRegistrationInstructionCommands } from '../registrationInstructions.js';
 import { buildAgentNextClaimed, buildAgentNextEmpty } from '../agentNext.js';
 import { sha256 } from '../util.js';
+import { buildDatedExportName, safeZipAssetName } from '../exportPlan.js';
 import { domAnchor, registeredApp, sampleHtml, sampleRegisterPayload, tempDbPath } from './helpers.js';
 import { buildCodexDeliveryPrompt } from '../codex/prompt.js';
 import { AppServerCodexClient, buildAppServerInitializeRequest, buildAppServerThreadResumeRequest, buildAppServerTurnStartRequest, deliveryErrorFromAppServerJsonRpc } from '../codex/appServerClient.js';
@@ -1621,6 +1623,11 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     assert.match(shellClient.body, /frame\.contentDocument.*keydown/s);
     assert.match(shellClient.body, /setPlanNavOpen\(open\)/);
     assert.match(shellClient.body, /planListNav\.inert = !open/);
+    assert.match(shellClient.body, /navigatorItems/);
+    assert.match(shellClient.body, /openQuickOpen/);
+    assert.match(shellClient.body, /quickOpenFuzzyScore/);
+    assert.match(shellClient.body, /handleQuickOpenKeydown/);
+    assert.match(shellClient.body, /frame\.contentDocument[\s\S]*?keydown/);
     const navHtml = shell.body.slice(shell.body.indexOf('id="plan-list-nav"'), shell.body.indexOf('<main id="review"'));
     const positions = ['Complete plan title', 'Execution ready plan title', 'Not ready plan title'].map(title => navHtml.indexOf(title));
     assert.deepEqual(positions.map(position => position >= 0), [true, true, true]);
@@ -4100,6 +4107,12 @@ test('CLI help is wired through the installed bin entrypoint', () => {
   assert.match(result.stdout, /ack/);
   assert.match(result.stdout, /resolve/);
   assert.match(result.stdout, /release/);
+  assert.match(result.stdout, /download/);
+  const downloadHelp = spawnSync(process.execPath, ['dist/cli.js', 'download', '--help'], { cwd: root, encoding: 'utf8' }).stdout;
+  assert.match(downloadHelp, /Download a dated raw HTML plan/);
+  assert.match(downloadHelp, /--output <directory>/);
+  assert.match(downloadHelp, /--version-id <id>/);
+  assert.match(downloadHelp, /--url <url>/);
   assert.match(spawnSync(process.execPath, ['dist/cli.js', 'register', '--help'], { cwd: root, encoding: 'utf8' }).stdout, /--new-thread/);
   assert.match(spawnSync(process.execPath, ['dist/cli.js', 'index', '--help'], { cwd: root, encoding: 'utf8' }).stdout, /--repo-key/);
   assert.match(spawnSync(process.execPath, ['dist/cli.js', 'queue', '--help'], { cwd: root, encoding: 'utf8' }).stdout, /list/);
@@ -4825,5 +4838,318 @@ test('filesystem source changes create a synced latest version and failures keep
   } finally {
     await app.close();
     fs.rmSync(sourceDir, { recursive: true, force: true });
+  }
+});
+
+function exportPayload(html: string, options: { slug?: string; assets?: Array<{ sourceUrl: string; absolutePath?: string; bytesBase64?: string }> } = {}) {
+  const slug = options.slug ?? 'download-plan';
+  return sampleRegisterPayload({
+    slug,
+    planPath: `thoughts/plans/${slug}.html`,
+    html,
+    fileHash: sha256(html),
+    assets: options.assets ?? []
+  });
+}
+
+function rawInjectBuffer(response: { rawPayload?: Buffer; body: string }): Buffer {
+  return Buffer.isBuffer(response.rawPayload) ? response.rawPayload : Buffer.from(response.body, 'binary');
+}
+
+test('review shell exposes compact download and plan navigator tools', async () => {
+  const app = createApp({ dbPath: tempDbPath('download-shell-tools'), delivery: { enabled: false } });
+  try {
+    const registered = await app.inject({ method: 'POST', url: '/api/plans/register', payload: exportPayload('<!doctype html><html><body><main id="shell-tools">Tools</main></body></html>', { slug: 'shell-tools' }) });
+    assert.equal(registered.statusCode, 200, registered.body);
+    const { planId } = registered.json().data as { planId: string };
+    const shell = await app.inject({ method: 'GET', url: `/p/${planId}` });
+    assert.equal(shell.statusCode, 200, shell.body);
+    assert.match(shell.body, /id="desktop-plan-nav-toggle"[^>]*aria-label="Plan Navigator"[^>]*title="Plan Navigator"[^>]*>☰<\/button>/);
+    assert.match(shell.body, /id="download-raw-plan"[^>]*href="\/download\//);
+    assert.match(shell.body, /aria-label="Download raw plan"/);
+    assert.match(shell.body, /title="Download raw plan HTML; ZIP includes required assets\."/);
+    assert.doesNotMatch(shell.body, /☰ <span>Navigator<\/span>/);
+    const client = await app.inject({ method: 'GET', url: '/client.js' });
+    assert.match(client.body, /function updateDownloadLink\(\)/);
+    assert.match(client.body, /versionId \? '\?versionId='/);
+  } finally {
+    await app.close();
+  }
+});
+
+test('download route returns dated raw HTML for plans without copied local image assets', async () => {
+  const app = createApp({ dbPath: tempDbPath('download-html-only'), delivery: { enabled: false } });
+  const html = '<!doctype html><html><head><title>Raw Export</title></head><body><main id="raw-plan"><p>Email me.</p></main></body></html>';
+  try {
+    const registered = await app.inject({ method: 'POST', url: '/api/plans/register', payload: exportPayload(html, { slug: 'raw export' }) });
+    assert.equal(registered.statusCode, 200, registered.body);
+    const { planId } = registered.json().data as { planId: string };
+
+    const download = await app.inject({ method: 'GET', url: `/download/${planId}` });
+    assert.equal(download.statusCode, 200, download.body);
+    assert.match(download.headers['content-type'] as string, /^text\/html; charset=utf-8/);
+    assert.match(download.headers['content-disposition'] as string, /^attachment; filename="raw-export-\d{4}-\d{2}-\d{2}-\d{6}Z\.html"/);
+    assert.equal(download.headers['cache-control'], 'no-store');
+    assert.equal(download.body, html);
+    assert.doesNotMatch(download.body, /plan-frame|id="comments"|plan-navbar/);
+  } finally {
+    await app.close();
+  }
+});
+
+test('download route allows self-contained data URL srcset values and about:blank iframes', async () => {
+  const app = createApp({ dbPath: tempDbPath('download-data-srcset'), delivery: { enabled: false } });
+  const html = '<!doctype html><html><body><img src="data:image/png;base64,AA==" srcset="data:image/png;base64,AA== 1x, data:image/png;base64,BB== 2x" alt="inline"><picture><source srcset="data:image/webp;base64,CC== 1x"><img src="data:image/png;base64,DD==" alt="fallback"></picture><iframe src="about:blank"></iframe></body></html>';
+  try {
+    const registered = await app.inject({ method: 'POST', url: '/api/plans/register', payload: exportPayload(html, { slug: 'data-srcset' }) });
+    assert.equal(registered.statusCode, 200, registered.body);
+    const { planId } = registered.json().data as { planId: string };
+
+    const download = await app.inject({ method: 'GET', url: `/download/${planId}` });
+    assert.equal(download.statusCode, 200, download.body);
+    assert.match(download.headers['content-type'] as string, /^text\/html; charset=utf-8/);
+    assert.equal(download.body, html);
+  } finally {
+    await app.close();
+  }
+});
+
+test('download route returns portable zip with rewritten copied image assets', async () => {
+  const app = createApp({ dbPath: tempDbPath('download-zip'), delivery: { enabled: false } });
+  const html = '<!doctype html><html><head><title>Zip Export</title></head><body><img src="./img/diagram.png" alt="one"><img src="./other/diagram.png" alt="two"><img src="./diagram.png" alt="normalized"><img src="./icon.svg?mode=a&amp;view=1#view-a" alt="fragment"></body></html>';
+  const firstBytes = Buffer.from('first-image');
+  const secondBytes = Buffer.from('second-image');
+  const normalizedBytes = Buffer.from('normalized-image');
+  const fragmentBytes = Buffer.from('fragment-image');
+  try {
+    const registered = await app.inject({ method: 'POST', url: '/api/plans/register', payload: exportPayload(html, {
+      slug: 'zip-export',
+      assets: [
+        { sourceUrl: './img/diagram.png', absolutePath: '/tmp/sample/thoughts/plans/img/diagram.png', bytesBase64: firstBytes.toString('base64') },
+        { sourceUrl: './other/diagram.png', absolutePath: '/tmp/sample/thoughts/plans/other/diagram.png', bytesBase64: secondBytes.toString('base64') },
+        { sourceUrl: 'diagram.png', absolutePath: '/tmp/sample/thoughts/plans/diagram.png', bytesBase64: normalizedBytes.toString('base64') },
+        { sourceUrl: './icon.svg?mode=a&view=1#view-a', absolutePath: '/tmp/sample/thoughts/plans/icon.svg', bytesBase64: fragmentBytes.toString('base64') }
+      ]
+    }) });
+    assert.equal(registered.statusCode, 200, registered.body);
+    const { planId } = registered.json().data as { planId: string };
+
+    const download = await app.inject({ method: 'GET', url: `/download/${planId}` });
+    assert.equal(download.statusCode, 200, download.body);
+    assert.match(download.headers['content-type'] as string, /^application\/zip/);
+    assert.match(download.headers['content-disposition'] as string, /^attachment; filename="zip-export-\d{4}-\d{2}-\d{2}-\d{6}Z\.zip"/);
+    const entries = unzipSync(rawInjectBuffer(download));
+    const names = Object.keys(entries).sort();
+    const root = names[0].split('/')[0];
+    assert.match(root, /^zip-export-\d{4}-\d{2}-\d{2}-\d{6}Z$/);
+    assert.equal(names.some(name => name === `${root}/${root}.html`), true);
+    const htmlEntry = strFromU8(entries[`${root}/${root}.html`]);
+    assert.doesNotMatch(htmlEntry, /\.\/(?:img\/|other\/)?diagram\.png|\.\/icon\.svg\?mode=a(?:&amp;|&)view=1#view-a/);
+    assert.match(htmlEntry, /src="assets\/diagram-[a-f0-9]{8}\.png"/);
+    assert.match(htmlEntry, /src="assets\/icon-[a-f0-9]{8}\.svg\?mode=a&amp;view=1#view-a"/);
+    const assetNames = names.filter(name => name.startsWith(`${root}/assets/`));
+    assert.equal(assetNames.length, 4);
+    assert.equal(new Set(assetNames).size, 4);
+    assert.deepEqual(assetNames.map(name => Buffer.from(entries[name]).toString()).sort(), ['first-image', 'fragment-image', 'normalized-image', 'second-image']);
+  } finally {
+    await app.close();
+  }
+});
+
+test('download route fails closed for missing, external, and unsupported asset references', async () => {
+  const cases = [
+    {
+      name: 'missing-local-image',
+      html: '<!doctype html><html><body><img src="./missing.png"></body></html>',
+      assets: [{ sourceUrl: './missing.png', absolutePath: '/tmp/sample/thoughts/plans/missing.png' }],
+      detailsKey: 'missingSources',
+      expectedSource: './missing.png'
+    },
+    {
+      name: 'external-image',
+      html: '<!doctype html><html><body><img src="https://example.com/diagram.png"></body></html>',
+      assets: [],
+      detailsKey: 'externalSources',
+      expectedSource: 'https://example.com/diagram.png'
+    },
+    {
+      name: 'unsupported-srcset',
+      html: '<!doctype html><html><body><img src="data:image/png;base64,AA==" srcset="./wide.png 2x"><source srcset="//cdn.example.com/wide.webp"><video poster="/poster.png"></video><style>.hero{background:url(./bg.png)}</style></body></html>',
+      assets: [],
+      detailsKey: 'unsupportedLocalSources',
+      expectedSource: './wide.png'
+    },
+    {
+      name: 'data-srcset-then-unsupported-local',
+      html: '<!doctype html><html><body><img src="data:image/png;base64,AA==" srcset="data:image/png;base64,AA==, ./wide.png 2x" alt="mixed"></body></html>',
+      assets: [],
+      detailsKey: 'unsupportedLocalSources',
+      expectedSource: './wide.png'
+    },
+    {
+      name: 'css-string-import-local',
+      html: '<!doctype html><html><head><style>@import "./theme.css"; body{background:url(data:image/png;base64,AA==)}</style></head><body>Styled</body></html>',
+      assets: [],
+      detailsKey: 'unsupportedLocalSources',
+      expectedSource: './theme.css'
+    },
+    {
+      name: 'base-href-with-packaged-asset',
+      html: '<!doctype html><html><head><base href="/"></head><body><img src="./diagram.png"></body></html>',
+      assets: [{ sourceUrl: './diagram.png', absolutePath: '/tmp/sample/thoughts/plans/diagram.png', bytesBase64: Buffer.from('diagram').toString('base64') }],
+      detailsKey: 'nonPortableSources',
+      expectedSource: '/'
+    },
+    {
+      name: 'iframe-local-reference',
+      html: '<!doctype html><html><body><iframe src="./child.html"></iframe></body></html>',
+      assets: [],
+      detailsKey: 'unsupportedLocalSources',
+      expectedSource: './child.html'
+    },
+    {
+      name: 'iframe-srcdoc-reference',
+      html: '<!doctype html><html><body><iframe srcdoc="&lt;img src=&quot;./nested.png&quot;&gt;"></iframe></body></html>',
+      assets: [],
+      detailsKey: 'unsupportedLocalSources',
+      expectedSource: './nested.png'
+    },
+    {
+      name: 'svg-href-reference',
+      html: '<!doctype html><html><body><svg><image href="./diagram.png"></image><feImage href="./filter.png"></feImage><use xlink:href="blob:https://example.com/icon"></use></svg></body></html>',
+      assets: [],
+      detailsKey: 'unsupportedLocalSources',
+      expectedSource: './diagram.png'
+    },
+    {
+      name: 'input-image-reference',
+      html: '<!doctype html><html><body><input type="image" src="/button.png"></body></html>',
+      assets: [],
+      detailsKey: 'nonPortableSources',
+      expectedSource: '/button.png'
+    },
+    {
+      name: 'manifest-reference',
+      html: '<!doctype html><html><head><link rel="manifest" href="https://example.com/site.webmanifest"><link rel="mask-icon" href="./mask.svg"></head><body></body></html>',
+      assets: [],
+      detailsKey: 'externalSources',
+      expectedSource: 'https://example.com/site.webmanifest'
+    },
+    {
+      name: 'link-imagesrcset-reference',
+      html: '<!doctype html><html><head><link rel="preload" as="image" href="data:image/png;base64,AA==" imagesrcset="./missing.png 1x, https://cdn.example.com/x.png 2x"></head><body></body></html>',
+      assets: [],
+      detailsKey: 'unsupportedLocalSources',
+      expectedSource: './missing.png'
+    },
+    {
+      name: 'meta-image-reference',
+      html: '<!doctype html><html><head><meta property="og:image" content="./social.png"></head><body></body></html>',
+      assets: [],
+      detailsKey: 'unsupportedLocalSources',
+      expectedSource: './social.png'
+    },
+    {
+      name: 'external-unsupported-boundary',
+      html: '<!doctype html><html><head><link rel="stylesheet" href="https://cdn.example.com/plan.css"><script src="blob:https://example.com/script"></script></head><body><object data="/diagram.svg"></object><div style="background-image:url(https://cdn.example.com/bg.png)"></div></body></html>',
+      assets: [],
+      detailsKey: 'externalSources',
+      expectedSource: 'https://cdn.example.com/plan.css'
+    }
+  ];
+
+  for (const item of cases) {
+    const app = createApp({ dbPath: tempDbPath(`download-${item.name}`), delivery: { enabled: false } });
+    try {
+      const registered = await app.inject({ method: 'POST', url: '/api/plans/register', payload: exportPayload(item.html, { slug: item.name, assets: item.assets }) });
+      assert.equal(registered.statusCode, 200, registered.body);
+      const { planId } = registered.json().data as { planId: string };
+      const download = await app.inject({ method: 'GET', url: `/download/${planId}` });
+      assert.equal(download.statusCode, 409, `${item.name}: ${download.body}`);
+      const body = download.json();
+      assert.equal(body.ok, false);
+      assert.equal(body.error.code, 'export_not_portable');
+      assert.equal(body.error.details[item.detailsKey].includes(item.expectedSource), true, JSON.stringify(body.error.details));
+      assert.match(body.error.nextAction, /re-register|inline|remove|local plan assets/i);
+    } finally {
+      await app.close();
+    }
+  }
+});
+
+test('download helpers build dated safe names and collision-safe zip asset names', () => {
+  assert.equal(buildDatedExportName('Plan With Spaces!', new Date('2026-06-18T15:30:12Z'), 'html'), 'plan-with-spaces-2026-06-18-153012Z.html');
+  assert.equal(buildDatedExportName('../Bad\0Name', new Date('2026-06-18T15:30:12Z'), 'zip'), 'bad-name-2026-06-18-153012Z.zip');
+  assert.equal(safeZipAssetName('../diagram.png', 'abcdef1234567890', new Set()), 'diagram-abcdef12.png');
+  assert.equal(safeZipAssetName('nested/diagram.png?cache=1', 'abcdef1234567890', new Set(['diagram-abcdef12.png'])), 'diagram-abcdef12-2.png');
+});
+
+test('CLI download saves server-provided filename into output directory and refuses overwrite', async () => {
+  const artifactName = 'cli-plan-2026-06-18-153012Z.html';
+  const artifactBody = '<!doctype html><html><body>CLI artifact</body></html>';
+  let requestCount = 0;
+  const pendingResponses: http.ServerResponse[] = [];
+  const server = http.createServer((request, response) => {
+    if (request.url === '/download/plan_cli') {
+      requestCount += 1;
+      response.statusCode = 200;
+      response.setHeader('content-type', 'text/html; charset=utf-8');
+      response.setHeader('content-disposition', `attachment; filename="${artifactName}"`);
+      if (requestCount === 2) {
+        response.write(artifactBody.slice(0, 1));
+        pendingResponses.push(response);
+        return;
+      }
+      response.end(artifactBody);
+      return;
+    }
+    response.statusCode = 404;
+    response.end('not found');
+  });
+
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+  const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-review-download-'));
+  const runDownload = (args: string[], timeoutMs = 5000) => new Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }>(resolve => {
+    const address = server.address();
+    assert(address && typeof address !== 'string');
+    const child = spawn(process.execPath, ['dist/cli.js', 'download', 'plan_cli', '--url', `http://127.0.0.1:${address.port}`, ...args], {
+      cwd: root,
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+    const timer = setTimeout(() => {
+      settled = true;
+      child.kill('SIGKILL');
+      resolve({ code: null, stdout, stderr, timedOut: true });
+    }, timeoutMs);
+    child.stdout.on('data', chunk => { stdout += chunk; });
+    child.stderr.on('data', chunk => { stderr += chunk; });
+    child.on('close', code => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ code, stdout, stderr, timedOut: false });
+    });
+  });
+
+  try {
+    const first = await runDownload(['--output', outputDir]);
+    assert.equal(first.code, 0, first.stderr);
+    const savedPath = path.join(outputDir, artifactName);
+    assert.equal(first.stdout.trim(), savedPath);
+    assert.equal(fs.readFileSync(savedPath, 'utf8'), artifactBody);
+
+    const second = await runDownload(['--output', outputDir], 1000);
+    assert.equal(second.timedOut, false, 'overwrite refusal should not wait for the response body');
+    assert.notEqual(second.code, 0);
+    assert.match(second.stderr, /already exists|refusing to overwrite/i);
+    assert.equal(requestCount, 2);
+  } finally {
+    for (const response of pendingResponses) response.end();
+    fs.rmSync(outputDir, { recursive: true, force: true });
+    await new Promise<void>(resolve => server.close(() => resolve()));
   }
 });
