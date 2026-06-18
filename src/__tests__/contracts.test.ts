@@ -1597,8 +1597,18 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     const shell = await app.inject({ method: 'GET', url: `/p/${notReady.json().data.planId}` });
     assert.equal(shell.statusCode, 200);
     assert.match(shell.body, /id="plan-list-nav"/);
+    assert.match(shell.body, /id="desktop-plan-nav-toggle"[^>]*aria-controls="plan-list-nav"[^>]*aria-expanded="true"/);
     assert.match(shell.body, /id="desktop-comments-toggle"[^>]*aria-controls="sidebar"[^>]*aria-expanded="false"/);
     assert.match(shell.body, /id="current-plan-bar"/);
+    const shellCss = await app.inject({ method: 'GET', url: '/client.css' });
+    assert.equal(shellCss.statusCode, 200);
+    assert.match(shellCss.body, /--plan-nav-width:260px/);
+    assert.match(shellCss.body, /body\.plan-nav-collapsed\{--plan-nav-width:0\}/);
+    assert.match(shellCss.body, /grid-template-columns:var\(--plan-nav-width\) minmax\(0,1fr\) var\(--comments-width\)/);
+    const shellClient = await app.inject({ method: 'GET', url: '/client.js' });
+    assert.equal(shellClient.statusCode, 200);
+    assert.match(shellClient.body, /setPlanNavOpen\(open\)/);
+    assert.match(shellClient.body, /planListNav\.inert = !open/);
     const navHtml = shell.body.slice(shell.body.indexOf('id="plan-list-nav"'), shell.body.indexOf('<main id="review"'));
     const positions = ['Complete plan title', 'Execution ready plan title', 'Not ready plan title'].map(title => navHtml.indexOf(title));
     assert.deepEqual(positions.map(position => position >= 0), [true, true, true]);

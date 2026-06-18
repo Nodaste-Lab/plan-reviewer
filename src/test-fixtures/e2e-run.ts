@@ -471,10 +471,40 @@ try {
     await page.goto(`${baseUrl}/p/${registered.planId}`);
     assert.equal(await page.title(), 'E2E Plan · Plan Review');
     await page.waitForSelector('#plan-list-nav');
+    await page.waitForSelector('#desktop-plan-nav-toggle[aria-expanded="true"]');
     await page.waitForSelector('#desktop-comments-toggle[aria-expanded="false"]');
     assert.match(await page.locator('#plan-list-nav').innerText(), /E2E Plan/);
     assert.equal(await page.evaluate(() => document.body.classList.contains('comments-open')), false);
+    assert.equal(await page.evaluate(() => document.body.classList.contains('plan-nav-collapsed')), false);
+    assert.equal(await page.evaluate(() => document.querySelector('#plan-navbar-actions')?.firstElementChild?.id), 'desktop-plan-nav-toggle');
     assert.equal(await page.evaluate(() => Math.round(document.querySelector<HTMLElement>('#sidebar')!.getBoundingClientRect().width) <= 60), true);
+    const frameWidthWithNavOpen = await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')!.getBoundingClientRect().width);
+    await page.click('#desktop-plan-nav-toggle');
+    await page.waitForFunction(() => document.body.classList.contains('plan-nav-collapsed'));
+    await page.waitForFunction(() => Math.round(document.querySelector<HTMLElement>('#plan-list-nav')!.getBoundingClientRect().width) <= 1);
+    assert.equal(await page.locator('#desktop-plan-nav-toggle').getAttribute('aria-expanded'), 'false');
+    assert.equal(await page.locator('#plan-list-nav').getAttribute('aria-hidden'), 'true');
+    assert.equal(await page.evaluate(() => document.querySelector<HTMLElement>('#plan-list-nav')!.inert), true);
+    assert.equal(await page.evaluate(() => {
+      const navLink = document.querySelector<HTMLElement>('#plan-list-nav a');
+      navLink?.focus();
+      return document.activeElement === navLink;
+    }), false);
+    assert.equal(await page.evaluate(widthBefore => document.querySelector<HTMLIFrameElement>('#plan-frame')!.getBoundingClientRect().width > widthBefore + 200, frameWidthWithNavOpen), true);
+    await page.click('#desktop-comments-toggle');
+    await page.waitForFunction(() => document.body.classList.contains('comments-open'));
+    await page.waitForFunction(() => Math.round(document.querySelector<HTMLElement>('#sidebar')!.getBoundingClientRect().width) >= 300);
+    assert.equal(await page.evaluate(() => document.body.classList.contains('plan-nav-collapsed')), true);
+    await page.click('#desktop-comments-toggle');
+    await page.waitForFunction(() => !document.body.classList.contains('comments-open'));
+    assert.equal(await page.evaluate(() => document.body.classList.contains('plan-nav-collapsed')), true);
+    await page.click('#desktop-plan-nav-toggle');
+    await page.waitForFunction(() => !document.body.classList.contains('plan-nav-collapsed'));
+    await page.waitForFunction(() => Math.round(document.querySelector<HTMLElement>('#plan-list-nav')!.getBoundingClientRect().width) >= 250);
+    assert.equal(await page.locator('#desktop-plan-nav-toggle').getAttribute('aria-expanded'), 'true');
+    assert.equal(await page.locator('#plan-list-nav').getAttribute('aria-hidden'), 'false');
+    assert.equal(await page.evaluate(() => document.querySelector<HTMLElement>('#plan-list-nav')!.inert), false);
+    assert.match(await page.locator('#plan-list-nav [aria-current="page"]').innerText(), /E2E Plan/);
     await page.click('#desktop-comments-toggle');
     await page.waitForFunction(() => document.body.classList.contains('comments-open'));
     await page.waitForFunction(() => Math.round(document.querySelector<HTMLElement>('#sidebar')!.getBoundingClientRect().width) >= 300);
@@ -799,6 +829,55 @@ try {
     assert.equal(activeBox.widthDelta <= 1, true);
     assert.equal(activeBox.heightDelta <= 1, true);
     assert.equal(activeBox.text, '');
+    const frameWidthBeforePlanNavCollapse = await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')!.getBoundingClientRect().width);
+    await page.click('#desktop-plan-nav-toggle');
+    await page.waitForFunction(() => document.body.classList.contains('plan-nav-collapsed'));
+    await page.waitForFunction(widthBefore => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const box = document.querySelector<HTMLElement>('#active-selection-box')!;
+      const target = iframe.contentDocument!.querySelector<HTMLElement>('#dom-annotation')!;
+      const frameRect = iframe.getBoundingClientRect();
+      const boxRect = box.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      return !box.hidden
+        && iframe.getBoundingClientRect().width > widthBefore
+        && Math.abs(boxRect.left - (frameRect.left + targetRect.left)) <= 1
+        && Math.abs(boxRect.top - (frameRect.top + targetRect.top)) <= 1
+        && Math.abs(boxRect.width - targetRect.width) <= 1
+        && Math.abs(boxRect.height - targetRect.height) <= 1;
+    }, frameWidthBeforePlanNavCollapse);
+    await page.click('#desktop-comments-toggle');
+    await page.waitForFunction(() => document.body.classList.contains('comments-open') && document.body.classList.contains('plan-nav-collapsed'));
+    await page.waitForFunction(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const box = document.querySelector<HTMLElement>('#active-selection-box')!;
+      const target = iframe.contentDocument!.querySelector<HTMLElement>('#dom-annotation')!;
+      const frameRect = iframe.getBoundingClientRect();
+      const boxRect = box.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      return !box.hidden
+        && Math.abs(boxRect.left - (frameRect.left + targetRect.left)) <= 1
+        && Math.abs(boxRect.top - (frameRect.top + targetRect.top)) <= 1
+        && Math.abs(boxRect.width - targetRect.width) <= 1
+        && Math.abs(boxRect.height - targetRect.height) <= 1;
+    });
+    await page.click('#desktop-comments-toggle');
+    await page.waitForFunction(() => !document.body.classList.contains('comments-open'));
+    await page.click('#desktop-plan-nav-toggle');
+    await page.waitForFunction(() => !document.body.classList.contains('plan-nav-collapsed'));
+    await page.waitForFunction(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const box = document.querySelector<HTMLElement>('#active-selection-box')!;
+      const target = iframe.contentDocument!.querySelector<HTMLElement>('#dom-annotation')!;
+      const frameRect = iframe.getBoundingClientRect();
+      const boxRect = box.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      return !box.hidden
+        && Math.abs(boxRect.left - (frameRect.left + targetRect.left)) <= 1
+        && Math.abs(boxRect.top - (frameRect.top + targetRect.top)) <= 1
+        && Math.abs(boxRect.width - targetRect.width) <= 1
+        && Math.abs(boxRect.height - targetRect.height) <= 1;
+    });
     await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollTo(0, 120));
     await page.waitForFunction(() => {
       const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
@@ -818,6 +897,7 @@ try {
     assert.equal(activeBoxAfterScroll.widthDelta <= 1, true);
     assert.equal(activeBoxAfterScroll.heightDelta <= 1, true);
     await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollTo(0, 0));
+    await page.focus('#comment-body');
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => document.querySelector<HTMLElement>('#composer')?.hidden === true);
 
@@ -1570,6 +1650,8 @@ try {
     await page.setViewportSize({ width: 486, height: 902 });
     await page.goto(`${baseUrl}/p/${registered.planId}`);
     await page.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#text-target'));
+    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector<HTMLElement>('#desktop-plan-nav-toggle')!).display), 'none');
+    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector<HTMLElement>('#plan-list-nav')!).display), 'none');
     await page.click('#mobile-comments-toggle');
     await page.waitForFunction(() => document.body.classList.contains('comments-open'));
     assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector<HTMLElement>('#plan-notes-panel')!).display !== 'none'), true);
