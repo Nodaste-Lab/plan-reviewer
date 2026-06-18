@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cmd-O fuzzy plan opener</title>
+  <style>
+    :root { color-scheme: dark; --bg:#070b16; --panel:#0f172a; --panel-2:#111827; --text:#e5e7eb; --muted:#a7b0c0; --accent:#7dd3fc; --accent-2:#a78bfa; --ok:#86efac; --warn:#fde68a; --danger:#fecaca; --border:#334155; --soft:#cbd5e1; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:linear-gradient(135deg,#070b16 0%,#101827 58%,#1e1b4b 100%); color:var(--text); font:16px/1.6 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    main { max-width:1120px; margin:0 auto; padding:44px 24px 72px; }
+    header, section, article, figure { background:rgba(15,23,42,.92); border:1px solid var(--border); border-radius:18px; padding:24px; margin:18px 0; box-shadow:0 18px 50px rgba(0,0,0,.28); }
+    header { background:linear-gradient(135deg,rgba(14,165,233,.16),rgba(167,139,250,.14)); }
+    h1,h2,h3,h4 { line-height:1.2; margin:0 0 12px; }
+    h1 { font-size:clamp(2rem,4vw,3.2rem); }
+    h2 { color:#f8fafc; }
+    h3 { color:#dbeafe; }
+    h4 { color:#bae6fd; margin-top:18px; }
+    p { margin:8px 0 0; }
+    a { color:var(--accent); }
+    code { background:#020617; border:1px solid #1e293b; border-radius:6px; padding:1px 5px; color:#bae6fd; }
+    pre { overflow:auto; background:#020617; border:1px solid #1e293b; border-radius:12px; padding:14px; white-space:pre-wrap; }
+    ul,ol { margin:8px 0 0; padding-left:22px; }
+    li { margin:6px 0; }
+    table { width:100%; border-collapse:collapse; margin-top:12px; }
+    th,td { border:1px solid var(--border); padding:10px; vertical-align:top; }
+    th { background:#0b1220; text-align:left; }
+    figcaption, .muted { color:var(--muted); }
+    .pill { display:inline-block; border:1px solid #475569; border-radius:999px; padding:4px 10px; margin:4px 6px 0 0; color:#dbeafe; background:rgba(15,23,42,.8); }
+    .status { color:var(--warn); font-weight:800; }
+    .callout { border:1px solid rgba(125,211,252,.42); background:rgba(14,165,233,.08); border-radius:12px; padding:14px; margin-top:12px; }
+    .warning { border-color:rgba(245,158,11,.45); background:rgba(245,158,11,.10); color:#fde68a; }
+    .phase { border-color:#475569; }
+    .mockup { background:#050816; border:1px solid #273449; border-radius:16px; padding:18px; overflow:auto; }
+    .shell { min-width:780px; border:1px solid #334155; border-radius:14px; overflow:hidden; background:#0b1020; box-shadow:0 22px 48px rgba(0,0,0,.35); }
+    .topbar { min-height:86px; display:grid; grid-template-rows:auto auto; gap:8px; padding:10px 16px; background:#0f172a; border-bottom:1px solid #2b364d; }
+    .top-actions { display:flex; align-items:center; justify-content:flex-end; gap:10px; flex-wrap:wrap; }
+    .index-link { color:#7dd3fc; text-decoration:none; font-weight:700; margin-right:auto; }
+    .current-plan { display:flex; align-items:center; gap:8px; min-width:0; border-top:1px solid rgba(71,85,105,.55); padding-top:8px; color:#cbd5e1; }
+    .current-plan strong { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#f8fafc; }
+    .btn { border:1px solid #475569; border-radius:6px; padding:8px 10px; background:#1e293b; color:#e5e7eb; font-size:12px; font-weight:800; white-space:nowrap; }
+    .bodygrid { display:grid; grid-template-columns:260px minmax(0,1fr) 48px; height:430px; }
+    .leftnav { background:#0b1220; border-right:1px solid #2b364d; padding:14px; }
+    .leftnav h3 { font-size:13px; text-transform:uppercase; letter-spacing:.08em; color:#a7b0c0; }
+    .plan-item { display:grid; gap:5px; padding:10px; margin:8px 0; border:1px solid #253248; border-radius:10px; background:#101827; color:#cbd5e1; }
+    .plan-item.active { border-color:#38bdf8; background:linear-gradient(135deg,rgba(14,165,233,.18),rgba(16,24,39,.95)); }
+    .plan-item-title { color:#f8fafc; font-size:13px; font-weight:850; line-height:1.25; }
+    .plan-item-meta { color:#8fa0b8; font-size:11px; }
+    .content { position:relative; background:#f8fafc; color:#0f172a; padding:24px; overflow:hidden; }
+    .page { max-width:560px; margin:0 auto; background:white; border-radius:12px; box-shadow:0 14px 32px rgba(15,23,42,.18); padding:28px; }
+    .right-rail { background:#111827; border-left:1px solid #2b364d; }
+    .modal-backdrop { position:absolute; inset:0; display:grid; align-items:start; justify-items:center; padding-top:34px; background:rgba(2,6,23,.38); }
+    .modal { width:min(620px,calc(100% - 40px)); border:1px solid #38bdf8; border-radius:14px; background:#0f172a; color:#e5e7eb; box-shadow:0 30px 90px rgba(2,6,23,.66); overflow:hidden; }
+    .searchbox { padding:14px 16px; border-bottom:1px solid #2b364d; display:flex; gap:10px; align-items:center; }
+    .searchbox span { color:#7dd3fc; font-weight:900; }
+    .searchbox strong { color:#f8fafc; }
+    .result { display:grid; gap:2px; padding:12px 16px; border-top:1px solid #1f2a44; }
+    .result.active { background:rgba(56,189,248,.14); outline:2px solid rgba(56,189,248,.42); outline-offset:-2px; }
+    .result-title { font-weight:850; color:#f8fafc; }
+    .result-meta { color:#a7b0c0; font-size:13px; }
+    .kbd { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; border:1px solid #475569; border-bottom-color:#64748b; background:#111827; color:#dbeafe; border-radius:6px; padding:1px 6px; }
+    @media(max-width:760px){ main{padding:28px 14px 56px}.shell{min-width:720px} }
+  </style>
+</head>
+<body>
+<main id="plan-root">
+  <header id="title">
+    <div class="muted">Implementation plan</div>
+    <h1>Cmd-O fuzzy plan opener</h1>
+    <p>Add a keyboard-first quick open overlay to the plan review browser shell so users can press <span class="kbd">⌘O</span> on macOS, type a fuzzy query, arrow to a plan, and open it without leaving the review page.</p>
+    <p><span class="pill">Repo: plan-reviewer</span><span class="pill">Surface: browser review shell</span><span class="pill">Linear issue: none supplied</span><span class="pill">Status: execution-ready</span><span class="pill">Execution ready: true</span></p>
+  </header>
+
+  <section id="status">
+    <h2>Status</h2>
+    <p><strong class="status">Execution-ready.</strong> Browser feedback has been processed, PM/product-intent review passed after tightening iframe-focus shortcut coverage, and both Codex and Claude Code returned <code>VERDICT: PLAN_EXECUTION_READY</code>. This plan is ready for scoped implementation handoff.</p>
+  </section>
+
+  <section id="goal">
+    <h2>Goal</h2>
+    <p>From any plan review page at <code>/p/:planId</code>, <span class="kbd">⌘O</span> opens a modal search palette that lists active plans as the user types. The user can navigate results with <span class="kbd">↑</span>/<span class="kbd">↓</span>, open the highlighted plan with <span class="kbd">Enter</span>, dismiss with <span class="kbd">Escape</span>, or click a result with the mouse.</p>
+  </section>
+
+  <section id="solution-narrative">
+    <h2>Solution narrative</h2>
+    <p>Reuse the existing active-plan navigator data instead of creating a second server-side concept. The review shell already loads <code>/api/plans/navigator?limit=200&amp;currentPlanId=...</code>, renders compact plan cards, and refreshes them periodically. This work should extend that client state into a keyboard palette: cache the current navigator payload in a module-level variable such as <code>navigatorItems</code>, score locally against title/repo/slug/path/status/issue/note terms, render the top ranked matches, and navigate to <code>/p/:planId</code> for the selected result.</p>
+    <div class="callout" id="default-workflow-contract">
+      <strong>Default workflow contract:</strong> users should not need to pre-open the left navigator, visit the index, or learn a CLI command. <span class="kbd">⌘O</span> from the review shell is the fastest safe path to another plan. On non-macOS browsers, <span class="kbd">Ctrl+O</span> should also open the palette and prevent the browser's native file picker while the review shell has focus.
+    </div>
+  </section>
+
+  <section id="authority-and-inputs">
+    <h2>Authority and inputs</h2>
+    <ul>
+      <li>User request: add a quick open keyboard shortcut so <span class="kbd">Cmd+O</span> opens fuzzy plan search, with typeahead matches and arrow-key or mouse selection, similar to Obsidian or web command palettes.</li>
+      <li><code>thoughts/specs/product_intent.md</code>: plan reviewers need the simplest browser workflow to open, review, and move among plans without extra setup or tribal knowledge.</li>
+      <li><code>src/server/app.ts</code>: <code>reviewShell()</code> renders the top toolbar, active-plan left navigator, plan iframe, and comments shell.</li>
+      <li><code>src/server/app.ts</code>: client-side <code>loadPlanNavigator()</code>, <code>renderPlanNavigatorItems()</code>, and <code>/api/plans/navigator</code> already provide active-plan data and ordering.</li>
+      <li><code>src/storage/database.ts</code>: <code>listPlans()</code> returns <code>displayTitle</code>, plan metadata, progress, comments counts, latest note, activity time, and <code>reviewUrl</code>.</li>
+      <li><code>src/test-fixtures/e2e-run.ts</code>: e2e coverage already exercises review shell keyboard behavior, comments submit shortcuts, left navigator switching, and navigator error recovery.</li>
+      <li><code>src/__tests__/contracts.test.ts</code>: contract tests already assert navigator API shape, bounded limits, shell markup, and client script affordances.</li>
+    </ul>
+  </section>
+
+  <section id="current-implementation-reality">
+    <h2>Current implementation reality</h2>
+    <table>
+      <thead><tr><th>Area</th><th>Current behavior</th><th>Planning implication</th></tr></thead>
+      <tbody>
+        <tr><td>Plan navigation</td><td>The review shell has a left navigator on desktop and a <code>/api/plans/navigator</code> endpoint capped at 200 active plans including the current plan.</td><td>The palette should reuse the same endpoint and active-plan lifecycle boundary for the first slice.</td></tr>
+        <tr><td>Search input</td><td>The index page has a basic substring filter, but the review shell has no search field or command palette.</td><td>Implement a review-shell-only modal and local fuzzy scoring; do not change the index page as part of this plan.</td></tr>
+        <tr><td>Keyboard handling</td><td><code>const body = document.getElementById('comment-body')</code> names the comment textarea, and <code>body.addEventListener('keydown')</code> currently handles composer-only <code>Escape</code> and <code>Cmd/Ctrl+Enter</code>. There is no document-level shortcut handler today. The rendered plan lives in a same-origin iframe, and <code>attachFrameListeners()</code> already attaches mouse/touch listeners to <code>frame.contentDocument</code>.</td><td>Shortcut handling must add new parent-document listeners without regressing textarea submit behavior, and must also cover rendered-plan iframe focus. Product decision during scoped implementation: <code>Cmd+O</code>/<code>Ctrl+O</code> opens quick open even when focus is inside the comment textarea, preserves draft text, and restores textarea focus on close; <code>Escape</code> should first close the quick-open modal when it is open.</td></tr>
+        <tr><td>Rendering constraints</td><td>The review shell is a single generated HTML/CSS/JS surface in <code>src/server/app.ts</code>. Client assets are served through <code>/client.css</code> and <code>/client.js</code>.</td><td>Keep changes scoped to shell markup/styles/script and tests. Avoid new dependencies or generated files.</td></tr>
+        <tr><td>Mobile/coarse pointer</td><td>The left navigator is hidden on mobile, but the plan review shell still supports keyboard events when a hardware keyboard is attached.</td><td>The modal must be responsive and usable even when the left navigator is not visible.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="product-intent-alignment">
+    <h2>Product intent alignment</h2>
+    <p>This plan advances <code>thoughts/specs/product_intent.md</code> by making the browser reviewer easier to operate when many local plans are active. It supports the desired outcomes that reviewers can open local plans, plan authors can keep source-linked plans synchronized, and the plan index/review shell truthfully surface plan status.</p>
+    <ul>
+      <li><strong>Golden path:</strong> press <span class="kbd">⌘O</span>, type, select, open. No index detour or manual URL editing.</li>
+      <li><strong>Safe defaults:</strong> search active plans from the same canonical navigator endpoint; opening a result navigates through the existing <code>/p/:planId</code> route, preserving current initialization and comment safety.</li>
+      <li><strong>Recovery:</strong> if navigator data fails to load, keep the current plan reviewable and show an actionable inline palette error with a Retry action.</li>
+      <li><strong>Fail-closed boundary:</strong> do not guess archived/deferred plans in quick open for this slice; active-plan search matches the current review shell navigator contract.</li>
+      <li><strong>Regression focus:</strong> prove the keyboard shortcut and result selection in the actual browser shell, not just isolated helper functions.</li>
+    </ul>
+  </section>
+
+  <section id="locked-decisions">
+    <h2>Locked decisions</h2>
+    <ol>
+      <li id="decision-active-only"><strong>Active plans only.</strong> Quick open searches the same active plan list as the left navigator. Archived/deferred search is out of scope until there is a product decision to include lifecycle-wide navigation.</li>
+      <li id="decision-client-score"><strong>Client-side fuzzy scoring.</strong> Use the existing bounded navigator payload and score locally. No new endpoint is required for the first 200 active plans.</li>
+      <li id="decision-route-navigation"><strong>Open by route navigation.</strong> Selecting a result sets <code>window.location.href</code> to <code>/p/:planId</code> rather than hot-swapping the active plan in place.</li>
+      <li id="decision-shortcuts"><strong>Shortcut parity.</strong> <span class="kbd">Meta+O</span> and <span class="kbd">Ctrl+O</span> open quick open in the shell and prevent the browser file picker.</li>
+      <li id="decision-no-dependency"><strong>No new dependency.</strong> Implement simple deterministic fuzzy matching directly in <code>client.js</code> because package size and matching needs are small. The expected primitive is a case-insensitive ranked match over normalized fields, using the field ordering in <a href="#decision-fuzzy-ranking">the fuzzy ranking decision</a>.</li>
+      <li id="decision-fuzzy-ranking"><strong>Simple ranked fuzzy matching.</strong> Rank exact/prefix title matches first, then title substring or ordered-subsequence matches, then repo/slug/status/note matches, and finally path-only matches; display a small top slice such as 10–15 results from the existing 200-plan navigator payload.</li>
+      <li id="decision-existing-design"><strong>Match the existing shell design.</strong> The quick-open affordance is keyboard-first and modal-only for this slice; do not add a permanent toolbar button or a new visual system that competes with the existing navigator/comments chrome.</li>
+    </ol>
+  </section>
+
+  <section id="acceptance-criteria">
+    <h2>Acceptance criteria</h2>
+    <ol>
+      <li id="ac-1"><strong>Shortcut opens palette:</strong> pressing <span class="kbd">⌘O</span> on macOS or <span class="kbd">Ctrl+O</span> elsewhere opens a modal quick-open palette from any review shell page, including when focus is inside the rendered plan iframe, and focuses the search input.</li>
+      <li id="ac-2"><strong>Fuzzy matching:</strong> as the user types, results are filtered and ranked by plan title, repo, slug, path, Linear issue, status, progress, comments, and latest note terms using deterministic case-insensitive fuzzy scoring. Title exact/prefix/substring or ordered-subsequence matches rank above metadata matches, and path-only matches rank last.</li>
+      <li id="ac-3"><strong>Keyboard selection:</strong> <span class="kbd">↑</span>/<span class="kbd">↓</span> moves the active result, <span class="kbd">Enter</span> opens it, and <span class="kbd">Escape</span> closes the palette without changing the current plan.</li>
+      <li id="ac-4"><strong>Mouse selection:</strong> hovering or clicking a result updates/opens the selected plan with the same URL as the left navigator.</li>
+      <li id="ac-5"><strong>Safe composer interaction:</strong> quick-open keyboard handling does not submit comments, discard in-progress comments, or trap the user when the comment composer is open.</li>
+      <li id="ac-6"><strong>Navigator failure recovery:</strong> if navigator data is unavailable, the palette shows a non-destructive error and Retry control while leaving the current plan reviewable.</li>
+      <li id="ac-7"><strong>Accessibility:</strong> the palette uses dialog/listbox semantics, exposes the highlighted option, returns focus on close, and has visible focus and active-result styling.</li>
+      <li id="ac-8"><strong>Regression coverage:</strong> contract tests and e2e tests cover the shell markup, client shortcut behavior, fuzzy ranking, selection, failure recovery, and non-regression of existing comment shortcuts.</li>
+    </ol>
+  </section>
+
+  <section id="bdd-scenarios">
+    <h2>BDD scenarios</h2>
+    <article id="bdd-open-and-select">
+      <h3>Open and select with keyboard</h3>
+      <p><strong>Given</strong> a user is viewing an active plan review page with multiple active plans registered, <strong>when</strong> they press <span class="kbd">⌘O</span>, type part of another plan title, press <span class="kbd">↓</span>, and press <span class="kbd">Enter</span>, <strong>then</strong> the browser navigates to that plan's <code>/p/:planId</code> URL and the selected plan becomes the active review shell.</p>
+    </article>
+    <article id="bdd-fuzzy-counterexample">
+      <h3>Fuzzy counterexample ranking</h3>
+      <p><strong>Given</strong> one plan title contains all query characters in order and another plan only matches a low-signal path segment, <strong>when</strong> the user types the query, <strong>then</strong> the title match ranks above the path-only match so the first highlighted result is predictable.</p>
+    </article>
+    <article id="bdd-empty-results">
+      <h3>No matching plans</h3>
+      <p><strong>Given</strong> no active plans match the query, <strong>when</strong> the user types a nonsense string, <strong>then</strong> the palette shows an empty state, <span class="kbd">Enter</span> does not navigate, and <span class="kbd">Escape</span> closes the palette.</p>
+    </article>
+    <article id="bdd-composer-safe">
+      <h3>Comment composer remains safe</h3>
+      <p><strong>Given</strong> the comment composer contains unsent text, <strong>when</strong> the user opens and dismisses quick open, <strong>then</strong> the composer text remains intact and <span class="kbd">Cmd/Ctrl+Enter</span> still submits the comment only when the palette is closed.</p>
+    </article>
+    <article id="bdd-iframe-focus-shortcut">
+      <h3>Shortcut works while the rendered plan has focus</h3>
+      <p><strong>Given</strong> focus is inside the same-origin rendered plan iframe after clicking or selecting plan content, <strong>when</strong> the user presses <span class="kbd">Cmd+O</span>, <strong>then</strong> the parent review shell opens the quick-open palette, prevents the browser file picker, and focuses the palette input.</p>
+    </article>
+    <article id="bdd-navigator-error">
+      <h3>Navigator load failure</h3>
+      <p><strong>Given</strong> <code>/api/plans/navigator</code> returns an error, <strong>when</strong> the user opens quick open, <strong>then</strong> the palette explains that plans could not be loaded, offers Retry, and does not obscure the fact that the current plan remains reviewable.</p>
+    </article>
+    <article id="bdd-mouse-selection">
+      <h3>Mouse selection parity</h3>
+      <p><strong>Given</strong> the quick-open palette is visible, <strong>when</strong> the user clicks a result row, <strong>then</strong> the browser opens the same URL that the left navigator link would open for that plan.</p>
+    </article>
+    <article id="bdd-mobile-hardware-keyboard">
+      <h3>Mobile or coarse-pointer shell with hardware keyboard</h3>
+      <p><strong>Given</strong> the left navigator is hidden by the mobile/coarse-pointer layout, <strong>when</strong> the user presses <span class="kbd">Cmd+O</span> with a hardware keyboard, <strong>then</strong> the palette still opens and fits the viewport.</p>
+    </article>
+  </section>
+
+  <section id="visual-rendering">
+    <h2>Visual rendering</h2>
+    <figure id="mock-quick-open">
+      <h3>Quick open palette over the existing review shell</h3>
+      <div class="mockup" role="img" aria-label="Plan review shell with command-o quick open modal">
+        <div class="shell">
+          <div class="topbar">
+            <div class="top-actions"><span class="btn">☰ Navigator</span><a class="index-link" href="#">← Plan index</a><span class="btn">Request execution-ready review</span><span class="btn">Build Plan</span><span class="btn">Defer plan</span><span class="btn">Archive plan</span><span class="btn">Comments</span></div>
+            <div class="current-plan"><strong>Cmd-O fuzzy plan opener</strong><span class="pill">Execution not ready</span></div>
+          </div>
+          <div class="bodygrid">
+            <aside class="leftnav"><h3>Active plans</h3><div class="plan-item active"><span class="plan-item-title">Cmd-O fuzzy plan opener</span><span class="plan-item-meta">Execution not ready · No phases</span><span class="plan-item-meta">pending 1 · updated now</span></div><div class="plan-item"><span class="plan-item-title">Left-hand plan navigator and collapsible comments panel</span><span class="plan-item-meta">Complete · 4/4</span></div><div class="plan-item"><span class="plan-item-title">Queue-backed agent next comment delivery</span><span class="plan-item-meta">Complete · pending 0</span></div></aside>
+            <main class="content">
+              <div class="page"><h3>Rendered plan</h3><p>The existing white iframe canvas remains visible behind the shell-owned overlay. Selecting a result navigates through the normal review route.</p><p style="height:120px;background:#eef2ff;border-radius:10px;padding:14px;">Reviewable plan content and comment anchors stay underneath.</p></div>
+              <div class="modal-backdrop">
+                <div class="modal" role="dialog" aria-label="Quick open plan mockup">
+                  <div class="searchbox"><span>⌘O</span><strong>queue agent</strong></div>
+                  <div class="result active"><span class="result-title">Queue-backed agent next comment delivery</span><span class="result-meta">plan-reviewer / queue-backed-agent-next · Complete · pending 0 · updated today</span></div>
+                  <div class="result"><span class="result-title">Agent listener harness smoke</span><span class="result-meta">plan-reviewer / agent-listener · Execution ready · pending 2</span></div>
+                  <div class="result"><span class="result-title">Comment idempotency and unclaimed delete</span><span class="result-meta">plan-reviewer / comment-idempotency · Complete · resolved 8</span></div>
+                </div>
+              </div>
+            </main>
+            <aside class="right-rail"></aside>
+          </div>
+        </div>
+      </div>
+      <figcaption>The mock now mirrors the current review-shell design: the existing two-row top navbar, active-plan left navigator, white rendered-plan iframe, and narrow comments rail remain intact. <span class="kbd">⌘O</span> opens a centered shell-owned dialog over that surface; there is no new persistent toolbar button or alternate visual language.</figcaption>
+    </figure>
+  </section>
+
+  <section id="progress">
+    <h2>Progress</h2>
+    <ul>
+      <li><label><input type="checkbox" checked disabled> P1: Lock quick-open contracts and tests</label></li>
+      <li><label><input type="checkbox" checked disabled> P2: Build modal UI and fuzzy client state</label></li>
+      <li><label><input type="checkbox" checked disabled> P3: Verify browser behavior and polish recovery</label></li>
+      <li><label><input type="checkbox" checked disabled> P4: Review, document, and finalize readiness evidence</label></li>
+    </ul>
+  </section>
+
+  <section id="resume-instructions">
+    <h2>Resume instructions</h2>
+    <p>Read this plan fully, then execute the first unchecked item in <a href="#progress">Progress</a>. Work phase-by-phase only. Do not implement archived/deferred search unless a later product decision changes <a href="#decision-active-only">the active-only decision</a>. After each phase, run its verification commands, update this plan's Progress and Decisions / Deviations Log, and request a scoped implementation review before advancing.</p>
+  </section>
+
+  <section id="test-coverage-matrix">
+    <h2>Test coverage matrix</h2>
+    <table>
+      <thead><tr><th>Acceptance / BDD</th><th>Test layer</th><th>Expected test locations</th><th>Verification commands</th></tr></thead>
+      <tbody>
+        <tr><td><a href="#ac-1">AC1</a>, <a href="#ac-7">AC7</a>, <a href="#bdd-open-and-select">open/select</a></td><td>Browser e2e</td><td><code>src/test-fixtures/e2e-run.ts</code></td><td><code>bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js</code></td></tr>
+        <tr><td><a href="#ac-2">AC2</a>, <a href="#bdd-fuzzy-counterexample">ranking</a></td><td>Contract/unit-style client asset assertions plus e2e ranking proof</td><td><code>src/__tests__/contracts.test.ts</code>, <code>src/test-fixtures/e2e-run.ts</code></td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></td></tr>
+        <tr><td><a href="#ac-3">AC3</a>, <a href="#ac-4">AC4</a>, <a href="#bdd-mouse-selection">mouse parity</a></td><td>Browser e2e</td><td><code>src/test-fixtures/e2e-run.ts</code></td><td><code>bun run test:e2e</code></td></tr>
+        <tr><td><a href="#ac-5">AC5</a>, <a href="#bdd-composer-safe">composer safe</a>, <a href="#bdd-iframe-focus-shortcut">iframe shortcut</a></td><td>Browser e2e regression around existing keyboard submit flow and same-origin iframe focus</td><td><code>src/test-fixtures/e2e-run.ts</code></td><td><code>bun run test:e2e</code></td></tr>
+        <tr><td><a href="#ac-6">AC6</a>, <a href="#bdd-navigator-error">navigator error</a></td><td>Browser e2e route interception</td><td><code>src/test-fixtures/e2e-run.ts</code></td><td><code>bun run test:e2e</code></td></tr>
+        <tr><td><a href="#ac-8">AC8</a></td><td>Repo gate</td><td>Full TypeScript and Node test suite</td><td><code>bun run build</code>, <code>bun run test</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="phase-plan">
+    <h2>Phase-by-phase execution plan</h2>
+
+    <article class="phase" id="phase-p1-contracts">
+      <h3>P1: Lock quick-open contracts and tests</h3>
+      <h4>End State</h4>
+      <p>Failing tests describe the quick-open contract before implementation: shell markup exists, keyboard shortcuts open the palette, result navigation works, ranking is deterministic, and existing comment shortcuts remain protected.</p>
+      <h4>Tests first</h4>
+      <ul>
+        <li>Add contract assertions in <code>src/__tests__/contracts.test.ts</code> for quick-open shell elements, client functions/state names, ARIA roles, and asset version bump.</li>
+        <li>Add e2e scenarios in <code>src/test-fixtures/e2e-run.ts</code> registering multiple plans with distinguishable titles/paths/notes, then pressing <span class="kbd">Meta+O</span> or <span class="kbd">Control+O</span> from both parent-shell focus and rendered-plan iframe focus.</li>
+        <li>Include failing assertions for ranking, arrow navigation, click navigation, empty state, retry after navigator failure, and composer shortcut safety.</li>
+      </ul>
+      <h4>Expected files</h4>
+      <ul>
+        <li><code>src/__tests__/contracts.test.ts</code></li>
+        <li><code>src/test-fixtures/e2e-run.ts</code></li>
+      </ul>
+      <h4>Work</h4>
+      <ul>
+        <li>Keep tests focused on externally observable shell behavior and generated client asset content.</li>
+        <li>Use the existing e2e browser setup and navigator route interception patterns rather than adding a new test harness.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js
+bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js</code></pre>
+    </article>
+
+    <article class="phase" id="phase-p2-ui-client">
+      <h3>P2: Build modal UI and fuzzy client state</h3>
+      <h4>End State</h4>
+      <p>The review shell includes a hidden quick-open dialog, styles, shortcut handling, navigator-data caching, deterministic fuzzy scoring, result rendering, and navigation through <code>/p/:planId</code>.</p>
+      <h4>Tests first</h4>
+      <p>Run the P1 tests and confirm they fail for the expected missing quick-open behavior before editing implementation.</p>
+      <h4>Expected files</h4>
+      <ul>
+        <li><code>src/server/app.ts</code></li>
+      </ul>
+      <h4>Work</h4>
+      <ul>
+        <li>Add quick-open dialog markup to <code>reviewShell()</code> outside the iframe, with a labelled input, result list, empty state, error state, and Retry button.</li>
+        <li>Add dark shell styles for the modal, overlay, active result, focus ring, mobile viewport sizing, and reduced-motion-safe behavior that reuse the existing review-shell navbar, navigator, and comments chrome language.</li>
+        <li>Extend client state so <code>loadPlanNavigator()</code> stores the latest plan list in a module-level variable such as <code>navigatorItems</code> for reuse by the palette.</li>
+        <li>Implement small local helpers: normalize text, build plan search text, fuzzy score, sort matches, cap displayed matches to a small top slice, open/close palette, move active index, select result, retry navigator load.</li>
+        <li>Intercept <span class="kbd">Meta+O</span>/<span class="kbd">Ctrl+O</span> with new parent <code>document</code> keyboard listeners and with iframe listeners installed by <code>attachFrameListeners()</code> on <code>frame.contentDocument</code>. Call <code>event.preventDefault()</code> before the browser file-open default can run. Keep the existing comment-textarea <code>body.addEventListener('keydown')</code> submit/escape behavior intact; when quick open is visible, handle <span class="kbd">Escape</span>, <span class="kbd">Enter</span>, <span class="kbd">ArrowUp</span>, and <span class="kbd">ArrowDown</span> before comment-submit handling.</li>
+        <li>Restore focus to the element that was focused before quick open opened, including the comment textarea when a draft comment is present, instead of hardcoding focus restoration.</li>
+        <li>Navigate via <code>window.location.href = '/p/' + encodeURIComponent(planId)</code> for selected plans; <code>encodeURIComponent</code> is intentionally harmless because navigator-returned plan IDs are route-safe <code>plan_...</code> identifiers.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build
+bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></pre>
+    </article>
+
+    <article class="phase" id="phase-p3-browser-polish">
+      <h3>P3: Verify browser behavior and polish recovery</h3>
+      <h4>End State</h4>
+      <p>The quick-open palette behaves correctly in the real review shell under normal, empty, failure, mouse, keyboard, and composer-interaction flows.</p>
+      <h4>Tests first</h4>
+      <p>Run the e2e quick-open scenarios from P1 before polishing and keep any failures as the implementation checklist.</p>
+      <h4>Expected files</h4>
+      <ul>
+        <li><code>src/server/app.ts</code></li>
+        <li><code>src/test-fixtures/e2e-run.ts</code></li>
+      </ul>
+      <h4>Work</h4>
+      <ul>
+        <li>Polish active-result scrolling, focus restoration, accessible status text, and retry behavior based on e2e findings.</li>
+        <li>Confirm the palette does not trigger plan iframe comment selection, does not hide destructive composer warnings, and does not regress mobile comments behavior.</li>
+        <li>Bump <code>clientAssetVersion</code> so deployed browsers refresh the updated client CSS/JS.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run test:e2e</code></pre>
+    </article>
+
+    <article class="phase" id="phase-p4-review-finalize">
+      <h3>P4: Review, document, and finalize readiness evidence</h3>
+      <h4>End State</h4>
+      <p>Implementation is reviewed, the plan records phase evidence, and the branch passes the relevant repo gates for a browser-shell change.</p>
+      <h4>Tests first</h4>
+      <p>No new red tests are expected in this phase unless review finds a missed behavior. If review finds a gap, add the smallest failing regression before fixing it.</p>
+      <h4>Expected files</h4>
+      <ul>
+        <li><code>thoughts/plans/cmd-o-fuzzy-plan-open.html</code></li>
+        <li>Any implementation files touched by prior phases</li>
+      </ul>
+      <h4>Work</h4>
+      <ul>
+        <li>Run a scoped implementation review focused on shortcut conflicts, accessibility, stale navigator data, and comment-composer safety.</li>
+        <li>Apply required fixes, then update this plan's Progress and Decisions / Deviations Log with RED/GREEN evidence.</li>
+        <li>Do not expand into archived/deferred quick open, global index redesign, or server-side search unless review proves they are required for this feature.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build
+bun run test
+bun run test:e2e</code></pre>
+    </article>
+  </section>
+
+  <section id="verification-strategy">
+    <h2>Verification strategy</h2>
+    <ul>
+      <li><strong>Primary proof:</strong> Playwright e2e in <code>src/test-fixtures/e2e-run.ts</code> because the shipped behavior is browser keyboard and mouse interaction.</li>
+      <li><strong>Contract proof:</strong> <code>src/__tests__/contracts.test.ts</code> for generated shell structure and navigator data assumptions.</li>
+      <li><strong>Full gate:</strong> <code>bun run build</code>, <code>bun run test</code>, and <code>bun run test:e2e</code> before handoff because this touches UI/comment-shell behavior.</li>
+    </ul>
+  </section>
+
+  <section id="delivery-order">
+    <h2>Delivery order</h2>
+    <ol>
+      <li>Write failing contract and e2e coverage for the keyboard palette.</li>
+      <li>Add the minimal shell markup, styles, and client logic to satisfy the tests.</li>
+      <li>Polish accessibility and recovery based on real browser behavior.</li>
+      <li>Run scoped review and full relevant gates, then mark phase progress in this plan.</li>
+    </ol>
+  </section>
+
+  <section id="non-goals">
+    <h2>Non-goals</h2>
+    <ul>
+      <li>Searching archived or deferred plans.</li>
+      <li>Changing the plan index filter UI.</li>
+      <li>Adding server-side full-text search or a new dependency.</li>
+      <li>Hot-swapping plans inside the existing shell without navigation.</li>
+      <li>Command-palette actions beyond opening a plan.</li>
+      <li>Changing queue/comment/source-sync semantics.</li>
+    </ul>
+  </section>
+
+  <section id="decisions-deviations-log">
+    <h2>Decisions / Deviations Log</h2>
+    <ul>
+      <li id="log-2026-06-18-draft">2026-06-18: Initial browser-review draft created from the user request. No Linear issue was supplied, so the plan explicitly records that none exists instead of inventing a key.</li>
+      <li id="log-2026-06-18-scope">2026-06-18: Scope locked to active plans from the existing navigator endpoint, with client-side fuzzy scoring and normal <code>/p/:planId</code> navigation for the first implementation slice.</li>
+      <li id="log-2026-06-18-design-feedback">2026-06-18: Browser feedback on <a href="#mock-quick-open">the visual rendering</a> said to match the existing design. Updated the mock and implementation constraints to preserve the current two-row navbar, left navigator, white iframe canvas, and right comments rail, and explicitly ruled out a new persistent quick-open toolbar button.</li>
+      <li id="log-2026-06-18-pm-iframe-focus">2026-06-18: PM/product-intent readiness pass identified iframe focus as a blocker for the golden path. Updated acceptance, BDD, tests, and phase work so the shortcut is handled from both the parent shell and same-origin rendered-plan iframe.</li>
+      <li id="log-2026-06-18-keyboard-reality">2026-06-18: Readiness inspection corrected the keyboard-handler reality: existing <code>body</code> is the comment textarea element, not <code>document.body</code>. The plan now requires new parent-document and iframe keydown listeners while preserving the textarea's current composer submit/escape behavior.</li>
+      <li id="log-2026-06-18-ai-review-ready">2026-06-18: Codex returned <code>VERDICT: PLAN_EXECUTION_READY</code> with no findings. Claude Code returned <code>VERDICT: PLAN_EXECUTION_READY</code> with optional clarity notes only; integrated the event <code>preventDefault()</code>, fuzzy-scoring primitive, and encoded route navigation clarifications.</li>
+      <li id="log-2026-06-18-ai-plan-review">2026-06-18: Codex returned <code>VERDICT: PLAN_EXECUTION_READY</code> with no findings. Claude Code returned <code>VERDICT: PLAN_EXECUTION_READY</code> with clarity notes only; integrated clarifications for fuzzy scoring tiers, the <code>body</code> textarea naming trap, navigator payload caching, displayed-result cap, and focus restoration.</li>
+      <li id="log-2026-06-18-implementation-p1-p3">2026-06-18: Implemented P1-P3. RED evidence: <code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code> failed on missing quick-open shell markup. GREEN evidence: <code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code>, <code>bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js</code>, <code>bun run test:e2e</code>, and full <code>bun run build &amp;&amp; bun run test &amp;&amp; bun run test:e2e</code> passed after adding quick-open shell markup, CSS, client state, keyboard handling, fuzzy ranking, and e2e coverage.</li>
+      <li id="log-2026-06-18-implementation-review-fixes">2026-06-18: Scoped implementation reviews returned <code>FIX_IN_SCOPE_FINDINGS</code>. Codex found modal focus could leave the <code>aria-modal</code> dialog and flagged an editable-text shortcut conflict. Product decision: keep <code>Cmd/Ctrl+O</code> active in the comment textarea while preserving drafts and restoring focus. Claude found missing iframe focus-restoration e2e coverage. Fixed with a quick-open Tab focus trap, iframe focus-restoration assertion, and this plan clarification.</li>
+      <li id="log-2026-06-18-rereview-retry-keyboard">2026-06-18: Codex re-review found Enter on the focused quick-open Retry button was swallowed by the capture-phase Enter handler. Fixed by allowing focused quick-open buttons to receive Enter normally and changed the navigator-failure e2e path to Tab to Retry and press Enter. Targeted GREEN evidence: <code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js &amp;&amp; node dist/test-fixtures/e2e-run.js</code>.</li>
+      <li id="log-2026-06-18-final-review-verification">2026-06-18: Final scoped implementation reviews passed: Codex re-review returned <code>VERDICT: PASS_SCOPED</code> with no findings, and Claude Code re-review returned <code>VERDICT: PASS_SCOPED</code> with no findings. Final verification passed with <code>bun run build</code>, <code>bun run test</code>, and <code>bun run test:e2e</code>.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>
