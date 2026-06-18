@@ -208,6 +208,31 @@ try {
     assert.equal(response.ok(), true);
     return (await response.json()).data as { planId: string; versionId: string };
   };
+  const registerQuickOpenPlan = async (slug: string, title: string, planPath: string) => {
+    const quickHtml = `<!doctype html><html><head><title>${title}</title></head><body><main><section id="${slug}"><h1>${title}</h1><p>Quick open target for ${slug}.</p></section></main></body></html>`;
+    const response = await context.post('/api/plans/register', {
+      data: {
+        repoKey: `e2e-${slug}-repo`,
+        repoName: `e2e-${slug}`,
+        rootPath: `/tmp/e2e-${slug}`,
+        branch: 'main',
+        commitSha: `e2e-${slug}`,
+        planPath,
+        slug,
+        html: quickHtml,
+        fileHash: sha256(quickHtml),
+        publicationMetadata: {
+          worktreePath: `/tmp/e2e-${slug}`,
+          branch: 'main',
+          executionReady: false,
+          executionReadyBasis: 'agent-review-results'
+        },
+        updateMode: 'upsert'
+      }
+    });
+    assert.equal(response.ok(), true);
+    return (await response.json()).data as { planId: string; versionId: string };
+  };
   const createStormComment = (planId: string, versionId: string, index: number, bodyPrefix = 'Storm comment') => context.post(`/api/plans/${planId}/comments`, {
     data: {
       versionId,
@@ -445,6 +470,8 @@ try {
     assert.match(await page.locator('.plan-card:not([hidden])').innerText(), /Source missing/);
     assert.match(await page.locator('.plan-card:not([hidden])').innerText(), /Showing cached copy/);
     const navSwitch = await registerTinyPlan('nav-switch');
+    const quickTitlePlan = await registerQuickOpenPlan('quick-open-title-match', 'Queue-backed agent next comment delivery', 'thoughts/plans/queue-backed-agent-next.html');
+    const quickPathPlan = await registerQuickOpenPlan('quick-open-path-only', 'Unrelated plan title', 'thoughts/plans/queue-agent-path-only.html');
     const linkedPlanHtml = `<!doctype html><html><body><main><section id="linked-plan-source"><h1>Linked plan source</h1><p><a id="linked-plan-link" href="${baseUrl}/p/${navSwitch.planId}">Open linked plan</a></p></section></main></body></html>`;
     const linkedPlanResponse = await context.post('/api/plans/register', {
       data: {
@@ -474,6 +501,56 @@ try {
     await page.waitForSelector('#desktop-plan-nav-toggle[aria-expanded="true"]');
     await page.waitForSelector('#desktop-comments-toggle[aria-expanded="false"]');
     assert.match(await page.locator('#plan-list-nav').innerText(), /E2E Plan/);
+    await page.keyboard.press('Control+O');
+    await page.waitForSelector('#quick-open-dialog:not([hidden])');
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'quick-open-input');
+    await page.keyboard.press('Tab');
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'quick-open-input');
+    await page.fill('#quick-open-input', 'queue agent');
+    await page.waitForSelector('[data-quick-open-result]');
+    const quickOpenTitles = await page.locator('[data-quick-open-result] .quick-open-result-title').allInnerTexts();
+    assert.equal(quickOpenTitles[0], 'Queue-backed agent next comment delivery');
+    assert.equal(quickOpenTitles.includes('Unrelated plan title'), true);
+    await page.keyboard.press('ArrowDown');
+    assert.equal(await page.locator('[data-quick-open-result][aria-selected="true"] .quick-open-result-title').innerText(), 'Unrelated plan title');
+    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('Enter');
+    await page.waitForURL(`${baseUrl}/p/${quickTitlePlan.planId}`);
+    await page.goto(`${baseUrl}/p/${registered.planId}`);
+    await page.keyboard.press('Control+O');
+    await page.fill('#quick-open-input', 'path only');
+    await page.locator('[data-quick-open-result]', { hasText: 'Unrelated plan title' }).click();
+    await page.waitForURL(`${baseUrl}/p/${quickPathPlan.planId}`);
+    await page.goto(`${baseUrl}/p/${registered.planId}`);
+    await page.keyboard.press('Control+O');
+    await page.fill('#quick-open-input', 'zzzz-no-active-plan-match');
+    await page.waitForSelector('#quick-open-empty:not([hidden])');
+    await page.keyboard.press('Enter');
+    assert.equal(page.url(), `${baseUrl}/p/${registered.planId}`);
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('#quick-open-dialog', { state: 'hidden' });
+    await page.evaluate(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const target = iframe.contentDocument!.querySelector<HTMLElement>('#text-target')!;
+      target.setAttribute('tabindex', '-1');
+      target.focus();
+    });
+    assert.equal(await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')!.contentDocument!.activeElement?.id), 'text-target');
+    await page.keyboard.press('Control+O');
+    await page.waitForSelector('#quick-open-dialog:not([hidden])');
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('#quick-open-dialog', { state: 'hidden' });
+    assert.equal(await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')!.contentDocument!.activeElement?.id), 'text-target');
+    await page.frameLocator('#plan-frame').locator('#dom-annotation').click();
+    await page.waitForSelector('#composer:not([hidden])');
+    await page.fill('#comment-body', 'Quick open preserves draft');
+    await page.keyboard.press('Control+O');
+    await page.waitForSelector('#quick-open-dialog:not([hidden])');
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('#quick-open-dialog', { state: 'hidden' });
+    assert.equal(await page.inputValue('#comment-body'), 'Quick open preserves draft');
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'comment-body');
+    await page.click('#cancel-comment');
     assert.equal(await page.evaluate(() => document.body.classList.contains('comments-open')), false);
     assert.equal(await page.evaluate(() => document.body.classList.contains('plan-nav-collapsed')), false);
     assert.equal(await page.evaluate(() => document.querySelector('#plan-navbar-actions')?.firstElementChild?.id), 'desktop-plan-nav-toggle');
@@ -550,9 +627,18 @@ try {
     await page.waitForSelector('#plan-list-error:not([hidden])');
     assert.match(await page.locator('#plan-list-error').innerText(), /current plan remains reviewable/i);
     assert.equal(await page.locator('#plan-frame').count(), 1);
-    await page.click('#plan-list-retry');
+    await page.keyboard.press('Control+O');
+    await page.waitForSelector('#quick-open-dialog:not([hidden])');
+    await page.waitForSelector('#quick-open-error:not([hidden])');
+    assert.match(await page.locator('#quick-open-error').innerText(), /could not be loaded|unable to load/i);
+    await page.keyboard.press('Tab');
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'quick-open-retry');
+    await page.keyboard.press('Enter');
+    await page.waitForSelector('#quick-open-error', { state: 'hidden' });
     await page.waitForSelector('#plan-list-error', { state: 'hidden' });
     assert.match(await page.locator('#plan-list-nav').innerText(), /E2E Plan/);
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('#quick-open-dialog', { state: 'hidden' });
     await page.waitForTimeout(500);
     assert.equal(planListRequests <= 3, true, `navigator refresh made too many requests: ${planListRequests}`);
     await page.unroute('**/api/plans/navigator?limit=200&currentPlanId=*');

@@ -405,7 +405,7 @@ function filterPlans(plans: ReturnType<PlanReviewStore['listPlans']>, query: { q
 }
 
 const executionReviewRequestBody = 'Review this plan with both codex and claude code, iterating on the plan until both agents agree it is execution ready';
-const clientAssetVersion = 'left-nav-collapse-v1';
+const clientAssetVersion = 'quick-open-v1';
 
 function buildPlanRequestBody(planPath: string): string {
   return `/skill:scoped-plan-run thoughts/plans/${path.basename(planPath)}`;
@@ -416,6 +416,7 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
   const escapedShellTitle = escapeHtml(shellTitle);
   const escapedCurrentTitle = escapeHtml(currentTitle);
   const isCollaboration = plan.reviewMode === 'collaboration';
+  const documentKind = isCollaboration ? 'document' : 'plan';
   const readyLabel = isCollaboration ? 'Collaboration mode' : plan.publicationMetadata?.executionReady ? 'Execution ready' : 'Execution not ready';
   const encodedTitleFallback = escapeHtml(encodeClientData(reviewShellTitle(planTitleFallback(plan))));
   const reviewButton = isCollaboration ? '' : '<button id="request-execution-review" type="button">Request execution-ready review</button>';
@@ -442,6 +443,15 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
       ${planNavigatorHtml(plans, plan.id, isCollaboration ? 'documents' : 'plans')}
       <main id="review"><iframe id="plan-frame" sandbox="allow-same-origin allow-popups" src="/render/${escapedPlanId}"></iframe><div id="plan-touch-layer" aria-hidden="true"></div><button id="mobile-comments-toggle" class="comments-toggle" type="button" aria-controls="sidebar" aria-expanded="false">Comments</button><div id="hover-selection-box" class="selection-box hover" hidden></div><div id="active-selection-box" class="selection-box active" hidden></div></main>
       <aside id="sidebar"><h1>Comments</h1><div id="sync-warning" hidden></div><section id="plan-notes-panel"><h2>${isCollaboration ? 'Document notes' : 'Plan notes'}</h2><div id="plan-notes"></div><textarea id="plan-note-body" placeholder="${isCollaboration ? 'Add context for agents' : 'Add a plan note for agents'}"></textarea><button id="add-plan-note" type="button">Add note</button></section><div id="deferred-refresh-notice" hidden>Document updated in the background. Finish or cancel this comment to refresh.</div><div id="comments"></div></aside>
+    </div>
+    <div id="quick-open-backdrop" hidden>
+      <section id="quick-open-dialog" role="dialog" aria-modal="true" aria-labelledby="quick-open-title" aria-describedby="quick-open-status">
+        <div class="quick-open-header"><div><h2 id="quick-open-title">Quick open ${escapeHtml(documentKind)}</h2><p id="quick-open-status">Search active ${escapeHtml(isCollaboration ? 'documents' : 'plans')}.</p></div><span class="quick-open-shortcut">⌘O</span></div>
+        <input id="quick-open-input" type="search" role="combobox" aria-controls="quick-open-results" aria-expanded="true" aria-autocomplete="list" autocomplete="off" spellcheck="false" placeholder="Search active ${escapeHtml(isCollaboration ? 'documents' : 'plans')}">
+        <div id="quick-open-error" hidden>Plans could not be loaded. <button id="quick-open-retry" type="button">Retry</button></div>
+        <div id="quick-open-empty" hidden>No matching active ${escapeHtml(isCollaboration ? 'documents' : 'plans')}.</div>
+        <div id="quick-open-results" role="listbox" aria-label="Quick open results"><div id="quick-open-result-list"></div></div>
+      </section>
     </div>
     <div id="lightbox" class="lightbox" hidden><header><button id="zoom-out">-</button><button id="zoom-reset">Reset</button><button id="zoom-in">+</button><button id="pan-toggle">Pan</button><button id="close-lightbox">Close</button></header><div id="lightbox-stage" class="lightbox-stage"><img id="lightbox-image" alt=""><div id="image-selection-box" hidden></div></div></div>
     <div id="composer" hidden><textarea id="comment-body" placeholder="Comment on selection" inputmode="text" enterkeyhint="done" autocapitalize="sentences"></textarea><div id="comment-discard-warning" hidden>Your comment would be lost. Use Cancel to discard it.</div><button id="submit-comment">Submit</button><button id="cancel-comment">Cancel</button></div>
@@ -479,9 +489,9 @@ body{--plan-nav-width:260px;--comments-width:48px;margin:0;background:#0b1020;co
 #sync-warning{border:1px solid #f59e0b;background:rgba(245,158,11,.12);color:#fde68a;border-radius:8px;padding:10px;margin:8px 0 14px;font-size:13px}#deferred-refresh-notice{border:1px solid #38bdf8;background:rgba(56,189,248,.12);color:#bae6fd;border-radius:8px;padding:10px;margin:8px 0 14px;font-size:13px}#composer{position:fixed;right:calc(var(--comments-width) + 20px);top:112px;background:#0f172a;border:1px solid #38bdf8;padding:12px;border-radius:8px;z-index:20;box-shadow:0 12px 32px rgba(0,0,0,.4)}#composer.discard-warning{border-color:#ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.22),0 12px 32px rgba(0,0,0,.4)}
 #comment-discard-warning{margin-top:8px;color:#fecaca;font-size:13px;font-weight:700}#composer.discard-warning textarea{border-color:#ef4444}
 #composer textarea{width:260px;height:90px;background:#020617;color:#e5e7eb;border:1px solid #2b364d;border-radius:6px;padding:8px;display:block;pointer-events:auto;touch-action:manipulation;-webkit-user-select:text;user-select:text}
-#composer button{margin-top:8px;margin-right:8px}#plan-notes-panel{border:1px solid #2b364d;border-radius:10px;background:#0f172a;padding:10px;margin:0 0 14px}#plan-notes-panel h2{font-size:15px;margin:0 0 8px}#plan-notes .note-row{border-top:1px solid #263246;padding:8px 0}#plan-notes .note-row:first-child{border-top:0}#plan-note-body{width:100%;min-height:70px;box-sizing:border-box;background:#020617;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px}#add-plan-note{margin-top:8px;background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px 10px;cursor:pointer}.plan-review-selected{outline:2px dotted #38bdf8!important;box-shadow:none!important}.lightbox{position:fixed;inset:36px calc(var(--comments-width) + 40px) 36px 36px;background:#020617;border:1px solid #38bdf8;z-index:12;display:grid;grid-template-rows:auto 1fr}.lightbox[hidden]{display:none}.lightbox header{display:flex;gap:8px;padding:10px;border-bottom:1px solid #2b364d}.lightbox img{max-width:100%;max-height:100%;place-self:center;transform-origin:center}.lightbox-stage{display:grid;overflow:hidden;position:relative}#image-selection-box{position:absolute;border:2px solid #38bdf8;background:rgba(56,189,248,.2);pointer-events:none}#mobile-comments-toggle{display:none}
+#composer button{margin-top:8px;margin-right:8px}#plan-notes-panel{border:1px solid #2b364d;border-radius:10px;background:#0f172a;padding:10px;margin:0 0 14px}#plan-notes-panel h2{font-size:15px;margin:0 0 8px}#plan-notes .note-row{border-top:1px solid #263246;padding:8px 0}#plan-notes .note-row:first-child{border-top:0}#plan-note-body{width:100%;min-height:70px;box-sizing:border-box;background:#020617;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px}#add-plan-note{margin-top:8px;background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px 10px;cursor:pointer}.plan-review-selected{outline:2px dotted #38bdf8!important;box-shadow:none!important}#quick-open-backdrop{position:fixed;inset:0;z-index:70;display:grid;align-items:start;justify-items:center;padding-top:min(12vh,96px);background:rgba(2,6,23,.46)}#quick-open-backdrop[hidden]{display:none}#quick-open-dialog{width:min(680px,calc(100vw - 36px));max-height:min(78vh,720px);display:grid;grid-template-rows:auto auto auto auto minmax(0,1fr);overflow:hidden;border:1px solid #38bdf8;border-radius:16px;background:#0f172a;color:#e5e7eb;box-shadow:0 30px 90px rgba(2,6,23,.68)}.quick-open-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:16px 18px 10px}.quick-open-header h2{margin:0;color:#f8fafc;font-size:18px}.quick-open-header p{margin:4px 0 0;color:#a7b0c0;font-size:13px}.quick-open-shortcut{border:1px solid #475569;border-bottom-color:#64748b;border-radius:7px;background:#111827;color:#dbeafe;padding:2px 8px;font:12px ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:800}#quick-open-input{margin:0 18px 14px;width:calc(100% - 36px);box-sizing:border-box;border:1px solid #475569;border-radius:10px;background:#020617;color:#e5e7eb;padding:12px 14px;font:16px system-ui,sans-serif;outline:none}#quick-open-input:focus{border-color:#38bdf8;box-shadow:0 0 0 3px rgba(56,189,248,.18)}#quick-open-error,#quick-open-empty{margin:0 18px 12px;border-radius:10px;padding:10px 12px;font-size:13px}#quick-open-error{border:1px solid #f59e0b;background:rgba(245,158,11,.12);color:#fde68a}#quick-open-error button{margin-left:8px;border:1px solid #f59e0b;border-radius:6px;background:#1e293b;color:#fde68a;padding:4px 8px;cursor:pointer}#quick-open-empty{border:1px solid #475569;background:#111827;color:#a7b0c0}#quick-open-results{overflow:auto;border-top:1px solid #2b364d}#quick-open-result-list{padding:6px}.quick-open-result{display:grid;gap:3px;width:100%;box-sizing:border-box;text-align:left;border:1px solid transparent;border-radius:10px;background:transparent;color:#cbd5e1;padding:11px 12px;cursor:pointer}.quick-open-result:hover,.quick-open-result.active{border-color:#38bdf8;background:rgba(56,189,248,.14)}.quick-open-result-title{font-weight:850;color:#f8fafc;line-height:1.25}.quick-open-result-meta{font-size:12px;color:#a7b0c0}.lightbox{position:fixed;inset:36px calc(var(--comments-width) + 40px) 36px 36px;background:#020617;border:1px solid #38bdf8;z-index:12;display:grid;grid-template-rows:auto 1fr}.lightbox[hidden]{display:none}.lightbox header{display:flex;gap:8px;padding:10px;border-bottom:1px solid #2b364d}.lightbox img{max-width:100%;max-height:100%;place-self:center;transform-origin:center}.lightbox-stage{display:grid;overflow:hidden;position:relative}#image-selection-box{position:absolute;border:2px solid #38bdf8;background:rgba(56,189,248,.2);pointer-events:none}#mobile-comments-toggle{display:none}
 @media(prefers-reduced-motion:reduce){.selection-box{transition:none}}
-@media(max-width:760px),(pointer:coarse){body{overflow:hidden;--comments-width:0}#plan-navbar{position:sticky;top:0;z-index:30;min-height:88px;box-sizing:border-box;gap:6px;padding:8px;overflow-x:auto;overscroll-behavior-x:contain}#plan-navbar-actions{justify-content:flex-start;gap:8px}#plan-navbar a,#plan-navbar button{flex:0 0 auto;min-height:40px;padding:8px 10px;font-size:13px;line-height:1.15;white-space:normal}#current-plan-bar{font-size:13px}#request-execution-review{max-width:170px}#build-plan{max-width:120px}#desktop-plan-nav-toggle,#desktop-comments-toggle{display:none}#app{display:block;min-height:calc(100dvh - 88px)}#plan-list-nav{display:none}#review{height:calc(100dvh - 88px);overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}#plan-frame{width:100%;min-height:calc(100dvh - 88px);border:0;display:block;pointer-events:none}#plan-touch-layer{display:block;position:absolute;top:0;left:0;width:100%;min-height:calc(100dvh - 88px);z-index:22;background:transparent;touch-action:pan-y;pointer-events:auto}#sidebar{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:24;max-height:min(72dvh,620px);box-sizing:border-box;border-left:0;border-top:1px solid #2b364d;border-radius:18px 18px 0 0;padding:12px 16px calc(16px + env(safe-area-inset-bottom));background:#111827;box-shadow:0 -16px 40px rgba(0,0,0,.45);overflow:auto;transform:translateY(100%);transition:transform .18s ease}#sidebar>h1,#sidebar>#sync-warning,#sidebar>#plan-notes-panel,#sidebar>#deferred-refresh-notice,#sidebar>#comments{display:block}body.comments-open #sidebar{transform:translateY(0)}#sidebar h1{position:sticky;top:-12px;margin:0 0 12px;padding:8px 0 10px;background:#111827;font-size:20px;z-index:1}.comment-row{padding:12px;margin:10px 0}.comment-row p{margin:.55rem 0}.comments-empty{margin:0;color:#a7b0c0;font-size:14px}#mobile-comments-toggle{display:flex;position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:25;min-height:44px;align-items:center;gap:6px;border:1px solid #38bdf8;border-radius:999px;background:#075985;color:#e0f2fe;padding:0 14px;font-weight:800;box-shadow:0 12px 28px rgba(0,0,0,.35)}body.comments-open #mobile-comments-toggle{background:#0f172a;border-color:#64748b}#composer{left:0;right:0;bottom:0;top:auto;z-index:60;box-sizing:border-box;border-left:0;border-right:0;border-bottom:0;border-radius:18px 18px 0 0;padding:14px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -16px 40px rgba(0,0,0,.48)}#composer textarea{width:100%;height:122px;box-sizing:border-box;font-size:16px}#composer button{min-height:44px;padding:8px 12px}.lightbox{inset:0;z-index:50;border:0}.lightbox header{flex-wrap:wrap}.selection-box{border-radius:4px}.marker{width:28px;height:28px}}
+@media(max-width:760px),(pointer:coarse){body{overflow:hidden;--comments-width:0}#plan-navbar{position:sticky;top:0;z-index:30;min-height:88px;box-sizing:border-box;gap:6px;padding:8px;overflow-x:auto;overscroll-behavior-x:contain}#plan-navbar-actions{justify-content:flex-start;gap:8px}#plan-navbar a,#plan-navbar button{flex:0 0 auto;min-height:40px;padding:8px 10px;font-size:13px;line-height:1.15;white-space:normal}#current-plan-bar{font-size:13px}#request-execution-review{max-width:170px}#build-plan{max-width:120px}#desktop-plan-nav-toggle,#desktop-comments-toggle{display:none}#app{display:block;min-height:calc(100dvh - 88px)}#plan-list-nav{display:none}#review{height:calc(100dvh - 88px);overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}#plan-frame{width:100%;min-height:calc(100dvh - 88px);border:0;display:block;pointer-events:none}#plan-touch-layer{display:block;position:absolute;top:0;left:0;width:100%;min-height:calc(100dvh - 88px);z-index:22;background:transparent;touch-action:pan-y;pointer-events:auto}#sidebar{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:24;max-height:min(72dvh,620px);box-sizing:border-box;border-left:0;border-top:1px solid #2b364d;border-radius:18px 18px 0 0;padding:12px 16px calc(16px + env(safe-area-inset-bottom));background:#111827;box-shadow:0 -16px 40px rgba(0,0,0,.45);overflow:auto;transform:translateY(100%);transition:transform .18s ease}#sidebar>h1,#sidebar>#sync-warning,#sidebar>#plan-notes-panel,#sidebar>#deferred-refresh-notice,#sidebar>#comments{display:block}body.comments-open #sidebar{transform:translateY(0)}#sidebar h1{position:sticky;top:-12px;margin:0 0 12px;padding:8px 0 10px;background:#111827;font-size:20px;z-index:1}.comment-row{padding:12px;margin:10px 0}.comment-row p{margin:.55rem 0}.comments-empty{margin:0;color:#a7b0c0;font-size:14px}#mobile-comments-toggle{display:flex;position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:25;min-height:44px;align-items:center;gap:6px;border:1px solid #38bdf8;border-radius:999px;background:#075985;color:#e0f2fe;padding:0 14px;font-weight:800;box-shadow:0 12px 28px rgba(0,0,0,.35)}body.comments-open #mobile-comments-toggle{background:#0f172a;border-color:#64748b}#quick-open-backdrop{padding-top:18px;align-items:start}#quick-open-dialog{width:calc(100vw - 24px);max-height:calc(100dvh - 36px)}#composer{left:0;right:0;bottom:0;top:auto;z-index:60;box-sizing:border-box;border-left:0;border-right:0;border-bottom:0;border-radius:18px 18px 0 0;padding:14px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -16px 40px rgba(0,0,0,.48)}#composer textarea{width:100%;height:122px;box-sizing:border-box;font-size:16px}#composer button{min-height:44px;padding:8px 12px}.lightbox{inset:0;z-index:50;border:0}.lightbox header{flex-wrap:wrap}.selection-box{border-radius:4px}.marker{width:28px;height:28px}}
 `;
 
 const clientJs = `
@@ -524,6 +534,15 @@ const planListNav = document.getElementById('plan-list-nav');
 const planListItems = document.getElementById('plan-list-items');
 const planListError = document.getElementById('plan-list-error');
 const planListRetry = document.getElementById('plan-list-retry');
+const quickOpenBackdrop = document.getElementById('quick-open-backdrop');
+const quickOpenDialog = document.getElementById('quick-open-dialog');
+const quickOpenInput = document.getElementById('quick-open-input');
+const quickOpenStatus = document.getElementById('quick-open-status');
+const quickOpenError = document.getElementById('quick-open-error');
+const quickOpenRetry = document.getElementById('quick-open-retry');
+const quickOpenEmpty = document.getElementById('quick-open-empty');
+const quickOpenResults = document.getElementById('quick-open-results');
+const quickOpenResultList = document.getElementById('quick-open-result-list');
 const syncWarning = document.getElementById('sync-warning');
 const deferredRefreshNotice = document.getElementById('deferred-refresh-notice');
 const hoverSelectionBox = document.getElementById('hover-selection-box');
@@ -569,6 +588,11 @@ let suppressSyntheticClickUntil = 0;
 let washi = null;
 let mermaidInitialized = false;
 let mermaidRenderGeneration = 0;
+let navigatorItems = [];
+let navigatorLoadError = null;
+let quickOpenMatches = [];
+let quickOpenActiveIndex = 0;
+let quickOpenPreviousFocus = null;
 // Must match the CSS mobile layout media query exactly: the overlay tap surface
 // and #review native-scroll layout (and the iframe-to-content-height sizing in
 // syncFrameHeight) activate on narrow widths OR any coarse-pointer device. iPad
@@ -1037,21 +1061,210 @@ function renderPlanNavigatorItems(items, label = 'plans'){
   }).join('');
   planListItems.innerHTML = html || '<p class="plan-list-empty">No active '+(label === 'documents' ? 'documents' : 'plans')+'.</p>';
 }
+function quickOpenVisible(){ return Boolean(quickOpenBackdrop && !quickOpenBackdrop.hidden); }
+function normalizeQuickOpenText(value){ return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
+function orderedQuickOpenScore(text, query){
+  if (!query) return 1;
+  let position = 0;
+  let first = -1;
+  let last = -1;
+  for (const char of query) {
+    if (char === ' ') continue;
+    const found = text.indexOf(char, position);
+    if (found < 0) return 0;
+    if (first < 0) first = found;
+    last = found;
+    position = found + 1;
+  }
+  const spread = Math.max(1, last - first + 1);
+  return Math.max(1, 120 - spread);
+}
+function quickOpenFieldScore(rawText, rawQuery, weight){
+  const text = normalizeQuickOpenText(rawText);
+  const query = normalizeQuickOpenText(rawQuery);
+  if (!text || !query) return 0;
+  if (text === query) return weight + 600;
+  if (text.startsWith(query)) return weight + 500;
+  if (text.includes(query)) return weight + 350;
+  const ordered = orderedQuickOpenScore(text, query);
+  return ordered ? weight + ordered : 0;
+}
+function quickOpenFuzzyScore(item, query){
+  const metadata = item?.plan?.publicationMetadata || {};
+  const title = planItemTitle(item);
+  const status = planItemStatus(item);
+  const progress = planItemProgress(item);
+  const commentsText = 'pending '+Number(item?.counts?.pending || 0)+' claimed '+Number(item?.counts?.claimed || 0)+' acknowledged '+Number(item?.counts?.acknowledged || 0)+' resolved '+Number(item?.counts?.resolved || 0);
+  const metadataText = [item?.plan?.repoName, item?.plan?.slug, item?.plan?.repoKey, item?.plan?.reviewMode, metadata.linearIssue, item?.plan?.linearIssueKey, status, progress, commentsText, item?.latestNote?.body].join(' ');
+  const pathText = [item?.plan?.planPath, item?.plan?.sourcePath, item?.plan?.rootPath, metadata.worktreePath, metadata.branch].join(' ');
+  const score = Math.max(quickOpenFieldScore(title, query, 3000), quickOpenFieldScore(metadataText, query, 1500), quickOpenFieldScore(pathText, query, 250));
+  if (!score) return 0;
+  return score + (item?.plan?.id === planId ? -10 : 0);
+}
+function quickOpenMeta(item){
+  return [item?.plan?.repoName, item?.plan?.slug, planItemStatus(item), planItemProgress(item), 'pending '+Number(item?.counts?.pending || 0), item?.modifiedAt ? 'updated '+new Date(item.modifiedAt).toLocaleDateString() : ''].filter(Boolean).join(' · ');
+}
+function quickOpenResultsFor(query){
+  const sorted = query.trim()
+    ? navigatorItems.map(item => ({ item, score: quickOpenFuzzyScore(item, query) })).filter(match => match.score > 0).sort((a,b)=>b.score-a.score||planItemTitle(a.item).localeCompare(planItemTitle(b.item))||String(a.item?.plan?.id||'').localeCompare(String(b.item?.plan?.id||''))).map(match => match.item)
+    : sortPlanNavItems(navigatorItems);
+  return sorted.slice(0, 15);
+}
+function setQuickOpenActiveIndex(index){
+  if (!quickOpenMatches.length) {
+    quickOpenActiveIndex = 0;
+    quickOpenInput?.removeAttribute('aria-activedescendant');
+    return;
+  }
+  quickOpenActiveIndex = (index + quickOpenMatches.length) % quickOpenMatches.length;
+  const activeId = 'quick-open-result-' + quickOpenActiveIndex;
+  quickOpenInput?.setAttribute('aria-activedescendant', activeId);
+  quickOpenResultList?.querySelectorAll('[data-quick-open-result]').forEach((row, rowIndex) => {
+    const active = rowIndex === quickOpenActiveIndex;
+    row.classList.toggle('active', active);
+    row.setAttribute('aria-selected', String(active));
+    if (active) row.scrollIntoView({ block: 'nearest' });
+  });
+}
+function renderQuickOpenResults(){
+  if (!quickOpenResultList) return;
+  const query = quickOpenInput?.value || '';
+  quickOpenMatches = navigatorLoadError ? [] : quickOpenResultsFor(query);
+  const hasError = Boolean(navigatorLoadError);
+  if (quickOpenError) { quickOpenError.hidden = !hasError; quickOpenError.firstChild.textContent = hasError ? 'Plans could not be loaded. ' : ''; }
+  if (quickOpenEmpty) quickOpenEmpty.hidden = hasError || quickOpenMatches.length > 0;
+  quickOpenResultList.innerHTML = quickOpenMatches.map((item, index) => '<div id="quick-open-result-'+index+'" class="quick-open-result" role="option" tabindex="-1" data-quick-open-result data-plan-id="'+escapeHtml(String(item?.plan?.id || ''))+'"><span class="quick-open-result-title">'+escapeHtml(planItemTitle(item))+'</span><span class="quick-open-result-meta">'+escapeHtml(quickOpenMeta(item))+'</span></div>').join('');
+  if (quickOpenStatus) {
+    if (hasError) quickOpenStatus.textContent = 'Active '+documentKind+'s could not be loaded. Retry when the service is reachable.';
+    else quickOpenStatus.textContent = quickOpenMatches.length ? quickOpenMatches.length+' matching active '+documentKind+(quickOpenMatches.length === 1 ? '' : 's')+'.' : 'No matching active '+documentKind+'s.';
+  }
+  setQuickOpenActiveIndex(0);
+}
+function captureQuickOpenFocus(){
+  try {
+    const frameDoc = frame?.contentDocument;
+    if (frameDoc?.hasFocus?.() && frameDoc.activeElement) return { element: frameDoc.activeElement };
+  } catch {}
+  return { element: document.activeElement };
+}
+function openQuickOpen(){
+  if (!quickOpenBackdrop || !quickOpenInput) return;
+  if (!quickOpenVisible()) quickOpenPreviousFocus = captureQuickOpenFocus();
+  quickOpenBackdrop.hidden = false;
+  quickOpenInput.value = '';
+  renderQuickOpenResults();
+  quickOpenInput.focus({ preventScroll: true });
+  if (!navigatorItems.length && !navigatorLoadError) void loadPlanNavigator().then(() => { if (quickOpenVisible()) renderQuickOpenResults(); });
+}
+function closeQuickOpen(){
+  if (!quickOpenBackdrop || !quickOpenVisible()) return;
+  quickOpenBackdrop.hidden = true;
+  const focusTarget = quickOpenPreviousFocus?.element;
+  quickOpenPreviousFocus = null;
+  try { focusTarget?.focus?.({ preventScroll: true }); } catch {}
+}
+function selectQuickOpenResult(){
+  const item = quickOpenMatches[quickOpenActiveIndex];
+  const id = item?.plan?.id;
+  if (!id) return;
+  window.location.href = '/p/' + encodeURIComponent(String(id));
+}
+function isQuickOpenShortcut(event){ return (event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && String(event.key || '').toLowerCase() === 'o'; }
+function quickOpenFocusableElements(){
+  if (!quickOpenDialog) return [];
+  return [...quickOpenDialog.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])')].filter(element => !element.disabled && element.getAttribute('aria-hidden') !== 'true' && element.getClientRects().length > 0);
+}
+function trapQuickOpenFocus(event){
+  const focusable = quickOpenFocusableElements();
+  if (!focusable.length) {
+    event.preventDefault();
+    quickOpenDialog?.focus?.({ preventScroll: true });
+    return;
+  }
+  const currentIndex = focusable.indexOf(document.activeElement);
+  const nextIndex = event.shiftKey ? (currentIndex <= 0 ? focusable.length - 1 : currentIndex - 1) : (currentIndex < 0 || currentIndex >= focusable.length - 1 ? 0 : currentIndex + 1);
+  event.preventDefault();
+  focusable[nextIndex].focus({ preventScroll: true });
+}
+function handleQuickOpenKeydown(event){
+  if (isQuickOpenShortcut(event)) {
+    event.preventDefault();
+    event.stopPropagation();
+    openQuickOpen();
+    return;
+  }
+  if (!quickOpenVisible()) return;
+  if (event.key === 'Tab') {
+    event.stopPropagation();
+    trapQuickOpenFocus(event);
+    return;
+  }
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    event.stopPropagation();
+    closeQuickOpen();
+    return;
+  }
+  if (event.key === 'ArrowDown') {
+    event.preventDefault();
+    event.stopPropagation();
+    setQuickOpenActiveIndex(quickOpenActiveIndex + 1);
+    return;
+  }
+  if (event.key === 'ArrowUp') {
+    event.preventDefault();
+    event.stopPropagation();
+    setQuickOpenActiveIndex(quickOpenActiveIndex - 1);
+    return;
+  }
+  if (event.key === 'Enter') {
+    const targetButton = event.target instanceof Element ? event.target.closest('button') : null;
+    if (targetButton && quickOpenDialog?.contains(targetButton)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    selectQuickOpenResult();
+  }
+}
 async function loadPlanNavigator(){
   if (!planListItems) return;
   try {
     const res = await fetch('/api/plans/navigator?limit=200&currentPlanId=' + encodeURIComponent(planId), { cache: 'no-store' });
     const json = await res.json();
     if (!json.ok) throw new Error(json.error?.message || 'Unable to load plans');
-    renderPlanNavigatorItems(json.data.plans || [], document.querySelector('#plan-list-nav')?.getAttribute('aria-label') === 'Active documents' ? 'documents' : 'plans');
+    navigatorItems = Array.isArray(json.data.plans) ? json.data.plans : [];
+    navigatorLoadError = null;
+    renderPlanNavigatorItems(navigatorItems, document.querySelector('#plan-list-nav')?.getAttribute('aria-label') === 'Active documents' ? 'documents' : 'plans');
     if (planListError) planListError.hidden = true;
     if (planListRetry) planListRetry.hidden = true;
+    if (quickOpenVisible()) renderQuickOpenResults();
   } catch (error) {
+    navigatorLoadError = error;
     if (planListError) { planListError.hidden = false; planListError.textContent = 'Unable to load plans. The current plan remains reviewable.'; }
     if (planListRetry) planListRetry.hidden = false;
+    if (quickOpenVisible()) renderQuickOpenResults();
   }
 }
 planListRetry?.addEventListener('click', () => { void loadPlanNavigator(); });
+quickOpenRetry?.addEventListener('click', () => { void loadPlanNavigator(); });
+quickOpenInput?.addEventListener('input', renderQuickOpenResults);
+quickOpenResultList?.addEventListener('mousemove', event => {
+  const row = event.target instanceof Element ? event.target.closest('[data-quick-open-result]') : null;
+  if (!row) return;
+  const rows = [...quickOpenResultList.querySelectorAll('[data-quick-open-result]')];
+  const index = rows.indexOf(row);
+  if (index >= 0) setQuickOpenActiveIndex(index);
+});
+quickOpenResultList?.addEventListener('click', event => {
+  const row = event.target instanceof Element ? event.target.closest('[data-quick-open-result]') : null;
+  if (!row) return;
+  event.preventDefault();
+  const rows = [...quickOpenResultList.querySelectorAll('[data-quick-open-result]')];
+  const index = rows.indexOf(row);
+  if (index >= 0) setQuickOpenActiveIndex(index);
+  selectQuickOpenResult();
+});
+quickOpenBackdrop?.addEventListener('mousedown', event => { if (event.target === quickOpenBackdrop) closeQuickOpen(); });
+document.addEventListener('keydown', handleQuickOpenKeydown, true);
 setInterval(() => { void loadPlanNavigator(); }, 30000);
 function renderMarkers(items){
   markerComments = items.filter(comment => comment.anchor?.rect);
@@ -1784,6 +1997,7 @@ function attachFrameListeners(){
   frameListenersAttached = true;
   const doc = frame.contentDocument;
   ensureFrameTapTargets(doc);
+  doc.addEventListener('keydown', handleQuickOpenKeydown, true);
   debugTouch('listeners-attached', { readyState: doc.readyState, url: doc.location.href });
   const adoptTextSelection = () => {
     if (submitInFlight || !composer.hidden) return false;

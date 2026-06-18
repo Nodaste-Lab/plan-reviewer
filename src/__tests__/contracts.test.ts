@@ -1597,6 +1597,10 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     const shell = await app.inject({ method: 'GET', url: `/p/${notReady.json().data.planId}` });
     assert.equal(shell.statusCode, 200);
     assert.match(shell.body, /id="plan-list-nav"/);
+    assert.match(shell.body, /id="quick-open-dialog"[^>]*role="dialog"[^>]*aria-modal="true"[^>]*aria-labelledby="quick-open-title"/);
+    assert.match(shell.body, /id="quick-open-input"[^>]*role="combobox"[^>]*aria-controls="quick-open-results"/);
+    assert.match(shell.body, /id="quick-open-results"[^>]*role="listbox"/);
+    assert.match(shell.body, /id="quick-open-retry"/);
     assert.match(shell.body, /id="desktop-plan-nav-toggle"[^>]*aria-controls="plan-list-nav"[^>]*aria-expanded="true"/);
     assert.match(shell.body, /id="desktop-comments-toggle"[^>]*aria-controls="sidebar"[^>]*aria-expanded="false"/);
     assert.match(shell.body, /id="current-plan-bar"/);
@@ -1605,8 +1609,16 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     assert.match(shellCss.body, /--plan-nav-width:260px/);
     assert.match(shellCss.body, /body\.plan-nav-collapsed\{--plan-nav-width:0\}/);
     assert.match(shellCss.body, /grid-template-columns:var\(--plan-nav-width\) minmax\(0,1fr\) var\(--comments-width\)/);
+    assert.match(shellCss.body, /#quick-open-backdrop/);
+    assert.match(shellCss.body, /#quick-open-result-list/);
+    assert.match(shellCss.body, /\.quick-open-result\.active/);
     const shellClient = await app.inject({ method: 'GET', url: '/client.js' });
     assert.equal(shellClient.statusCode, 200);
+    assert.match(shellClient.body, /navigatorItems/);
+    assert.match(shellClient.body, /openQuickOpen/);
+    assert.match(shellClient.body, /quickOpenFuzzyScore/);
+    assert.match(shellClient.body, /handleQuickOpenKeydown/);
+    assert.match(shellClient.body, /frame\.contentDocument.*keydown/s);
     assert.match(shellClient.body, /setPlanNavOpen\(open\)/);
     assert.match(shellClient.body, /planListNav\.inert = !open/);
     const navHtml = shell.body.slice(shell.body.indexOf('id="plan-list-nav"'), shell.body.indexOf('<main id="review"'));
