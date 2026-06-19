@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Archive Toast Undo Plan</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07111f;
+      --panel: #0f172a;
+      --panel-2: #111827;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #38bdf8;
+      --accent-2: #22c55e;
+      --warn: #f59e0b;
+      --border: #334155;
+      --code: #020617;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top left, rgba(56,189,248,.14), transparent 36rem), var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.55;
+    }
+    main { max-width: 1120px; margin: 0 auto; padding: 40px 22px 72px; }
+    section, article { border: 1px solid var(--border); border-radius: 16px; background: rgba(15,23,42,.82); padding: 22px; margin: 18px 0; }
+    h1, h2, h3 { line-height: 1.18; margin: 0 0 12px; }
+    h1 { font-size: clamp(2rem, 4vw, 3.3rem); }
+    h2 { font-size: 1.45rem; color: #f8fafc; }
+    h3 { font-size: 1.05rem; color: #bae6fd; }
+    p { margin: 0 0 12px; }
+    a { color: #7dd3fc; }
+    code, pre { background: var(--code); color: #dbeafe; border-radius: 6px; }
+    code { padding: .12rem .28rem; }
+    pre { padding: 14px; overflow: auto; border: 1px solid #1e293b; }
+    ul, ol { margin-top: 8px; }
+    li { margin: 6px 0; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+    th, td { border: 1px solid var(--border); padding: 10px; text-align: left; vertical-align: top; }
+    th { background: #0b1220; color: #f8fafc; }
+    .hero { border-color: rgba(56,189,248,.45); background: linear-gradient(135deg, rgba(14,165,233,.16), rgba(15,23,42,.9)); }
+    .eyebrow { text-transform: uppercase; letter-spacing: .1em; color: var(--accent); font-weight: 800; font-size: .78rem; }
+    .status { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0 0; }
+    .pill { display: inline-flex; align-items: center; border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; background: #0b1220; color: #cbd5e1; font-size: .86rem; font-weight: 800; }
+    .pill.ready { border-color: var(--accent-2); color: #bbf7d0; }
+    .pill.review { border-color: var(--warn); color: #fde68a; }
+    .muted { color: var(--muted); }
+    .progress-list { list-style: none; padding: 0; }
+    .progress-list li { display: flex; gap: 10px; align-items: flex-start; }
+    .progress-list input { margin-top: 4px; }
+    .callout { border-left: 4px solid var(--accent); padding: 12px 14px; background: rgba(56,189,248,.08); border-radius: 10px; }
+    .mock-wide { width: min(1280px, calc(100vw - 44px)); margin-left: 50%; transform: translateX(-50%); }
+    .mock-flow { display: grid; gap: 18px; }
+    .mock-browser { border: 1px solid #2b364d; border-radius: 18px; overflow: hidden; background: #0b1020; box-shadow: 0 24px 80px rgba(2,6,23,.55); }
+    .mock-browserbar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #020617; border-bottom: 1px solid #1e293b; color: #94a3b8; font-size: .82rem; }
+    .mock-dot { width: 10px; height: 10px; border-radius: 50%; background: #475569; }
+    .mock-dot.red { background: #ef4444; } .mock-dot.yellow { background: #f59e0b; } .mock-dot.green { background: #22c55e; }
+    .mock-url { margin-left: 8px; border: 1px solid #1f2937; border-radius: 999px; background: #0f172a; padding: 4px 10px; flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .mock-page { min-height: 410px; padding: 22px; background: #0b1020; position: relative; }
+    .mock-header { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; margin-bottom: 18px; }
+    .mock-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .mock-btn { border: 1px solid #475569; border-radius: 7px; background: #1e293b; color: #e5e7eb; padding: 8px 10px; font-weight: 800; font-size: .84rem; }
+    .mock-btn.primary { border-color: #38bdf8; color: #bae6fd; }
+    .mock-btn.green { border-color: #22c55e; color: #bbf7d0; }
+    .mock-btn.dimmed { opacity: .5; }
+    .mock-toolbar { display: grid; grid-template-columns: minmax(0,1fr) 220px; gap: 10px; margin: 14px 0; }
+    .mock-input { border: 1px solid #2b364d; border-radius: 7px; background: #0f172a; color: #9ca3af; padding: 10px; }
+    .mock-card { border: 1px solid #2563eb; border-left: 5px solid #2563eb; border-radius: 9px; background: #111827; padding: 16px; margin: 12px 0; }
+    .mock-card.archived { border-color: #64748b; border-left-color: #64748b; opacity: .78; }
+    .mock-card h4 { margin: 0 0 8px; color: #f8fafc; }
+    .mock-meta { color: #a7b0c0; font-size: .82rem; }
+    .mock-toast { position: absolute; top: 12px; right: 16px; width: min(520px, calc(100% - 32px)); display: flex; align-items: center; justify-content: space-between; gap: 14px; border: 1px solid #38bdf8; border-radius: 14px; background: rgba(15,23,42,.96); color: #e5e7eb; padding: 12px 14px; box-shadow: 0 18px 50px rgba(2,6,23,.64); z-index: 3; }
+    .mock-toast strong { color: #f8fafc; }
+    .mock-toast p { margin: 2px 0 0; color: #a7b0c0; font-size: .88rem; }
+    .mock-toast button { border: 2px solid #86efac; border-radius: 10px; background: linear-gradient(180deg,#22c55e,#15803d); color: #052e16; padding: 10px 18px; font-weight: 950; font-size: .95rem; box-shadow: 0 0 0 3px rgba(34,197,94,.18), 0 10px 24px rgba(21,128,61,.38); cursor: pointer; }
+    .mock-toast.ghost { opacity: .18; border-style: dashed; }
+    .mock-frame-label { display: inline-flex; border: 1px solid #334155; border-radius: 999px; background: #020617; color: #cbd5e1; padding: 3px 9px; font-size: .78rem; font-weight: 900; margin-bottom: 10px; }
+    .mock-plan-shell { display: grid; grid-template-columns: 240px minmax(0,1fr) 48px; min-height: 355px; border-top: 1px solid #2b364d; }
+    .mock-nav { background: #0b1220; border-right: 1px solid #2b364d; padding: 12px; }
+    .mock-doc { background: #f8fafc; color: #0f172a; padding: 26px; }
+    .mock-comments { background: #111827; border-left: 1px solid #2b364d; }
+    .mock-archived-pill { display: inline-flex; border: 1px solid #475569; border-radius: 999px; background: #1e293b; color: #cbd5e1; padding: 4px 10px; font-size: .78rem; font-weight: 900; }
+    @media(max-width:760px){.mock-toolbar,.mock-header{display:block}.mock-actions{justify-content:flex-start;margin-top:10px}.mock-plan-shell{grid-template-columns:1fr}.mock-nav,.mock-comments{display:none}.mock-toast{top:10px;left:12px;right:12px;width:auto;align-items:flex-start;flex-direction:column}.mock-page{padding:14px}}
+  </style>
+</head>
+<body>
+<main>
+  <section class="hero" id="title">
+    <p class="eyebrow">Plan-reviewer HTML implementation plan</p>
+    <h1>Replace Archive Confirmation Prompts with Undo Toasts</h1>
+    <p id="solution-narrative">Remove blocking browser confirmation dialogs from plan archive actions. Archive immediately, show an unobtrusive top-bar overlay toast with an Undo button for 10 seconds, dismiss the toast when the user resumes normal page interaction, and use the existing unarchive API to recover accidental archives.</p>
+    <div class="status" id="status">
+      <span class="pill ready">Status: execution-ready</span>
+      <span class="pill">Linear issue: none supplied</span>
+      <span class="pill">Plan path: <code>thoughts/plans/archive-toast-undo.html</code></span>
+    </div>
+  </section>
+
+  <section id="goal">
+    <h2>Goal</h2>
+    <p>Make archive actions feel reversible instead of interruptive: clicking Archive on an active plan archives it without a confirm popup, displays an unobtrusive top-of-screen toast with Undo for 10 seconds, and lets the user continue scrolling or interacting without being blocked.</p>
+  </section>
+
+  <section id="why-this-exists">
+    <h2>Why this plan exists</h2>
+    <p>The current browser <code>confirm()</code> popup blocks the reviewer workflow and forces a decision before the user can keep working. The desired interaction is a safer modern pattern: perform the action, offer a short undo window, and dismiss the recovery UI when the user moves on.</p>
+  </section>
+
+  <section id="authority-inputs">
+    <h2>Authority and inputs</h2>
+    <ul>
+      <li>User request: stop prompting on archive; show a 10-second undo toast that goes away on continued page interaction.</li>
+      <li><code>AGENTS.md</code>: non-trivial repo changes require a reviewed HTML plan registered through <code>plan-review</code>.</li>
+      <li><code>thoughts/specs/product_intent.md</code>: simplest browser workflow should work without tribal knowledge; browser review actions should be recoverable and idempotent.</li>
+      <li>Code inspection of <code>src/server/app.ts</code>, <code>src/test-fixtures/e2e-run.ts</code>, and existing archive/unarchive API routes.</li>
+    </ul>
+  </section>
+
+  <section id="current-implementation-reality">
+    <h2>Current implementation reality</h2>
+    <table>
+      <thead><tr><th>Surface</th><th>Current behavior</th><th>Implication</th></tr></thead>
+      <tbody>
+        <tr><td>Active index</td><td><code>indexHtml</code> attaches a click handler to <code>[data-archive-plan]</code>, calls <code>confirm('Archive this plan?')</code>, then POSTs <code>/api/plans/:planId/archive</code> and removes the card.</td><td>Replace the confirm branch with immediate archive plus toast. The card-removal path already exists.</td></tr>
+        <tr><td>Plan review shell</td><td><code>clientJs</code> handles <code>#archive-plan</code>, calls <code>confirm('Archive this '+documentKind+'?')</code>, POSTs archive, then redirects to <code>/</code>.</td><td>Replace confirm and redirect with local archived-state UI plus toast undo so the user is not kicked out of the current page.</td></tr>
+        <tr><td>Deferred index</td><td>The deferred page has an Archive button without a confirm popup and removes the card after a successful archive.</td><td>Bring this archive entry point into scope for the same top-bar toast and Undo behavior so all browser archive actions are consistent.</td></tr>
+        <tr><td>Recovery API</td><td><code>POST /api/plans/:planId/unarchive</code> already restores archived plans, re-registers source sync, and runs manual sync.</td><td>No new API is required for Undo.</td></tr>
+        <tr><td>Existing e2e</td><td><code>src/test-fixtures/e2e-run.ts</code> currently accepts the archive dialog before clicking archive.</td><td>Update tests to fail if a dialog appears and to exercise toast Undo.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="ui-mocks" class="mock-wide">
+    <h2>Full-width UI mocks</h2>
+    <p class="muted">These mocks use the existing plan-reviewer dark shell: <code>#0b1020</code> page background, <code>#0f172a</code>/<code>#111827</code> panels, slate borders, blue primary navigation, green restore/undo affordances, and the current card/action layout. They show the intended transition from immediate archive to recovery toast to dismissed toast. The toast is intentionally anchored as a compact top-bar overlay, not a large bottom snackbar and not over the plan navigator/list. The Undo affordance is a high-contrast raised button, not a subtle link.</p>
+
+    <div class="mock-flow" id="mock-transition-flow">
+      <figure class="mock-browser" id="mock-index-before-archive">
+        <div class="mock-browserbar"><span class="mock-dot red"></span><span class="mock-dot yellow"></span><span class="mock-dot green"></span><span class="mock-url">http://mbp.braid-python.ts.net:4317/</span></div>
+        <div class="mock-page">
+          <span class="mock-frame-label">1. Before click — active index</span>
+          <div class="mock-header"><div><h3>Plan Review Index</h3><p class="mock-meta">Active plans are shown by default.</p></div><div class="mock-actions"><span class="mock-btn primary">Deferred (2) →</span><span class="mock-btn primary">Archived (7) →</span></div></div>
+          <div class="mock-toolbar"><div class="mock-input">Filter plans</div><div class="mock-input">All repos</div></div>
+          <div class="mock-card"><div class="mock-header"><div><h4>plan-reviewer / archive-toast-undo</h4><p class="mock-meta"><code>thoughts/plans/archive-toast-undo.html</code></p></div><div class="mock-actions"><span class="mock-btn">Incomplete</span><span class="mock-btn">Archive</span></div></div><p class="mock-meta">Execution ready: No · pending 0 · updated just now</p></div>
+          <div class="mock-card"><h4>plan-reviewer / browser-tab-plan-title</h4><p class="mock-meta">Another active card remains available while the user works.</p></div>
+        </div>
+      </figure>
+
+      <figure class="mock-browser" id="mock-index-toast-visible">
+        <div class="mock-browserbar"><span class="mock-dot red"></span><span class="mock-dot yellow"></span><span class="mock-dot green"></span><span class="mock-url">http://mbp.braid-python.ts.net:4317/</span></div>
+        <div class="mock-page">
+          <span class="mock-frame-label">2. Immediately after Archive — no popup, top-bar toast offers Undo</span>
+          <div class="mock-header"><div><h3>Plan Review Index</h3><p class="mock-meta">The archived card is removed from the active list after the archive request succeeds.</p></div><div class="mock-actions"><span class="mock-btn primary">Deferred (2) →</span><span class="mock-btn primary">Archived (8) →</span></div></div>
+          <div class="mock-toolbar"><div class="mock-input">Filter plans</div><div class="mock-input">All repos</div></div>
+          <div class="mock-card"><h4>plan-reviewer / browser-tab-plan-title</h4><p class="mock-meta">The page remains usable; filters and links are not blocked by a modal.</p></div>
+          <div class="mock-toast" role="status" aria-label="Archived plan undo toast"><div><strong>Archived “archive-toast-undo”.</strong><p>Undo is available for 10 seconds. It stays near the top bar and clears when you keep working.</p></div><button type="button">Undo</button></div>
+        </div>
+      </figure>
+
+      <figure class="mock-browser" id="mock-index-toast-dismissed">
+        <div class="mock-browserbar"><span class="mock-dot red"></span><span class="mock-dot yellow"></span><span class="mock-dot green"></span><span class="mock-url">http://mbp.braid-python.ts.net:4317/</span></div>
+        <div class="mock-page">
+          <span class="mock-frame-label">3. After 10 seconds or continued interaction — toast gone</span>
+          <div class="mock-header"><div><h3>Plan Review Index</h3><p class="mock-meta">User scrolled, clicked a filter, or waited out the recovery window.</p></div><div class="mock-actions"><span class="mock-btn primary">Deferred (2) →</span><span class="mock-btn primary">Archived (8) →</span></div></div>
+          <div class="mock-toolbar"><div class="mock-input">browser tab title</div><div class="mock-input">plan-reviewer</div></div>
+          <div class="mock-card"><h4>plan-reviewer / browser-tab-plan-title</h4><p class="mock-meta">Normal work continues. To recover after dismissal, use the Archived page Restore button.</p></div>
+          <div class="mock-toast ghost" aria-hidden="true"><div><strong>Archived toast dismissed</strong><p>No active undo affordance remains after dismissal.</p></div><button type="button">Undo</button></div>
+        </div>
+      </figure>
+
+      <figure class="mock-browser" id="mock-detail-archive-state">
+        <div class="mock-browserbar"><span class="mock-dot red"></span><span class="mock-dot yellow"></span><span class="mock-dot green"></span><span class="mock-url">http://mbp.braid-python.ts.net:4317/p/plan_g_Hz76WZ7lNd</span></div>
+        <div class="mock-page" style="padding:0">
+          <div class="mock-header" style="padding:12px 16px; margin:0; background:#0f172a; border-bottom:1px solid #2b364d"><div class="mock-actions"><span class="mock-btn primary">☰ Navigator</span><span class="mock-btn primary">← Plan index</span><span class="mock-btn dimmed">Build Plan</span><span class="mock-archived-pill">Archived</span><span class="mock-btn green">Restore plan</span><span class="mock-btn">Comments</span></div></div>
+          <div class="mock-plan-shell"><div class="mock-nav"><h4>Active plans</h4><p class="mock-meta">Navigator stays available and is not covered by the toast.</p></div><div class="mock-doc"><h3 style="color:#0f172a">Replace Archive Confirmation Prompts with Undo Toasts</h3><p>The plan document remains visible after archive; the user is not redirected away mid-review.</p></div><div class="mock-comments"></div></div>
+          <div class="mock-toast" role="status" aria-label="Archived detail undo toast"><div><strong>Archived this plan.</strong><p>Undo for 10 seconds. The toast overlays the top bar on the right, clear of the plan list.</p></div><button type="button">Undo</button></div>
+        </div>
+      </figure>
+    </div>
+  </section>
+
+  <section id="readiness-gates">
+    <h2>Readiness review gates</h2>
+    <table>
+      <thead><tr><th>Gate</th><th>Verdict</th><th>Evidence</th></tr></thead>
+      <tbody>
+        <tr><td>PM / product-intent review</td><td>Ready</td><td>2026-06-18 parent PM pass verified the plan advances the product-intent golden path: archive becomes non-blocking, recovery is built into the normal UI, lifecycle/source-sync/queue contracts remain unchanged, and failure cases are actionable.</td></tr>
+        <tr><td>Claude Code plan rereview</td><td><code>PLAN_EXECUTION_READY</code></td><td><code>/tmp/archive-toast-undo-claude-rereview.md</code>: no blockers; current-code assumptions, navigator/quick-open reconciliation, deferred archive parity, and e2e coverage are accurate and executable.</td></tr>
+        <tr><td>Codex final plan rereview</td><td><code>PLAN_EXECUTION_READY</code></td><td><code>/tmp/archive-toast-undo-codex-final-review.md</code>: findings none; code assumptions match the repo and the plan covers toast/Undo behavior, interaction dismissal, top-bar placement, navigator/quick-open reconciliation, and e2e verification.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="progress">
+    <h2>Progress</h2>
+    <ul class="progress-list">
+      <li><input type="checkbox" checked disabled> <span>P1 — Add archive undo toast behavior and focused tests. Completed 2026-06-18: added non-blocking archive toast/Undo behavior across active index, deferred index, and detail shell; targeted e2e passed with no archive dialogs.</span></li>
+      <li><input type="checkbox" checked disabled> <span>P2 — Verify real browser workflow and update plan evidence. Completed 2026-06-18: full build/test/e2e gates passed; Codex returned <code>PASS_SCOPED</code>; Claude returned <code>PASS_WITH_DOCUMENTED_OUT_OF_SCOPE_FOLLOW_UPS</code> with no in-plan findings.</span></li>
+    </ul>
+  </section>
+
+  <section id="resume-instructions">
+    <h2>Resume instructions</h2>
+    <p>Read this plan fully, inspect <code>git status --short</code>, then execute the first unchecked item in <a href="#progress">Progress</a>. Keep scope limited to removing archive confirmation prompts and adding non-blocking undo to archive actions. Do not redesign lifecycle state, comments, source sync, or plan navigation. After each phase, run its verification, update this Progress section and the Decisions / Deviations Log, and run a scoped implementation review before advancing.</p>
+  </section>
+
+  <section id="product-intent-alignment">
+    <h2>Product intent alignment</h2>
+    <p>This plan advances <code>thoughts/specs/product_intent.md</code> by making the simplest reviewer workflow less interruptive while preserving recoverability. It keeps queue/source-sync semantics unchanged, uses the existing archive/unarchive lifecycle, and makes accidental archive recovery available directly in the browser UI without a blocking modal.</p>
+    <ul>
+      <li><strong>Golden path:</strong> Archive is one click and does not block page interaction.</li>
+      <li><strong>Safe recovery:</strong> Undo uses the existing unarchive endpoint during a 10-second window.</li>
+      <li><strong>Fail-closed boundary:</strong> If archive fails, the UI keeps the item actionable and shows an error; if undo fails, the toast reports that the plan remains archived.</li>
+      <li><strong>Truthful state:</strong> Once archived, the active/deferred index removes the card, the review shell indicates archived/restorable state instead of pretending the plan is active, and active navigator/quick-open state is reconciled.</li>
+    </ul>
+  </section>
+
+  <section id="locked-decisions">
+    <h2>Locked decisions</h2>
+    <ul>
+      <li id="decision-no-confirm"><strong>No confirm dialogs for archive.</strong> Remove <code>confirm()</code> from archive actions on the active index and plan review shell; keep deferred archive prompt-free.</li>
+      <li id="decision-toast-window"><strong>Undo window is 10 seconds.</strong> The toast auto-dismisses after 10 seconds and no longer offers recovery after dismissal.</li>
+      <li id="decision-toast-placement"><strong>Toast placement is top-bar overlay.</strong> The toast is compact and anchored near the top-right/top bar of the current page or viewer shell, not over the plan navigator/list and not as a bottom snackbar.</li>
+      <li id="decision-undo-prominence"><strong>Undo is a prominent button.</strong> The Undo control uses a clearly clickable, high-contrast raised button treatment with sufficient padding and focus/hover states; it must not look like a quiet text link.</li>
+      <li id="decision-interaction-dismiss"><strong>Normal interaction dismisses the toast.</strong> Scroll, pointer/click outside the toast, keyboard input, filter/search interaction, rendered-plan iframe scroll/click on desktop, or mobile review/touch-surface interaction dismisses the toast so the user can continue working.</li>
+      <li id="decision-navigator-reconcile"><strong>Archive state reconciles navigation.</strong> Detail-page archive/Undo must refresh or locally reconcile the active plan navigator and quick-open cache so archived plans leave active navigation and Undo restores them.</li>
+      <li id="decision-existing-api"><strong>Use existing unarchive API.</strong> Do not add a new archive transaction or delayed archive API; archive remains immediate and undo is a restore.</li>
+      <li id="decision-detail-no-redirect"><strong>Do not redirect after detail-page archive.</strong> The review shell updates to archived state and shows undo instead of sending the user back to the index.</li>
+    </ul>
+  </section>
+
+  <section id="acceptance-criteria">
+    <h2>Acceptance criteria</h2>
+    <ol>
+      <li id="ac-no-popup">Clicking Archive on the active index, deferred index, or plan review shell does not open a browser confirm dialog.</li>
+      <li id="ac-toast-visible">After a successful archive from any browser archive entry point, a compact top-bar overlay toast appears with clear archived text and a prominent high-contrast Undo button, without covering the plan navigator/list.</li>
+      <li id="ac-undo-restores">Clicking Undo within the visible toast calls <code>/api/plans/:planId/unarchive</code>, restores the plan to active state, reloads/reconciles the current UI, and returns index, navigator, and quick-open state to a truthful active view.</li>
+      <li id="ac-timeout-dismiss">If no action is taken, the toast disappears after 10 seconds and the plan remains archived.</li>
+      <li id="ac-interaction-dismiss">If the user scrolls, clicks outside the toast, types in a filter/search field, scrolls/clicks inside the rendered-plan iframe, uses the mobile review/touch surface, or otherwise resumes interaction, the toast dismisses and the plan remains archived.</li>
+      <li id="ac-failure-handling">Archive failure leaves the archive control usable and shows an inline or toast error; Undo failure leaves the user informed that the plan remains archived.</li>
+      <li id="ac-no-api-regression">Archive, unarchive, deferred, source sync, queue claiming, and rendered-plan safety contracts remain unchanged.</li>
+    </ol>
+  </section>
+
+  <section id="bdd-scenarios">
+    <h2>BDD scenarios</h2>
+    <article id="bdd-index-archive-toast">
+      <h3>BDD-1: Active index archive shows undo without popup</h3>
+      <p><strong>Given</strong> an active plan card on the index, <strong>when</strong> the user clicks Archive, <strong>then</strong> no dialog appears, the card leaves the active list after the archive request succeeds, and a compact top-bar toast with a clearly clickable Undo button is visible.</p>
+    </article>
+    <article id="bdd-index-undo">
+      <h3>BDD-2: Undo from index restores the plan</h3>
+      <p><strong>Given</strong> the index archive toast is visible, <strong>when</strong> the user clicks Undo, <strong>then</strong> the app calls unarchive, reloads the index from server-rendered state, and the plan is visible again as active.</p>
+    </article>
+    <article id="bdd-detail-archive-toast">
+      <h3>BDD-3: Detail archive stays non-blocking</h3>
+      <p><strong>Given</strong> the user is reviewing a plan detail page, <strong>when</strong> the user clicks Archive, <strong>then</strong> no dialog appears, the page does not redirect to the index, the shell shows archived state, active navigator and quick-open entries are refreshed or locally removed, and the toast offers a prominent Undo button as a top-bar overlay that does not cover the plan navigator/list.</p>
+    </article>
+    <article id="bdd-deferred-archive-toast">
+      <h3>BDD-4: Deferred index archive has the same undo pattern</h3>
+      <p><strong>Given</strong> a deferred plan card, <strong>when</strong> the user clicks Archive, <strong>then</strong> no dialog appears, the card leaves the deferred list, and the same top-bar toast with Undo can restore the plan to active state through <code>/unarchive</code>.</p>
+    </article>
+    <article id="bdd-dismiss-on-work">
+      <h3>BDD-5: Continuing work dismisses recovery UI</h3>
+      <p><strong>Given</strong> an archive toast is visible, <strong>when</strong> the user scrolls the page, interacts outside the toast, scrolls/clicks in the rendered plan iframe on desktop, or uses the mobile review/touch surface, <strong>then</strong> the toast disappears and the archived lifecycle state remains unchanged.</p>
+    </article>
+    <article id="bdd-failures">
+      <h3>BDD-6: Failed archive or undo is explicit</h3>
+      <p><strong>Given</strong> archive or unarchive fails, <strong>when</strong> the user triggers the action, <strong>then</strong> the UI does not silently lose the plan and shows a concise error with the next safe action: retry Archive or restore from Archived plans.</p>
+    </article>
+  </section>
+
+  <section id="phase-plan">
+    <h2>Phase-by-phase execution plan</h2>
+    <article id="phase-p1-toast-tests">
+      <h3>P1 — Add archive undo toast behavior and focused tests</h3>
+      <h4>End State</h4>
+      <p>All browser archive entry points covered by this slice use a non-blocking toast with Undo instead of a confirm prompt, and automated tests prove the key behavior.</p>
+      <h4>Tests first</h4>
+      <ul>
+        <li>Update the relevant e2e coverage in <code>src/test-fixtures/e2e-run.ts</code> so archive clicks fail the run if a dialog appears.</li>
+        <li>Add e2e assertions for active-index and deferred-index toast visibility, top-bar placement that avoids the plan navigator/list, prominent Undo button presence, Undo restore, and detail-page archive staying on the plan page.</li>
+        <li>Add dismissal assertions for regular page interaction plus rendered-plan iframe scroll/click on desktop and the mobile review/touch surface where stable in Playwright.</li>
+        <li>Add e2e assertions that detail archive removes the plan from active navigator/quick-open state and Undo restores it.</li>
+      </ul>
+      <h4>Expected files</h4>
+      <ul>
+        <li><code>src/server/app.ts</code></li>
+        <li><code>src/test-fixtures/e2e-run.ts</code></li>
+      </ul>
+      <h4>Work</h4>
+      <ul>
+        <li>Add small reusable toast markup/CSS/JS helpers inside the existing server-rendered browser shell/index scripts; avoid new dependencies.</li>
+        <li>Remove <code>confirm()</code> from active-index and review-shell archive handlers, and remove archive-failure <code>alert()</code> dialogs from active-index and review-shell failure paths in favor of inline or toast errors.</li>
+        <li>On successful active-index archive, remove the card and show a compact top-bar toast with a prominent raised Undo button; Undo calls unarchive and reloads the index so the active plan is visible again from server-rendered state.</li>
+        <li>On successful deferred-index archive, remove the card and show the same compact top-bar toast/Undo path; Undo calls unarchive and returns the plan to active lifecycle state.</li>
+        <li>On successful detail archive, update shell controls/status to archived state, keep the user on the detail page, refresh or locally reconcile active navigator and quick-open state, and show a top-bar overlay toast with a prominent raised Undo button that stays clear of the plan navigator/list; Undo calls unarchive, returns the shell to active state, and refreshes or locally restores navigator/quick-open state.</li>
+        <li>Dismiss the toast after 10 seconds or on user interaction outside the toast, including rendered-plan iframe scroll/click on desktop and mobile review/touch surface interaction; preserve clicks inside the toast so Undo works.</li>
+        <li>Keep existing archive/unarchive API semantics untouched.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build
+node dist/test-fixtures/e2e-run.js</code></pre>
+    </article>
+
+    <article id="phase-p2-verification-review">
+      <h3>P2 — Verify real browser workflow and update plan evidence</h3>
+      <h4>End State</h4>
+      <p>The implementation is verified through the repo's UI gates, reviewed for scoped regressions, and the plan records RED/GREEN evidence.</p>
+      <h4>Tests first</h4>
+      <p>P2 uses the P1 tests as regression gates; no additional product code should be added unless review finds a missed acceptance case.</p>
+      <h4>Expected files</h4>
+      <ul>
+        <li><code>thoughts/plans/archive-toast-undo.html</code></li>
+        <li>Any implementation files from P1 if a review finding requires a small correction.</li>
+      </ul>
+      <h4>Work</h4>
+      <ul>
+        <li>Run the full relevant UI gate for browser shell changes.</li>
+        <li>Perform a scoped implementation review focused on archive lifecycle correctness, accidental dismissal behavior, and no confirm dialogs.</li>
+        <li>Update Progress and Decisions / Deviations Log with verification evidence.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build
+bun run test
+bun run test:e2e</code></pre>
+    </article>
+  </section>
+
+  <section id="verification-strategy">
+    <h2>Verification strategy</h2>
+    <table>
+      <thead><tr><th>Acceptance</th><th>BDD</th><th>Test layer</th><th>Command</th></tr></thead>
+      <tbody>
+        <tr><td><a href="#ac-no-popup">AC1</a>, <a href="#ac-toast-visible">AC2</a></td><td>BDD-1, BDD-3, BDD-4</td><td>Playwright e2e</td><td><code>node dist/test-fixtures/e2e-run.js</code></td></tr>
+        <tr><td><a href="#ac-undo-restores">AC3</a></td><td>BDD-2, BDD-3, BDD-4</td><td>Playwright e2e plus existing unarchive route coverage</td><td><code>node dist/test-fixtures/e2e-run.js</code></td></tr>
+        <tr><td><a href="#ac-timeout-dismiss">AC4</a>, <a href="#ac-interaction-dismiss">AC5</a></td><td>BDD-5</td><td>Playwright e2e with deterministic timeout, outside interaction, iframe interaction, and mobile touch-surface dismissal</td><td><code>node dist/test-fixtures/e2e-run.js</code></td></tr>
+        <tr><td><a href="#ac-failure-handling">AC6</a>, <a href="#ac-no-api-regression">AC7</a></td><td>BDD-6</td><td>Existing contracts plus e2e failure route mocking</td><td><code>bun run test</code> and <code>node dist/test-fixtures/e2e-run.js</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="delivery-order">
+    <h2>Delivery order</h2>
+    <ol>
+      <li>Update e2e expectations to reject archive dialogs and assert toast/undo behavior.</li>
+      <li>Implement toast helper and remove confirm prompts.</li>
+      <li>Wire active-index, deferred-index, and detail-page archive success/failure/undo/dismissal states.</li>
+      <li>Run targeted e2e, then full build/test gates.</li>
+      <li>Run scoped implementation review and record evidence.</li>
+    </ol>
+  </section>
+
+  <section id="non-goals">
+    <h2>Non-goals</h2>
+    <ul>
+      <li>No API schema change or delayed archive transaction model.</li>
+      <li>No redesign of archive, deferred, source sync, queue, comment, or note semantics beyond adding consistent archive Undo recovery to the deferred archive button.</li>
+      <li>No global notification framework beyond the minimal toast needed for this workflow.</li>
+      <li>No change to the defer prompt; this request is specifically about archive confirmation prompts.</li>
+      <li>No authentication or multi-user concurrency work.</li>
+    </ul>
+  </section>
+
+  <section id="decisions-deviations-log">
+    <h2>Decisions / Deviations log</h2>
+    <ul>
+      <li><strong>2026-06-18:</strong> Initial plan created from user request and repo inspection. Chose immediate archive plus existing unarchive endpoint for Undo to avoid API churn and preserve lifecycle semantics.</li>
+      <li><strong>2026-06-18:</strong> Browser reviewer requested full-width visuals. Added application-style mocks for active-index before/archive toast/dismissed states and detail-page archived-with-undo state.</li>
+      <li><strong>2026-06-18:</strong> Browser reviewer clarified toast placement. Updated mocks and requirements so the undo toast is an unobtrusive top-bar overlay that does not cover the plan list/navigator.</li>
+      <li><strong>2026-06-18:</strong> Browser reviewer requested a more obvious Undo action. Updated the mock button styling and requirements so Undo is a prominent raised button with high contrast, padding, and button-like affordance.</li>
+      <li><strong>2026-06-18:</strong> Claude Code returned <code>PLAN_EXECUTION_READY</code> with optional tightening. Codex required revisions for deferred archive parity, rendered-plan iframe/mobile dismissal coverage, and active navigator/quick-open reconciliation. Integrated those requirements and clarified index Undo uses server-rendered reload, archive failure alerts are replaced, and AC6 verification includes e2e route mocking.</li>
+      <li><strong>2026-06-18:</strong> PM/product-intent gate passed after revisions: the plan keeps archive non-blocking, recoverable, truthful across navigation surfaces, and does not change queue/source-sync lifecycle contracts.</li>
+      <li><strong>2026-06-18:</strong> Claude Code rereview returned <code>PLAN_EXECUTION_READY</code>. Codex rereview found the substance ready and requested truthful execution-ready status/evidence/registration; after the status/evidence update, final Codex rereview returned <code>PLAN_EXECUTION_READY</code> with no findings.</li>
+      <li><strong>2026-06-18:</strong> P1 implementation completed. RED evidence: the first targeted e2e run failed because deferred archive still sent an empty JSON request body/header and did not remove the card. GREEN evidence: <code>bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js</code> passed after correcting deferred archive to send a plain POST and after adding active/deferred/detail archive toast/Undo assertions.</li>
+      <li><strong>2026-06-18:</strong> P2 verification completed. GREEN evidence: <code>bun run test</code> passed, <code>bun run test:e2e</code> passed, and the targeted fixture <code>node dist/test-fixtures/e2e-run.js</code> passed after adding no-dialog, toast placement, timeout dismissal, outside interaction dismissal, iframe dismissal, mobile touch-surface dismissal, archive failure, Undo failure, active/deferred/detail Undo restore, and navigator/quick-open reconciliation coverage.</li>
+      <li><strong>2026-06-18:</strong> Scoped implementation reviews completed. Codex final review at <code>/tmp/archive-toast-undo-codex-postfix-review.md</code> returned <code>VERDICT: PASS_SCOPED</code>. Claude final review at <code>/tmp/archive-toast-undo-claude-postpatch-final.md</code> returned <code>VERDICT: PASS_WITH_DOCUMENTED_OUT_OF_SCOPE_FOLLOW_UPS</code> with no in-plan, prerequisite, or regression findings. The only documented follow-up is cosmetic DOM hygiene for hidden Undo buttons on error toasts; it is outside this plan because the button is visually hidden and unreachable through normal UI.</li>
+      <li><strong>2026-06-19:</strong> PR-side Codex review found P2 keyboard-access and recovery issues: blanket keydown dismissal hid the toast when keyboard users pressed Tab toward Undo, the removed archive card could leave focus too far from Undo, and failed Undo cleared dismissal/timer behavior while leaving the toast visible. Fixed dismissal so Tab preserves the toast and Escape dismisses it, moved focus to the Undo button for success toasts, and re-armed dismissal after failed Undo across active index, deferred index, and detail shell. Added e2e regression assertions for active/deferred/detail focus, Tab preservation, active Escape dismissal, and failed-Undo Escape dismissal; targeted <code>bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js</code> passed.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>

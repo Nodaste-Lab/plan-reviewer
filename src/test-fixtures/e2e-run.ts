@@ -72,6 +72,31 @@ try {
     }
   });
   assert.equal(missingSourceRegister.ok(), true);
+  const deferredRegister = await context.post('/api/plans/register', {
+    data: {
+      repoKey: 'e2e-repo',
+      repoName: 'e2e',
+      rootPath: '/tmp/e2e',
+      branch: 'main',
+      commitSha: 'e2e-deferred',
+      planPath: 'thoughts/plans/e2e-deferred.html',
+      slug: 'e2e-deferred',
+      html: '<!doctype html><html><body><main><p>Deferred archive undo e2e</p></main></body></html>',
+      fileHash: sha256('deferred-archive-undo-e2e'),
+      publicationMetadata: {
+        worktreePath: '/tmp/e2e',
+        branch: 'main',
+        linearIssue: 'NOD-E2E',
+        executionReady: false,
+        executionReadyBasis: 'agent-review-results'
+      },
+      updateMode: 'upsert'
+    }
+  });
+  assert.equal(deferredRegister.ok(), true);
+  const deferredRegistered = (await deferredRegister.json()).data as { planId: string; versionId: string };
+  const deferredResponse = await context.post(`/api/plans/${deferredRegistered.planId}/defer`, { data: { note: 'Paused for deferred archive undo e2e' } });
+  assert.equal(deferredResponse.ok(), true);
 
   const index = await context.get('/');
   assert.equal(index.ok(), true);
@@ -1878,10 +1903,174 @@ try {
     await page.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('Mobile image touch comment'));
     await page.setViewportSize({ width: 1280, height: 720 });
 
+    const archiveDialogs: string[] = [];
+    page.on('dialog', async dialog => {
+      archiveDialogs.push(dialog.message());
+      await dialog.dismiss();
+    });
+
     await page.goto(`${baseUrl}/`);
-    await page.once('dialog', dialog => dialog.accept());
+    await page.route(`**/api/plans/${registered.planId}/archive`, route => route.abort('failed'));
+    await page.click(`[data-archive-plan="${registered.planId}"]`);
+    await page.waitForSelector('.archive-toast.error');
+    assert.equal(await page.locator(`[data-plan-id="${registered.planId}"]`).count(), 1);
+    await page.unroute(`**/api/plans/${registered.planId}/archive`);
     await page.click(`[data-archive-plan="${registered.planId}"]`);
     await page.waitForFunction(planId => !document.querySelector(`[data-plan-id="${planId}"]`), registered.planId);
+    await page.waitForSelector('.archive-toast:not(.error)');
+    const activeToastBox = await page.locator('.archive-toast').boundingBox();
+    assert.ok(activeToastBox);
+    assert.equal(activeToastBox.y < 80, true);
+    const activeUndoBox = await page.locator('.archive-toast button').boundingBox();
+    assert.ok(activeUndoBox);
+    assert.equal(activeUndoBox.width >= 70, true);
+    assert.match(await page.locator('.archive-toast').innerText(), /Undo/);
+    await page.waitForFunction(() => !document.querySelector('.archive-toast'), undefined, { timeout: 12_000 });
+    assert.equal(await page.locator(`[data-plan-id="${registered.planId}"]`).count(), 0);
+    await context.post(`/api/plans/${registered.planId}/unarchive`, { data: {} });
+    await page.reload();
+    await page.waitForSelector(`[data-plan-id="${registered.planId}"]`);
+    await page.click(`[data-archive-plan="${registered.planId}"]`);
+    await page.waitForSelector('.archive-toast:not(.error)');
+    await page.route(`**/api/plans/${registered.planId}/unarchive`, route => route.abort('failed'));
+    await page.click('.archive-toast button');
+    await page.waitForFunction(() => document.querySelector('.archive-toast')?.textContent?.includes('Undo failed. The plan remains archived'));
+    assert.equal(await page.locator(`[data-plan-id="${registered.planId}"]`).count(), 0);
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('.archive-toast'));
+    await page.unroute(`**/api/plans/${registered.planId}/unarchive`);
+    await context.post(`/api/plans/${registered.planId}/unarchive`, { data: {} });
+    await page.reload();
+    await page.waitForSelector(`[data-plan-id="${registered.planId}"]`);
+    await page.click(`[data-archive-plan="${registered.planId}"]`);
+    await page.waitForSelector('.archive-toast:not(.error)');
+    await page.click('#q');
+    await page.waitForFunction(() => !document.querySelector('.archive-toast'));
+    assert.equal(await page.locator(`[data-plan-id="${registered.planId}"]`).count(), 0);
+    await context.post(`/api/plans/${registered.planId}/unarchive`, { data: {} });
+    await page.reload();
+    await page.waitForSelector(`[data-plan-id="${registered.planId}"]`);
+    await page.click(`[data-archive-plan="${registered.planId}"]`);
+    await page.waitForSelector('.archive-toast:not(.error)');
+    assert.equal(await page.evaluate(() => document.activeElement?.matches('.archive-toast button')), true);
+    await page.keyboard.press('Tab');
+    assert.equal(await page.locator('.archive-toast').count(), 1);
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('.archive-toast'));
+    assert.equal(await page.locator(`[data-plan-id="${registered.planId}"]`).count(), 0);
+    await context.post(`/api/plans/${registered.planId}/unarchive`, { data: {} });
+    assert.deepEqual(archiveDialogs, []);
+
+    await page.goto(`${baseUrl}/p/${registered.planId}`);
+    await page.waitForSelector('#archive-plan');
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+O' : 'Control+O');
+    await page.waitForSelector('#quick-open-backdrop:not([hidden])');
+    assert.equal(await page.locator(`[data-quick-open-result][data-plan-id="${registered.planId}"]`).count(), 1);
+    await page.keyboard.press('Escape');
+    await page.click('#archive-plan');
+    await page.waitForSelector('#archive-toast:not([hidden])');
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'archive-toast-undo');
+    await page.keyboard.press('Tab');
+    assert.equal(await page.locator('#archive-toast:not([hidden])').count(), 1);
+    assert.match(page.url(), new RegExp(`/p/${registered.planId}$`));
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#archive-status')?.hidden === false && document.querySelector('#plan-navbar')?.textContent?.includes('Archived'));
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#restore-plan')?.hidden === false);
+    assert.equal(await page.locator(`[data-plan-nav-item][data-plan-id="${registered.planId}"]`).count(), 0);
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+O' : 'Control+O');
+    await page.waitForSelector('#quick-open-backdrop:not([hidden])');
+    assert.equal(await page.locator(`[data-quick-open-result][data-plan-id="${registered.planId}"]`).count(), 0);
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      iframe.contentDocument!.body.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: iframe.contentWindow ?? window }));
+    });
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#archive-toast')?.hidden === true);
+    assert.match(await page.locator('#plan-navbar').innerText(), /Archived/);
+    await context.post(`/api/plans/${registered.planId}/unarchive`, { data: {} });
+    await page.goto(`${baseUrl}/p/${registered.planId}`);
+    await page.setViewportSize({ width: 390, height: 760 });
+    await page.waitForSelector('#archive-plan');
+    await page.click('#archive-plan');
+    await page.waitForSelector('#archive-toast:not([hidden])');
+    await page.dispatchEvent('#plan-touch-layer', 'touchstart');
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#archive-toast')?.hidden === true);
+    assert.match(await page.locator('#plan-navbar').innerText(), /Archived/);
+    await context.post(`/api/plans/${registered.planId}/unarchive`, { data: {} });
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto(`${baseUrl}/p/${registered.planId}`);
+    await page.waitForSelector('#archive-plan');
+    await page.click('#archive-plan');
+    await page.waitForSelector('#archive-toast:not([hidden])');
+    await page.route(`**/api/plans/${registered.planId}/unarchive`, route => route.abort('failed'));
+    await page.click('#archive-toast-undo');
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#archive-toast-message')?.textContent?.includes('Undo failed. The plan remains archived'));
+    assert.match(await page.locator('#plan-navbar').innerText(), /Archived/);
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#archive-toast')?.hidden === true);
+    await page.unroute(`**/api/plans/${registered.planId}/unarchive`);
+    await context.post(`/api/plans/${registered.planId}/unarchive`, { data: {} });
+    await page.goto(`${baseUrl}/p/${registered.planId}`);
+    await page.waitForSelector('#archive-plan');
+    await page.click('#archive-plan');
+    await page.waitForSelector('#archive-toast:not([hidden])');
+    await page.click('#archive-toast-undo');
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#archive-status')?.hidden === true);
+    await page.waitForSelector(`[data-plan-nav-item][data-plan-id="${registered.planId}"]`);
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+O' : 'Control+O');
+    await page.waitForSelector('#quick-open-backdrop:not([hidden])');
+    assert.equal(await page.locator(`[data-quick-open-result][data-plan-id="${registered.planId}"]`).count(), 1);
+    await page.keyboard.press('Escape');
+    await page.route(`**/api/plans/${registered.planId}/archive`, route => route.abort('failed'));
+    await page.click('#archive-plan');
+    await page.waitForSelector('#archive-toast.error:not([hidden])');
+    assert.equal(await page.locator('#archive-plan').evaluate((button: HTMLButtonElement) => button.disabled), false);
+    assert.equal(await page.locator('#archive-status').evaluate((status: HTMLElement) => status.hidden), true);
+    await page.unroute(`**/api/plans/${registered.planId}/archive`);
+
+    await page.goto(`${baseUrl}/p/${deferredRegistered.planId}`);
+    await page.waitForSelector('#resume-plan');
+    await page.click('#archive-plan');
+    await page.waitForSelector('#archive-toast:not([hidden])');
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#resume-plan')?.hidden === true && document.querySelector<HTMLElement>('#restore-plan')?.hidden === false && document.querySelector<HTMLElement>('#archive-status')?.textContent === 'Archived');
+    await page.click('#archive-toast-undo');
+    await page.waitForSelector('#archive-plan');
+    assert.equal(await page.locator('#resume-plan').count(), 0);
+    assert.equal(await page.locator('#archive-status').evaluate((status: HTMLElement) => status.hidden), true);
+    await context.post(`/api/plans/${deferredRegistered.planId}/defer`, { data: { note: 'Paused for deferred archive undo e2e' } });
+
+    await page.goto(`${baseUrl}/deferred`);
+    await page.waitForSelector(`[data-plan-id="${deferredRegistered.planId}"]`);
+    await page.route(`**/api/plans/${deferredRegistered.planId}/archive`, route => route.abort('failed'));
+    await page.click(`[data-archive-plan="${deferredRegistered.planId}"]`);
+    await page.waitForSelector('.archive-toast.error');
+    assert.equal(await page.locator(`[data-plan-id="${deferredRegistered.planId}"]`).count(), 1);
+    await page.unroute(`**/api/plans/${deferredRegistered.planId}/archive`);
+    await page.click(`[data-archive-plan="${deferredRegistered.planId}"]`);
+    await page.waitForFunction(planId => !document.querySelector(`[data-plan-id="${planId}"]`), deferredRegistered.planId);
+    await page.waitForSelector('.archive-toast:not(.error)');
+    assert.equal(await page.evaluate(() => document.activeElement?.matches('.archive-toast button')), true);
+    await page.keyboard.press('Tab');
+    assert.equal(await page.locator('.archive-toast').count(), 1);
+    await page.route(`**/api/plans/${deferredRegistered.planId}/unarchive`, route => route.abort('failed'));
+    await page.click('.archive-toast button');
+    await page.waitForFunction(() => document.querySelector('.archive-toast')?.textContent?.includes('Undo failed. The plan remains archived'));
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('.archive-toast'));
+    assert.equal(await page.locator(`[data-plan-id="${deferredRegistered.planId}"]`).count(), 0);
+    await page.unroute(`**/api/plans/${deferredRegistered.planId}/unarchive`);
+    await context.post(`/api/plans/${deferredRegistered.planId}/unarchive`, { data: {} });
+    await context.post(`/api/plans/${deferredRegistered.planId}/defer`, { data: { note: 'Paused again for deferred archive undo e2e' } });
+    await page.goto(`${baseUrl}/deferred`);
+    await page.waitForSelector(`[data-plan-id="${deferredRegistered.planId}"]`);
+    await page.click(`[data-archive-plan="${deferredRegistered.planId}"]`);
+    await page.waitForFunction(planId => !document.querySelector(`[data-plan-id="${planId}"]`), deferredRegistered.planId);
+    await page.waitForSelector('.archive-toast:not(.error)');
+    await page.click('.archive-toast button');
+    await page.waitForURL(`${baseUrl}/`);
+    await page.waitForSelector(`[data-plan-id="${deferredRegistered.planId}"]`);
+    assert.deepEqual(archiveDialogs, []);
+
+    await context.post(`/api/plans/${registered.planId}/archive`, { data: {} });
     await page.goto(`${baseUrl}/archive`);
     await page.waitForSelector(`[data-plan-id="${registered.planId}"]`);
     await page.click(`[data-plan-id="${registered.planId}"] a[href="/p/${registered.planId}"]`);
