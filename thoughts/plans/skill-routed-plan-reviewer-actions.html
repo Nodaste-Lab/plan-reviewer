@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Skill-routed plan reviewer actions</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0f172a; --panel:#111827; --panel2:#1e293b; --text:#e5e7eb; --muted:#94a3b8; --accent:#38bdf8; --border:#334155; --warn:#fbbf24; --ok:#34d399; }
+    body { margin:0; background:var(--bg); color:var(--text); font:16px/1.55 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    main { max-width:1100px; margin:0 auto; padding:40px 22px 80px; }
+    h1,h2,h3 { line-height:1.2; }
+    h1 { font-size:2.2rem; margin:0 0 10px; }
+    h2 { margin-top:34px; border-bottom:1px solid var(--border); padding-bottom:8px; }
+    h3 { margin-top:24px; }
+    a { color:var(--accent); }
+    code, pre { background:#020617; color:#dbeafe; border:1px solid var(--border); border-radius:8px; }
+    code { padding:1px 5px; }
+    pre { padding:14px; overflow:auto; }
+    section, article { background:rgba(17,24,39,.72); border:1px solid var(--border); border-radius:14px; padding:18px 20px; margin:18px 0; }
+    .hero { background:linear-gradient(135deg, rgba(56,189,248,.14), rgba(52,211,153,.08)); }
+    .pill { display:inline-block; border:1px solid var(--border); border-radius:999px; padding:4px 10px; margin:4px 6px 4px 0; color:#cbd5e1; background:#0b1220; font-size:.9rem; }
+    .warn { color:var(--warn); }
+    .ok { color:var(--ok); }
+    .muted { color:var(--muted); }
+    table { width:100%; border-collapse:collapse; margin:12px 0; }
+    th,td { border:1px solid var(--border); padding:10px; vertical-align:top; }
+    th { background:#0b1220; text-align:left; }
+    input[type="checkbox"] { transform:translateY(1px); }
+  </style>
+</head>
+<body>
+<main>
+  <section class="hero" id="title">
+    <h1>Skill-routed plan reviewer actions</h1>
+    <p class="muted">Replace hardcoded browser action prompts with skill invocation requests, then add the matching shared skills to <code>ai-configs</code> so Pi and Codex listeners can execute them through their own native mechanisms.</p>
+    <p>
+      <span class="pill">Repo: plan-reviewer</span>
+      <span class="pill">External config repo: ai-configs</span>
+      <span class="pill">Linear issue: none supplied</span>
+      <span class="pill ok">Status: validation-complete</span>
+    </p>
+  </section>
+
+  <section id="status">
+    <h2>Status</h2>
+    <p>Implementation and scoped validation are complete. Browser action comments now route through named skills, ai-configs defines and installs those skills for Pi and Codex, and final GPT plus GLM scoped implementation rereviews returned <code>PASS_SCOPED</code> with no in-scope findings.</p>
+  </section>
+
+  <section id="goal">
+    <h2>Goal</h2>
+    <p>When a reviewer clicks <strong>Request execution-ready review</strong> or <strong>Build Plan</strong> in the plan-reviewer browser shell, the created agent-visible comment should ask the listening agent to use a named skill, not embed tool-specific review or execution instructions in plan-reviewer itself.</p>
+    <ul>
+      <li><code>Request execution-ready review</code> should call <code>plan-reviewer-execution-ready</code>.</li>
+      <li><code>Build Plan</code> should call <code>plan-reviewer-build</code> with the plan path.</li>
+      <li><code>ai-configs</code> should define and install both skills for Pi and Codex via the shared skill setup.</li>
+    </ul>
+  </section>
+
+  <section id="why">
+    <h2>Why this plan exists</h2>
+    <p>The current plan-reviewer service encodes agent choices directly in browser action comment bodies. That makes the service own decisions like “Codex plus Claude Code” or “run scoped-plan-run,” even though those choices belong in the active agent configuration. Moving this policy into skills keeps plan-reviewer focused on durable review/comment delivery while letting each listener choose the correct local execution strategy.</p>
+  </section>
+
+  <section id="solution">
+    <h2>Solution narrative</h2>
+    <p>Make plan-reviewer emit stable, minimal skill requests:</p>
+    <pre><code>Use the plan-reviewer-execution-ready skill for this plan.
+Plan path: thoughts/plans/example.html</code></pre>
+    <pre><code>Use the plan-reviewer-build skill for this plan.
+Plan path: thoughts/plans/example.html</code></pre>
+    <p>The skill documents in <code>ai-configs</code> become the source of truth for what those requests mean. For Pi, <code>plan-reviewer-execution-ready</code> runs read-only Pi subagent plan reviews using GPT and GLM. For build, <code>plan-reviewer-build</code> delegates to <code>scoped-plan-run</code> with the explicit plan path, preserving the current browser button outcome without hardcoding that command in the plan-reviewer service.</p>
+  </section>
+
+  <section id="authority-inputs">
+    <h2>Authority and inputs</h2>
+    <ul>
+      <li id="input-user-request">User request: route plan-reviewer prompts through <code>plan-reviewer-execution-ready</code> and <code>plan-reviewer-build</code>, and install those skills for Pi and Codex through <code>ai-configs</code>.</li>
+      <li id="input-repo-guidance"><code>AGENTS.md</code> and <code>thoughts/plans/AGENTS.md</code>: non-trivial changes require reviewed HTML plans, product intent alignment, truthful registration, and queue-backed browser feedback handling.</li>
+      <li id="input-product-intent"><code>thoughts/specs/product_intent.md</code>: plan-reviewer should make agent monitoring/action guidance explicit while keeping queue state canonical and avoiding hidden tribal knowledge.</li>
+      <li id="input-current-code"><code>src/server/app.ts</code>: <code>executionReviewRequestBody</code> currently names Codex and Claude Code directly; <code>buildPlanRequestBody()</code> currently emits <code>/skill:scoped-plan-run thoughts/plans/&lt;basename&gt;</code>.</li>
+      <li id="input-current-tests"><code>src/__tests__/contracts.test.ts</code>: contract tests assert those exact current comment bodies.</li>
+      <li id="input-ai-configs"><code>/Users/anichols/code/ai-configs</code>: shared installable skills live under <code>skills/</code> and are inventoried by <code>skills/install-matrix.json</code>; <code>install.sh --pi</code> and <code>install.sh --codex</code> refresh shared skills into <code>~/.agents/skills</code>.</li>
+    </ul>
+  </section>
+
+  <section id="current-reality">
+    <h2>Current implementation reality</h2>
+    <table>
+      <thead><tr><th>Surface</th><th>Current state</th><th>Implication</th></tr></thead>
+      <tbody>
+        <tr><td>Browser action endpoints</td><td><code>POST /api/plans/:planId/request-execution-review</code> and <code>/request-build-plan</code> create normal pending comments anchored to <code>body</code>.</td><td>The safest change is to alter only comment body generation and matching tests.</td></tr>
+        <tr><td>Execution-ready request body</td><td>Hardcoded to “Review this plan with both codex and claude code...”</td><td>Replace with a skill request so reviewer selection lives in <code>ai-configs</code>.</td></tr>
+        <tr><td>Build request body</td><td>Hardcoded to <code>/skill:scoped-plan-run thoughts/plans/&lt;basename&gt;</code>.</td><td>Replace with <code>plan-reviewer-build</code>; that skill can internally choose <code>scoped-plan-run</code>.</td></tr>
+        <tr><td>ai-configs skill source</td><td><code>reviewed-html-plan</code> source still references Claude/Codex in places, while this Pi runtime already has a newer GPT/GLM variant installed.</td><td>Source-of-truth skill files must be updated before any shared-skill install so reinstalling does not regress behavior.</td></tr>
+        <tr><td>Pi subagent source</td><td>The installed runtime includes <code>~/.pi/agent/agents/quality-reviewer-glm.md</code>, but ai-configs source currently lacks <code>_pi/agents/quality-reviewer-glm.md</code>.</td><td>The plan must add the GLM reviewer agent to ai-configs source or <code>install.sh --pi</code> can remove the required reviewer.</td></tr>
+        <tr><td>Codex install</td><td>Codex prompts install globally, and shared skills are discovered from <code>~/.agents/skills</code>.</td><td>New skills must be in <code>skills/install-matrix.json</code> with <code>codex</code> and <code>pi</code> consumers.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="progress">
+    <h2>Progress</h2>
+    <ul>
+      <li><label><input type="checkbox" checked disabled> P1 — Replace plan-reviewer browser action bodies</label></li>
+      <li><label><input type="checkbox" checked disabled> P2 — Add shared ai-configs action skills</label></li>
+      <li><label><input type="checkbox" checked disabled> P3 — Refresh install docs and verification</label></li>
+    </ul>
+  </section>
+
+  <section id="resume-instructions">
+    <h2>Resume instructions</h2>
+    <p>All planned phases are complete. If resuming, inspect the current diffs in this repo and <code>/Users/anichols/code/ai-configs</code>, preserve the skill-routing scope, and only make changes required by new review feedback or user direction.</p>
+  </section>
+
+  <section id="product-intent-alignment">
+    <h2>Product intent alignment</h2>
+    <p>This plan advances <code>thoughts/specs/product_intent.md</code> by keeping plan-reviewer focused on durable plan registration, browser comments, and queue-backed delivery while making the agent’s required next action explicit. It removes hidden hardcoded reviewer policy from the service and places that policy in installable agent skills, which is a better source of truth for Pi/Codex behavior. The plan preserves the canonical comment lifecycle: browser action creates one pending comment, listeners claim it through the queue, and the listening agent processes only that requested action.</p>
+  </section>
+
+  <section id="locked-decisions">
+    <h2>Locked decisions</h2>
+    <ul>
+      <li id="decision-skill-request-not-command">Plan-reviewer will emit skill request language rather than Pi-only slash-command syntax so Pi, Codex, or future listeners can choose their own execution path.</li>
+      <li id="decision-plan-path-required">Both browser action comments will include the registered plan path. The build skill requires it; the execution-ready skill benefits from the same explicit context.</li>
+      <li id="decision-ai-configs-source">The two new skills will be source-controlled in <code>/Users/anichols/code/ai-configs/skills/</code> and added to <code>skills/install-matrix.json</code> for both <code>pi</code> and <code>codex</code>.</li>
+      <li id="decision-pi-reviewers">For Pi, <code>plan-reviewer-execution-ready</code> will run independent plan reviews with <code>quality-reviewer</code> (GPT) and <code>quality-reviewer-glm</code> (GLM, high/xhigh thinking where supported).</li>
+      <li id="decision-codex-reviewers">For Codex, <code>plan-reviewer-execution-ready</code> will use the existing Codex-native multi-review plan path from ai-configs, currently <code>/review:plan &lt;plan-path&gt;</code> followed by review integration, unless the skill detects that the active Codex install has a newer equivalent. Codex must not silently claim execution-ready if it cannot run or delegate two independent read-only plan reviews.</li>
+      <li id="decision-build-delegates">For Pi and Codex, <code>plan-reviewer-build</code> will delegate to <code>scoped-plan-run</code> with the explicit plan path rather than duplicating execution workflow rules.</li>
+    </ul>
+  </section>
+
+  <section id="acceptance-criteria">
+    <h2>Acceptance criteria</h2>
+    <ol>
+      <li id="ac-execution-body"><code>POST /api/plans/:planId/request-execution-review</code> creates a pending agent-visible comment whose body names <code>plan-reviewer-execution-ready</code>, includes the exact registered plan path, and does not mention Codex, Claude Code, GPT, GLM, or any reviewer choice directly.</li>
+      <li id="ac-build-body"><code>POST /api/plans/:planId/request-build-plan</code> creates a pending agent-visible comment whose body names <code>plan-reviewer-build</code>, includes the exact registered plan path, and does not directly mention <code>scoped-plan-run</code>.</li>
+      <li id="ac-comment-contract">Both button requests still create one <code>browser.comment.v1</code> pending comment, emit the existing queue event, and keep the existing body anchor metadata.</li>
+      <li id="ac-exec-skill"><code>ai-configs/skills/plan-reviewer-execution-ready/SKILL.md</code> exists, is installable for Pi and Codex, documents the Pi GPT+GLM subagent review implementation, documents the Codex-native multi-review path, and does not require plan-reviewer service code to know those reviewers.</li>
+      <li id="ac-build-skill"><code>ai-configs/skills/plan-reviewer-build/SKILL.md</code> exists, is installable for Pi and Codex, and delegates execution to <code>scoped-plan-run</code> with the plan path.</li>
+      <li id="ac-install"><code>ai-configs</code> install/verification proves the new skills appear in the shared install surface for Pi and Codex without writing divergent per-consumer copies.</li>
+      <li id="ac-docs-no-drift">Relevant ai-configs reviewed-plan docs/prompts no longer describe the Pi execution-ready gate as Claude+Codex-owned when the intended local policy is the new GPT+GLM skill.</li>
+      <li id="ac-glm-agent-source"><code>ai-configs/_pi/agents/quality-reviewer-glm.md</code> exists and <code>install.sh --pi</code> installs or preserves both <code>quality-reviewer</code> and <code>quality-reviewer-glm</code>.</li>
+    </ol>
+  </section>
+
+  <section id="bdd-scenarios">
+    <h2>BDD scenarios</h2>
+    <article id="bdd-execution-ready-button">
+      <h3>Execution-ready button routes through skill</h3>
+      <p><strong>Given</strong> a registered plan with path <code>thoughts/plans/sample-plan.html</code>, <strong>when</strong> the reviewer clicks Request execution-ready review, <strong>then</strong> the queued comment tells the listener to use <code>plan-reviewer-execution-ready</code> for that path and leaves reviewer selection to the installed skill.</p>
+    </article>
+    <article id="bdd-build-button">
+      <h3>Build button routes through skill</h3>
+      <p><strong>Given</strong> the same registered plan, <strong>when</strong> the reviewer clicks Build Plan, <strong>then</strong> the queued comment tells the listener to use <code>plan-reviewer-build</code> for that path, and the plan-reviewer service does not embed <code>scoped-plan-run</code> syntax.</p>
+    </article>
+    <article id="bdd-pi-listener">
+      <h3>Pi listener chooses Pi-native review mechanics</h3>
+      <p><strong>Given</strong> Pi has refreshed shared skills from ai-configs, <strong>when</strong> it claims an execution-ready request comment, <strong>then</strong> the <code>plan-reviewer-execution-ready</code> skill directs it to run GPT and GLM Pi subagent plan reviews read-only and integrate only readiness blockers.</p>
+    </article>
+    <article id="bdd-codex-listener">
+      <h3>Codex listener can resolve skill guidance</h3>
+      <p><strong>Given</strong> Codex has refreshed shared skills from ai-configs, <strong>when</strong> it claims either action comment, <strong>then</strong> the named skill exists in the shared skill directory and explains the required outcome without relying on Pi-only slash-command parsing.</p>
+    </article>
+    <article id="bdd-install-refresh">
+      <h3>Install refresh keeps source of truth aligned</h3>
+      <p><strong>Given</strong> <code>install.sh --pi</code> or <code>install.sh --codex</code> is rerun from ai-configs, <strong>when</strong> shared skills are synced, <strong>then</strong> both new skills are present under <code>~/.agents/skills</code> and no stale per-consumer copy overrides them.</p>
+    </article>
+  </section>
+
+  <section id="coverage-matrix">
+    <h2>Test coverage matrix</h2>
+    <table>
+      <thead><tr><th>Acceptance</th><th>BDD</th><th>Planned evidence</th><th>Command</th></tr></thead>
+      <tbody>
+        <tr><td>AC1, AC3</td><td>BDD execution-ready</td><td>Update <code>src/__tests__/contracts.test.ts</code> endpoint assertion for the new body and unchanged queue/comment shape.</td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></td></tr>
+        <tr><td>AC2, AC3</td><td>BDD build</td><td>Update <code>src/__tests__/contracts.test.ts</code> endpoint assertion for the new body and absence of direct <code>scoped-plan-run</code>.</td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></td></tr>
+        <tr><td>AC4-AC7</td><td>BDD Pi/Codex/install</td><td>Add skill files and matrix entries in ai-configs; update reviewed-plan source before install; extend shared-skill verification to assert the two new skills are installed.</td><td><code>bash test_install_shared_skills.sh</code> from ai-configs, then <code>bash install.sh --skills</code> only when ready to refresh this host.</td></tr>
+        <tr><td>AC8</td><td>BDD Pi listener/install</td><td>Add the GLM reviewer agent to ai-configs Pi source and verify a Pi install exposes both reviewer agents.</td><td><code>bash install.sh --pi</code> then <code>test -f ~/.pi/agent/agents/quality-reviewer.md</code> and <code>test -f ~/.pi/agent/agents/quality-reviewer-glm.md</code>.</td></tr>
+        <tr><td>All</td><td>All</td><td>Full plan-reviewer gate after product code changes.</td><td><code>bun run build &amp;&amp; bun run test</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="phases">
+    <h2>Phase-by-phase execution plan</h2>
+
+    <article id="phase-p1-plan-reviewer-bodies">
+      <h3>P1 — Replace plan-reviewer browser action bodies</h3>
+      <h4>End State</h4>
+      <p>The browser action endpoints still create normal pending queue comments, but their bodies contain stable skill requests instead of embedded reviewer/executor policy.</p>
+      <h4>Tests first</h4>
+      <ul>
+        <li>Update the two contract tests in <code>src/__tests__/contracts.test.ts</code> to expect <code>plan-reviewer-execution-ready</code> and <code>plan-reviewer-build</code> bodies, each including <code>thoughts/plans/sample-plan.html</code>.</li>
+        <li>Add negative assertions that the execution-ready body does not include <code>claude</code>, <code>codex</code>, <code>gpt</code>, <code>glm</code>, or <code>scoped-plan-run</code>, and the build body does not include <code>scoped-plan-run</code>.</li>
+      </ul>
+      <h4>Expected files</h4>
+      <ul><li><code>src/server/app.ts</code></li><li><code>src/__tests__/contracts.test.ts</code></li></ul>
+      <h4>Work</h4>
+      <ul>
+        <li>Replace <code>executionReviewRequestBody</code> with a path-aware builder, or otherwise pass <code>plan.planPath</code> into the execution-review body.</li>
+        <li>Change <code>buildPlanRequestBody(planPath)</code> to request <code>plan-reviewer-build</code> and include the registered plan path.</li>
+        <li>Keep comment creation, dedupe behavior, anchor metadata, event emission, and delivery wake behavior unchanged.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></pre>
+    </article>
+
+    <article id="phase-p2-ai-configs-skills">
+      <h3>P2 — Add shared ai-configs action skills</h3>
+      <h4>End State</h4>
+      <p><code>ai-configs</code> contains two installable shared skills that define the behavior previously hardcoded into plan-reviewer comments, with Pi and Codex listed as allowed consumers.</p>
+      <h4>Tests first</h4>
+      <ul>
+        <li>Inspect <code>skills/install-matrix.json</code> and existing skill naming conventions before editing.</li>
+        <li>If ai-configs has an install-matrix validation test, extend it before adding the entries; otherwise rely on <code>test_install_shared_skills.sh</code> after edits.</li>
+      </ul>
+      <h4>Expected files</h4>
+      <ul>
+        <li><code>/Users/anichols/code/ai-configs/skills/plan-reviewer-execution-ready/SKILL.md</code></li>
+        <li><code>/Users/anichols/code/ai-configs/skills/plan-reviewer-build/SKILL.md</code></li>
+        <li><code>/Users/anichols/code/ai-configs/skills/install-matrix.json</code></li>
+        <li><code>/Users/anichols/code/ai-configs/skills/reviewed-html-plan/SKILL.md</code></li>
+        <li><code>/Users/anichols/code/ai-configs/_pi/agents/quality-reviewer-glm.md</code></li>
+      </ul>
+      <h4>Work</h4>
+      <ul>
+        <li>Create <code>plan-reviewer-execution-ready</code> as a skill triggered by plan-reviewer execution-ready request comments. It should parse or use the explicit plan path, perform PM/product-intent readiness checks as appropriate, run two independent read-only plan reviews, integrate blockers, and re-register only after readiness is true. The Pi-specific implementation must name <code>quality-reviewer</code> and <code>quality-reviewer-glm</code>; the Codex-specific implementation must name the existing Codex-native <code>/review:plan &lt;plan-path&gt;</code> multi-review path or its current equivalent and must fail with an actionable handoff if no equivalent is installed.</li>
+        <li>Create <code>plan-reviewer-build</code> as a skill triggered by plan-reviewer build request comments. It should require an explicit plan path and then execute <code>scoped-plan-run</code> rather than copying that workflow.</li>
+        <li>Add both entries to <code>skills/install-matrix.json</code> as repo-owned, consumer-specific installable skills for <code>codex</code> and <code>pi</code>.</li>
+        <li>Add <code>_pi/agents/quality-reviewer-glm.md</code> to ai-configs source so <code>install.sh --pi</code> cannot delete the GLM reviewer required by the skill.</li>
+        <li>Update source-of-truth reviewed-plan docs in ai-configs before any install so the repo-managed <code>reviewed-html-plan</code> skill cannot overwrite the currently installed GPT/GLM guidance with stale Claude/Codex wording.</li>
+        <li>Extend <code>test_install_shared_skills.sh</code> or an equivalent ai-configs install test to assert the two new skills land in the staged <code>~/.agents/skills</code> output.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>cd /Users/anichols/code/ai-configs
+! rg -n "Claude Code plus Codex plan review|read-only Codex and Claude Code plan review|Codex and Claude Code plan review|codex-review-partner for the read-only Codex|claude-code-review for the read-only Claude Code|Run read-only Claude Code and Codex plan reviews|Run read-only Codex and Claude Code plan reviews" skills/reviewed-html-plan/SKILL.md _pi/prompts/dev:reviewed-html-plan.md
+rg -n "quality-reviewer-glm|GLM" skills/reviewed-html-plan/SKILL.md _pi/prompts/dev:reviewed-html-plan.md
+bash test_install_shared_skills.sh</code></pre>
+    </article>
+
+    <article id="phase-p3-install-docs-verify">
+      <h3>P3 — Refresh install docs and verification</h3>
+      <h4>End State</h4>
+      <p>Documentation and install verification make it clear that Pi and Codex receive these action skills from the shared <code>~/.agents/skills</code> surface, and this host can be refreshed safely.</p>
+      <h4>Tests first</h4>
+      <ul>
+        <li>Search ai-configs for stale “Claude/Codex plan review” wording tied to the reviewed plan gate and update only references made false by this change.</li>
+        <li>Identify the smallest install verification that proves both skills are synced without requiring unrelated tool setup.</li>
+      </ul>
+      <h4>Expected files</h4>
+      <ul>
+        <li><code>/Users/anichols/code/ai-configs/_pi/README.md</code></li>
+        <li><code>/Users/anichols/code/ai-configs/_pi/prompts/dev:reviewed-html-plan.md</code></li>
+        <li><code>/Users/anichols/code/ai-configs/_codex/README.md</code> or relevant Codex prompt docs if they reference the old behavior</li>
+        <li><code>/Users/anichols/code/ai-configs/test_install_shared_skills.sh</code> if its assertions need the new skills added</li>
+        <li>Installed runtime copy under <code>~/.agents/skills/</code> only as an install result, not as source-controlled work</li>
+      </ul>
+      <h4>Work</h4>
+      <ul>
+        <li>Align Pi and Codex docs so agents know plan-reviewer browser action comments are skill requests.</li>
+        <li>Run the ai-configs shared skill installer when source changes are verified and this host should consume them: <code>bash install.sh --skills</code>. Do not run <code>bash install.sh --pi</code> until P2 has added <code>_pi/agents/quality-reviewer-glm.md</code>, because the Pi install refreshes <code>~/.pi/agent/agents</code> from source. If refreshing all Pi/Codex resources is desired, run <code>bash install.sh --pi</code> and <code>bash install.sh --codex</code> after confirming no local runtime config will be overwritten.</li>
+        <li>Run plan-reviewer’s focused and full gates after P1 so the product contract is proven independent of local ai-configs install state.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>cd /Users/anichols/code/ai-configs
+bash test_install_shared_skills.sh
+! rg -n "Claude Code plus Codex plan review|read-only Codex and Claude Code plan review|Codex and Claude Code plan review|codex-review-partner for the read-only Codex|claude-code-review for the read-only Claude Code|Run read-only Claude Code and Codex plan reviews|Run read-only Codex and Claude Code plan reviews" skills/reviewed-html-plan/SKILL.md _pi/prompts/dev:reviewed-html-plan.md
+rg -n "quality-reviewer-glm|GLM" skills/reviewed-html-plan/SKILL.md _pi/prompts/dev:reviewed-html-plan.md
+bash install.sh --skills
+test -f ~/.agents/skills/plan-reviewer-execution-ready/SKILL.md
+test -f ~/.agents/skills/plan-reviewer-build/SKILL.md
+bash install.sh --pi
+test -f ~/.pi/agent/agents/quality-reviewer.md
+test -f ~/.pi/agent/agents/quality-reviewer-glm.md
+
+cd /Users/anichols/code/plan-reviewer-worktrees/update-plan-review
+bun run build
+bun run test</code></pre>
+    </article>
+  </section>
+
+  <section id="verification-strategy">
+    <h2>Verification strategy</h2>
+    <p>Use contract tests to prove the plan-reviewer API/browser button semantics. Use ai-configs install verification to prove the new skill source is installable and discoverable. Because the runtime behavior is agent-harness dependent, the implementation review should inspect the skill docs for clear Pi and Codex paths rather than expecting plan-reviewer tests to launch agents.</p>
+  </section>
+
+  <section id="delivery-order">
+    <h2>Delivery order</h2>
+    <ol>
+      <li>Land plan-reviewer body/test changes first; this narrows the service contract.</li>
+      <li>Add ai-configs skills and install-matrix entries; verify shared-skill packaging.</li>
+      <li>Refresh docs and local shared skill install; then run plan-reviewer build/test.</li>
+    </ol>
+  </section>
+
+  <section id="non-goals">
+    <h2>Non-goals</h2>
+    <ul>
+      <li>Do not add plan-reviewer service knowledge of Pi subagent types, GPT, GLM, Claude, or Codex reviewer selection.</li>
+      <li>Do not change queue claim, ack, resolve, delivery worker, or source sync semantics.</li>
+      <li>Do not create a new plan execution engine in plan-reviewer.</li>
+      <li>Do not create divergent Pi-only or Codex-only skill source copies outside the ai-configs shared skill system.</li>
+      <li>Do not broaden reviewed-plan policy beyond the two browser action requests named here.</li>
+    </ul>
+  </section>
+
+  <section id="risks">
+    <h2>Risks and mitigations</h2>
+    <table>
+      <thead><tr><th>Risk</th><th>Mitigation</th></tr></thead>
+      <tbody>
+        <tr><td>Codex does not interpret Pi slash-command syntax in comment bodies.</td><td>Use plain skill-request wording, not <code>/skill:</code>, and install the skill for Codex.</td></tr>
+        <tr><td>ai-configs source and installed runtime drift.</td><td>Update source files first, then run install verification and shared skill sync.</td></tr>
+        <tr><td>The execution-ready button loses its existing “iterate until ready” intent.</td><td>Encode that iterative readiness workflow inside <code>plan-reviewer-execution-ready</code>, not in plan-reviewer service text.</td></tr>
+        <tr><td>Cross-repo implementation creates unrelated dirty changes.</td><td>Check <code>git status --short</code> in both repos before editing and keep changes limited to listed files.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="decisions-log">
+    <h2>Decisions / Deviations log</h2>
+    <ul>
+      <li id="log-2026-06-19-created"><time datetime="2026-06-19">2026-06-19</time>: Initial browser-review-ready plan created from repo inspection. No Linear issue was supplied; no product code was changed.</li>
+      <li id="log-2026-06-19-review-cycle-1"><time datetime="2026-06-19">2026-06-19</time>: First GPT and GLM plan reviews returned <code>PLAN_NEEDS_REVISION</code>. Integrated blockers by adding source-of-truth coverage for <code>quality-reviewer-glm</code>, naming the Codex-native execution-ready review path, strengthening install verification for the new skills, and requiring stale <code>reviewed-html-plan</code> source text to be fixed before installation.</li>
+      <li id="log-2026-06-19-review-cycle-2"><time datetime="2026-06-19">2026-06-19</time>: GPT rereview returned <code>PLAN_EXECUTION_READY</code>. GLM rereview found one remaining verification blocker: stale reviewed-plan wording checks covered only one phrase in one file. Tightened verification to scan both <code>skills/reviewed-html-plan/SKILL.md</code> and <code>_pi/prompts/dev:reviewed-html-plan.md</code> for stale Claude/Codex gate ownership wording and assert GPT/GLM wording is present before install. A follow-up GLM check found the first regex too broad because it matched valid “do not launch Claude Code” guard text, so the stale-wording check now targets ownership-specific stale phrases only.</li>
+      <li id="log-2026-06-19-final-ready"><time datetime="2026-06-19">2026-06-19</time>: Final GPT and GLM confirmation reviews both returned <code>PLAN_EXECUTION_READY</code> with no blocker findings. Plan promoted to execution-ready and ready for implementation handoff.</li>
+      <li id="log-2026-06-19-p1-p2"><time datetime="2026-06-19">2026-06-19</time>: P1 and P2 implemented. Plan-reviewer contract tests now expect skill-routed browser action comments. ai-configs now defines <code>plan-reviewer-execution-ready</code> and <code>plan-reviewer-build</code>, installs them for Pi and Codex through <code>skills/install-matrix.json</code>, includes <code>quality-reviewer-glm</code> in Pi agent source, and refreshes <code>scoped-plan-run</code> source to the GPT/GLM Pi reviewer workflow.</li>
+      <li id="log-2026-06-19-p3-verify"><time datetime="2026-06-19">2026-06-19</time>: P3 install/docs verification completed for the scoped surfaces. Ran <code>bash install.sh --skills</code>, <code>bash install.sh --pi</code>, and <code>bash install.sh --codex</code>; confirmed both new skills under <code>~/.agents/skills</code> and both Pi reviewer agents under <code>~/.pi/agent/agents</code>. Full plan-reviewer <code>bun run build &amp;&amp; bun run test</code> passed. The broader ai-configs <code>test_install_shared_skills.sh</code> still has pre-existing unrelated failures for <code>_opencode/QUICKSTART.md</code> missing a <code>~/.agents/skills/playwright-skill</code> reference and an existing <code>_opencode/skills/codex-computer-use</code> repo-local directory; these are outside this plan’s skill-routing scope.</li>
+      <li id="log-2026-06-19-review-fixes"><time datetime="2026-06-19">2026-06-19</time>: Scoped implementation reviews found in-scope ai-configs drift. Fixed stale Claude/Codex reviewed-plan wording in <code>AGENTS.md</code> and <code>_pi/prompts/dev:plan.md</code>. Reconciled <code>scoped-plan-run</code> so it remains usable by both Pi and Codex: Pi keeps <code>quality-reviewer</code>/<code>quality-reviewer-glm</code> gates, while Codex uses Codex goal/task state and installed Codex-native review prompts rather than being routed into a Pi-only workflow.</li>
+      <li id="log-2026-06-19-final-scoped-review"><time datetime="2026-06-19">2026-06-19</time>: Final targeted ai-configs checks passed, updated shared skills were installed with <code>bash install.sh --skills</code>, and final GPT plus GLM scoped rereviews both returned <code>PASS_SCOPED</code> with no findings.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>

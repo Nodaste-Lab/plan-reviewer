@@ -2062,7 +2062,7 @@ test('review client polling reloads metadata for plan lifecycle and note events'
   }
 });
 
-test('execution-review request button creates an agent-visible comment', async () => {
+test('execution-review request button creates an agent-visible skill request comment', async () => {
   const { app, planId } = await registeredApp('execution-review-request');
   try {
     const shell = await app.inject({ method: 'GET', url: `/p/${planId}` });
@@ -2072,7 +2072,9 @@ test('execution-review request button creates an agent-visible comment', async (
     const requested = await app.inject({ method: 'POST', url: `/api/plans/${planId}/request-execution-review` });
     assert.equal(requested.statusCode, 200);
     assert.equal(requested.json().data.created, true);
-    assert.equal(requested.json().data.comment.body, 'Review this plan with both codex and claude code, iterating on the plan until both agents agree it is execution ready');
+    const body = requested.json().data.comment.body;
+    assert.equal(body, 'Use the plan-reviewer-execution-ready skill for this plan.\nPlan path: thoughts/plans/sample-plan.html');
+    assert.doesNotMatch(body, /claude|codex|gpt|glm|scoped-plan-run/i);
     assert.equal(requested.json().data.comment.status, 'pending');
     assert.equal(requested.json().data.comment.conversationPayload.type, 'browser.comment.v1');
 
@@ -2083,7 +2085,7 @@ test('execution-review request button creates an agent-visible comment', async (
   }
 });
 
-test('build plan button creates an agent-visible scoped-plan-run comment', async () => {
+test('build plan button creates an agent-visible skill request comment', async () => {
   const { app, planId } = await registeredApp('build-plan-request');
   try {
     const shell = await app.inject({ method: 'GET', url: `/p/${planId}` });
@@ -2093,7 +2095,9 @@ test('build plan button creates an agent-visible scoped-plan-run comment', async
     const requested = await app.inject({ method: 'POST', url: `/api/plans/${planId}/request-build-plan` });
     assert.equal(requested.statusCode, 200);
     assert.equal(requested.json().data.created, true);
-    assert.equal(requested.json().data.comment.body, '/skill:scoped-plan-run thoughts/plans/sample-plan.html');
+    const body = requested.json().data.comment.body;
+    assert.equal(body, 'Use the plan-reviewer-build skill for this plan.\nPlan path: thoughts/plans/sample-plan.html');
+    assert.doesNotMatch(body, /scoped-plan-run/i);
     assert.equal(requested.json().data.comment.status, 'pending');
     assert.equal(requested.json().data.comment.conversationPayload.type, 'browser.comment.v1');
 
