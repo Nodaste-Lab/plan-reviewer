@@ -1945,6 +1945,16 @@ try {
     await page.waitForFunction(() => !document.querySelector('.archive-toast'));
     assert.equal(await page.locator(`[data-plan-id="${registered.planId}"]`).count(), 0);
     await context.post(`/api/plans/${registered.planId}/unarchive`, { data: {} });
+    await page.reload();
+    await page.waitForSelector(`[data-plan-id="${registered.planId}"]`);
+    await page.click(`[data-archive-plan="${registered.planId}"]`);
+    await page.waitForSelector('.archive-toast:not(.error)');
+    await page.keyboard.press('Tab');
+    assert.equal(await page.locator('.archive-toast').count(), 1);
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('.archive-toast'));
+    assert.equal(await page.locator(`[data-plan-id="${registered.planId}"]`).count(), 0);
+    await context.post(`/api/plans/${registered.planId}/unarchive`, { data: {} });
     assert.deepEqual(archiveDialogs, []);
 
     await page.goto(`${baseUrl}/p/${registered.planId}`);
@@ -1955,6 +1965,8 @@ try {
     await page.keyboard.press('Escape');
     await page.click('#archive-plan');
     await page.waitForSelector('#archive-toast:not([hidden])');
+    await page.keyboard.press('Tab');
+    assert.equal(await page.locator('#archive-toast:not([hidden])').count(), 1);
     assert.match(page.url(), new RegExp(`/p/${registered.planId}$`));
     await page.waitForFunction(() => document.querySelector<HTMLElement>('#archive-status')?.hidden === false && document.querySelector('#plan-navbar')?.textContent?.includes('Archived'));
     await page.waitForFunction(() => document.querySelector<HTMLElement>('#restore-plan')?.hidden === false);
@@ -2024,6 +2036,8 @@ try {
     await page.click(`[data-archive-plan="${deferredRegistered.planId}"]`);
     await page.waitForFunction(planId => !document.querySelector(`[data-plan-id="${planId}"]`), deferredRegistered.planId);
     await page.waitForSelector('.archive-toast:not(.error)');
+    await page.keyboard.press('Tab');
+    assert.equal(await page.locator('.archive-toast').count(), 1);
     await page.click('#q');
     await page.waitForFunction(() => !document.querySelector('.archive-toast'));
     assert.equal(await page.locator(`[data-plan-id="${deferredRegistered.planId}"]`).count(), 0);
