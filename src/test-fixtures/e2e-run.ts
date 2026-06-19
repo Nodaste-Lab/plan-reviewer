@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { chromium, request } from 'playwright';
+import { unzipSync, strFromU8 } from 'fflate';
 import { createApp } from '../server/app.js';
 import { sha256 } from '../util.js';
 
@@ -500,6 +501,25 @@ try {
     await page.waitForSelector('#plan-list-nav');
     await page.waitForSelector('#desktop-plan-nav-toggle[aria-expanded="true"]');
     await page.waitForSelector('#desktop-comments-toggle[aria-expanded="false"]');
+    await page.waitForSelector('#download-raw-plan[aria-label="Download raw plan"]');
+    assert.equal(await page.locator('#desktop-plan-nav-toggle').getAttribute('aria-label'), 'Plan Navigator');
+    assert.equal(await page.locator('#desktop-plan-nav-toggle').getAttribute('title'), 'Plan Navigator');
+    assert.equal(await page.locator('#download-raw-plan').getAttribute('title'), 'Download raw plan HTML; ZIP includes required assets.');
+    assert.equal(await page.locator('#download-raw-plan').getAttribute('href'), `/download/${registered.planId}?versionId=${registered.versionId}`);
+    const [rawPlanDownload] = await Promise.all([
+      page.waitForEvent('download'),
+      page.locator('#download-raw-plan').click()
+    ]);
+    assert.match(rawPlanDownload.suggestedFilename(), /^e2e-\d{4}-\d{2}-\d{2}-\d{6}Z\.zip$/);
+    const rawPlanDownloadPath = await rawPlanDownload.path();
+    assert(rawPlanDownloadPath);
+    const entries = unzipSync(fs.readFileSync(rawPlanDownloadPath));
+    const entryNames = Object.keys(entries).sort();
+    const zipRoot = entryNames[0].split('/')[0];
+    const exportedHtml = strFromU8(entries[`${zipRoot}/${zipRoot}.html`]);
+    assert.match(exportedHtml, /assets\/diagram-[a-f0-9]{8}\.png/);
+    assert.doesNotMatch(exportedHtml, /plan-navbar|id="comments"|plan-frame/);
+    assert.equal(await page.locator('#composer').isHidden(), true);
     assert.match(await page.locator('#plan-list-nav').innerText(), /E2E Plan/);
     await page.keyboard.press('Control+O');
     await page.waitForSelector('#quick-open-dialog:not([hidden])');
@@ -1920,7 +1940,7 @@ try {
     await syncPage.goto(`${baseUrl}/p/${syncRegistered.planId}`);
     await syncPage.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.body?.textContent?.includes('Source sync v1'));
     await syncPage.waitForSelector('#plan-navbar');
-    assert.equal(await syncPage.locator('#plan-navbar a').getAttribute('href'), '/');
+    assert.equal(await syncPage.locator('#plan-navbar a.nav-index').getAttribute('href'), '/');
     const openSyncComposer = async () => {
       await syncPage.evaluate(() => {
         const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame');

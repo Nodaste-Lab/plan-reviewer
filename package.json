@@ -24,6 +24,7 @@
     "chokidar": "^4.0.3",
     "commander": "^12.1.0",
     "fastify": "^5.6.2",
+    "fflate": "^0.8.3",
     "html2canvas": "^1.4.1",
     "mermaid": "^11.15.0",
     "nanoid": "^5.1.6",

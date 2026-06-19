@@ -1496,6 +1496,55 @@ export class PlanReviewStore {
     };
   }
 
+  getPlanSourceExport(identifier: string, versionId?: string) {
+    const { plan, version } = this.getPlan(identifier);
+    const selectedVersionId = versionId ?? version.id;
+    const row = this.db.prepare(`
+      SELECT id, file_hash AS fileHash, branch, commit_sha AS commitSha, html_blob_path AS htmlBlobPath,
+        rendered_blob_path AS renderedBlobPath, render_warnings_json AS renderWarningsJson,
+        source_mtime_ms AS sourceMtimeMs, source_size AS sourceSize, sync_origin AS syncOrigin
+      FROM plan_versions
+      WHERE id = ? AND plan_id = ?
+    `).get(selectedVersionId, plan.id) as Record<string, unknown> | undefined;
+    if (!row) throw new PlanReviewError('not_found', `Version '${selectedVersionId}' was not found for plan '${plan.id}'`, 404);
+    const assetRows = this.db.prepare(`
+      SELECT id, source_url AS sourceUrl, asset_hash AS assetHash, content_type AS contentType,
+        width, height, status, warning_json AS warningJson, blob_path AS blobPath
+      FROM plan_assets
+      WHERE version_id = ?
+      ORDER BY source_url
+    `).all(selectedVersionId) as Array<Record<string, unknown>>;
+    const htmlBlobPath = String(row.htmlBlobPath);
+    return {
+      plan,
+      version: {
+        id: String(row.id),
+        planId: plan.id,
+        fileHash: String(row.fileHash),
+        branch: String(row.branch),
+        commitSha: optionalString(row.commitSha),
+        htmlBlobPath,
+        renderedBlobPath: String(row.renderedBlobPath),
+        renderWarnings: parseJson(row.renderWarningsJson as string | null, []),
+        sourceMtimeMs: optionalNumber(row.sourceMtimeMs),
+        sourceSize: optionalNumber(row.sourceSize),
+        syncOrigin: (row.syncOrigin ?? 'manual_register') as 'manual_register' | 'filesystem_watch'
+      },
+      html: fs.readFileSync(htmlBlobPath, 'utf8'),
+      assets: assetRows.map(asset => ({
+        id: String(asset.id),
+        sourceUrl: String(asset.sourceUrl),
+        assetHash: optionalString(asset.assetHash),
+        contentType: optionalString(asset.contentType),
+        width: asset.width ?? undefined,
+        height: asset.height ?? undefined,
+        status: String(asset.status),
+        warning: parseJson(asset.warningJson as string | null, null),
+        blobPath: optionalString(asset.blobPath)
+      }))
+    };
+  }
+
   getRenderedHtml(identifier: string, versionId?: string): string {
     const { plan, version } = this.getPlan(identifier);
     if (!versionId) return fs.readFileSync(version.renderedBlobPath, 'utf8');

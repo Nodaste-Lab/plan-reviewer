@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan: Download dated raw HTML plan exports</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1020;
+      --panel: #111827;
+      --panel-2: #162033;
+      --text: #e5e7eb;
+      --muted: #a7b0c0;
+      --accent: #38bdf8;
+      --accent-2: #c084fc;
+      --border: #2b364d;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --danger: #fb7185;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top left, rgba(56,189,248,.14), transparent 34rem), var(--bg);
+      color: var(--text);
+      font: 16px/1.55 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main { max-width: 1120px; margin: 0 auto; padding: 40px 22px 72px; }
+    header, section, article {
+      background: rgba(17, 24, 39, .9);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 22px;
+      margin: 18px 0;
+      box-shadow: 0 18px 48px rgba(0,0,0,.24);
+    }
+    header { border-color: rgba(56,189,248,.42); }
+    h1, h2, h3, h4 { line-height: 1.18; margin: 0 0 12px; }
+    h1 { font-size: clamp(2rem, 4vw, 3rem); }
+    h2 { font-size: 1.45rem; color: #f8fafc; }
+    h3 { font-size: 1.12rem; color: #dbeafe; }
+    h4 { font-size: 1rem; color: #bae6fd; margin-top: 14px; }
+    p { margin: .5rem 0 1rem; }
+    a { color: #7dd3fc; }
+    code, pre { background: #0f172a; color: #dbeafe; border-radius: 8px; }
+    code { padding: .1rem .32rem; }
+    pre { padding: 14px; overflow-x: auto; border: 1px solid var(--border); }
+    ul, ol { padding-left: 1.35rem; }
+    li { margin: .42rem 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { border: 1px solid var(--border); padding: 10px; text-align: left; vertical-align: top; }
+    th { background: #0f172a; color: #dbeafe; }
+    .muted { color: var(--muted); }
+    .pill {
+      display: inline-block;
+      border: 1px solid rgba(56,189,248,.5);
+      border-radius: 999px;
+      padding: 4px 10px;
+      color: #bae6fd;
+      background: rgba(14, 116, 144, .22);
+      font-size: .86rem;
+      font-weight: 700;
+      margin: 0 8px 8px 0;
+    }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+    .card { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+    .good { border-color: rgba(34,197,94,.45); }
+    .warn { border-color: rgba(245,158,11,.55); }
+    .danger { border-color: rgba(251,113,133,.55); }
+    .checkbox-list { list-style: none; padding-left: 0; }
+    .checkbox-list input[type="checkbox"] { accent-color: var(--accent); margin-right: 8px; }
+    .phase { border-color: rgba(192,132,252,.4); }
+    .mockup-frame { border: 1px solid #334155; border-radius: 16px; overflow: hidden; background: #020617; box-shadow: 0 16px 44px rgba(0,0,0,.32); }
+    .mockup-nav { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; border-bottom: 1px solid #334155; padding: 12px; background: #0f172a; }
+    .mockup-button, .mockup-link, .mockup-pill { border: 1px solid #475569; border-radius: 8px; padding: 7px 10px; background: #111827; color: #dbeafe; font-size: .86rem; }
+    .mockup-link { color: #7dd3fc; }
+    .mockup-button.primary { border-color: rgba(56,189,248,.72); background: #075985; color: #ecfeff; font-weight: 800; }
+    .mockup-button.icon { width: 38px; height: 34px; display: inline-grid; place-items: center; padding: 0; font-size: 1rem; }
+    .mockup-tooltip { position: relative; border: 1px solid rgba(125,211,252,.55); border-radius: 8px; padding: 7px 10px; background: #082f49; color: #e0f2fe; font-size: .8rem; }
+    .mockup-tooltip::before { content: ""; position: absolute; left: -6px; top: 12px; width: 10px; height: 10px; transform: rotate(45deg); background: #082f49; border-left: 1px solid rgba(125,211,252,.55); border-bottom: 1px solid rgba(125,211,252,.55); }
+    .mockup-pill { margin-left: auto; color: #fcd34d; border-color: rgba(245,158,11,.45); background: rgba(120,53,15,.32); }
+    .mockup-body { display: grid; grid-template-columns: 1fr 280px; min-height: 220px; }
+    .mockup-plan { padding: 18px; background: #111827; }
+    .mockup-sidebar { border-left: 1px solid #334155; padding: 18px; background: #0b1120; }
+    .mockup-line { height: 10px; border-radius: 999px; background: #334155; margin: 10px 0; }
+    .mockup-line.short { width: 54%; }
+    .mockup-note { color: var(--muted); font-size: .9rem; margin-top: 12px; }
+  </style>
+</head>
+<body>
+<main>
+  <header id="summary">
+    <span class="pill">Plan-reviewer export</span>
+    <span class="pill">Planning only</span>
+    <span class="pill">No Linear issue exists</span>
+    <span class="pill">Plan path: <code>thoughts/plans/download-dated-html-plan.html</code></span>
+    <h1>Download dated raw HTML plan exports</h1>
+    <p class="muted">Add a one-click and CLI-accessible export path that produces a dated copy of a registered plan without the review shell. Plans without local image assets download as a standalone raw HTML file. Plans with required local image assets download as a portable zip containing one plan directory, the raw HTML file, and an <code>assets/</code> directory with the copied non-HTML assets referenced by that HTML. While touching the review-shell action bar, also polish the existing navigator toggle into the same compact tool style.</p>
+  </header>
+
+  <section id="status">
+    <h2>Status</h2>
+    <p><strong>execution-ready.</strong> Browser feedback has been processed. PM/product-intent re-review returned <code>PM_READY</code>. Initial and follow-up Claude Code/Codex readiness blockers were integrated: non-portable URL classification, real progress checkboxes, unambiguous CLI output semantics, displayed-version downloads, unsupported/non-portable asset fail-closed behavior across the asset scanner boundary, and zip-entry sanitization. Final Claude Code and Codex re-reviews returned <code>PLAN_EXECUTION_READY</code> with no blockers.</p>
+  </section>
+
+  <section id="goal">
+    <h2>Goal</h2>
+    <p>Reviewers and plan authors can share a plan outside the local reviewer service by downloading a dated, portable artifact for email or file sharing. The downloaded artifact must be the plan HTML itself, not the review shell, source sync chrome, comments sidebar, or sanitized iframe wrapper. The same action-bar pass should make the existing plan navigator control visually consistent with the new download tool.</p>
+  </section>
+
+  <section id="solution-narrative">
+    <h2>Solution narrative</h2>
+    <p>Add a server-side export builder over the latest registered source version. The browser review shell gets a <strong>Download raw plan</strong> action that points at a binary download route. The same UI phase updates the existing desktop plan navigator toggle from a text button into a compact three-bars tool with accessible name and tooltip <strong>Plan Navigator</strong>. The CLI gets <code>plan-review download &lt;plan&gt;</code> for agents and operators. The route chooses the artifact type automatically:</p>
+    <ul>
+      <li id="solution-html-only"><strong>No copied local image assets:</strong> return <code>text/html; charset=utf-8</code> with a content-disposition filename such as <code>download-dated-html-plan-2026-06-18-153012Z.html</code>.</li>
+      <li id="solution-zip"><strong>Copied local image assets present:</strong> return <code>application/zip</code> with a content-disposition filename such as <code>download-dated-html-plan-2026-06-18-153012Z.zip</code>. The zip contains <code>download-dated-html-plan-2026-06-18-153012Z/download-dated-html-plan-2026-06-18-153012Z.html</code> plus <code>download-dated-html-plan-2026-06-18-153012Z/assets/&lt;safe-asset-name&gt;</code>.</li>
+    </ul>
+    <p>The HTML file in both formats is based on the stored source HTML blob for the selected plan version. For zip exports, local <code>&lt;img src&gt;</code> references that map to copied plan assets are rewritten to the packaged <code>assets/</code> paths. Inline data images stay inline. Any asset-bearing reference in the scanner boundary that is not packaged, inline/self-contained, or explicitly excluded is non-portable and fails closed with an actionable error. That includes <code>http:</code>, <code>https:</code>, protocol-relative <code>//</code>, absolute path, and <code>blob:</code> references for images and non-image assets. Missing local image assets fail the same way because the product cannot honestly call those exports portable. Local non-HTML asset references that the product does not yet package, such as stylesheet/script/font/media references, fail closed with a clear unsupported-local-asset error instead of producing a silently broken share artifact.</p>
+  </section>
+
+  <section id="ui-mockup">
+    <h2>UI mockup</h2>
+    <p>The download action should live in the review shell's existing top action bar, not inside the rendered plan iframe. Use a compact icon-style download button with an accessible name and tooltip; the tooltip explains that it downloads the raw plan HTML, or a portable zip when assets are required. Show the navigator with the same compact tool treatment: a three-bars button with an accessible name and tooltip reading <strong>Plan Navigator</strong>. Place the download action near the index link and before heavier workflow actions so sharing the current source artifact is discoverable without looking in the comments sidebar.</p>
+    <figure id="download-button-mockup" class="mockup-frame">
+      <div class="mockup-nav" aria-label="Mock review shell action bar">
+        <span class="mockup-button icon" role="button" aria-label="Plan Navigator" title="Plan Navigator">☰</span>
+        <span class="mockup-tooltip">Plan Navigator</span>
+        <span class="mockup-link">← Plan index</span>
+        <span class="mockup-button icon primary" role="button" aria-label="Download raw plan" title="Download raw plan HTML, or a portable ZIP when the plan has assets">⬇</span>
+        <span class="mockup-tooltip">Download raw plan HTML; ZIP includes required assets.</span>
+        <span class="mockup-button">Request execution-ready review</span>
+        <span class="mockup-button">Build Plan</span>
+        <span class="mockup-button">Defer plan</span>
+        <span class="mockup-button">Archive plan</span>
+        <span class="mockup-button">Comments</span>
+        <span class="mockup-pill">Not execution ready</span>
+      </div>
+      <div class="mockup-body">
+        <div class="mockup-plan" aria-label="Rendered plan iframe placeholder">
+          <h3>Rendered plan iframe</h3>
+          <div class="mockup-line"></div>
+          <div class="mockup-line"></div>
+          <div class="mockup-line short"></div>
+          <p class="mockup-note">The downloaded file is the raw source HTML or portable zip, not this review-shell page.</p>
+        </div>
+        <div class="mockup-sidebar" aria-label="Comments sidebar placeholder">
+          <h3>Comments</h3>
+          <div class="mockup-line"></div>
+          <div class="mockup-line short"></div>
+          <p class="mockup-note">Comments and screenshots are intentionally excluded from the export.</p>
+        </div>
+      </div>
+      <figcaption class="mockup-note">Mock placement for planning documents. The navigator control should be a three-bars button with <code>aria-label="Plan Navigator"</code> and matching tooltip. The download control should be a real link or button with <code>aria-label="Download raw plan"</code> and a <code>title</code>/tooltip matching the text shown here. Collaboration documents use the same compact download action but omit planning-only buttons such as execution review, build, and defer.</figcaption>
+    </figure>
+  </section>
+
+  <section id="authority-inputs">
+    <h2>Authority and inputs</h2>
+    <ul>
+      <li id="input-user-request">User request: allow downloading a dated raw HTML plan for email or sharing; if images are included, export a portable zip with the HTML and an images/assets directory for non-HTML assets.</li>
+      <li id="input-repo-guidance"><code>AGENTS.md</code> requires non-trivial repo work to be planned as a registered HTML plan, cites source sync/render safety as product-critical, and requires API/CLI/README/browser behavior alignment for public contracts.</li>
+      <li id="input-plan-guidance"><code>thoughts/plans/AGENTS.md</code>, <code>reviewed-html-plan</code>, <code>planning-workflow</code>, <code>html-plan-reviewer</code>, and <code>product-principles</code> define the reviewed HTML plan workflow and required plan contents.</li>
+      <li id="input-product-intent"><code>thoughts/specs/product_intent.md</code> requires files to remain authoritative, source sync to fail safe, rendered output to be safe, and HTTP API, CLI, browser UI, README guidance, and tests to describe the same lifecycle semantics.</li>
+      <li id="input-dependency-selection"><code>dependency-selection</code> requires reusing a vetted library for non-trivial archive creation instead of hand-rolling zip output.</li>
+    </ul>
+  </section>
+
+  <section id="current-implementation-reality">
+    <h2>Current implementation reality</h2>
+    <div class="grid">
+      <article id="reality-source-blobs" class="card good">
+        <h3>Source and rendered blobs already exist</h3>
+        <p><code>PlanReviewStore.registerPlan</code> writes the original source HTML to <code>html_blob_path</code> and the sanitized review render to <code>rendered_blob_path</code>. <code>getPlan()</code> returns the latest <code>VersionRecord</code> with both paths.</p>
+      </article>
+      <article id="reality-assets" class="card good">
+        <h3>Local image assets are already copied</h3>
+        <p><code>discoverImageAssets</code> and <code>discoverSourceAssets</code> collect relative local <code>&lt;img src&gt;</code> assets inside the plan directory. <code>registerPlan</code> stores copied assets in <code>plan_assets</code>, exposes them through <code>listPlanAssets(version.id)</code>, and serves them through <code>GET /assets/:assetId</code>.</p>
+      </article>
+      <article id="reality-render-rewrites" class="card good">
+        <h3>Review rendering rewrites images</h3>
+        <p><code>renderPlan</code> rewrites copied local images to <code>/assets/&lt;hash&gt;</code>, blocks external image URLs, leaves data/blob/asset URLs alone, and shows placeholders for missing assets. Export should not reuse the review shell, but it can reuse the image-source parsing and copied-asset manifest.</p>
+      </article>
+      <article id="reality-no-download" class="card warn">
+        <h3>No raw download surface exists</h3>
+        <p>The browser shell serves <code>/p/:planId</code> and the sanitized iframe uses <code>/render/:planId</code>. The CLI has <code>register</code>, <code>index</code>, <code>show</code>, and comment/queue commands, but no command or route that downloads the raw plan source as a dated standalone artifact.</p>
+      </article>
+      <article id="reality-deps" class="card warn">
+        <h3>No zip dependency exists</h3>
+        <p><code>package.json</code> has no archive library. Node 20 does not provide a built-in zip writer, so the plan locks a small dependency rather than implementing zip file structures by hand.</p>
+      </article>
+      <article id="reality-tests" class="card good">
+        <h3>Test seams are available</h3>
+        <p><code>src/__tests__/contracts.test.ts</code> already covers rendering, asset discovery, API routes, and CLI behavior. <code>src/test-fixtures/e2e-run.ts</code> already exercises browser downloads/assets through Playwright-style flows and can verify the review-shell button.</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="progress">
+    <h2>Progress</h2>
+    <ul class="checkbox-list">
+      <li id="progress-p1"><input type="checkbox" checked disabled> P1 complete — export contract and regression tests added.</li>
+      <li id="progress-p2"><input type="checkbox" checked disabled> P2 complete — export builder and server route implemented.</li>
+      <li id="progress-p3"><input type="checkbox" checked disabled> P3 complete — CLI and browser entry points added.</li>
+      <li id="progress-p4"><input type="checkbox" checked disabled> P4 complete — README guidance and e2e coverage added.</li>
+      <li id="progress-p5"><input type="checkbox" checked disabled> P5 complete — final verification and scoped reviews passed.</li>
+    </ul>
+  </section>
+
+  <section id="resume-instructions">
+    <h2>Resume instructions</h2>
+    <p>Read this plan fully, then start with the first unchecked item in <a href="#progress">Progress</a>. Execute one phase at a time. For each phase, write the tests first where practical, implement the minimum product change needed to satisfy those tests, run the phase verification commands, update this plan's Progress and Decisions / Deviations Log, then run the scoped implementation review required by <code>AGENTS.md</code> before advancing. Ask the user only if repo evidence cannot resolve a product-shaping decision.</p>
+  </section>
+
+  <section id="product-intent-alignment">
+    <h2>Product intent alignment</h2>
+    <ul>
+      <li id="intent-source-truth"><strong>Files stay authoritative:</strong> exports are built from the stored source HTML blob and copied source assets for the registered version, not from the browser shell or transient rendered DOM.</li>
+      <li id="intent-golden-path"><strong>Golden path is obvious:</strong> a reviewer can click one browser action; an agent/operator can run one CLI command. The product infers artifact type from the registered version instead of asking users to choose html versus zip.</li>
+      <li id="intent-safe-default"><strong>Safe default:</strong> missing, external, absolute, blob, or unsupported asset-bearing references fail closed with a clear next action instead of silently producing a broken or non-portable share package.</li>
+      <li id="intent-cross-surface"><strong>Surface parity:</strong> HTTP, CLI, browser UI, README, and tests define the same download naming, asset packaging, and error semantics.</li>
+      <li id="intent-render-safety"><strong>Rendered-plan safety preserved:</strong> the export path does not weaken review-shell sanitization or source sync. It is a download of the authorial source artifact and its stored copied assets.</li>
+      <li id="intent-toolbar-consistency"><strong>Action bar stays coherent:</strong> the adjacent navigator polish keeps the top action bar legible as compact tools instead of mixing one-off text and icon treatments.</li>
+    </ul>
+  </section>
+
+  <section id="locked-decisions">
+    <h2>Locked decisions</h2>
+    <ol>
+      <li id="decision-raw-source"><strong>Export the source HTML blob.</strong> The HTML artifact is the latest stored <code>html_blob_path</code> source for the plan version, not <code>/render/:planId</code> and not <code>/p/:planId</code>. This satisfies “raw html plan” and avoids review-shell chrome.</li>
+      <li id="decision-auto-format"><strong>Artifact format is automatic.</strong> HTML-only exports return a single <code>.html</code>; exports with copied local image assets return a <code>.zip</code>. No first-slice format picker is required.</li>
+      <li id="decision-zip-layout"><strong>Zip layout is deterministic.</strong> The root directory and file basename are <code>&lt;slug&gt;-YYYY-MM-DD-HHmmssZ</code>. The HTML file is <code>&lt;root&gt;/&lt;root&gt;.html</code>; assets live under <code>&lt;root&gt;/assets/</code>.</li>
+      <li id="decision-date"><strong>Use UTC download timestamps.</strong> Dated names use a UTC timestamp generated at export time so tests and agents do not depend on local timezone settings.</li>
+      <li id="decision-assets"><strong>Use the registered asset manifest and stored blobs.</strong> Export does not read arbitrary paths from the filesystem at request time. It packages only <code>plan_assets</code> rows for the selected version whose status is <code>copied</code> and whose blob path still exists. First-slice packaging covers copied local image assets discovered from <code>&lt;img src&gt;</code>; every other asset-bearing reference is scanned and rejected until the product deliberately supports packaging it.</li>
+      <li id="decision-rewrite"><strong>Rewrite only package-local image references.</strong> In zip exports, relative local <code>&lt;img src&gt;</code> values that map to copied assets are rewritten to <code>assets/&lt;safe-name&gt;</code>. Inline <code>data:image/...</code> values stay inline. Asset references outside supported <code>&lt;img src&gt;</code> packaging are not silently left behind; they are treated as unsupported assets and fail closed.</li>
+      <li id="decision-unsupported-scanner"><strong>Define the unsupported/non-portable asset scanner boundary.</strong> The export builder must scan the source HTML for asset-bearing references outside supported <code>&lt;img src&gt;</code> packaging. For every reference in this boundary, relative local references inside the plan directory are classified as <code>unsupportedLocalSources</code>; non-relative, external, protocol-relative, absolute-path, or <code>blob:</code> references are classified as <code>nonPortableSources</code> or <code>externalSources</code>. The first slice must include at least: <code>srcset</code> on <code>&lt;img&gt;</code> and <code>&lt;source&gt;</code>, <code>&lt;source src&gt;</code>, <code>&lt;video poster&gt;</code>, <code>&lt;object data&gt;</code>, <code>&lt;embed src&gt;</code>, <code>&lt;audio src&gt;</code>, <code>&lt;video src&gt;</code>, <code>&lt;track src&gt;</code>, <code>&lt;script src&gt;</code>, stylesheet/preload/icon <code>&lt;link href&gt;</code>, and <code>url(...)</code> references in <code>style</code> attributes and <code>&lt;style&gt;</code> blocks. Fragment-only links, navigational <code>&lt;a href&gt;</code> links, and explicitly self-contained values such as <code>data:</code> URLs stay out of the failure list.</li>
+      <li id="decision-fail-closed"><strong>Fail closed for non-portable and unsupported asset references.</strong> Relative local image references without copied assets, unsupported local asset-bearing references, and non-relative/external/absolute/blob asset-bearing references in the scanner boundary return <code>409 export_not_portable</code> with the offending sources and the next action to re-register/fix the source or remove unsupported/non-portable assets. This explicitly includes <code>http:</code>, <code>https:</code>, protocol-relative <code>//</code>, absolute path, and <code>blob:</code> references for images, scripts, stylesheets, media, object/embed refs, and CSS <code>url(...)</code> refs.</li>
+      <li id="decision-library"><strong>Use <code>fflate</code> for zip creation.</strong> Add the zero-dependency, ESM-compatible <code>fflate</code> package instead of writing a custom zip implementation. Keep zip creation in a small server-side helper over buffers; plan exports are expected to be small repo artifacts, not large media archives.</li>
+      <li id="decision-cli"><strong>Add <code>plan-review download &lt;plan&gt;</code>.</strong> If <code>--output</code> is omitted, the CLI saves the content-disposition filename in the current directory and prints the path. <code>--output &lt;directory&gt;</code> always means an output directory; create it when missing and save the server-provided filename inside it. To avoid accidental data loss, fail with an actionable error when the resolved target file already exists; exact output-file paths and overwrite flags are not included in this slice.</li>
+      <li id="decision-ui-placement"><strong>Place the browser action in the top review-shell action bar.</strong> The action should appear as a compact download icon link/button near the index/navigation controls and before planning-specific workflow buttons. It must include an accessible name <strong>Download raw plan</strong> plus a tooltip explaining that it downloads raw plan HTML, or a portable zip when assets are required. It must not live inside the rendered plan iframe or comments sidebar.</li>
+      <li id="decision-navigator-polish"><strong>Include the adjacent navigator polish.</strong> Because P3 already edits the review-shell action bar, this plan also updates the existing desktop navigator toggle to an icon-only three-bars control with accessible name and tooltip <strong>Plan Navigator</strong>. Do not redesign plan navigation behavior or mobile navigation in this slice.</li>
+      <li id="decision-no-comments"><strong>Do not export comments or screenshots.</strong> This feature exports the plan artifact for sharing, not the review thread or comment asset history.</li>
+    </ol>
+  </section>
+
+  <section id="acceptance-criteria">
+    <h2>Acceptance criteria</h2>
+    <ol>
+      <li id="ac-html-download">A registered plan without copied local image assets can be downloaded from the browser and CLI as a dated <code>.html</code> file containing the raw plan source without review-shell markup.</li>
+      <li id="ac-zip-download">A registered plan with copied local image assets downloads as a dated <code>.zip</code> whose root directory contains one HTML file and an <code>assets/</code> directory containing every supported copied local image asset required by the HTML.</li>
+      <li id="ac-rewritten-assets">The HTML inside a zip rewrites packaged local image references to relative <code>assets/&lt;safe-name&gt;</code> paths, and unzipping the archive allows the HTML to load those supported images without the plan-review service running.</li>
+      <li id="ac-fail-closed">Exports fail with a structured, actionable error when a plan version contains missing local image assets, unsupported local asset-bearing references, or external/absolute/blob asset-bearing references that would make the artifact non-portable.</li>
+      <li id="ac-dated-filenames">HTML and zip artifact names include the plan slug and a UTC <code>YYYY-MM-DD-HHmmssZ</code> timestamp, and content-disposition headers are safe for spaces and special characters.</li>
+      <li id="ac-cli-parity"><code>plan-review download &lt;plan&gt;</code> uses the same service route and artifact selection as the browser button, writes the file to the requested output location, and reports the saved path.</li>
+      <li id="ac-ui-entry">The review shell exposes a visible compact download button for planning and collaboration documents with accessible name <strong>Download raw plan</strong> and tooltip copy explaining raw HTML versus portable zip behavior, without disrupting comment selection, source sync reloads, or lifecycle buttons.</li>
+      <li id="ac-navigator-tool">The existing desktop plan navigator toggle is updated to a compact three-bars tool with accessible name and tooltip <strong>Plan Navigator</strong>, while preserving its collapse/expand behavior and state.</li>
+      <li id="ac-docs">README guidance documents the browser action, CLI command, automatic html/zip behavior, zip layout, and non-portable asset errors.</li>
+    </ol>
+  </section>
+
+  <section id="bdd-scenarios">
+    <h2>BDD scenarios</h2>
+    <article id="bdd-html-only" class="card good">
+      <h3>BDD-1: HTML-only plan download</h3>
+      <p><strong>Given</strong> a registered plan whose latest version has no copied local image assets, <strong>when</strong> a reviewer clicks <strong>Download raw plan</strong> or an operator runs <code>plan-review download plan_123</code>, <strong>then</strong> the response is <code>text/html</code>, the filename is dated, and the body is the raw plan source without review shell markup such as <code>id="comments"</code> or <code>plan-frame</code>.</p>
+    </article>
+    <article id="bdd-zip-assets" class="card good">
+      <h3>BDD-2: Image plan zip download</h3>
+      <p><strong>Given</strong> a registered plan contains <code>&lt;img src="./diagram.png"&gt;</code> and the image was copied into <code>plan_assets</code>, <strong>when</strong> the plan is downloaded, <strong>then</strong> the response is a zip containing <code>&lt;root&gt;/&lt;root&gt;.html</code> and <code>&lt;root&gt;/assets/diagram-&lt;hash&gt;.png</code>, and the HTML references <code>assets/diagram-&lt;hash&gt;.png</code>.</p>
+    </article>
+    <article id="bdd-duplicate-names" class="card good">
+      <h3>BDD-3: Duplicate image filenames stay distinct</h3>
+      <p><strong>Given</strong> a plan references two different local images with the same basename from different relative directories, <strong>when</strong> a zip export is built, <strong>then</strong> both assets receive collision-safe names that include their asset hash and the HTML references the correct packaged path for each original source.</p>
+    </article>
+    <article id="bdd-missing-asset" class="card warn">
+      <h3>BDD-4: Missing local image fails closed</h3>
+      <p><strong>Given</strong> a registered plan source contains a relative image reference but the latest version has no copied blob for that source, <strong>when</strong> a user requests export, <strong>then</strong> the service returns <code>409 export_not_portable</code> naming the missing source and advising the user to restore the asset and re-register or sync the source.</p>
+    </article>
+    <article id="bdd-external-image" class="card warn">
+      <h3>BDD-5: External image fails closed</h3>
+      <p><strong>Given</strong> a registered plan source contains <code>&lt;img src="https://example.com/diagram.png"&gt;</code>, <code>&lt;img src="//cdn.example.com/diagram.png"&gt;</code>, an absolute-path image, or any other image source that is not a relative path inside the registered plan directory and is not a <code>data:</code> URI, <strong>when</strong> export is requested, <strong>then</strong> the service returns <code>409 export_not_portable</code> explaining that non-portable images cannot be packaged by the export and must be converted to local plan assets first.</p>
+    </article>
+    <article id="bdd-unsupported-local-asset" class="card warn">
+      <h3>BDD-6: Unsupported local non-HTML asset fails closed</h3>
+      <p><strong>Given</strong> a registered plan source contains a local asset reference that is not a supported <code>&lt;img src&gt;</code>, such as <code>&lt;img srcset="./wide.png 2x"&gt;</code>, <code>&lt;source srcset="./wide.webp"&gt;</code>, <code>&lt;video poster="./poster.png"&gt;</code>, <code>&lt;object data="./diagram.svg"&gt;</code>, <code>&lt;embed src="./diagram.svg"&gt;</code>, <code>&lt;link rel="stylesheet" href="./plan.css"&gt;</code>, <code>&lt;script src="./plan.js"&gt;</code>, or <code>style="background-image:url('./bg.png')"</code>, <strong>when</strong> export is requested, <strong>then</strong> the service returns <code>409 export_not_portable</code> naming the unsupported local source and explaining that the asset must be inlined, removed, or covered by a later packaging slice. <strong>Given</strong> the same asset-bearing attributes use non-relative sources such as <code>https://cdn.example.com/plan.css</code>, <code>//cdn.example.com/app.js</code>, <code>/assets/poster.png</code>, <code>blob:...</code>, or <code>url(https://cdn.example.com/bg.png)</code>, <strong>then</strong> the service returns <code>409 export_not_portable</code> naming those non-portable sources instead of allowing a network-dependent export.</p>
+    </article>
+    <article id="bdd-cli-output" class="card good">
+      <h3>BDD-7: CLI saves the route response</h3>
+      <p><strong>Given</strong> the service returns a zip or HTML export with a content-disposition filename, <strong>when</strong> an operator runs <code>plan-review download plan_123 --output ./exports</code>, <strong>then</strong> the CLI creates <code>./exports</code> as a directory if needed, writes the server artifact using the same filename inside that directory, and prints the absolute saved path. <strong>Given</strong> the resolved target file already exists, <strong>when</strong> the command runs, <strong>then</strong> it fails without overwriting the file and prints an actionable error.</p>
+    </article>
+    <article id="bdd-browser-download" class="card good">
+      <h3>BDD-8: Browser entry point downloads the visible version without comment side effects</h3>
+      <p><strong>Given</strong> the review shell is open on a displayed plan version, including after source sync has deferred or applied a newer frame version, <strong>when</strong> the reviewer hovers or focuses the compact download button, <strong>then</strong> the tooltip explains raw HTML versus portable zip behavior; <strong>when</strong> the reviewer activates the button with accessible name <strong>Download raw plan</strong>, <strong>then</strong> the browser starts an attachment download for the version currently displayed in the plan frame and no comment composer opens, selection state changes, or lifecycle action fires.</p>
+    </article>
+    <article id="bdd-navigator-tool" class="card good">
+      <h3>BDD-9: Navigator remains functional as a compact tool</h3>
+      <p><strong>Given</strong> the review shell action bar is visible, <strong>when</strong> the reviewer hovers or focuses the three-bars navigator button, <strong>then</strong> the tooltip reads <strong>Plan Navigator</strong>; <strong>when</strong> the reviewer activates it, <strong>then</strong> the existing navigator collapse/expand behavior and accessible expanded state still work.</p>
+    </article>
+  </section>
+
+  <section id="test-coverage-matrix">
+    <h2>Test coverage matrix</h2>
+    <table>
+      <thead>
+        <tr><th>Coverage target</th><th>Acceptance / BDD</th><th>Planned tests</th><th>Commands</th></tr>
+      </thead>
+      <tbody>
+        <tr id="matrix-html"><td>HTML-only export contract</td><td><a href="#ac-html-download">AC-1</a>, <a href="#bdd-html-only">BDD-1</a></td><td>Contract tests against <code>createApp().inject</code> for <code>GET /download/:planId</code> on a no-asset plan; assert content type, content disposition, body source, and absence of review shell.</td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></td></tr>
+        <tr id="matrix-zip"><td>Zip layout and asset rewrite</td><td><a href="#ac-zip-download">AC-2</a>, <a href="#ac-rewritten-assets">AC-3</a>, <a href="#bdd-zip-assets">BDD-2</a>, <a href="#bdd-duplicate-names">BDD-3</a></td><td>Pure helper tests plus route tests that unzip with <code>fflate</code>, inspect entries, validate rewritten HTML paths, and confirm copied bytes match stored asset blobs.</td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></td></tr>
+        <tr id="matrix-errors"><td>Fail-closed non-portable assets</td><td><a href="#ac-fail-closed">AC-4</a>, <a href="#bdd-missing-asset">BDD-4</a>, <a href="#bdd-external-image">BDD-5</a>, <a href="#bdd-unsupported-local-asset">BDD-6</a></td><td>Contract tests for missing <code>plan_assets</code> blobs, unsupported local asset-bearing references (<code>srcset</code>/<code>&lt;source&gt;</code>, <code>poster</code>, <code>object data</code>, <code>embed src</code>, stylesheet/script/link refs, and CSS <code>url(...)</code> in style attributes/blocks), and non-portable external/absolute/blob references across the same scanner boundary; assert <code>409</code>, code, source lists, and next action.</td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></td></tr>
+        <tr id="matrix-cli"><td>CLI parity and output behavior</td><td><a href="#ac-cli-parity">AC-6</a>, <a href="#bdd-cli-output">BDD-7</a></td><td>Spawned CLI tests using a fake HTTP server for HTML and zip responses; assert inferred filename, <code>--output</code> directory creation, output directory behavior, existing-target failure, <code>--url</code> service base URL override behavior, and error propagation.</td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></td></tr>
+        <tr id="matrix-ui"><td>Browser action</td><td><a href="#ac-ui-entry">AC-7</a>, <a href="#ac-navigator-tool">AC-8</a>, <a href="#bdd-browser-download">BDD-8</a>, <a href="#bdd-navigator-tool">BDD-9</a></td><td>E2E fixture test opens a registered plan, verifies the compact download control has accessible name <strong>Download raw plan</strong> and tooltip/title copy, verifies the navigator control has accessible name/tooltip <strong>Plan Navigator</strong>, clicks the download action, waits for browser download, verifies the artifact matches the currently displayed frame version, verifies composer stays hidden, and confirms navigator collapse/expand still works.</td><td><code>bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js</code></td></tr>
+        <tr id="matrix-docs"><td>Documentation parity</td><td><a href="#ac-docs">AC-9</a></td><td>Targeted README inspection in implementation review plus contract assertions for CLI help text mentioning <code>download</code>.</td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="phase-plan">
+    <h2>Phase-by-phase execution plan</h2>
+
+    <article id="phase-p1-contracts" class="phase">
+      <h3>P1: Lock export contract and tests</h3>
+      <h4>End State</h4>
+      <p>The artifact contract is captured in failing tests before implementation: dated names, automatic html/zip selection, zip layout, asset rewriting, missing/external/non-portable/unsupported asset errors, and CLI output behavior.</p>
+      <h4>Tests first</h4>
+      <ul>
+        <li>Add contract tests in <code>src/__tests__/contracts.test.ts</code> for HTML-only route output, zip route output with one and multiple assets, missing asset failure, external image failure, unsupported local asset failure across the scanner boundary (<code>srcset</code>/<code>&lt;source&gt;</code>, <code>poster</code>, <code>object data</code>, <code>embed src</code>, stylesheet/script/link refs, and CSS <code>url(...)</code>), non-portable external/absolute/blob sources across that same boundary, and content-disposition filename safety.</li>
+        <li>Add spawned CLI tests using a fake HTTP server to prove <code>plan-review download</code> saves server-provided artifacts into output directories and refuses to overwrite existing target files.</li>
+        <li>Add helper-level tests for <code>buildDatedExportName</code>, safe zip entry names, and collision handling.</li>
+      </ul>
+      <h4>Expected files</h4>
+      <ul><li><code>src/__tests__/contracts.test.ts</code></li><li>Possible new helper test fixtures under existing temp-test patterns</li></ul>
+      <h4>Work</h4>
+      <ul>
+        <li>Define expected response headers: <code>Content-Type</code>, <code>Content-Disposition: attachment</code>, and no-store caching for generated exports.</li>
+        <li>Lock error shape by expecting <code>PlanReviewError</code> code <code>export_not_portable</code> with <code>externalSources</code> or <code>nonPortableSources</code>, <code>missingSources</code>, <code>unsupportedLocalSources</code>, and an actionable next step.</li>
+        <li>Lock the CLI help surface for <code>download &lt;plan&gt; [--output &lt;directory&gt;] [--version-id &lt;id&gt;] [--url &lt;service-base-url&gt;]</code>, where <code>--output</code> is always a directory and <code>--url</code> follows existing CLI commands as the plan-review service base URL.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></pre>
+      <p class="muted">Expected RED: tests fail because the route, helper, CLI command, and dependency do not exist yet.</p>
+    </article>
+
+    <article id="phase-p2-export-builder" class="phase">
+      <h3>P2: Implement export builder and server route</h3>
+      <h4>End State</h4>
+      <p>The server can build and return a binary export for the latest or explicitly selected plan version using stored source HTML and stored copied asset blobs.</p>
+      <h4>Tests first</h4>
+      <ul>
+        <li>Keep P1 route/helper tests failing until the implementation is complete.</li>
+      </ul>
+      <h4>Expected files</h4>
+      <ul><li><code>package.json</code> and lockfile</li><li><code>src/exportPlan.ts</code> or equivalent small helper</li><li><code>src/storage/database.ts</code></li><li><code>src/server/app.ts</code></li><li><code>src/__tests__/contracts.test.ts</code></li></ul>
+      <h4>Work</h4>
+      <ul>
+        <li>Add <code>fflate</code> as the zip dependency and keep the dependency note in this plan's Decisions / Deviations Log if the final package differs.</li>
+        <li>Add store methods that expose a selected version's raw HTML path/content and copied asset rows with source URL, content type, asset hash, and blob path. Support latest version by default and optional <code>versionId</code> for future-proofed downloads.</li>
+        <li>Create a pure export builder that analyzes source HTML image references with existing <code>htmlImages</code> parsing, maps relative sources to copied assets, detects missing and non-portable image sources, scans the unsupported/non-portable asset-bearing reference boundary defined in <a href="#decision-unsupported-scanner">the scanner decision</a>, rewrites package-local <code>src</code> attributes for zip exports, and returns either an HTML buffer or zip buffer plus metadata.</li>
+        <li>Generate safe artifact names by slugifying the plan slug, appending UTC timestamp, and sanitizing zip entry basenames by stripping <code>../</code> traversal, leading slashes, path separators, and null bytes. Include short asset hashes to avoid collisions.</li>
+        <li>Add <code>GET /download/:planId</code> with optional <code>?versionId=...</code>. Return generated binary attachments with no-store caching. Convert export errors into structured JSON when the request cannot be fulfilled.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></pre>
+    </article>
+
+    <article id="phase-p3-cli-browser" class="phase">
+      <h3>P3: Add CLI and browser entry points</h3>
+      <h4>End State</h4>
+      <p>Operators can export from CLI; reviewers can export from the review shell. Both use the same server route and get the same html/zip artifact semantics. The existing desktop navigator toggle is polished into the same compact tool treatment without changing navigation behavior.</p>
+      <h4>Tests first</h4>
+      <ul>
+        <li>Add CLI command tests before command implementation.</li>
+        <li>Add browser shell markup/client tests or e2e expectations before UI wiring, including the compact download control and the navigator toggle's accessible name, tooltip, and preserved collapse/expand behavior.</li>
+      </ul>
+      <h4>Expected files</h4>
+      <ul><li><code>src/cli.ts</code></li><li><code>src/server/app.ts</code></li><li><code>src/__tests__/contracts.test.ts</code></li><li><code>src/test-fixtures/e2e-run.ts</code></li></ul>
+      <h4>Work</h4>
+      <ul>
+        <li>Add <code>plan-review download &lt;plan&gt;</code> to <code>src/cli.ts</code>. Fetch <code>/download/:planId</code> from the default or <code>--url &lt;service-base-url&gt;</code> service, parse <code>Content-Disposition</code>, save to cwd or requested output directory, create output directories when needed, refuse to overwrite an existing target file, and print the absolute saved path. Preserve JSON errors from the service.</li>
+        <li>Add a compact icon-style download link/button in the review shell header/action area matching the <a href="#download-button-mockup">UI mockup</a>: near <code>← Plan index</code>/<code>← Document index</code>, before <code>Request execution-ready review</code>, <code>Build Plan</code>, defer/archive controls, and <code>Comments</code>. Use a normal anchor to <code>/download/&lt;planId&gt;?versionId=&lt;displayedVersionId&gt;</code> so browser download behavior does not require plan-authored scripts and the artifact matches the currently visible plan frame. Update the link when source sync refreshes or defers the displayed frame version. The control must have accessible name <strong>Download raw plan</strong> and tooltip/title text explaining: “Download raw plan HTML; ZIP includes required assets.”</li>
+        <li>Keep collaboration-mode labels neutral if needed, but the same export action should work for both planning and collaboration documents because both are registered HTML source artifacts. Collaboration mode should omit planning-only buttons while preserving the compact download action in the same relative top-bar position.</li>
+        <li>Update the existing desktop navigator toggle in <code>reviewShell</code> from the current <code>☰ Navigator</code> text treatment to a compact three-bars control with accessible name and tooltip <strong>Plan Navigator</strong>. Preserve the existing <code>aria-controls</code>, <code>aria-expanded</code>, collapse/expand behavior, and any responsive/mobile comments controls.</li>
+        <li>Ensure click handling for the action is outside the rendered plan iframe and does not interact with comment selection/composer state.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></pre>
+    </article>
+
+    <article id="phase-p4-docs-e2e" class="phase">
+      <h3>P4: Document and exercise the user workflow</h3>
+      <h4>End State</h4>
+      <p>README and e2e fixtures prove the browser workflow works, and docs accurately describe artifact formats, layout, and failure behavior.</p>
+      <h4>Tests first</h4>
+      <ul>
+        <li>Add an e2e download assertion to <code>src/test-fixtures/e2e-run.ts</code> that clicks the review-shell action and inspects the downloaded file type/name and version-matching content.</li>
+      </ul>
+      <h4>Expected files</h4>
+      <ul><li><code>src/test-fixtures/e2e-run.ts</code></li><li><code>README.md</code></li><li><code>thoughts/plans/download-dated-html-plan.html</code></li></ul>
+      <h4>Work</h4>
+      <ul>
+        <li>Document the browser action and CLI command in README near registration/review guidance.</li>
+        <li>Document zip layout and explain that supported local image assets are packaged while missing, external, absolute, blob, non-portable, or unsupported assets must be fixed before a portable export can be produced.</li>
+        <li>Extend the e2e fixture with an asset-backed plan if existing fixture coverage cannot safely reuse its current image plan for download assertions.</li>
+        <li>Update this plan's Progress and Decisions / Deviations Log with implementation evidence.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js</code></pre>
+    </article>
+
+    <article id="phase-p5-final-gate" class="phase">
+      <h3>P5: Final verification and scoped review</h3>
+      <h4>End State</h4>
+      <p>The feature is implementation-complete, verified through the repo's relevant gates, reviewed for scoped quality, and ready for final handoff or PR.</p>
+      <h4>Tests first</h4>
+      <ul>
+        <li>No new tests first unless review finds a missed behavior; if it does, add the failing regression test before the fix.</li>
+      </ul>
+      <h4>Expected files</h4>
+      <ul><li>All files touched in P1–P4</li><li><code>thoughts/plans/download-dated-html-plan.html</code></li></ul>
+      <h4>Work</h4>
+      <ul>
+        <li>Run the full relevant gates from <code>AGENTS.md</code>: build, unit/contracts, and e2e for browser UI work.</li>
+        <li>Run a scoped implementation review focused on export safety, binary route behavior, path traversal prevention, missing/external asset errors, and API/CLI/UI/README parity.</li>
+        <li>Address review findings with tests first where behavior changes.</li>
+        <li>Update plan Progress and Decisions / Deviations Log with final evidence.</li>
+      </ul>
+      <h4>Verify</h4>
+      <pre><code>bun run build
+bun run test
+bun run test:e2e</code></pre>
+    </article>
+  </section>
+
+  <section id="verification-strategy">
+    <h2>Verification strategy</h2>
+    <ul>
+      <li id="verify-contracts">Use contract tests for artifact headers, route error shapes, zip content, raw source HTML selection, and CLI behavior.</li>
+      <li id="verify-e2e">Use e2e browser coverage for the review-shell download action and no comment-composer side effects.</li>
+      <li id="verify-security">Review zip entry generation for path traversal, unsafe names, <code>../</code> sequences, leading slashes, null bytes, source-path reads, and accidental inclusion of comment screenshots or service blobs unrelated to the selected version.</li>
+      <li id="verify-parity">Check README examples and CLI help match the shipped route and behavior exactly.</li>
+    </ul>
+  </section>
+
+  <section id="delivery-order">
+    <h2>Delivery order</h2>
+    <ol>
+      <li id="delivery-1">P1 contract tests establish the behavior and safety boundaries.</li>
+      <li id="delivery-2">P2 server export builder makes the core product behavior real.</li>
+      <li id="delivery-3">P3 CLI and browser entry points expose the same route.</li>
+      <li id="delivery-4">P4 docs and e2e prove the user-facing workflow.</li>
+      <li id="delivery-5">P5 final verification and review complete the handoff.</li>
+    </ol>
+  </section>
+
+  <section id="non-goals">
+    <h2>Non-goals</h2>
+    <ul>
+      <li id="non-goal-comments">No export of browser comments, thread history, claims, queue state, plan notes, or screenshot/comment assets.</li>
+      <li id="non-goal-editor">No editing or transformation UI for the plan source.</li>
+      <li id="non-goal-auth">No new authentication, secret links, or public sharing controls in this slice.</li>
+      <li id="non-goal-archive-history">No browsable archive/history UI for all prior exported downloads; downloads are generated on demand.</li>
+      <li id="non-goal-all-css-assets">No broad web-page packaging beyond supported local image references in registered plan HTML. Unsupported or non-portable stylesheet/script/font/media/object/embed/CSS URL references must fail closed with actionable errors rather than being silently omitted; if implementation discovers those are common in plans, log a follow-up rather than expanding this slice without review.</li>
+      <li id="non-goal-nav-redesign">No broader navigator redesign beyond changing the existing desktop navigator toggle to the compact three-bars tool treatment while preserving behavior.</li>
+      <li id="non-goal-pdf">No PDF, MHTML, or email-template conversion.</li>
+    </ul>
+  </section>
+
+  <section id="decisions-log">
+    <h2>Decisions / Deviations Log</h2>
+    <ul>
+      <li id="log-2026-06-18-created"><strong>2026-06-18:</strong> Initial browser-review plan created from repo inspection. The plan uses source HTML blobs plus stored copied image assets, adds automatic HTML-vs-zip selection, fails closed for non-portable images, and locks <code>fflate</code> as the zip dependency to avoid custom archive code.</li>
+      <li id="log-2026-06-18-browser-feedback-mockup"><strong>2026-06-18:</strong> Integrated browser feedback requesting a UI mockup by adding <a href="#ui-mockup">UI mockup</a>, locking top action-bar placement, and updating P3 browser work to implement the shown <strong>Download raw plan</strong> action.</li>
+      <li id="log-2026-06-18-browser-feedback-tooltip"><strong>2026-06-18:</strong> Integrated browser feedback to make the mockup more like a simple download button by changing it to a compact icon control with an accessible name and tooltip explaining raw HTML versus portable zip behavior.</li>
+      <li id="log-2026-06-18-browser-feedback-navigator"><strong>2026-06-18:</strong> Integrated browser feedback to give the navigator mockup the same tool treatment: a three-bars button with accessible name and tooltip <strong>Plan Navigator</strong>.</li>
+      <li id="log-2026-06-18-browser-feedback-navigator-scope"><strong>2026-06-18:</strong> Integrated browser feedback to include the actual navigator toggle polish in P3 scope while preserving existing collapse/expand behavior and avoiding a broader navigation redesign.</li>
+      <li id="log-2026-06-18-review-gate-fixes"><strong>2026-06-18:</strong> Integrated first execution-ready gate findings. Claude Code flagged an ambiguous protocol-relative image boundary, so the fail-closed rule now treats any non-relative, non-<code>data:</code> image source as non-portable. Codex flagged pseudo-checkbox progress, so Progress now uses real disabled checkbox inputs. Optional review notes also clarified <code>--url</code> as the service base URL, no-overwrite CLI behavior, and zip-entry sanitization.</li>
+      <li id="log-2026-06-18-pm-gate-fixes"><strong>2026-06-18:</strong> Integrated PM/product-intent gate findings by making <code>--output</code> unambiguously directory-only, requiring the browser download link to include the currently displayed <code>versionId</code>, and failing closed for unsupported local non-HTML asset references instead of silently producing non-portable exports. PM re-review returned <code>PM_READY</code> with no blockers.</li>
+      <li id="log-2026-06-18-codex-rereview-scanner"><strong>2026-06-18:</strong> Integrated Codex re-review blocker by defining the unsupported-asset scanner boundary beyond <code>&lt;img src&gt;</code>, including <code>srcset</code>/<code>&lt;source&gt;</code>, media/object/embed refs, stylesheet/script/link refs, and CSS <code>url(...)</code> references, with BDD and contract-test coverage requiring <code>409 export_not_portable</code>.</li>
+      <li id="log-2026-06-18-codex-final-rereview-nonportable"><strong>2026-06-18:</strong> Integrated final Codex re-review blocker by requiring non-relative, external, protocol-relative, absolute-path, and <code>blob:</code> references across the same asset-bearing scanner boundary to fail closed as <code>externalSources</code> or <code>nonPortableSources</code>, while local relative unsupported refs remain <code>unsupportedLocalSources</code>.</li>
+      <li id="log-2026-06-18-final-readiness"><strong>2026-06-18:</strong> Final readiness gates passed. Codex re-review returned <code>PLAN_EXECUTION_READY</code> with no blockers after the non-portable asset fix. Claude Code re-review returned <code>PLAN_EXECUTION_READY</code> with no blockers; its notes were implementation-level guidance only.</li>
+      <li id="log-2026-06-18-implementation-p1-p4"><strong>2026-06-18:</strong> Implemented P1–P4. Added contract coverage for raw HTML downloads, zip layout/asset rewriting, fail-closed missing/external/unsupported asset errors, helper naming, shell controls, and CLI output behavior. Added <code>fflate</code>, <code>GET /download/:planId</code>, source export store access, <code>plan-review download</code>, compact browser download/navigator tools, README guidance, and e2e coverage for downloading the displayed asset-backed version. Verification so far: <code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js --test-name-pattern 'download route|CLI download|download helpers|review shell exposes compact download'</code> passed; <code>bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js</code> passed.</li>
+      <li id="log-2026-06-18-implementation-review-fixes"><strong>2026-06-18:</strong> Integrated implementation review findings. Claude flagged missing CLI help assertions, so the contract test now checks top-level <code>download</code> help plus <code>download --help</code> description/options. Codex flagged an accidental quick-open navigator regression, so the existing quick-open markup, styles, client behavior, contract assertions, and e2e flows were restored; verification also added frame-document shortcut handling so <kbd>Control</kbd>/<kbd>Command</kbd>+<kbd>O</kbd> still opens quick-open when focus is inside the rendered plan iframe. Claude then flagged two remaining regressions: missing quick-open client contract assertions and an unbumped client asset version. Those were fixed by restoring the <code>/client.js</code> assertions and setting <code>clientAssetVersion</code> to <code>download-export-v1</code>. After rebasing onto <code>origin/main</code>, Codex flagged a <code>srcset</code> parser bug where self-contained <code>data:</code> URLs containing commas could be misclassified as unsupported local assets. That was fixed by parsing <code>data:</code> srcset candidates through the base64 payload comma and first whitespace descriptor boundary, plus fail-closed coverage for a following unsupported local candidate such as <code>data:image/png;base64,AA==, ./wide.png 2x</code>. Final gates passed after the srcset edge-case fix: <code>git diff --check</code>, targeted contract gate 111/111, <code>bun run test</code> 112/112, and <code>bun run test:e2e</code>. Claude's final review found one harmless duplicate iframe keydown listener as an <code>OUT_OF_SCOPE_FOLLOW_UP</code>; the duplicate was removed in this branch instead of carrying the follow-up. PR review then flagged CSS string-form imports such as <code>@import "./theme.css"</code>; the CSS scanner now extracts string-form and <code>url(...)</code> imports, with fail-closed contract coverage. A follow-up PR review flagged render/export drift for copied asset source URLs such as HTML <code>./diagram.png</code> with manifest <code>diagram.png</code>; export packaging now uses the same leading-<code>./</code>-insensitive matching as rendering, with ZIP route regression coverage. Another PR review flagged dropped image URL fragments such as <code>diagram.svg#view-a</code>; ZIP HTML rewriting now preserves original query/fragment suffixes after the packaged asset path, with regression coverage. A further PR review flagged <code>&lt;base href&gt;</code> rewriting hazards for packaged ZIP exports; asset-backed exports now fail closed when a base href is present, with regression coverage. Post-fix gates passed: targeted contracts 111/111, <code>bun run test</code> 112/112, and <code>bun run test:e2e</code>. Earlier, the first fragment-fix e2e attempt failed on an unrelated pre-existing selection-box geometry assertion and passed unchanged on rerun. After a broader adversarial export-boundary review, the scanner was tightened for iframe/srcdoc, SVG hrefs, input image sources, manifest/meta image links, <code>&lt;link imagesrcset&gt;</code>, and self-contained <code>about:blank</code>; ZIP rewrites now HTML-escape preserved query/fragment suffixes; CLI download now reserves files atomically and cancels unconsumed response bodies on overwrite refusal. Final evidence after those fixes: targeted export contracts 111/111, <code>bun run test</code> 112/112, <code>bun run test:e2e</code>, and final focused review returned no blocking findings.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>
