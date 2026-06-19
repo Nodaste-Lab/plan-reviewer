@@ -417,11 +417,14 @@ function filterPlans(plans: ReturnType<PlanReviewStore['listPlans']>, query: { q
   };
 }
 
-const executionReviewRequestBody = 'Review this plan with both codex and claude code, iterating on the plan until both agents agree it is execution ready';
 const clientAssetVersion = 'download-export-v1';
 
+function executionReviewRequestBody(planPath: string): string {
+  return `Use the plan-reviewer-execution-ready skill for this plan.\nPlan path: ${planPath}`;
+}
+
 function buildPlanRequestBody(planPath: string): string {
-  return `/skill:scoped-plan-run thoughts/plans/${path.basename(planPath)}`;
+  return `Use the plan-reviewer-build skill for this plan.\nPlan path: ${planPath}`;
 }
 
 function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], currentTitle: string, shellTitle: string, plans: ListedPlan[]): string {
@@ -3106,7 +3109,7 @@ export function createApp(options: AppOptions): FastifyInstance {
       const { plan, version } = store.getPlan(planId);
       const result = store.createComment(plan.id, {
         versionId: version.id,
-        body: executionReviewRequestBody,
+        body: executionReviewRequestBody(plan.planPath),
         anchorType: 'dom',
         anchor: {
           cssSelector: 'body',
