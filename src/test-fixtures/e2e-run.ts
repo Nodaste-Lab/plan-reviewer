@@ -1949,6 +1949,7 @@ try {
     await page.waitForSelector(`[data-plan-id="${registered.planId}"]`);
     await page.click(`[data-archive-plan="${registered.planId}"]`);
     await page.waitForSelector('.archive-toast:not(.error)');
+    assert.equal(await page.evaluate(() => document.activeElement?.matches('.archive-toast button')), true);
     await page.keyboard.press('Tab');
     assert.equal(await page.locator('.archive-toast').count(), 1);
     await page.keyboard.press('Escape');
@@ -1965,6 +1966,7 @@ try {
     await page.keyboard.press('Escape');
     await page.click('#archive-plan');
     await page.waitForSelector('#archive-toast:not([hidden])');
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'archive-toast-undo');
     await page.keyboard.press('Tab');
     assert.equal(await page.locator('#archive-toast:not([hidden])').count(), 1);
     assert.match(page.url(), new RegExp(`/p/${registered.planId}$`));
@@ -2036,6 +2038,7 @@ try {
     await page.click(`[data-archive-plan="${deferredRegistered.planId}"]`);
     await page.waitForFunction(planId => !document.querySelector(`[data-plan-id="${planId}"]`), deferredRegistered.planId);
     await page.waitForSelector('.archive-toast:not(.error)');
+    assert.equal(await page.evaluate(() => document.activeElement?.matches('.archive-toast button')), true);
     await page.keyboard.press('Tab');
     assert.equal(await page.locator('.archive-toast').count(), 1);
     await page.click('#q');
