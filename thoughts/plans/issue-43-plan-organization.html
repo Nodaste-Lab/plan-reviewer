@@ -1,0 +1,807 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Issue 43: Plan organization categories and pinned plans</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #070b16;
+      --panel: #0f172a;
+      --panel-2: #111827;
+      --panel-3: #172033;
+      --text: #e5e7eb;
+      --muted: #a7b0c0;
+      --soft: #cbd5e1;
+      --accent: #7dd3fc;
+      --accent-2: #a78bfa;
+      --ok: #86efac;
+      --warn: #fde68a;
+      --danger: #fecaca;
+      --border: #334155;
+      --border-2: #475569;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top left, rgba(125, 211, 252, .13), transparent 32%), linear-gradient(135deg, #070b16 0%, #111827 58%, #1e1b4b 100%);
+      color: var(--text);
+      font: 16px/1.6 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main { max-width: 1180px; margin: 0 auto; padding: 44px 24px 72px; }
+    header, section, article, figure { background: rgba(15, 23, 42, .92); border: 1px solid var(--border); border-radius: 18px; padding: 24px; margin: 18px 0; box-shadow: 0 18px 50px rgba(0, 0, 0, .26); }
+    header { background: linear-gradient(135deg, rgba(14, 165, 233, .18), rgba(167, 139, 250, .16)); }
+    h1, h2, h3, h4 { line-height: 1.2; margin: 0 0 12px; }
+    h1 { font-size: clamp(2rem, 4vw, 3.25rem); }
+    h2 { color: #f8fafc; }
+    h3 { color: #dbeafe; }
+    h4 { color: #bae6fd; margin-top: 18px; }
+    p { margin: 8px 0 0; }
+    a { color: var(--accent); }
+    code { background: #020617; border: 1px solid #1e293b; border-radius: 6px; padding: 1px 5px; color: #bae6fd; }
+    pre { overflow: auto; background: #020617; border: 1px solid #1e293b; border-radius: 12px; padding: 14px; white-space: pre-wrap; }
+    ul, ol { margin: 8px 0 0; padding-left: 22px; }
+    li { margin: 6px 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { border: 1px solid var(--border); padding: 10px; vertical-align: top; }
+    th { background: #0b1220; text-align: left; }
+    figcaption, .muted { color: var(--muted); }
+    .pill { display: inline-block; border: 1px solid var(--border-2); border-radius: 999px; padding: 4px 10px; margin: 4px 6px 0 0; color: #dbeafe; background: rgba(15, 23, 42, .8); }
+    .status { color: var(--warn); font-weight: 800; }
+    .callout { border: 1px solid rgba(125, 211, 252, .42); background: rgba(14, 165, 233, .08); border-radius: 12px; padding: 14px; margin-top: 12px; }
+    .warning { border-color: rgba(245, 158, 11, .48); background: rgba(245, 158, 11, .1); color: #fde68a; }
+    .phase { border-color: #475569; }
+    .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; border: 1px solid #475569; border-bottom-color: #64748b; background: #111827; color: #dbeafe; border-radius: 6px; padding: 1px 6px; }
+    .mockup { background: #050816; border: 1px solid #273449; border-radius: 16px; padding: 14px; overflow: auto; }
+    .screen { min-width: 860px; border: 1px solid #334155; border-radius: 14px; overflow: hidden; background: #0b1020; box-shadow: 0 22px 48px rgba(0, 0, 0, .35); }
+    .topbar { padding: 14px; background: #0f172a; border-bottom: 1px solid #2b364d; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .tab { border: 1px solid #475569; border-radius: 999px; padding: 6px 11px; background: #172033; color: #cbd5e1; font-size: 12px; font-weight: 850; }
+    .tab.active { border-color: #38bdf8; color: #e0f2fe; background: rgba(14, 165, 233, .2); }
+    .layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); min-height: 420px; }
+    .facet { background: #0b1220; border-right: 1px solid #2b364d; padding: 14px; }
+    .facet h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: #a7b0c0; }
+    .facet-row { padding: 9px 10px; border-radius: 10px; margin: 6px 0; color: #cbd5e1; display: flex; justify-content: space-between; gap: 8px; }
+    .facet-row.active { background: rgba(56, 189, 248, .16); outline: 1px solid rgba(56, 189, 248, .5); }
+    .cards { padding: 16px; }
+    .plan-card { border: 1px solid #253248; border-left: 5px solid #475569; border-radius: 12px; padding: 13px; margin: 10px 0; background: #101827; }
+    .plan-card.pinned { border-left-color: #facc15; }
+    .plan-card.executing { border-left-color: #22c55e; }
+    .plan-card.planning { border-left-color: #38bdf8; }
+    .plan-card.backlog { border-left-color: #94a3b8; }
+    .card-title { color: #f8fafc; font-weight: 900; }
+    .card-summary { margin-top: 6px; color: #cbd5e1; font-size: 12px; line-height: 1.35; }
+    .card-meta { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; color: #a7b0c0; font-size: 12px; }
+    .card-detail-link { margin-top: 6px; color: #93c5fd; font-size: 12px; font-weight: 800; }
+    .badge { border: 1px solid #475569; border-radius: 999px; padding: 1px 7px; background: #0b1220; }
+    .badge.pin { border-color: #facc15; color: #fef08a; }
+    .badge.ready { border-color: #22c55e; color: #bbf7d0; }
+    .badge.not-ready { border-color: #f59e0b; color: #fde68a; }
+    .mock-shell { background: #0b1020; color: #e5e7eb; }
+    .mock-navbar { min-height: 86px; display: grid; grid-template-rows: auto auto; gap: 8px; padding: 10px 16px; border-bottom: 1px solid #2b364d; background: #0f172a; }
+    .mock-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+    .mock-action-cluster { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+    .mock-tool { background: #1e293b; color: #e5e7eb; border: 1px solid #475569; border-radius: 6px; padding: 8px 10px; font-size: 12px; font-weight: 700; }
+    .mock-pin-button { width: 34px; height: 34px; display: inline-grid; place-items: center; border: 1px solid #facc15; border-radius: 8px; background: transparent; color: #fef08a; font-size: 17px; line-height: 1; }
+    .mock-pin-button[aria-pressed="true"] { background: #facc15; color: #422006; }
+    .index-mock { max-width: 1100px; margin: 0 auto; padding: 32px; background: #0b1020; color: #e5e7eb; font-family: system-ui, sans-serif; }
+    .index-mock .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin: 0 0 18px; padding: 0; background: transparent; border: 0; border-radius: 0; box-shadow: none; }
+    .index-mock h1 { margin: 0; color: #f8fafc; font-size: 32px; line-height: 1.15; }
+    .index-mock .muted { color: #a7b0c0; font-size: 13px; }
+    .index-mock .plan-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: flex-end; }
+    .index-mock .nav-link.primary { display: inline-block; background: #1e293b; border: 1px solid #38bdf8; color: #bae6fd; border-radius: 6px; padding: 8px 10px; font-weight: 700; text-decoration: none; }
+    .index-mock .organizer-controls { margin: 18px 0; }
+    .index-mock .organizer-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+    .index-mock .organizer-row label { display: grid; gap: 5px; color: #cbd5e1; font-size: 12px; font-weight: 750; }
+    .index-mock .toolbar { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 10px; margin: 18px 0; }
+    .index-mock .toolbar input, .index-mock .toolbar select, .index-mock .organizer-row select { min-width: 0; background: #0f172a; color: #e5e7eb; border: 1px solid #38bdf8; border-radius: 6px; padding: 10px; font: inherit; box-shadow: 0 0 0 1px rgba(56,189,248,.12); cursor: pointer; }
+    .index-mock .toolbar input { cursor: text; }
+    .index-mock .repo-group { margin: 0; padding: 0; background: transparent; border: 0; border-radius: 0; box-shadow: none; }
+    .index-mock .repo-group h2 { color: #dbeafe; margin: 18px 0 8px; font-size: 22px; }
+    .index-mock .plan-card { border: 1px solid #2563eb; border-left: 5px solid #2563eb; background: #111827; border-radius: 8px; padding: 16px; margin: 12px 0; box-shadow: none; }
+    .index-mock .plan-card.complete { border-color: #16a34a; border-left-color: #16a34a; }
+    .index-mock .plan-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+    .index-mock .plan-card-header h2 { margin: 0; font-size: 20px; }
+    .index-mock .plan-card-header a { color: #7dd3fc; text-decoration: none; }
+    .index-mock .status-pill { display: inline-block; background: #1d4ed8; color: #dbeafe; border-radius: 999px; padding: 2px 8px; font-size: 12px; font-weight: 700; }
+    .index-mock .complete .status-pill { background: #166534; color: #dcfce7; }
+    .index-mock .pin-pill { border: 1px solid #facc15; color: #fef08a; border-radius: 999px; padding: 2px 8px; font-size: 12px; font-weight: 800; }
+    .index-mock .archive-plan { background: #1e293b; color: #e5e7eb; border: 1px solid #475569; border-radius: 6px; padding: 8px 10px; font-weight: 700; }
+    .index-mock code { background: #0f172a; color: #dbeafe; padding: .1rem .25rem; border-radius: 4px; border: 0; }
+    .index-mock .plan-metadata { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 10px 0; }
+    .index-mock .plan-metadata > span { min-width: 0; background: #0b1220; border: 1px solid #253248; border-radius: 8px; padding: 7px 8px; color: #e5e7eb; font-size: 12px; }
+    .index-mock .plan-metadata > span > b { display: block; color: #a7b0c0; font-size: 10px; font-weight: 850; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px; }
+    .index-mock .compact-detail-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; margin-top: 8px; color: #a7b0c0; font-size: 12px; }
+    .index-mock .compact-detail-row p { margin: 0; min-width: 0; }
+    .index-mock .ready-pill, .index-mock .pr-pill { border-radius: 999px; padding: 2px 8px; font-size: 12px; font-weight: 800; }
+    .index-mock .ready-pill.ready { background: #166534; color: #dcfce7; }
+    .index-mock .ready-pill.not-ready { background: #7f1d1d; color: #fecaca; }
+    .index-mock .pr-pill.open { background: #1d4ed8; color: #dbeafe; }
+    .index-mock .pr-pill.unlinked { background: #334155; color: #cbd5e1; }
+    .index-mock .row-label { color: #e5e7eb; font-weight: 800; }
+    .index-mock .pr-status, .index-mock .note-summary, .index-mock .comment-counts, .index-mock .timestamp-row { color: #a7b0c0; font-size: 13px; margin: 6px 0; }
+    .index-mock .progress-row { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+    .index-mock .progress-bar { display: grid; grid-template-columns: repeat(4, 26px); gap: 4px; }
+    .index-mock .progress-segment { height: 14px; border: 1px solid #64748b; border-radius: 3px; background: transparent; }
+    .index-mock .progress-segment.complete { background: #22c55e; border-color: #22c55e; }
+    .index-mock .progress-count { color: #a7b0c0; font-size: 13px; }
+    .kanban-board { display: grid; grid-template-columns: repeat(4, minmax(230px, 1fr)); gap: 12px; margin-top: 14px; }
+    .kanban-column { background: #0b1220; border: 1px solid #334155; border-radius: 12px; padding: 10px; min-height: 260px; }
+    .kanban-column h4 { margin: 0 0 8px; color: #e0f2fe; display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+    .column-count { color: #a7b0c0; font-size: 12px; font-weight: 800; }
+    .kanban-card { border: 1px solid #253248; border-radius: 10px; background: #111827; padding: 10px; margin: 8px 0; box-shadow: 0 10px 20px rgba(0,0,0,.18); }
+    .kanban-card.dragging { border-color: #7dd3fc; background: #0f2740; transform: rotate(-1deg); }
+    .drop-target { outline: 2px dashed #7dd3fc; outline-offset: -4px; }
+    .column-config-grid { display: grid; grid-template-columns: 1fr 180px 120px; gap: 8px; align-items: center; margin-top: 10px; }
+    .column-config-row { display: contents; }
+    .column-config-row > span, .column-config-row > code { background: #0b1220; border: 1px solid #334155; border-radius: 8px; padding: 8px; }
+    .drag-handle { color: #94a3b8; font-weight: 900; margin-right: 5px; }
+    .doc-kind-switcher { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid #334155; border-radius: 999px; background: #08111f; }
+    .doc-kind-seg { border-radius: 999px; padding: 5px 10px; color: #a7b0c0; font-size: 12px; font-weight: 850; white-space: nowrap; }
+    .doc-kind-seg.active { background: #0ea5e9; color: #e0f2fe; }
+    .all-doc-card { border: 1px solid #334155; border-left: 6px solid #38bdf8; border-radius: 12px; padding: 14px; margin: 10px 0; background: #111827; }
+    .all-doc-card.collab { border-left-color: #a78bfa; }
+    .all-doc-card.attention { border-left-color: #f59e0b; background: linear-gradient(180deg, rgba(245,158,11,.10), #111827 44%); }
+    .collab-card { border: 1px solid #334155; border-left: 6px solid #a78bfa; border-radius: 12px; padding: 14px; margin: 10px 0; background: #111827; }
+    .collab-card.attention { border-left-color: #f59e0b; background: linear-gradient(180deg, rgba(245,158,11,.10), #111827 44%); }
+    .badge.collab { border-color: #a78bfa; color: #ddd6fe; }
+    .mock-download { border-color: rgba(56, 189, 248, .72); background: #075985; color: #ecfeff; }
+    .mock-current-bar { display: flex; align-items: center; gap: 8px; min-width: 0; border-top: 1px solid rgba(71, 85, 105, .55); padding-top: 8px; color: #cbd5e1; }
+    .mock-current-title { color: #f8fafc; font-weight: 900; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .mock-ready-pill, .mock-nav-pill { border: 1px solid #f59e0b; color: #fde68a; background: #0b1220; border-radius: 999px; padding: 2px 7px; font-size: 11px; font-weight: 850; }
+    .mock-selector-group { display: inline-flex; align-items: center; gap: 6px; padding: 3px 6px; border: 1px solid #334155; border-radius: 8px; background: #111827; font-size: 12px; font-weight: 800; }
+    .mock-select { background: #020617; color: #e5e7eb; border: 1px solid #7dd3fc; border-radius: 6px; padding: 6px 8px; font-size: 12px; }
+    .mock-app { display: grid; grid-template-columns: 260px minmax(0, 1fr) 240px; min-height: 430px; }
+    .mock-plan-list-nav { border-right: 1px solid #2b364d; background: #0b1220; padding: 14px; overflow: hidden; }
+    .mock-plan-list-nav h3 { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: #a7b0c0; margin: 0 0 10px; }
+    .mock-nav-item { display: grid; gap: 5px; padding: 10px; margin: 8px 0; border: 1px solid #253248; border-radius: 10px; background: #101827; color: #cbd5e1; }
+    .mock-nav-item.active { border-color: #38bdf8; background: linear-gradient(135deg, rgba(14,165,233,.18), rgba(16,24,39,.95)); }
+    .mock-nav-title { font-size: 13px; font-weight: 850; color: #f8fafc; line-height: 1.25; }
+    .mock-nav-meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; color: #a7b0c0; font-size: 11px; }
+    .mock-review-pane { position: relative; background: #ffffff; color: #111827; padding: 22px; overflow: hidden; }
+    .mock-plan-frame { height: 360px; border: 0; border-radius: 2px; background: linear-gradient(#f8fafc, #eef2ff); color: #111827; padding: 20px; box-shadow: inset 0 0 0 1px #cbd5e1; }
+    .mock-plan-frame h4 { color: #111827; margin: 0 0 10px; }
+    .mock-sidebar { border-left: 1px solid #2b364d; background: #111827; padding: 16px; overflow: hidden; }
+    .mock-sidebar h3 { color: #f8fafc; margin: 0 0 12px; }
+    .mock-notes-panel, .mock-comment-row { border: 1px solid #2b364d; border-radius: 10px; background: #0f172a; padding: 10px; margin: 8px 0 14px; }
+    @media (max-width: 760px) { main { padding: 28px 14px 56px; } .screen { min-width: 760px; } }
+  </style>
+</head>
+<body>
+<main id="plan-root">
+  <header id="title">
+    <div class="muted">Implementation plan</div>
+    <h1>Issue 43: Plan organization categories and pinned plans</h1>
+    <p>Add first-class document organization to plan-reviewer: planning documents live on a configurable kanban board, collaboration documents are available through a separate selector/view, and both surfaces keep project grouping, pinned plans, drag/drop movement where applicable, and <span class="kbd">⌘O</span> as a global fuzzy open.</p>
+    <p><span class="pill">Repo: plan-reviewer</span><span class="pill">Surface: plan index, review shell navigator, CLI/API metadata</span><span class="pill">GitHub issue: <a href="https://github.com/Nodaste-Lab/plan-reviewer/issues/43">#43</a></span><span class="pill">Linear issue: none; GitHub issue supplied</span><span class="pill">Status: execution-ready</span><span class="pill">Execution ready: true</span></p>
+  </header>
+
+  <section id="status">
+    <h2>Status</h2>
+    <p><strong class="status">Execution-ready; no open questions remain.</strong> This browser-reviewed plan is linked to GitHub issue <a href="https://github.com/Nodaste-Lab/plan-reviewer/issues/43">Nodaste-Lab/plan-reviewer#43</a>. Independent GPT and GLM readiness reviews cleared after the CLI parity blocker was fixed, and the plan is registered with <code>--execution-ready true</code>.</p>
+  </section>
+
+  <section id="open-questions">
+    <h2>Open questions before execution readiness</h2>
+    <p>No open questions remain. Project overrides, configurable kanban columns for plans, document-kind separation for collaboration docs, lifecycle/column/readiness separation, and always-present review-shell navigation are locked decisions.</p>
+  </section>
+
+  <section id="progress">
+    <h2>Progress</h2>
+    <ul>
+      <li><label><input type="checkbox" checked disabled> Phase 1 — Persist organization metadata, board columns, and APIs</label></li>
+      <li><label><input type="checkbox" checked disabled> Phase 2 — Build kanban board, drag/drop, sorting, and status controls</label></li>
+      <li><label><input type="checkbox" checked disabled> Phase 3 — Extend review shell navigator and global Cmd-O search</label></li>
+      <li><label><input type="checkbox" checked disabled> Phase 4 — Documentation, CLI parity, and full verification</label></li>
+    </ul>
+  </section>
+
+  <section id="goal">
+    <h2>Goal</h2>
+    <p>Users should be able to organize a growing pile of planning documents as a kanban board grouped by project, configurable column status, lifecycle, and pin state, while keeping collaboration documents available through a separate Collab docs selector/view instead of mixing them into the plan board. The default plan-board columns are Backlog, Ready to Pull, In Progress, and Done; humans can move plan cards between columns by drag and drop, and agents can assign columns through CLI/API without editing source plan files.</p>
+    <div class="callout" id="goal-execution-ready-boundary">
+      <strong>Important boundary:</strong> execution readiness remains an independent agent-provided readiness signal, not the board column itself. A plan can be in Ready to Pull because a human moved it there, while the execution-ready signal still tells whether the reviewed plan gate has passed.
+    </div>
+    <div class="callout" id="goal-cmd-o-boundary">
+      <strong>Important boundary:</strong> <span class="kbd">⌘O</span> must continue to cut across categories and document kinds. Selecting Kanban, All documents, Collab docs, lifecycle deep links such as Deferred/Archived, or any future board-status view must not constrain quick-open search; it should search all registered documents unless the user explicitly filters inside the palette later.
+    </div>
+  </section>
+
+  <section id="solution-narrative">
+    <h2>Solution narrative</h2>
+    <p>Introduce a persisted organization model on top of the existing document records: use existing <code>reviewMode</code> to separate planning documents from collaboration documents; keep lifecycle state as <code>active</code>, <code>deferred</code>, or <code>archived</code>; add configurable kanban column definitions for planning documents; store each plan's current <code>boardColumnKey</code>; keep execution readiness as separate publication/readiness metadata; add derived/stored project identity; and add <code>pinnedAt</code>. Archive/defer remain lifecycle operations, while kanban columns represent human/agent-assigned workflow status for plans only.</p>
+    <p>The index becomes a document-kind-aware organizer with one consistent selector: <code>Kanban | All documents | Collab docs</code>. <code>Kanban</code> opens the board-first planning organizer with configurable columns, detailed cards, pinned-first ordering, and no extra Kanban filter controls in this slice; <code>All documents</code> shows mixed planning and collaboration discovery; <code>Collab docs</code> opens an independent collaboration-document list with kind/status/source/comment cues but no execution-ready/build/board-column controls. The review shell left navigator uses the same selector and preserves current-document visibility even when the active filter would otherwise hide it. The quick-open endpoint/search payload expands from active-only navigation to an all-documents search source so <span class="kbd">⌘O</span> can find active, deferred, archived, backlog, ready-to-pull, in-progress, done, execution-ready, pinned, and collaboration documents regardless of the currently selected category.</p>
+  </section>
+
+  <section id="authority-and-inputs">
+    <h2>Authority and inputs</h2>
+    <ul>
+      <li>User request in Discord and browser review: create a GitHub issue and linked HTML plan for plan-reviewer to organize plans by Project, configurable kanban Column, Lifecycle, Readiness, and Pin; consolidate <a href="http://mbp.braid-python.ts.net:4317/p/plan_YXWUdjBxmHC7">plan_YXWUdjBxmHC7</a> so planning documents live on the kanban board while collaboration documents are available through a separate selector/view; keep <span class="kbd">⌘O</span> as fuzzy search across all documents.</li>
+      <li>GitHub issue: <a href="https://github.com/Nodaste-Lab/plan-reviewer/issues/43">Nodaste-Lab/plan-reviewer#43</a>.</li>
+      <li><code>thoughts/specs/product_intent.md</code>: the plan index should truthfully report plan organization state, source sync state, repository metadata, execution readiness, and recovery actions.</li>
+      <li><code>src/schemas.ts</code>: current <code>planLifecycleStateSchema</code> is only <code>active | deferred | archived</code>; <code>reviewMode</code> already distinguishes <code>planning</code> and <code>collaboration</code>; publication metadata separately tracks <code>executionReady</code> for plans.</li>
+      <li><code>src/storage/database.ts</code>: current <code>plans</code> table has <code>lifecycle_state</code>, <code>deferred_at</code>, <code>archived_at</code>, and no pin/project/board-column columns or board-column configuration table.</li>
+      <li><code>src/server/app.ts</code>: current index splits active/deferred/archive into separate pages and groups active rows mostly by repo after started/not-started progress buckets.</li>
+      <li><code>src/server/app.ts</code>: current review shell quick-open and left navigator use active-plan navigator data; this conflicts with the new requirement that <span class="kbd">⌘O</span> cut across categories.</li>
+      <li><code>AGENTS.md</code> and <code>thoughts/plans/AGENTS.md</code>: non-trivial plan-reviewer work must use semantic HTML plans, stable IDs, product-intent alignment, browser registration, and comment monitoring.</li>
+    </ul>
+  </section>
+
+  <section id="current-implementation-reality">
+    <h2>Current implementation reality</h2>
+    <table>
+      <thead><tr><th>Area</th><th>Current behavior</th><th>Planning implication</th></tr></thead>
+      <tbody>
+        <tr><td>Status model</td><td><code>plans.lifecycle_state</code> stores <code>active</code>, <code>deferred</code>, or <code>archived</code>; archive also uses <code>archived_at</code>. Complete is inferred from progress. Execution readiness is inferred from <code>publicationMetadata.executionReady</code>. There is no configurable kanban column model.</td><td>Keep lifecycle and execution readiness as separate signals, and add configurable board columns plus a per-plan <code>boardColumnKey</code> for planning-document workflow status.</td></tr>
+        <tr><td>Project model</td><td>Plans have repo metadata: <code>repoName</code>, <code>repoKey</code>, root/worktree paths, branch, and plan path. There is no separate project grouping concept.</td><td>Infer project from repo/worktree inputs first, store normalized project key/name, and allow explicit per-plan overrides without changing plan files.</td></tr>
+        <tr><td>Pin model</td><td>No persisted pin state or sort lane exists.</td><td>Add <code>pinned_at</code> so pinned plans sort above unpinned plans and can be unpinned without losing history ordering.</td></tr>
+        <tr><td>Index UI</td><td>The active index has a text filter and repo select; deferred and archived are separate pages with similar filters.</td><td>Introduce the Plans Kanban board as the primary organizer without adding Kanban filter controls in this slice, while keeping archive/deferred URLs usable as compatibility/deep links.</td></tr>
+        <tr><td>Review shell navigation</td><td>The left navigator and quick-open are based on active plans/documents. Archived/deferred plans can open directly, but are not part of the active navigator search, and collaboration docs are visually mixed with planning docs.</td><td>Keep the left navigator present for every viewed document regardless of lifecycle/column/readiness/kind, add the consistent <code>Kanban | All documents | Collab docs</code> selector, and split it from global quick-open search, which should search all document kinds and lifecycle/column/readiness combinations.</td></tr>
+        <tr><td>Tests</td><td>Contract and fixture tests already cover registration metadata, index cards, archive/defer flows, navigator API shape, quick-open behavior, and browser shell interactions.</td><td>Extend those same gates; do not rely on snapshot-only manual inspection for public column/pin contracts.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="product-intent-alignment">
+    <h2>Product intent alignment</h2>
+    <p>This plan advances the product intent by making board column, lifecycle, repository/project metadata, and execution-readiness easier to see and manipulate as the plan set grows.</p>
+    <ul>
+      <li><strong>Golden path decision:</strong> the default user flow is decided: users open the index, use the <code>Kanban</code> selector for the planning board, switch to <code>All documents</code> for mixed discovery or <code>Collab docs</code> for collaboration documents, read detailed planning cards, drag planning cards across kanban columns, pin important plans, open card details when more context is needed, and use <span class="kbd">⌘O</span> to jump anywhere.</li>
+      <li><strong>Truthful state decision:</strong> the UI must show each state signal for what it actually means. <code>reviewMode</code> decides whether a document is a planning document or collaboration document; <code>lifecycleState</code> decides whether it is active, deferred, or archived; <code>boardColumnKey</code> is only a human/agent workflow column for planning documents; <code>executionReady</code> only comes from the reviewed-plan readiness gate; progress comes from checked phases; and <code>pinnedAt</code> only affects ordering. These signals must not be inferred from each other: moving a card to Ready to Pull does not make it execution-ready, archiving a completed plan does not erase its Done column, and collaboration documents must not show plan-only board, Build Plan, or execution-ready controls.</li>
+      <li><strong>Safe defaults decision:</strong> migration must preserve what users already see today before adding new organization fields. Existing <code>archived_at</code> and <code>deferred_at</code> records become the explicit <code>archived</code> or <code>deferred</code> lifecycle state; ordinary active records stay active. On first run, the service creates the default plan-board columns Backlog, Ready to Pull, In Progress, and Done in a stable order, assigns existing planning documents to a deterministic valid column, and leaves collaboration documents outside the board. Existing Archive, Defer, and Resume commands keep changing only lifecycle state; they must not silently change a plan's board column, execution-readiness flag, project override, pin, comments, source-sync state, or notes.</li>
+      <li><strong>Actionable recovery:</strong> invalid lifecycle/column transitions, failed drag/drop saves, and failed toggles return clear UI/CLI errors without losing plan reviewability.</li>
+      <li><strong>Cross-surface consistency:</strong> API, CLI, index board, collaboration view, review shell navigator, quick-open, README, and tests describe the same document-kind, lifecycle, board-column, and execution-readiness semantics.</li>
+    </ul>
+  </section>
+
+  <section id="locked-decisions">
+    <h2>Locked decisions</h2>
+    <ol>
+      <li id="decision-document-kind"><strong>Use <code>reviewMode</code> as the document-kind source of truth.</strong> Planning documents are eligible for the Kanban board and plan execution controls. Collaboration documents are shown through All documents/Collab docs discovery views and must not be assigned board columns or execution-ready/build controls.</li>
+      <li id="decision-status-taxonomy"><strong>Separate lifecycle, board column, and execution readiness.</strong> Lifecycle remains <code>active</code>, <code>deferred</code>, or <code>archived</code>. Board column is configurable workflow status for planning documents, defaulting to <code>backlog</code>, <code>ready_to_pull</code>, <code>in_progress</code>, and <code>done</code>. Execution readiness remains independent agent-provided metadata from the reviewed-plan gate.</li>
+      <li id="decision-explicit-status"><strong>Board column is explicit organization metadata.</strong> Registration does not silently set board column from <code>--execution-ready</code>; humans and agents must set <code>boardColumnKey</code> explicitly through drag/drop or the column API/CLI when workflow status changes. Migration may backfill sensible initial values for existing rows only. Completeness remains a progress ratio for display and a migration defaulting signal, not the lifecycle state or execution-readiness signal.</li>
+      <li id="decision-existing-compat"><strong>Preserve existing archive/defer behavior.</strong> Existing <code>/archive</code>, <code>/deferred</code>, CLI archive/defer/resume commands, and archive/defer buttons update lifecycle state during this slice without overwriting board column or execution readiness.</li>
+      <li id="decision-project-inference"><strong>Project is inferred, stored, and overrideable.</strong> Default project comes from repo/worktree metadata in this order: parent worktree/repo root basename when recognizable, then <code>repoName</code>. Humans and agents can explicitly override the stored <code>projectKey</code>/<code>projectName</code> through API/CLI/UI controls when inference is wrong for monorepos, renamed worktrees, or repos that contain multiple product areas.</li>
+      <li id="decision-pin-order"><strong>Pinned plans always sort first within their column.</strong> Within each kanban column or list view, sort by pinned first, then the fixed default order for that surface such as recent activity or completion. This slice does not add Kanban filter/sort controls.</li>
+      <li id="decision-global-quick-open"><strong><span class="kbd">⌘O</span> searches all registered documents.</strong> It must include every document kind plus every lifecycle, board-column, and execution-readiness combination, including active, deferred, archived, backlog, ready-to-pull, in-progress, done, execution-ready, pinned plans, and collaboration documents across projects. It may visually show kind/lifecycle/column/readiness/project badges, but it must not inherit the current organizer facet.</li>
+      <li id="decision-left-navigator-always-present"><strong>The left navigator is always present in the review shell.</strong> Any directly opened document, including archived, deferred, done-column, backlog, or collaboration documents, must render with the left navigator. The navigator can prioritize nearby/active work and respect the <code>Kanban | All documents | Collab docs</code> selector, but it must include or highlight the current document and show truthful kind/lifecycle/column/readiness/project labels.</li>
+      <li id="decision-kanban-config"><strong>Kanban columns are configurable and persisted for plans.</strong> The service creates default columns Backlog, Ready to Pull, In Progress, and Done on first run, stores column order/labels/visibility in the local database, preserves configuration across service restarts, and applies those columns only to planning documents.</li>
+      <li id="decision-no-plan-file-edits"><strong>Toggling column/project/pin does not edit source HTML plans.</strong> Organization state lives in the plan-reviewer store so humans and agents can update it without changing reviewed plan content or source sync hashes.</li>
+      <li id="decision-no-auth-scope"><strong>No authentication or sharing expansion.</strong> This is local organizer state for the existing trusted-network MVP, not a multi-user permission system.</li>
+    </ol>
+  </section>
+
+  <section id="proposed-data-contract">
+    <h2>Proposed data contract</h2>
+    <table>
+      <thead><tr><th>Field</th><th>Storage</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>reviewMode</code></td><td>Existing <code>plans.review_mode</code></td><td>Document kind source of truth: <code>planning</code> documents appear on the Kanban board; <code>collaboration</code> documents appear in All documents/Collab docs views and are excluded from board-column assignment.</td></tr>
+        <tr><td><code>lifecycleState</code></td><td>Existing <code>plans.lifecycle_state TEXT NOT NULL DEFAULT 'active'</code></td><td>Visibility/lifecycle axis: <code>active</code>, <code>deferred</code>, or <code>archived</code>. A planning document can be <code>archived</code> and still have <code>boardColumnKey = 'done'</code>.</td></tr>
+        <tr><td><code>boardColumnKey</code></td><td><code>plans.board_column_key TEXT</code></td><td>Current configurable workflow column for planning documents only. Default columns are <code>backlog</code>, <code>ready_to_pull</code>, <code>in_progress</code>, and <code>done</code>. Collaboration documents keep this null/not applicable.</td></tr>
+        <tr><td><code>executionReady</code></td><td>Existing publication metadata</td><td>Independent agent-provided readiness signal from reviewed-plan gates. It is displayed as a card badge/detail but does not set <code>boardColumnKey</code>.</td></tr>
+        <tr><td><code>pinnedAt</code></td><td><code>plans.pinned_at TEXT</code></td><td>Pin state and stable ordering among pinned plans. <code>null</code> means unpinned.</td></tr>
+        <tr><td><code>projectKey</code></td><td><code>plans.project_key TEXT</code></td><td>Normalized project identifier, e.g. <code>plan-reviewer</code>, <code>heddle</code>, <code>doct</code>.</td></tr>
+        <tr><td><code>projectName</code></td><td><code>plans.project_name TEXT</code></td><td>Human-readable project label shown on cards, detail rows, and list badges.</td></tr>
+        <tr><td><code>projectOverriddenAt</code></td><td><code>plans.project_overridden_at TEXT</code></td><td>Nullable marker that project metadata was explicitly set rather than inferred; used to avoid re-registration clobbering human/agent overrides.</td></tr>
+        <tr><td><code>completionRatio</code></td><td>Derived from existing progress metadata</td><td>Separate sort signal: completed phases divided by total phases, with no phases treated as unknown/0 depending on sort context.</td></tr>
+        <tr><td><code>boardColumns</code></td><td>New local configuration table, e.g. <code>board_columns(key TEXT PRIMARY KEY, label TEXT, position INTEGER, is_done INTEGER, is_default INTEGER, hidden_at TEXT)</code></td><td>Persisted kanban configuration used to render columns and validate plan moves across restarts.</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warning" id="migration-warning">
+      <strong>Migration rule:</strong> do not drop or reinterpret <code>archived_at</code>, <code>deferred_at</code>, or <code>lifecycle_state</code> in the first implementation. Backfill new columns and keep compatibility reads/writes until a later cleanup plan removes old fields.
+    </div>
+  </section>
+
+  <section id="status-defaulting-rules">
+    <h2>Lifecycle, board column, and readiness defaulting rules</h2>
+    <ol>
+      <li id="default-lifecycle-archived">If <code>archived_at</code> is present or <code>lifecycle_state = 'archived'</code>, keep <code>lifecycleState = 'archived'</code>.</li>
+      <li id="default-lifecycle-deferred">Else if <code>lifecycle_state = 'deferred'</code>, keep <code>lifecycleState = 'deferred'</code> and preserve existing deferred note behavior.</li>
+      <li id="default-lifecycle-active">Else keep <code>lifecycleState = 'active'</code>.</li>
+      <li id="default-columns">On first run, create default board columns in this order: <code>backlog</code> (“Backlog”), <code>ready_to_pull</code> (“Ready to Pull”), <code>in_progress</code> (“In Progress”), and <code>done</code> (“Done”).</li>
+      <li id="default-column-done">For existing rows only, if progress has phases and all phases are complete, backfill <code>boardColumnKey = 'done'</code>.</li>
+      <li id="default-column-in-progress">For existing rows only, if progress shows any started/incomplete implementation work, backfill <code>boardColumnKey = 'in_progress'</code>.</li>
+      <li id="default-column-backlog">Else set <code>boardColumnKey = 'backlog'</code>. Do not auto-move a plan to <code>ready_to_pull</code> from <code>--execution-ready</code>.</li>
+      <li id="default-registration">New registrations and re-registrations default to <code>backlog</code> only when no stored <code>boardColumnKey</code> exists and no explicit column argument/API call is provided. <code>--execution-ready</code> remains publication/readiness metadata and must not change board column by itself; agents must call the column API/CLI explicitly when they want <code>ready_to_pull</code>, <code>in_progress</code>, or <code>done</code>.</li>
+    </ol>
+  </section>
+
+  <section id="column-config-persistence">
+    <h2>Kanban column configuration persistence</h2>
+    <p>Column configuration is repo-local service state for planning documents, not source-plan content. It must survive process restarts, service upgrades, and plan re-registration without changing HTML plan files or collaboration documents.</p>
+    <ul>
+      <li><strong>Storage:</strong> add a local <code>board_columns</code> table keyed by stable column keys with label, position, done/default markers, and optional hidden timestamp.</li>
+      <li><strong>Validation:</strong> a plan move must target an existing non-hidden column and a <code>reviewMode: planning</code> document. Failed validation returns an actionable UI/API/CLI error and leaves the card in its previous column; collaboration docs reject board-column moves as not applicable.</li>
+      <li><strong>Ordering:</strong> column position controls board layout; card ordering inside a column is pinned first, then selected sort such as activity or completion.</li>
+      <li><strong>Configuration changes:</strong> renaming a column changes labels only; hiding/removing a column requires either an empty column or a replacement target so plans are never orphaned.</li>
+      <li><strong>Restart recovery:</strong> startup creates missing default columns idempotently, reads persisted custom columns before rendering the index, and never overwrites custom labels/order during registration.</li>
+      <li><strong>Events:</strong> column configuration changes and card moves should emit the same durable event shape used by other organization updates so browser views can refresh consistently.</li>
+    </ul>
+  </section>
+
+  <section id="ui-prototype">
+    <h2>UI prototype</h2>
+
+    <figure id="prototype-kanban-board">
+      <h3>Kanban board with default configurable columns</h3>
+      <div class="mockup" role="img" aria-label="Kanban board with Backlog, Ready to Pull, In Progress, and Done columns">
+        <main class="screen index-mock">
+          <nav class="mock-navbar" aria-label="Kanban actions mockup">
+            <div class="mock-actions">
+              <span class="mock-tool">☰</span>
+              <div class="doc-kind-switcher" aria-label="Document view selector"><span class="doc-kind-seg active">Kanban</span><span class="doc-kind-seg">All documents</span><span class="doc-kind-seg">Collab docs</span></div>
+              <span class="mock-action-cluster" aria-label="Kanban actions"><span class="mock-tool" role="button" aria-label="Configure columns" title="Configure columns">⚙</span></span>
+            </div>
+          </nav>
+          <div class="page-header">
+            <div>
+              <h1>Plans · Kanban</h1>
+              <p class="muted">Kanban is the primary Plans view. Columns are workflow status; cards carry project, readiness, Linear, summary, and progress details below the shared top bar.</p>
+            </div>
+          </div>
+          <section class="kanban-board" aria-label="Plan board columns">
+            <div class="kanban-column" data-column-key="backlog">
+              <h4>Backlog <span class="column-count">3</span></h4>
+              <article class="kanban-card"><div class="card-title"><span class="drag-handle">⋮⋮</span>issue-43-plan-organization</div><p class="card-summary">Organize planning documents into a configurable kanban board while keeping Collab docs separate.</p><div class="card-meta"><span class="badge">Plan</span><span class="badge">Project: plan-reviewer</span><span class="badge">GitHub: <a href="https://github.com/Nodaste-Lab/plan-reviewer/issues/43">#43</a></span><span class="badge">State: Active</span><span class="badge not-ready">Readiness: Not ready</span><span class="badge">Progress: 0/4</span><span class="badge">Pending: 3</span></div><div class="card-detail-link">Details: summary, source path, PR, comments, latest note</div></article>
+            </div>
+            <div class="kanban-column drop-target" data-column-key="ready_to_pull">
+              <h4>Ready to Pull <span class="column-count">2</span></h4>
+              <article class="kanban-card dragging"><div class="card-title"><span class="drag-handle">⋮⋮</span>queue-backed-agent-next</div><p class="card-summary">Deliver durable browser-comment claims so agents can process reviewer feedback safely.</p><div class="card-meta"><span class="badge">Plan</span><span class="badge">Project: plan-reviewer</span><span class="badge">Linear: none</span><span class="badge">State: Active</span><span class="badge ready">Readiness: Execution ready</span><span class="badge">Progress: 4/4</span><span class="badge pin">Pinned</span></div><div class="card-detail-link">Details: open plan, review comments, PR state</div></article>
+            </div>
+            <div class="kanban-column" data-column-key="in_progress">
+              <h4>In Progress <span class="column-count">1</span></h4>
+              <article class="kanban-card"><div class="card-title"><span class="drag-handle">⋮⋮</span>source-sync-safety</div><p class="card-summary">Prevent stale source files from silently overwriting reviewed browser changes.</p><div class="card-meta"><span class="badge">Plan</span><span class="badge">Project: plan-reviewer</span><span class="badge">Linear: <a href="https://linear.app/nodaste/issue/NOD-38">NOD-38</a></span><span class="badge">State: Active</span><span class="badge ready">Readiness: Execution ready</span><span class="badge">Progress: 3/5</span><span class="badge not-ready">Source attention</span></div><div class="card-detail-link">Details: source sync, failed checks, latest reviewer note</div></article>
+            </div>
+            <div class="kanban-column" data-column-key="done">
+              <h4>Done <span class="column-count">4</span></h4>
+              <article class="kanban-card"><div class="card-title"><span class="drag-handle">⋮⋮</span>seeded-comment-stream</div><p class="card-summary">Fixture scenario for deterministic comment delivery and replay during agent tests.</p><div class="card-meta"><span class="badge">Plan</span><span class="badge">Project: fixtures</span><span class="badge">Linear: <a href="https://linear.app/nodaste/issue/NOD-31">NOD-31</a></span><span class="badge">State: Archived</span><span class="badge">Status: Done</span><span class="badge">Progress: Complete</span><span class="badge">Pending: 0</span></div><div class="card-detail-link">Details: archive note, source path, fixture evidence</div></article>
+            </div>
+          </section>
+        </main>
+      </div>
+      <figcaption>The board is the primary organizer for planning documents. The active top-level view is <strong>Kanban</strong>; this slice does not add filter controls inside the Kanban view. Columns remain the visible workflow status, execution readiness is a separate badge on cards, and dragging a card persists <code>boardColumnKey</code> without changing source HTML.</figcaption>
+    </figure>
+
+    <figure id="prototype-document-kind-selector">
+      <h3>Document-view selector separates Kanban, all documents, and collab docs</h3>
+      <div class="mockup" role="img" aria-label="All documents index selector with tighter cards and current index metadata">
+        <main class="screen index-mock">
+          <nav class="mock-navbar" aria-label="All documents actions mockup">
+            <div class="mock-actions">
+              <span class="mock-tool">☰</span>
+              <div class="doc-kind-switcher" aria-label="Document view selector"><span class="doc-kind-seg">Kanban</span><span class="doc-kind-seg active">All documents</span><span class="doc-kind-seg">Collab docs</span></div>
+              <span class="mock-action-cluster" aria-label="All documents actions"><span class="mock-tool" role="button" aria-label="Deferred documents" title="Deferred documents">⏸</span><span class="mock-tool" role="button" aria-label="Archived documents" title="Archived documents">🗄</span></span>
+            </div>
+          </nav>
+          <div class="page-header">
+            <div>
+              <h1>Plan Review Index · All documents</h1>
+              <p class="muted">This is the non-Kanban index view: compact cards keep the current index metadata while mixing plans and collaboration docs below the shared top bar.</p>
+            </div>
+          </div>
+          <section aria-label="All documents index cards">
+            <article class="all-doc-card"><strong>issue-43-plan-organization</strong><p class="card-summary">Organize planning documents into a configurable kanban board while keeping Collab docs separate.</p><div class="card-meta"><span class="badge">Plan</span><span class="badge">Project: plan-reviewer</span><span class="badge">GitHub: <a href="https://github.com/Nodaste-Lab/plan-reviewer/issues/43">#43</a></span><span class="badge">State: Active</span><span class="badge">Status: Backlog</span><span class="badge not-ready">Execution not ready</span><span class="badge">Progress: 0/4</span><span class="badge">pending 3</span><span class="badge">No PR</span></div><p class="muted"><code>thoughts/plans/issue-43-plan-organization.html</code></p></article>
+            <article class="all-doc-card"><strong>queue-backed-agent-next</strong><p class="card-summary">Deliver durable browser-comment claims so agents can process reviewer feedback safely.</p><div class="card-meta"><span class="badge">Plan</span><span class="badge">Project: plan-reviewer</span><span class="badge">Linear: none</span><span class="badge">State: Active</span><span class="badge">Status: Ready to Pull</span><span class="badge ready">Execution ready</span><span class="badge">Progress: 4/4</span><span class="badge">PR open #123</span></div><p class="muted"><code>thoughts/plans/queue-backed-agent-next.html</code></p></article>
+            <article class="all-doc-card collab"><strong>Hermes workspace notes</strong><p class="card-summary">Shared collaboration notes for Hermes workspace behavior and operator follow-up.</p><div class="card-meta"><span class="badge collab">Collab doc</span><span>No phases</span><span>pending 2</span><span>updated today</span><span>source synced</span></div><p class="muted">No board column, execution-ready, or Build Plan controls.</p></article>
+            <article class="all-doc-card attention"><strong>Missing source collaboration doc</strong><p class="card-summary">Cached collaboration document whose source path needs repair.</p><div class="card-meta"><span class="badge collab">Collab doc</span><span class="badge not-ready">Needs attention</span><span>cached copy</span><span>pending 0</span></div><p class="muted">Needs attention appears only when source sync or recovery requires operator action, such as a missing source file, stale cached copy, failed source write, or unresolved source conflict.</p></article>
+          </section>
+        </main>
+      </div>
+      <figcaption>The selector comes from the consolidated collab-doc plan and now sits inside the same shared top bar shape used by the other index and review-shell prototypes. <code>Kanban</code> is the board-only planning view; <code>All documents</code> is a compact index/list with the current plan-index metadata; <code>Collab docs</code> is the same list shape narrowed to collaboration documents without board-only controls.</figcaption>
+    </figure>
+
+    <figure id="prototype-column-configuration">
+      <h3>Column configuration and restart-stable persistence</h3>
+      <div class="mockup" role="img" aria-label="Column configuration panel showing labels, keys, and ordering">
+        <main class="screen index-mock">
+          <nav class="mock-navbar" aria-label="Column configuration actions mockup">
+            <div class="mock-actions">
+              <span class="mock-tool">☰</span>
+              <div class="doc-kind-switcher" aria-label="Document view selector"><span class="doc-kind-seg active">Kanban</span><span class="doc-kind-seg">All documents</span><span class="doc-kind-seg">Collab docs</span></div>
+              <span class="mock-action-cluster" aria-label="Column configuration actions"><span class="mock-tool" role="button" aria-label="Add column" title="Add column">＋</span><span class="mock-tool" role="button" aria-label="Save order" title="Save order">💾</span></span>
+            </div>
+          </nav>
+          <div class="page-header"><div><h1>Board columns</h1><p class="muted">Stored in the local plan-reviewer database and loaded before the index renders below the shared top bar.</p></div></div>
+          <div class="column-config-grid" aria-label="Column configuration rows">
+            <strong>Label</strong><strong>Stable key</strong><strong>Behavior</strong>
+            <div class="column-config-row"><span><span class="drag-handle">⋮⋮</span>Backlog</span><code>backlog</code><span>Default</span></div>
+            <div class="column-config-row"><span><span class="drag-handle">⋮⋮</span>Ready to Pull</span><code>ready_to_pull</code><span>Default</span></div>
+            <div class="column-config-row"><span><span class="drag-handle">⋮⋮</span>In Progress</span><code>in_progress</code><span>Default</span></div>
+            <div class="column-config-row"><span><span class="drag-handle">⋮⋮</span>Done</span><code>done</code><span>Done column</span></div>
+          </div>
+        </main>
+      </div>
+      <figcaption>The prototype shows only the actual default product columns: Backlog, Ready to Pull, In Progress, and Done. Column labels/order are persisted with stable keys; startup creates missing defaults idempotently and preserves configured order across restarts and re-registration.</figcaption>
+    </figure>
+
+    <figure id="prototype-organized-index">
+      <h3>All documents list view with project/status controls and pinned sorting</h3>
+      <div class="mockup" role="img" aria-label="Plan Review Index All documents view using the current single-column index layout plus organizer controls">
+        <main class="screen index-mock">
+          <nav class="mock-navbar" aria-label="All documents actions mockup">
+            <div class="mock-actions">
+              <span class="mock-tool">☰</span>
+              <div class="doc-kind-switcher" aria-label="Document view selector"><span class="doc-kind-seg">Kanban</span><span class="doc-kind-seg active">All documents</span><span class="doc-kind-seg">Collab docs</span></div>
+              <span class="mock-action-cluster" aria-label="All documents actions"><span class="mock-tool" role="button" aria-label="Deferred documents" title="Deferred documents">⏸</span><span class="mock-tool" role="button" aria-label="Archived documents" title="Archived documents">🗄</span></span>
+            </div>
+          </nav>
+          <div class="page-header">
+            <div>
+              <h1>Plan Review Index · All documents</h1>
+              <p class="muted">The shared top bar provides document-scope navigation; All documents uses compact list cards below it.</p>
+            </div>
+          </div>
+          <div class="toolbar" aria-label="Current index filters">
+            <input value="" placeholder="Filter plans" aria-label="Filter plans">
+            <select aria-label="Filter by repo"><option>All repos</option><option>plan-reviewer</option></select>
+          </div>
+          <section class="repo-group" data-repo-group="plan-reviewer">
+            <h2>plan-reviewer</h2>
+            <article class="plan-card complete" data-plan-id="plan-example-ready" data-repo="plan-reviewer" data-lifecycle="active" data-column="done" data-pr-status="open" data-needs-attention="false" aria-label="plan-reviewer / queue-backed-agent-next: Active / Done">
+              <div class="plan-card-header">
+                <h2><a href="#">plan-reviewer / queue-backed-agent-next</a></h2>
+                <div class="plan-actions"><button class="mock-pin-button" type="button" aria-label="Unpin plan" aria-pressed="true" title="Unpin plan">★</button><span class="pin-pill">Pinned</span><span class="status-pill">Active · Done</span><button class="archive-plan" type="button">Archive</button></div>
+              </div>
+              <p><code>thoughts/plans/queue-backed-agent-next.html</code></p>
+              <div class="plan-metadata" aria-label="Compact plan metadata"><span><b>Project</b>plan-reviewer</span><span><b>State</b>Active</span><span><b>Status</b>Done</span><span><b>Execution</b><span class="ready-pill ready">Ready</span></span><span><b>Worktree</b>/Users/anichols/code/plan-reviewer</span><span><b>Branch</b>main</span><span><b>Linear</b>None</span><span><b>PR</b><a class="pr-pill open" href="#">open #123</a></span></div>
+              <div class="progress-row"><div class="progress-bar" aria-label="4 of 4 phases complete"><span class="progress-segment complete"></span><span class="progress-segment complete"></span><span class="progress-segment complete"></span><span class="progress-segment complete"></span></div><span class="progress-count">4 of 4 phases complete</span></div>
+              <div class="compact-detail-row"><p><span class="row-label">Comments</span> pending 0 · claimed 0 · ack 0 · resolved 8</p><p><span class="row-label">Notes</span> None</p><p><span class="row-label">PR check</span> <time datetime="2026-06-20T03:00:00Z" data-local-timestamp>2026-06-20T03:00:00Z</time></p><p><span class="row-label">Updated</span> <time datetime="2026-06-20T03:00:00Z" data-local-timestamp>2026-06-20T03:00:00Z</time></p></div>
+            </article>
+            <article class="plan-card incomplete" data-plan-id="plan-7YfBxyUDBdj" data-repo="plan-reviewer" data-lifecycle="active" data-column="backlog" data-pr-status="unlinked" data-needs-attention="false" aria-label="plan-reviewer / issue-43-plan-organization: Active / Backlog">
+              <div class="plan-card-header">
+                <h2><a href="#">plan-reviewer / issue-43-plan-organization</a></h2>
+                <div class="plan-actions"><button class="mock-pin-button" type="button" aria-label="Pin plan" aria-pressed="false" title="Pin plan">☆</button><span class="status-pill">Active · Backlog</span><button class="archive-plan" type="button">Archive</button></div>
+              </div>
+              <p><code>thoughts/plans/issue-43-plan-organization.html</code></p>
+              <div class="plan-metadata" aria-label="Compact plan metadata"><span><b>Project</b>plan-reviewer</span><span><b>State</b>Active</span><span><b>Status</b>Backlog</span><span><b>Execution</b><span class="ready-pill not-ready">Not ready</span></span><span><b>Worktree</b>/Users/anichols/code/plan-reviewer-worktrees/issue-43-organization</span><span><b>Branch</b>issue-43-organization</span><span><b>Linear</b>None</span><span><b>PR</b><span class="pr-pill unlinked">No PR</span></span></div>
+              <div class="progress-row"><div class="progress-bar" aria-label="0 of 4 phases complete"><span class="progress-segment"></span><span class="progress-segment"></span><span class="progress-segment"></span><span class="progress-segment"></span></div><span class="progress-count">0 of 4 phases complete</span></div>
+              <div class="compact-detail-row"><p><span class="row-label">Comments</span> pending 0 · claimed 0 · ack 0 · resolved 6</p><p><span class="row-label">Notes</span> None</p><p><span class="row-label">Source</span> synced</p><p><span class="row-label">Updated</span> <time datetime="2026-06-20T03:45:00Z" data-local-timestamp>2026-06-20T03:45:00Z</time></p></div>
+            </article>
+          </section>
+        </main>
+      </div>
+      <figcaption>This companion All documents list view uses the same shared top bar shape as the review shell: menu, <strong>Kanban | All documents | Collab docs</strong> selector, then right-aligned screen actions. Deferred/Archived links move into that right action cluster while the page heading, existing text filter, repo select, repo-grouped cards, status metadata, PR, notes, segmented phase progress, comment counts, source state, and timestamps remain below the bar.</figcaption>
+    </figure>
+
+    <figure id="prototype-review-shell-organizer">
+      <h3>Plan view with status, project, and pin controls</h3>
+      <div class="mockup" role="img" aria-label="Plan review page showing the actual three-column review shell with organizer selectors">
+        <div class="screen mock-shell">
+          <nav class="mock-navbar" aria-label="Plan actions mockup">
+            <div class="mock-actions">
+              <span class="mock-tool">☰</span>
+              <div class="doc-kind-switcher" aria-label="Document view selector"><span class="doc-kind-seg active">Kanban</span><span class="doc-kind-seg">All documents</span><span class="doc-kind-seg">Collab docs</span></div>
+              <button class="mock-pin-button" type="button" aria-label="Pin plan" aria-pressed="false" title="Pin plan">☆</button>
+              <label class="mock-selector-group">Project <select class="mock-select" aria-label="Project"><option>plan-reviewer</option><option>doct</option><option>heddle</option></select></label>
+              <label class="mock-selector-group">State <select class="mock-select" aria-label="State"><option>Active</option><option>Deferred</option><option>Archived</option></select></label>
+              <label class="mock-selector-group">Status <select class="mock-select" aria-label="Status"><option>Backlog</option><option>Ready to Pull</option><option>In Progress</option><option>Done</option></select></label>
+              <span class="mock-action-cluster" aria-label="Plan action buttons"><span class="mock-tool mock-download" role="button" aria-label="Download" title="Download">⬇</span><span class="mock-tool" role="button" aria-label="Request execution-ready review" title="Request execution-ready review">✓</span><span class="mock-tool" role="button" aria-label="Build Plan" title="Build Plan">🔨</span><span class="mock-tool" role="button" aria-label="Defer plan" title="Defer plan">⏸</span><span class="mock-tool" role="button" aria-label="Archive plan" title="Archive plan">🗄</span><span class="mock-tool" role="button" aria-label="Comments" title="Comments">💬</span></span>
+            </div>
+            <div class="mock-current-bar">
+              <strong class="mock-current-title">Issue 43: Plan organization categories and pinned plans</strong>
+              <span class="mock-ready-pill">Execution not ready</span>
+            </div>
+          </nav>
+          <div class="mock-app">
+            <aside class="mock-plan-list-nav">
+              <h3>Active plans</h3>
+              <article class="mock-nav-item active">
+                <div class="mock-nav-title">plan-reviewer / issue-43-plan-organization</div>
+                <div class="mock-nav-meta"><span class="mock-nav-pill">Active · Planning</span><span>0/4</span><span>pending 0</span></div>
+              </article>
+              <article class="mock-nav-item">
+                <div class="mock-nav-title">plan-reviewer / queue-backed-agent-next</div>
+                <div class="mock-nav-meta"><span class="mock-nav-pill">Active · Complete</span><span>4/4</span><span>updated today</span></div>
+              </article>
+              <article class="mock-nav-item">
+                <div class="mock-nav-title">plan-reviewer / source-sync-safety</div>
+                <div class="mock-nav-meta"><span class="mock-nav-pill">Complete</span><span>3/3</span></div>
+              </article>
+            </aside>
+            <main class="mock-review-pane">
+              <div class="mock-plan-frame">
+                <h4>Rendered plan iframe</h4>
+                <p>The center pane remains the reviewed HTML plan itself, with selection and comment markers layered by the shell.</p>
+                <p><strong>The view selector and status/project/pin controls live in the shell navbar, not inside this source plan iframe.</strong></p>
+              </div>
+            </main>
+            <aside class="mock-sidebar">
+              <h3>Comments</h3>
+              <section class="mock-notes-panel">
+                <strong>Plan notes</strong>
+                <p class="muted">Add a plan note for agents</p>
+              </section>
+              <article class="mock-comment-row">
+                <small>Comment 2</small>
+                <p>Reviewer feedback appears here while the plan iframe stays visible.</p>
+              </article>
+            </aside>
+          </div>
+        </div>
+      </div>
+      <figcaption>This version follows the actual review shell: top plan action navbar, current-plan bar, always-present left plan navigator, center rendered-plan iframe, and right comments/sidebar. The shared <strong>Kanban | All documents | Collab docs</strong> selector remains present in the top action row on the plan screen and supersedes the old separate Plan index link; pin plus Project, State, and Status are organization controls, and the six single-action buttons sit together on the right after those selectors: Download, execution-ready review, Build Plan, Defer, Archive, and Comments. Dense action controls may use icons when the full text remains available through accessible labels and tooltips. The current-plan bar remains focused on the plan title and execution-ready state. Project contains registered project groups such as plan-reviewer, doct, and heddle; State contains Active, Deferred, and Archived; Status contains the persisted board statuses such as Backlog, Ready to Pull, In Progress, and Done.</figcaption>
+    </figure>
+  </section>
+
+  <section id="shared-top-bar-contract">
+    <h2>Shared top bar contract</h2>
+    <p>The organizer top bar is a reusable shell component, not a one-off mockup. Every document organizer or review-shell screen that lets the user switch document scope must render the same base structure in the same order: menu affordance, <code>Kanban | All documents | Collab docs</code> selector, screen-specific organization controls, then a right-aligned cluster of single-action icon buttons. The <code>All documents</code> selector replaces the old separate Plan index link rather than duplicating it. Screens may omit actions that do not apply, but they must preserve visual rhythm, accessible labels, tooltips, and the relative placement of the shared selector.</p>
+    <table>
+      <thead><tr><th>Screen</th><th>Shared selector</th><th>Screen-specific controls</th><th>Right action cluster</th></tr></thead>
+      <tbody>
+        <tr><td>Kanban index</td><td>Visible; <code>Kanban</code> active</td><td>Board column configuration affordance; no extra Kanban filters in this slice</td><td>Right cluster uses icon actions, including Configure columns when available</td></tr>
+        <tr><td>All documents index/list</td><td>Visible; <code>All documents</code> active</td><td>Text search and repo/project discovery controls below the bar</td><td>Deferred and Archived remain available as icon actions without replacing the shared selector</td></tr>
+        <tr><td>Collab docs index/list</td><td>Visible; <code>Collab docs</code> active</td><td>Collaboration-document source/status controls only</td><td>No execution-ready, Build Plan, board-status, or plan-only action buttons</td></tr>
+        <tr><td>Planning document review shell</td><td>Visible; preserves current document even when selector would filter it out</td><td>Pin, Project, State, and Status controls</td><td>Exactly six icon actions on the right when applicable: Download, execution-ready review, Build Plan, Defer, Archive, Comments</td></tr>
+        <tr><td>Collaboration document review shell</td><td>Visible; preserves current document even when selector would filter it out</td><td>Source/status controls relevant to collaboration docs</td><td>Download and Comments only unless a collab-specific action exists; no Build Plan or execution-ready controls</td></tr>
+        <tr><td>Deferred/Archived list screens and direct deep links</td><td>Visible with the matching document-kind selection retained</td><td>State recovery controls such as Resume/Unarchive when applicable</td><td>Only actions valid for that document state; disabled or absent actions must not shift the shared selector</td></tr>
+        <tr><td>Column configuration screen</td><td>Visible as navigation context unless the screen is opened as a modal/panel</td><td>Column add/reorder/save controls below the bar</td><td>Add, Save, cancel, or close controls grouped as right-side icon actions</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="acceptance-criteria">
+    <h2>Acceptance criteria</h2>
+    <ol>
+      <li id="ac-1"><strong>Project organization:</strong> each plan exposes <code>projectKey</code> and <code>projectName</code> derived from worktree/root/repo metadata by default, supports explicit project overrides when inference is wrong, and displays project identity on board cards and detail/list surfaces.</li>
+      <li id="ac-2"><strong>Document-kind separation and shared top bar:</strong> every appropriate index, list, configuration, and review-shell surface uses the shared top bar contract and screen matrix: one consistent <code>Kanban</code>, <code>All documents</code>, and <code>Collab docs</code> selector at the top, backed by existing <code>reviewMode</code>; Kanban shows the planning board, All documents shows mixed discovery, Collab docs shows collaboration documents independently, screen-specific controls appear in addition to the shared selector, and the current document remains visible in the review shell even when out of filter.</li>
+      <li id="ac-2a"><strong>Configurable board columns:</strong> the service creates default columns <code>backlog</code>, <code>ready_to_pull</code>, <code>in_progress</code>, and <code>done</code> for planning documents, lets users configure column labels/order, and persists configuration across restarts.</li>
+      <li id="ac-3"><strong>Card movement:</strong> humans can move planning-document cards between columns by drag and drop from the board; agents can change <code>boardColumnKey</code> through CLI/API with clear success/error output; collaboration documents reject board-column moves as not applicable.</li>
+      <li id="ac-4"><strong>Independent readiness:</strong> existing <code>--execution-ready</code> / publication readiness remains an independent agent-provided signal and never silently changes <code>boardColumnKey</code>.</li>
+      <li id="ac-5"><strong>Archive/defer compatibility:</strong> existing archive, unarchive, defer, and resume controls still work and update lifecycle state without overwriting board column or execution readiness.</li>
+      <li id="ac-6"><strong>Pinning:</strong> plans can be pinned/unpinned from index, review shell, and CLI/API; pinned plans always appear above unpinned plans within each column or filtered category view.</li>
+      <li id="ac-7"><strong>Sorting:</strong> Kanban columns use deterministic ordering with pinned plans first, then activity/completeness/title/id tie-breakers; this slice does not add user-facing Kanban filter or sort controls.</li>
+      <li id="ac-8"><strong>Scoped discovery controls:</strong> document-view selection separates <code>Kanban</code>, <code>All documents</code>, and <code>Collab docs</code>, but the Kanban board itself does not include project/lifecycle/readiness filter controls in this slice; those states appear as card metadata and in details instead.</li>
+      <li id="ac-9"><strong>Global quick open:</strong> <span class="kbd">⌘O</span> fuzzy search includes all registered documents across projects, document kinds, lifecycle states, columns, and readiness states, including archived done plans, deferred backlog plans, execution-ready plans, in-progress plans, pinned plans, and collaboration documents.</li>
+      <li id="ac-10"><strong>Truthful badges and controls:</strong> board cards, collab cards, list cards, review shell header/navigator, quick-open results, and archived/deferred deep links show the same kind/project/lifecycle/column/readiness/pin labels where applicable. Dense shell action buttons can be icon-only only when their full action text is preserved in <code>aria-label</code> and tooltip text.</li>
+      <li id="ac-10a"><strong>Informative board cards:</strong> each kanban card shows enough detail to identify the work without opening it: title, short executive summary, project, Linear/issue link state where issue IDs render as links, lifecycle, board column, execution-readiness state, phase progress, pending-comment count, source-attention state when present, and a Details/Open affordance for full metadata.</li>
+      <li id="ac-10b"><strong>All-documents index cards:</strong> the <code>All documents</code> view is not a Kanban board. It uses compact index/list cards that retain the current plan index metadata: title, summary, kind, project/repo/path, Linear issue link state, lifecycle, board column for plans, execution readiness for plans, progress, pending/resolved comment counts, source health, PR state, latest note when present, updated time, and archive/defer affordances where applicable. A <strong>Needs attention</strong> badge is reserved for source-sync or source-recovery conditions requiring operator action: missing source path, stale cached copy, failed source write, unresolved source conflict, or equivalent non-comment recovery state.</li>
+      <li id="ac-11"><strong>Data preservation:</strong> existing local databases migrate without losing archived/deferred timestamps, notes, progress, source sync state, comments, registration metadata, board column assignments, or column configuration.</li>
+      <li id="ac-12"><strong>Regression coverage:</strong> contract and e2e tests cover the shared top bar matrix across shown and unshown appropriate screens, document-kind filtering, current-document safety, migration, column config persistence, drag/drop card moves, column/pin APIs, index board rendering, collab docs view rendering, sort order, review shell controls, quick-open all-document search, and old archive/defer paths.</li>
+    </ol>
+  </section>
+
+  <section id="bdd-scenarios">
+    <h2>BDD scenarios</h2>
+    <article id="bdd-project-metadata">
+      <h3>Project metadata is visible on cards</h3>
+      <p><strong>Given</strong> registered plans from <code>plan-reviewer</code>, <code>doct</code>, and <code>heddle</code>, <strong>when</strong> the user opens the Plans Kanban board, <strong>then</strong> each card shows its project identity so the user can understand where the work belongs without using a project filter.</p>
+    </article>
+    <article id="bdd-document-kind-selector">
+      <h3>Plans and Collab docs are separate views</h3>
+      <p><strong>Given</strong> the service has active planning and collaboration documents, <strong>when</strong> the reviewer selects <code>Kanban</code>, <strong>then</strong> planning documents appear on the board; <strong>when</strong> they select <code>All documents</code>, <strong>then</strong> planning and collaboration documents appear in mixed discovery; <strong>when</strong> they select <code>Collab docs</code>, <strong>then</strong> collaboration documents appear in an independent list without board-column, execution-ready, or Build Plan controls.</p>
+    </article>
+    <article id="bdd-current-out-of-filter">
+      <h3>Current document remains visible outside selected kind</h3>
+      <p><strong>Given</strong> the reviewer is viewing a plan, <strong>when</strong> they select <code>Collab docs</code> in the review shell, <strong>then</strong> the current plan stays visible as the active navigator item, the rendered plan remains commentable, and only discovery lists are filtered.</p>
+    </article>
+    <article id="bdd-drag-card-column">
+      <h3>Dragging a card persists its column</h3>
+      <p><strong>Given</strong> a plan has <code>lifecycleState: "active"</code> and <code>boardColumnKey: "backlog"</code>, <strong>when</strong> a human drags it to Ready to Pull, <strong>then</strong> the card moves columns, the review shell badge updates after reload, the API returns <code>boardColumnKey: "ready_to_pull"</code>, and the source HTML file is not modified.</p>
+    </article>
+    <article id="bdd-agent-column-toggle">
+      <h3>Agent can set a board column explicitly</h3>
+      <p><strong>Given</strong> an agent has completed execution-ready review for a plan and re-registered it with <code>--execution-ready true</code>, <strong>when</strong> it separately runs the column update CLI/API to set <code>ready_to_pull</code>, <strong>then</strong> the plan appears in Ready to Pull, keeps its current lifecycle state, shows execution-ready as an independent badge, and no source HTML file is modified.</p>
+    </article>
+    <article id="bdd-pin-first">
+      <h3>Pinned plans stay first</h3>
+      <p><strong>Given</strong> one older plan is pinned and a newer plan is unpinned in the same board column, <strong>when</strong> the user views the board, <strong>then</strong> the pinned plan appears first within its column before ordinary activity/completeness sorting.</p>
+    </article>
+    <article id="bdd-global-quick-open">
+      <h3>Cmd-O ignores category scope</h3>
+      <p><strong>Given</strong> the user is viewing the Plans Kanban board, <strong>when</strong> they press <span class="kbd">⌘O</span> and type a matching archived <code>doct</code> plan title, <strong>then</strong> the archived <code>doct</code> plan appears in results with project/lifecycle/column/readiness badges and can be opened.</p>
+    </article>
+    <article id="bdd-legacy-defer">
+      <h3>Existing defer flow preserves board column</h3>
+      <p><strong>Given</strong> a plan is in board column <code>in_progress</code>, <strong>when</strong> the user clicks Defer plan and adds a note, <strong>then</strong> <code>lifecycleState</code> becomes <code>deferred</code>, <code>boardColumnKey</code> remains <code>in_progress</code>, the note is saved, and the existing Deferred page/deep link still shows it.</p>
+    </article>
+    <article id="bdd-collab-column-rejected">
+      <h3>Collab docs cannot be moved to board columns</h3>
+      <p><strong>Given</strong> a document has <code>reviewMode: "collaboration"</code>, <strong>when</strong> a client or CLI tries to set <code>boardColumnKey</code>, <strong>then</strong> the service rejects the move with a clear not-applicable error and leaves the collaboration document reviewable in the Collab docs view.</p>
+    </article>
+    <article id="bdd-migration">
+      <h3>Existing database migrates safely</h3>
+      <p><strong>Given</strong> a database with active, deferred, archived, execution-ready, in-progress, and complete plans plus collaboration documents but no board columns, <strong>when</strong> the service starts after migration, <strong>then</strong> default board columns are created, every planning document receives deterministic lifecycle/column/project values, collaboration documents keep <code>reviewMode: "collaboration"</code> without board assignment, no comments are lost, and old archive/defer routes still work.</p>
+    </article>
+    <article id="bdd-column-config-restart">
+      <h3>Column configuration survives restart</h3>
+      <p><strong>Given</strong> the user reorders the default columns Backlog, Ready to Pull, In Progress, and Done, <strong>when</strong> the service restarts and the index is reopened, <strong>then</strong> the configured order is still present and every plan remains in one of the actual default columns.</p>
+    </article>
+  </section>
+
+  <section id="test-coverage-matrix">
+    <h2>Test coverage matrix</h2>
+    <table>
+      <thead><tr><th>Behavior</th><th>Test target</th><th>Evidence expected</th></tr></thead>
+      <tbody>
+        <tr><td>Document-view selector</td><td><code>src/__tests__/contracts.test.ts</code> and e2e review-shell/index tests</td><td><code>Kanban</code>, <code>All documents</code>, and <code>Collab docs</code> use existing <code>reviewMode</code>; current documents remain visible when out of filter; collaboration docs omit board/build/readiness controls.</td></tr>
+        <tr><td>Shared top bar matrix</td><td>E2E index, review-shell, deferred/archive, collab-doc, and column-configuration scenarios</td><td>Each appropriate screen renders the same base top bar structure, keeps the selector visually consistent, adds only valid screen-specific controls, and groups single-action icon buttons on the right with accessible labels/tooltips.</td></tr>
+        <tr><td>Lifecycle/column schema and migration</td><td><code>src/__tests__/contracts.test.ts</code> plus database migration-focused tests</td><td>Old rows preserve lifecycle, default board columns are created for plans, expected columns are backfilled, collaboration docs stay unassigned, and invalid lifecycle/column values are rejected.</td></tr>
+        <tr><td>Column config persistence</td><td>Contract tests around database restart/reopen</td><td>Custom labels/order survive restart; hidden/removed columns cannot orphan plans.</td></tr>
+        <tr><td>Lifecycle/column/pin API</td><td>Contract tests for new endpoints and legacy archive/defer endpoints</td><td>Responses include updated lifecycle/column, pinned timestamp, events, and safe error shapes.</td></tr>
+        <tr><td>Kanban board organization</td><td><code>src/test-fixtures/e2e-run.ts</code></td><td>Planning documents render on the board without Kanban filter controls; columns render in configured order; pinned sort is visible inside columns; cards expose summary, Linear/issue link state, project, lifecycle, readiness, progress, pending comments, source attention, and a Details/Open affordance.</td></tr>
+        <tr><td>All-documents index cards</td><td><code>src/test-fixtures/e2e-run.ts</code> and contract markup assertions</td><td><code>All documents</code> renders compact list/index cards, not Kanban columns, and preserves current index metadata including status, source health, PR, notes, comments, path, progress, and updated timestamps.</td></tr>
+        <tr><td>Collab docs independent view</td><td><code>src/test-fixtures/e2e-run.ts</code></td><td>Collaboration documents render in the Collab docs view/list with kind, source, comment, and update cues but without board columns or execution-ready/build controls.</td></tr>
+        <tr><td>Drag/drop movement</td><td>E2E browser board scenario</td><td>Dragging a card to another column persists across reload and shows a recoverable error if the update fails.</td></tr>
+        <tr><td>Review shell controls</td><td>E2E browser shell scenario</td><td>Project/state/status controls and pin button update UI and survive reload; planning docs show the six-action icon cluster, while collab docs omit plan-only actions.</td></tr>
+        <tr><td>Global quick-open</td><td>Existing Cmd-O e2e scenario extended with archived/deferred/backlog/ready-to-pull/in-progress/done/execution-ready plans plus collaboration docs</td><td>Results include all document kinds and lifecycle/column/readiness combinations and are not constrained by selected category.</td></tr>
+        <tr><td>CLI parity</td><td>CLI contract/smoke tests</td><td><code>plan-review project set</code>, <code>plan-review lifecycle set</code>, <code>plan-review column set</code>, <code>plan-review columns list</code>, <code>plan-review columns save-order</code>, and <code>plan-review pin/unpin</code> produce copy-pasteable success/error output and JSON.</td></tr>
+        <tr><td>Docs parity</td><td>README inspection in tests or docs review checklist</td><td>README mentions lifecycle, configurable kanban columns, execution readiness independence, pinning, and global quick-open behavior.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="phases">
+    <h2>Phases</h2>
+    <article class="phase" id="phase-p1-data-api">
+      <h3>Phase 1 — Persist organization metadata, board columns, and APIs</h3>
+      <h4>End State</h4>
+      <p>The service stores separate document-kind, lifecycle, board-column, and execution-readiness axes plus <code>projectKey</code>, <code>projectName</code>, <code>projectOverriddenAt</code>, and <code>pinnedAt</code>, migrates existing databases safely, persists column configuration for planning documents, and exposes update/filter APIs without changing source HTML files.</p>
+      <h4>Tests first</h4>
+      <ul>
+        <li>Add failing contract/migration tests for reviewMode filtering, lifecycle preservation, board-column defaulting rules, collaboration-doc column exclusion, column configuration creation/restart persistence, pin update, project inference, project override preservation across re-registration, and legacy archive/defer compatibility.</li>
+        <li>Add invalid-lifecycle, invalid-column, archived-done, deferred-in-progress, execution-ready-independent, collab-column-rejected, and idempotent pin/unpin tests.</li>
+      </ul>
+      <h4>Expected files</h4>
+      <ul>
+        <li><code>src/schemas.ts</code></li>
+        <li><code>src/storage/database.ts</code></li>
+        <li><code>src/server/app.ts</code></li>
+        <li><code>src/__tests__/contracts.test.ts</code></li>
+      </ul>
+      <h4>Work</h4>
+      <ol>
+        <li>Use existing <code>reviewMode</code> as document-kind input for the consistent <code>Kanban</code>, <code>All documents</code>, and <code>Collab docs</code> selector.</li>
+        <li>Add a <code>boardColumnKey</code> schema validated against persisted columns for planning documents and keep <code>planLifecycleStateSchema</code> as the lifecycle taxonomy.</li>
+        <li>Add migration columns/tables with safe defaults and backfill logic using <a href="#status-defaulting-rules">lifecycle/board-column defaulting rules</a> and <a href="#column-config-persistence">column configuration persistence</a>; keep collaboration documents unassigned to board columns.</li>
+        <li>Add store methods such as <code>setPlanLifecycleState</code>, <code>setPlanBoardColumn</code>, <code>setPlanPinned</code>, <code>setPlanProject</code>, <code>listBoardColumns</code>, <code>saveBoardColumns</code>, and <code>inferPlanProject</code>.</li>
+        <li>Add event types for lifecycle/column/config/pin changes if needed for queue/watch parity.</li>
+        <li>Add HTTP routes for document-kind-filtered lists/navigator data, lifecycle, board-column movement, column configuration, pin, and project override updates; keep existing archive/defer/resume routes mapped to lifecycle fields.</li>
+      </ol>
+      <h4>Verify</h4>
+      <pre>bun run build
+bun run test</pre>
+    </article>
+
+    <article class="phase" id="phase-p2-index-organization">
+      <h3>Phase 2 — Build kanban board, sorting, drag/drop, and status controls</h3>
+      <h4>End State</h4>
+      <p>The index can browse planning documents as a Kanban board with configurable columns, informative cards, pinned-first ordering, and drag/drop movement; switch to an independent Collab docs view; and pin or change project/lifecycle/column inline where applicable without adding Kanban filter controls in this slice.</p>
+      <h4>Tests first</h4>
+      <ul>
+        <li>Add e2e assertions for the shared top bar on index/list/configuration surfaces, document-kind selector behavior, board rendering without Kanban filter controls, All-documents list rendering without Kanban columns, informative card content, Collab docs view rendering, column configuration UI, drag/drop movement, pinned-first order inside columns, deterministic card ordering, and failed-move error messages.</li>
+        <li>Add contract assertions that rendered board cards include summary, project, Linear/issue link state, lifecycle, column, readiness, progress, pending-comment count, source-attention state, pin data attributes, labels, and Details/Open affordance; All-documents cards retain current index metadata; and collaboration cards include kind/source/comment/update cues without board-column controls.</li>
+      </ul>
+      <h4>Expected files</h4>
+      <ul>
+        <li><code>src/server/app.ts</code></li>
+        <li><code>src/test-fixtures/e2e-run.ts</code></li>
+        <li><code>src/__tests__/contracts.test.ts</code></li>
+      </ul>
+      <h4>Work</h4>
+      <ol>
+        <li>Replace separate active-only grouping logic with reusable organization helpers for document kind, project metadata, lifecycle, column, readiness, and pin state.</li>
+        <li>Add a document-view selector for <code>Kanban</code>, <code>All documents</code>, and <code>Collab docs</code>; Kanban renders the planning board, All documents renders mixed discovery, and Collab docs renders a separate list view.</li>
+        <li>Build the shared top bar component for index/list/configuration surfaces, then add board controls limited to pin buttons, project override control, lifecycle selector, column selector, and column configuration panel; do not add project/lifecycle/readiness filter controls to the Kanban view in this slice.</li>
+        <li>Add accessible drag/drop card movement for planning-document cards with keyboard fallback and optimistic update rollback on failed saves; prevent drag/drop affordances for collaboration docs.</li>
+        <li>Keep <code>/archive</code> and <code>/deferred</code> as deep links backed by lifecycle data so existing muscle memory works.</li>
+        <li>Show pinned plans first within every column/view and expose source-missing attention without overriding lifecycle, board column, or readiness.</li>
+        <li>Use accessible buttons/selects, clear empty states, and non-destructive move/toggle failures.</li>
+      </ol>
+      <h4>Verify</h4>
+      <pre>bun run build
+bun run test
+bun run test:e2e</pre>
+    </article>
+
+    <article class="phase" id="phase-p3-review-shell-quick-open">
+      <h3>Phase 3 — Extend review shell navigator and global Cmd-O search</h3>
+      <h4>End State</h4>
+      <p>The review shell always shows the left navigator for the current document, supports the <code>Kanban</code>/<code>All documents</code>/<code>Collab docs</code> selector without losing current-document context, shows kind/lifecycle/column/readiness/project/pin metadata where applicable, can update project and toggle pin/lifecycle/column for planning documents, and <span class="kbd">⌘O</span> searches all documents across all categories.</p>
+      <h4>Tests first</h4>
+      <ul>
+        <li>Extend quick-open e2e coverage so results include active, archived, deferred, backlog, ready-to-pull, in-progress, done, execution-ready plans, and collaboration documents even while a project/lifecycle/column/readiness/document-kind view is active.</li>
+        <li>Add review shell tests for shared top bar consistency, document-kind selector filtering, current-document out-of-filter safety, current-plan pin/state/status controls, right-side action cluster membership, collab-doc action omission, and reload persistence.</li>
+      </ul>
+      <h4>Expected files</h4>
+      <ul>
+        <li><code>src/server/app.ts</code></li>
+        <li><code>src/test-fixtures/e2e-run.ts</code></li>
+        <li><code>src/__tests__/contracts.test.ts</code></li>
+      </ul>
+      <h4>Work</h4>
+      <ol>
+        <li>Add or adjust an API endpoint for global document quick-open data that includes all document kinds and lifecycle/column/readiness combinations by default and returns kind/project/lifecycle/column/readiness/pin/progress badges.</li>
+        <li>Keep the left navigator present for every viewed document regardless of kind/lifecycle/column/readiness; it may prioritize useful nearby documents, but it must include or highlight the current document and make kind/lifecycle/column/project labels truthful.</li>
+        <li>Update quick-open scoring/search haystack to include document kind, project, lifecycle labels, column labels, readiness labels, pin, issue keys, notes, repo, slug, and plan path.</li>
+        <li>Ensure archived/deferred result selection routes to the existing review shell and preserves archive/deferred controls.</li>
+        <li>Reuse the shared top bar in the review shell, place current-plan project/lifecycle/column/pin controls before the right-side action cluster, group Download/execution-ready review/Build/Defer/Archive/Comments as icon buttons for planning documents, and hide plan-only controls for collaboration documents.</li>
+      </ol>
+      <h4>Verify</h4>
+      <pre>bun run build
+bun run test
+bun run test:e2e</pre>
+    </article>
+
+    <article class="phase" id="phase-p4-docs-cli-verification">
+      <h3>Phase 4 — Documentation, CLI parity, and full verification</h3>
+      <h4>End State</h4>
+      <p>Humans and agents have copy-pasteable CLI commands for project override, lifecycle, column/configuration, and pin updates, README guidance matches the browser behavior, and the full validation gate passes.</p>
+      <h4>Tests first</h4>
+      <ul>
+        <li>Add CLI tests or command parser contract coverage for <code>project set</code>, <code>lifecycle set</code>, column/configuration, and pin commands with <code>--json</code>, including success and validation-error output.</li>
+        <li>Add docs-alignment checks where existing contract tests assert command examples.</li>
+      </ul>
+      <h4>Expected files</h4>
+      <ul>
+        <li><code>src/cli.ts</code></li>
+        <li><code>README.md</code></li>
+        <li><code>src/__tests__/contracts.test.ts</code></li>
+        <li><code>src/test-fixtures/e2e-run.ts</code></li>
+      </ul>
+      <h4>Work</h4>
+      <ol>
+        <li>Add CLI commands such as <code>plan-review project set &lt;planId&gt; &lt;projectName&gt;</code>, <code>plan-review lifecycle set &lt;planId&gt; &lt;active|deferred|archived&gt;</code>, <code>plan-review column set &lt;planId&gt; &lt;columnKey&gt;</code>, <code>plan-review columns list</code>, <code>plan-review columns save-order</code>, <code>plan-review pin &lt;planId&gt;</code>, and <code>plan-review unpin &lt;planId&gt;</code>.</li>
+        <li>Document document-kind semantics, lifecycle semantics, configurable kanban columns for plans, Collab docs separation, execution-readiness independence, pinning, project inference/override, and the rule that <span class="kbd">⌘O</span> searches all documents.</li>
+        <li>Run the repo's full gates and fix product/test issues within this plan scope.</li>
+      </ol>
+      <h4>Verify</h4>
+      <pre>bun run build
+bun run test
+bun run test:e2e
+bun run test:fixtures</pre>
+    </article>
+  </section>
+
+  <section id="verification-strategy">
+    <h2>Verification strategy</h2>
+    <ul>
+      <li>Use migration/contract tests as the primary evidence that existing plan and collaboration document data remains safe.</li>
+      <li>Use browser e2e tests as the primary evidence for document-kind filtering, current-document safety, kanban board rendering, Collab docs view rendering, drag/drop movement, column configuration, category switching, pin/column toggles, sorting, and quick-open behavior.</li>
+      <li>Run the full repo gate before marking execution complete because this changes public API, CLI, index UI, and review shell behavior.</li>
+      <li>Manually inspect the registered plan-reviewer UI only after automated tests pass, focusing on crowded toolbar behavior and category discoverability.</li>
+    </ul>
+  </section>
+
+  <section id="non-goals">
+    <h2>Non-goals</h2>
+    <ul>
+      <li>No authentication, multi-user ownership, or permission system.</li>
+      <li>No cloud sync or GitHub project synchronization.</li>
+      <li>No automatic source HTML rewrites when document-kind filters, column, project, lifecycle, or pin changes.</li>
+      <li>No deletion of old lifecycle fields in this implementation slice.</li>
+      <li>No bulk project-management screen beyond the per-plan project override controls in this implementation slice.</li>
+      <li>No new document-kind enum beyond existing <code>reviewMode</code>; this consolidates filtering and views around the current planning/collaboration distinction.</li>
+    </ul>
+  </section>
+
+  <section id="resume-instructions">
+    <h2>Resume instructions</h2>
+    <ol>
+      <li>Open GitHub issue <a href="https://github.com/Nodaste-Lab/plan-reviewer/issues/43">#43</a> and this registered plan.</li>
+      <li>Process browser-review comments through <code>plan-review agent next</code> before editing.</li>
+      <li>Implementation is complete through Phase 4.</li>
+      <li>Verification passed: <code>bun run test</code>, <code>bun run test:e2e</code>, and <code>bun run test:fixtures</code>.</li>
+      <li>Before handoff, review the final scoped diff and preserve the existing untracked plan file <code>thoughts/plans/pi-plan-mode-registration-monitor-fix.html</code>; it predates this work.</li>
+    </ol>
+  </section>
+
+  <section id="decisions-log">
+    <h2>Decisions / Deviations Log</h2>
+    <ul>
+      <li id="log-2026-06-19-created">2026-06-19: Created GitHub issue <a href="https://github.com/Nodaste-Lab/plan-reviewer/issues/43">#43</a> and initial active-planning HTML plan. No product code changed.</li>
+      <li id="log-2026-06-21-lifecycle-status-split">2026-06-21: Browser review clarified that lifecycle, board column, and execution readiness are separate axes: lifecycle is <code>active</code>/<code>deferred</code>/<code>archived</code>, board columns are configurable workflow status, and execution readiness remains independent agent-provided metadata. Registration and re-registration must not infer board column from <code>--execution-ready</code>; agents must explicitly call the column API/CLI when workflow status changes.</li>
+      <li id="log-2026-06-21-left-nav-always-present">2026-06-21: Browser review clarified that the left navigator is always present when viewing a document in any lifecycle/column/readiness/document-kind state; Phase 3 now requires the current document to remain represented there.</li>
+      <li id="log-2026-06-21-project-overrides">2026-06-21: Browser review accepted adding explicit project overrides in this slice; project inference remains the default but API/CLI/UI controls must let humans or agents correct wrong grouping without source-plan edits.</li>
+      <li id="log-2026-06-21-kanban-scope">2026-06-21: Browser review expanded scope to a configurable kanban board with default columns Backlog, Ready to Pull, In Progress, and Done; drag/drop card moves; persisted column configuration; and execution readiness as a separate agent-provided signal.</li>
+      <li id="log-2026-06-21-collab-consolidation">2026-06-21: Browser review asked to consolidate <a href="http://mbp.braid-python.ts.net:4317/p/plan_YXWUdjBxmHC7">plan_YXWUdjBxmHC7</a>. This plan now owns document-view separation: planning docs appear on the Kanban board, mixed discovery appears through All documents, collaboration docs appear through Collab docs, and <span class="kbd">⌘O</span> searches all documents.</li>
+      <li id="log-2026-06-21-readiness-cli-parity">2026-06-21: Execution-readiness review required explicit CLI/test parity for project override and lifecycle commands, not only column/configuration/pin commands. Phase 4 and the test matrix now gate <code>project set</code>, <code>lifecycle set</code>, column/configuration, and pin commands with JSON success/error coverage.</li>
+      <li id="log-2026-06-21-execution-ready">2026-06-21: After the CLI/test parity blocker was integrated, both independent rerun reviewers returned <code>PLAN_EXECUTION_READY</code>; the plan was re-registered with <code>--execution-ready true</code> and is ready for scoped execution.</li>
+      <li id="log-2026-06-21-implementation-complete">2026-06-21: Implemented organization metadata, configurable board columns, Kanban/All/Collab views, review-shell organization controls, quick-open search expansion, CLI parity, and regression coverage. Verification passed with <code>bun run test</code>, <code>bun run test:e2e</code>, and <code>bun run test:fixtures</code>.</li>
+      <li id="log-2026-06-21-pre-pr-review-followups">2026-06-21: Pre-PR GPT and GLM rereviews returned <code>CLEAN_FOR_PR</code>. Non-blocking follow-ups logged separately: emit <code>plan.columns.changed</code> for concurrent column-config refreshes, replace the review-shell free-text Status control with visible column choices, and decide whether pin/project commands should be planning-only or apply to collaboration documents.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>

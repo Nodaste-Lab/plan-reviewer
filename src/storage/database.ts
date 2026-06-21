@@ -16,6 +16,7 @@ import type {
   ResumePlanInput,
   PlanLifecycleState,
   PlanPublicationMetadata,
+  SaveBoardColumnsInput,
   PlanPullRequest,
   DeliveryAdapter,
   DeliveryStatus,
@@ -53,6 +54,20 @@ export interface PlanRecord {
   lastSyncStatus?: string;
   lastSyncError?: Record<string, unknown> | null;
   archivedAt?: string;
+  boardColumnKey?: string;
+  pinnedAt?: string;
+  projectKey: string;
+  projectName: string;
+  projectOverriddenAt?: string;
+}
+
+export interface BoardColumnRecord {
+  key: string;
+  label: string;
+  position: number;
+  isDone: boolean;
+  isDefault: boolean;
+  hiddenAt?: string;
 }
 
 export interface PlanProgress {
@@ -198,6 +213,32 @@ function optionalString(value: unknown): string | undefined {
 function lifecycleStateFromRow(row: Record<string, unknown>): PlanLifecycleState {
   if (optionalString(row.archivedAt) || optionalString(row.archived_at)) return 'archived';
   return optionalString(row.lifecycleState) === 'deferred' || optionalString(row.lifecycle_state) === 'deferred' ? 'deferred' : 'active';
+}
+
+function normalizeProjectKey(value: string): string {
+  const normalized = slugify(value).replace(/^-+|-+$/g, '');
+  return normalized || 'uncategorized';
+}
+
+function inferProjectName(input: { rootPath?: string | null; repoName?: string | null; sourcePath?: string | null; planPath?: string | null }): string {
+  const root = optionalString(input.rootPath);
+  if (root) {
+    const base = path.basename(root);
+    if (base) return base;
+  }
+  const source = optionalString(input.sourcePath) ?? optionalString(input.planPath);
+  if (source) {
+    const parts = source.split(/[\\/]/).filter(Boolean);
+    const thoughtsIndex = parts.indexOf('thoughts');
+    if (thoughtsIndex > 0) return parts[thoughtsIndex - 1];
+  }
+  return optionalString(input.repoName) ?? 'Uncategorized';
+}
+
+function defaultBoardColumnForProgress(progress: PlanProgress): string {
+  if (progress.totalPhases > 0 && progress.completedPhases === progress.totalPhases) return 'done';
+  if (progress.completedPhases > 0) return 'in_progress';
+  return 'backlog';
 }
 
 function noteAuthor(input?: { displayName?: string }): Record<string, unknown> {
@@ -380,6 +421,16 @@ export class PlanReviewStore {
         updated_at TEXT NOT NULL,
         UNIQUE(repo_id, plan_path, slug)
       );
+      CREATE TABLE IF NOT EXISTS board_columns (
+        key TEXT PRIMARY KEY,
+        label TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        is_done INTEGER NOT NULL DEFAULT 0,
+        is_default INTEGER NOT NULL DEFAULT 0,
+        hidden_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS plan_versions (
         id TEXT PRIMARY KEY,
         plan_id TEXT NOT NULL REFERENCES plans(id),
@@ -556,6 +607,11 @@ export class PlanReviewStore {
     this.ensureColumn('plans', 'last_sync_error_json', 'TEXT');
     this.ensureColumn('plans', 'archived_at', 'TEXT');
     this.ensureColumn('plans', 'publication_metadata_json', 'TEXT');
+    this.ensureColumn('plans', 'board_column_key', 'TEXT');
+    this.ensureColumn('plans', 'pinned_at', 'TEXT');
+    this.ensureColumn('plans', 'project_key', 'TEXT');
+    this.ensureColumn('plans', 'project_name', 'TEXT');
+    this.ensureColumn('plans', 'project_overridden_at', 'TEXT');
     this.ensureColumn('comments', 'deleted_at', 'TEXT');
     this.ensureColumn('plan_versions', 'source_mtime_ms', 'REAL');
     this.ensureColumn('plan_versions', 'source_size', 'INTEGER');
@@ -564,8 +620,27 @@ export class PlanReviewStore {
     this.ensureColumn('plan_versions', 'progress_json', 'TEXT');
     this.ensureColumn('plan_versions', 'progress_total', 'INTEGER');
     this.ensureColumn('plan_versions', 'progress_completed', 'INTEGER');
+    this.ensureDefaultBoardColumns();
     this.backfillThreadEntries();
     this.backfillPlanVersionMetadata();
+    this.backfillOrganizationMetadata();
+  }
+
+  private ensureDefaultBoardColumns(): void {
+    const now = nowIso();
+    const defaults: Array<{ key: string; label: string; position: number; isDone: boolean }> = [
+      { key: 'backlog', label: 'Backlog', position: 0, isDone: false },
+      { key: 'ready_to_pull', label: 'Ready to Pull', position: 1, isDone: false },
+      { key: 'in_progress', label: 'In Progress', position: 2, isDone: false },
+      { key: 'done', label: 'Done', position: 3, isDone: true }
+    ];
+    const insert = this.db.prepare(`INSERT INTO board_columns (key, label, position, is_done, is_default, hidden_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 1, NULL, ?, ?)
+      ON CONFLICT(key) DO NOTHING`);
+    const tx = this.db.transaction(() => {
+      for (const column of defaults) insert.run(column.key, column.label, column.position, column.isDone ? 1 : 0, now, now);
+    });
+    tx();
   }
 
   private backfillThreadEntries(): void {
@@ -617,6 +692,33 @@ export class PlanReviewStore {
           progress.completedPhases,
           row.id
         );
+      }
+    });
+    tx();
+  }
+
+  private backfillOrganizationMetadata(): void {
+    const rows = this.db.prepare(`
+      SELECT p.id, p.review_mode AS reviewMode, p.board_column_key AS boardColumnKey,
+        p.project_key AS projectKey, p.project_name AS projectName, p.project_overridden_at AS projectOverriddenAt,
+        p.plan_path AS planPath, p.source_path AS sourcePath, r.repo_name AS repoName, r.root_path AS rootPath,
+        v.progress_json AS progressJson
+      FROM plans p
+      JOIN repos r ON r.id = p.repo_id
+      LEFT JOIN plan_versions v ON v.id = (
+        SELECT id FROM plan_versions WHERE plan_id = p.id ORDER BY created_at DESC LIMIT 1
+      )
+      WHERE p.project_key IS NULL OR p.project_name IS NULL OR (p.review_mode = 'planning' AND p.board_column_key IS NULL) OR (p.review_mode = 'collaboration' AND p.board_column_key IS NOT NULL)
+    `).all() as Array<Record<string, unknown>>;
+    if (rows.length === 0) return;
+    const update = this.db.prepare('UPDATE plans SET project_key = ?, project_name = ?, board_column_key = ?, updated_at = updated_at WHERE id = ?');
+    const tx = this.db.transaction(() => {
+      for (const row of rows) {
+        const projectName = optionalString(row.projectName) ?? inferProjectName({ rootPath: optionalString(row.rootPath), repoName: optionalString(row.repoName), sourcePath: optionalString(row.sourcePath), planPath: optionalString(row.planPath) });
+        const projectKey = optionalString(row.projectKey) ?? normalizeProjectKey(projectName);
+        const progress = parseJson<PlanProgress | null>(row.progressJson as string | null, null) ?? { totalPhases: 0, completedPhases: 0, phases: [] };
+        const boardColumnKey = row.reviewMode === 'planning' ? (optionalString(row.boardColumnKey) ?? this.defaultVisibleBoardColumnKey(defaultBoardColumnForProgress(progress))) : null;
+        update.run(projectKey, projectName, boardColumnKey, row.id);
       }
     });
     tx();
@@ -713,6 +815,62 @@ export class PlanReviewStore {
     const file = path.join(dir, name);
     fs.writeFileSync(file, content);
     return file;
+  }
+
+  listBoardColumns(options: { includeHidden?: boolean } = {}): BoardColumnRecord[] {
+    const rows = this.db.prepare(`SELECT key, label, position, is_done AS isDone, is_default AS isDefault, hidden_at AS hiddenAt
+      FROM board_columns
+      ${options.includeHidden ? '' : 'WHERE hidden_at IS NULL'}
+      ORDER BY position ASC, key ASC`).all() as Array<Record<string, unknown>>;
+    return rows.map(row => ({
+      key: String(row.key),
+      label: String(row.label),
+      position: Number(row.position ?? 0),
+      isDone: Number(row.isDone ?? 0) === 1,
+      isDefault: Number(row.isDefault ?? 0) === 1,
+      hiddenAt: optionalString(row.hiddenAt)
+    }));
+  }
+
+  private requireVisibleBoardColumn(key: string): BoardColumnRecord {
+    const column = this.listBoardColumns().find(item => item.key === key);
+    if (!column) {
+      throw new PlanReviewError('validation_failed', `Board column '${key}' was not found`, 400, { boardColumnKey: key }, 'Run plan-review columns list, then retry with an existing visible column key.');
+    }
+    return column;
+  }
+
+  private defaultVisibleBoardColumnKey(preferredKey = 'backlog'): string {
+    const columns = this.listBoardColumns();
+    return columns.find(column => column.key === preferredKey)?.key ?? columns[0]?.key ?? 'backlog';
+  }
+
+  saveBoardColumns(input: SaveBoardColumnsInput): { columns: BoardColumnRecord[]; event?: StoredEvent } {
+    const now = nowIso();
+    const seen = new Set<string>();
+    const occupiedPlanCount = this.db.prepare("SELECT COUNT(*) AS count FROM plans WHERE review_mode = 'planning' AND board_column_key = ?");
+    const tx = this.db.transaction(() => {
+      const nextVisibility = new Map(this.listBoardColumns({ includeHidden: true }).map(column => [column.key, !column.hiddenAt]));
+      for (const column of input.columns) nextVisibility.set(column.key, !column.hidden);
+      if (![...nextVisibility.values()].some(Boolean)) {
+        throw new PlanReviewError('validation_failed', 'At least one board column must remain visible', 400, {}, 'Keep one visible column so new planning documents have a valid default destination.');
+      }
+      for (const [index, column] of input.columns.entries()) {
+        if (seen.has(column.key)) throw new PlanReviewError('validation_failed', `Duplicate board column key '${column.key}'`, 400, { key: column.key });
+        seen.add(column.key);
+        const occupied = Number((occupiedPlanCount.get(column.key) as { count?: number } | undefined)?.count ?? 0);
+        if (column.hidden && occupied > 0) {
+          throw new PlanReviewError('invalid_state', `Board column '${column.key}' still has ${occupied} plan${occupied === 1 ? '' : 's'}`, 409, { key: column.key, occupied }, 'Move plans out of the column before hiding it, or save a replacement target in a follow-up migration.');
+        }
+        this.db.prepare(`INSERT INTO board_columns (key, label, position, is_done, is_default, hidden_at, created_at, updated_at)
+          VALUES (?, ?, ?, ?, 0, ?, ?, ?)
+          ON CONFLICT(key) DO UPDATE SET label = excluded.label, position = excluded.position, is_done = excluded.is_done,
+            hidden_at = excluded.hidden_at, updated_at = excluded.updated_at`)
+          .run(column.key, column.label, column.position ?? index, column.isDone ? 1 : 0, column.hidden ? now : null, now, now);
+      }
+      return this.listBoardColumns({ includeHidden: true });
+    });
+    return { columns: tx() };
   }
 
   getPullRequest(planId: string): PlanPullRequest | null {
@@ -1057,19 +1215,27 @@ export class PlanReviewStore {
       const watchMode = input.watchMode ?? 'snapshot';
       const reviewMode = inferReviewMode(input);
       const lastSyncStatus = watchMode === 'filesystem' ? 'synced' : 'snapshot';
+      const inferredProjectName = inferProjectName({ rootPath: input.rootPath, repoName: input.repoName, sourcePath: input.sourcePath, planPath: input.planPath });
+      const inferredProjectKey = normalizeProjectKey(inferredProjectName);
+      const defaultBoardColumn = reviewMode === 'planning' ? this.defaultVisibleBoardColumnKey('backlog') : null;
       this.db
-        .prepare(`INSERT INTO plans (id, repo_id, slug, plan_path, source_path, watch_mode, review_mode, lifecycle_state, deferred_at, deferred_note_id, last_sync_at, last_sync_status, last_sync_error_json, archived_at, publication_metadata_json, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, 'active', NULL, NULL, ?, ?, ?, NULL, ?, ?, ?)
+        .prepare(`INSERT INTO plans (id, repo_id, slug, plan_path, source_path, watch_mode, review_mode, lifecycle_state, deferred_at, deferred_note_id, last_sync_at, last_sync_status, last_sync_error_json, archived_at, publication_metadata_json, board_column_key, pinned_at, project_key, project_name, project_overridden_at, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'active', NULL, NULL, ?, ?, ?, NULL, ?, ?, NULL, ?, ?, NULL, ?, ?)
           ON CONFLICT(repo_id, plan_path, slug) DO UPDATE SET updated_at = excluded.updated_at,
             source_path = excluded.source_path, watch_mode = excluded.watch_mode, review_mode = excluded.review_mode,
             last_sync_at = excluded.last_sync_at, last_sync_status = excluded.last_sync_status,
             last_sync_error_json = excluded.last_sync_error_json,
             publication_metadata_json = excluded.publication_metadata_json,
+            board_column_key = CASE WHEN excluded.review_mode = 'planning' THEN COALESCE(plans.board_column_key, excluded.board_column_key) ELSE NULL END,
+            project_key = CASE WHEN plans.project_overridden_at IS NULL THEN excluded.project_key ELSE plans.project_key END,
+            project_name = CASE WHEN plans.project_overridden_at IS NULL THEN excluded.project_name ELSE plans.project_name END,
+            project_overridden_at = plans.project_overridden_at,
+            pinned_at = plans.pinned_at,
             archived_at = plans.archived_at,
             lifecycle_state = plans.lifecycle_state,
             deferred_at = plans.deferred_at,
             deferred_note_id = plans.deferred_note_id`)
-        .run(planId, repoId, slug, input.planPath, input.sourcePath ?? null, watchMode, reviewMode, now, lastSyncStatus, null, input.publicationMetadata ? JSON.stringify(input.publicationMetadata) : null, now, now);
+        .run(planId, repoId, slug, input.planPath, input.sourcePath ?? null, watchMode, reviewMode, now, lastSyncStatus, null, input.publicationMetadata ? JSON.stringify(input.publicationMetadata) : null, defaultBoardColumn, inferredProjectKey, inferredProjectName, now, now);
 
       const htmlName = `${input.fileHash}.html`;
       const renderedName = `${sha256(renderedHtml)}.rendered.html`;
@@ -1173,6 +1339,8 @@ export class PlanReviewStore {
     const baseWhere = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
     const boundedLimit = options.limit && options.limit > 0 ? Math.floor(options.limit) : undefined;
     const orderBy = `ORDER BY
+      CASE WHEN p.pinned_at IS NULL THEN 1 ELSE 0 END ASC,
+      p.pinned_at DESC,
       CASE
         WHEN p.watch_mode = 'filesystem' AND p.last_sync_status = 'failed' THEN 3
         WHEN COALESCE(v.progress_total, 0) > 0 AND COALESCE(v.progress_completed, 0) = COALESCE(v.progress_total, 0) THEN 0
@@ -1189,6 +1357,7 @@ export class PlanReviewStore {
         p.review_mode AS reviewMode, p.lifecycle_state AS lifecycleState, p.deferred_at AS deferredAt, p.deferred_note_id AS deferredNoteId,
         p.last_sync_at AS lastSyncAt, p.last_sync_status AS lastSyncStatus, p.last_sync_error_json AS lastSyncErrorJson,
         p.archived_at AS archivedAt, p.publication_metadata_json AS publicationMetadataJson,
+        p.board_column_key AS boardColumnKey, p.pinned_at AS pinnedAt, p.project_key AS projectKey, p.project_name AS projectName, p.project_overridden_at AS projectOverriddenAt,
         r.repo_name AS repoName, r.repo_key AS repoKey, r.remote_url AS remoteUrl, r.root_path AS rootPath,
         v.id AS versionId, v.branch, v.commit_sha AS commitSha, v.file_hash AS fileHash,
         v.html_blob_path AS htmlBlobPath, v.display_title AS displayTitle, v.progress_json AS progressJson,
@@ -1254,7 +1423,12 @@ export class PlanReviewStore {
         publicationMetadata,
         linearIssueKey,
         linearIssueUrl: linearIssueKey ? linearIssueUrl(linearIssueKey) : undefined,
-        pullRequest: this.getPullRequest(planId)
+        pullRequest: this.getPullRequest(planId),
+        boardColumnKey: optionalString(row.boardColumnKey),
+        pinnedAt: optionalString(row.pinnedAt),
+        projectKey: optionalString(row.projectKey) ?? normalizeProjectKey(String(row.repoName ?? 'Uncategorized')),
+        projectName: optionalString(row.projectName) ?? String(row.repoName ?? 'Uncategorized'),
+        projectOverriddenAt: optionalString(row.projectOverriddenAt)
       },
       latestVersion: {
         id: row.versionId,
@@ -1281,6 +1455,8 @@ export class PlanReviewStore {
       };
     });
     return boundedLimit ? plans : plans.sort((a, b) => {
+      if (Boolean(a.plan.pinnedAt) !== Boolean(b.plan.pinnedAt)) return a.plan.pinnedAt ? -1 : 1;
+      if (a.plan.pinnedAt && b.plan.pinnedAt && a.plan.pinnedAt !== b.plan.pinnedAt) return String(b.plan.pinnedAt).localeCompare(String(a.plan.pinnedAt));
       const aStarted = a.progress.totalPhases > 0 && a.progress.completedPhases > 0;
       const bStarted = b.progress.totalPhases > 0 && b.progress.completedPhases > 0;
       if (aStarted !== bStarted) return bStarted ? 1 : -1;
@@ -1408,6 +1584,7 @@ export class PlanReviewStore {
         p.watch_mode AS watchMode, p.review_mode AS reviewMode, p.lifecycle_state AS lifecycleState, p.deferred_at AS deferredAt, p.deferred_note_id AS deferredNoteId,
         p.last_sync_at AS lastSyncAt, p.last_sync_status AS lastSyncStatus,
         p.last_sync_error_json AS lastSyncErrorJson, p.archived_at AS archivedAt, p.publication_metadata_json AS publicationMetadataJson,
+        p.board_column_key AS boardColumnKey, p.pinned_at AS pinnedAt, p.project_key AS projectKey, p.project_name AS projectName, p.project_overridden_at AS projectOverriddenAt,
         r.repo_name AS repoName, r.repo_key AS repoKey, r.remote_url AS remoteUrl, r.root_path AS rootPath,
         v.id AS versionId, v.file_hash AS fileHash, v.branch, v.commit_sha AS commitSha,
         v.html_blob_path AS htmlBlobPath, v.rendered_blob_path AS renderedBlobPath,
@@ -1426,6 +1603,7 @@ export class PlanReviewStore {
         p.watch_mode AS watchMode, p.review_mode AS reviewMode, p.lifecycle_state AS lifecycleState, p.deferred_at AS deferredAt, p.deferred_note_id AS deferredNoteId,
         p.last_sync_at AS lastSyncAt, p.last_sync_status AS lastSyncStatus,
         p.last_sync_error_json AS lastSyncErrorJson, p.archived_at AS archivedAt, p.publication_metadata_json AS publicationMetadataJson,
+        p.board_column_key AS boardColumnKey, p.pinned_at AS pinnedAt, p.project_key AS projectKey, p.project_name AS projectName, p.project_overridden_at AS projectOverriddenAt,
         r.repo_name AS repoName, r.repo_key AS repoKey, r.remote_url AS remoteUrl, r.root_path AS rootPath,
         v.id AS versionId, v.file_hash AS fileHash, v.branch, v.commit_sha AS commitSha,
         v.html_blob_path AS htmlBlobPath, v.rendered_blob_path AS renderedBlobPath,
@@ -1478,7 +1656,12 @@ export class PlanReviewStore {
         publicationMetadata,
         linearIssueKey,
         linearIssueUrl: linearIssueKey ? linearIssueUrl(linearIssueKey) : undefined,
-        pullRequest: this.getPullRequest(selectedRow.id)
+        pullRequest: this.getPullRequest(selectedRow.id),
+        boardColumnKey: optionalString(selectedRow.boardColumnKey),
+        pinnedAt: optionalString(selectedRow.pinnedAt),
+        projectKey: optionalString(selectedRow.projectKey) ?? normalizeProjectKey(String(selectedRow.repoName ?? 'Uncategorized')),
+        projectName: optionalString(selectedRow.projectName) ?? String(selectedRow.repoName ?? 'Uncategorized'),
+        projectOverriddenAt: optionalString(selectedRow.projectOverriddenAt)
       },
       version: {
         id: selectedRow.versionId,
@@ -1562,10 +1745,76 @@ export class PlanReviewStore {
         return { plan, event, changed: false };
       }
       const now = nowIso();
-      this.db.prepare('UPDATE plans SET review_mode = ?, updated_at = ? WHERE id = ?').run(reviewMode, now, plan.id);
+      const boardColumn = reviewMode === 'planning' ? (plan.boardColumnKey ?? this.defaultVisibleBoardColumnKey('backlog')) : null;
+      this.db.prepare('UPDATE plans SET review_mode = ?, board_column_key = ?, updated_at = ? WHERE id = ?').run(reviewMode, boardColumn, now, plan.id);
       const updated = this.getPlan(plan.id).plan;
       const event = this.addEvent(plan.id, 'plan.mode.changed', { eventType: 'plan.mode.changed', planId: plan.id, reviewMode, changed: true });
       return { plan: updated, event, changed: true };
+    });
+    return tx();
+  }
+
+  setPlanLifecycleState(identifier: string, lifecycleState: PlanLifecycleState): { plan: PlanRecord; event: StoredEvent; changed: boolean } {
+    const tx = this.db.transaction(() => {
+      const { plan } = this.getPlan(identifier);
+      const changed = plan.lifecycleState !== lifecycleState;
+      const now = nowIso();
+      if (changed) {
+        if (lifecycleState === 'archived') {
+          this.db.prepare("UPDATE plans SET lifecycle_state = 'archived', archived_at = COALESCE(archived_at, ?), updated_at = ? WHERE id = ?").run(now, now, plan.id);
+        } else if (lifecycleState === 'deferred') {
+          this.db.prepare("UPDATE plans SET lifecycle_state = 'deferred', archived_at = NULL, deferred_at = COALESCE(deferred_at, ?), updated_at = ? WHERE id = ?").run(now, now, plan.id);
+        } else {
+          this.db.prepare("UPDATE plans SET lifecycle_state = 'active', archived_at = NULL, deferred_at = NULL, deferred_note_id = NULL, updated_at = ? WHERE id = ?").run(now, plan.id);
+        }
+      }
+      const updated = this.getPlan(plan.id).plan;
+      const event = this.addEvent(plan.id, 'plan.lifecycle.changed', { eventType: 'plan.lifecycle.changed', planId: plan.id, lifecycleState, changed });
+      return { plan: updated, event, changed };
+    });
+    return tx();
+  }
+
+  setPlanBoardColumn(identifier: string, boardColumnKey: string): { plan: PlanRecord; column: BoardColumnRecord; event: StoredEvent; changed: boolean } {
+    const tx = this.db.transaction(() => {
+      const { plan } = this.getPlan(identifier);
+      if (plan.reviewMode !== 'planning') {
+        throw new PlanReviewError('not_applicable', 'Collaboration documents cannot be moved to board columns', 400, { planId: plan.id, reviewMode: plan.reviewMode }, 'Use the Collab docs view for collaboration documents; board columns apply only to planning documents.');
+      }
+      const column = this.requireVisibleBoardColumn(boardColumnKey);
+      const changed = plan.boardColumnKey !== column.key;
+      if (changed) this.db.prepare('UPDATE plans SET board_column_key = ?, updated_at = ? WHERE id = ?').run(column.key, nowIso(), plan.id);
+      const updated = this.getPlan(plan.id).plan;
+      const event = this.addEvent(plan.id, 'plan.column.changed', { eventType: 'plan.column.changed', planId: plan.id, boardColumnKey: column.key, changed });
+      return { plan: updated, column, event, changed };
+    });
+    return tx();
+  }
+
+  setPlanPinned(identifier: string, pinned: boolean): { plan: PlanRecord; event: StoredEvent; changed: boolean } {
+    const tx = this.db.transaction(() => {
+      const { plan } = this.getPlan(identifier);
+      const changed = Boolean(plan.pinnedAt) !== pinned;
+      const pinnedAt = pinned ? (plan.pinnedAt ?? nowIso()) : null;
+      if (changed) this.db.prepare('UPDATE plans SET pinned_at = ?, updated_at = ? WHERE id = ?').run(pinnedAt, nowIso(), plan.id);
+      const updated = this.getPlan(plan.id).plan;
+      const event = this.addEvent(plan.id, 'plan.pin.changed', { eventType: 'plan.pin.changed', planId: plan.id, pinned, pinnedAt: updated.pinnedAt, changed });
+      return { plan: updated, event, changed };
+    });
+    return tx();
+  }
+
+  setPlanProject(identifier: string, input: { projectName: string; projectKey?: string }): { plan: PlanRecord; event: StoredEvent; changed: boolean } {
+    const tx = this.db.transaction(() => {
+      const { plan } = this.getPlan(identifier);
+      const projectName = input.projectName.trim();
+      const projectKey = input.projectKey?.trim() || normalizeProjectKey(projectName);
+      const changed = plan.projectName !== projectName || plan.projectKey !== projectKey || !plan.projectOverriddenAt;
+      const now = nowIso();
+      if (changed) this.db.prepare('UPDATE plans SET project_key = ?, project_name = ?, project_overridden_at = COALESCE(project_overridden_at, ?), updated_at = ? WHERE id = ?').run(projectKey, projectName, now, now, plan.id);
+      const updated = this.getPlan(plan.id).plan;
+      const event = this.addEvent(plan.id, 'plan.project.changed', { eventType: 'plan.project.changed', planId: plan.id, projectKey, projectName, changed });
+      return { plan: updated, event, changed };
     });
     return tx();
   }

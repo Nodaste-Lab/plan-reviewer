@@ -102,7 +102,7 @@ test('review modes infer, override, expose, and change without source edits', as
     const shell = await app.inject({ method: 'GET', url: `/p/${planId}` });
     assert.equal(shell.statusCode, 200);
     assert.match(shell.body, /data-review-mode="collaboration"/);
-    assert.match(shell.body, /Document index/);
+    assert.match(shell.body, /Active documents/);
     assert.match(shell.body, /Archive document/);
     assert.doesNotMatch(shell.body, /Defer plan/);
     const client = await app.inject({ method: 'GET', url: '/client.js' });
@@ -1409,7 +1409,7 @@ test('index exposes phase progress and archive hides plans by default', async ()
     assert.equal(apiIndex.json().data.plans[0].plan.publicationMetadata.linearIssue, 'NOD-123');
     assert.equal(apiIndex.json().data.plans[0].plan.publicationMetadata.executionReady, false);
 
-    const htmlIndex = await app.inject({ method: 'GET', url: '/' });
+    const htmlIndex = await app.inject({ method: 'GET', url: '/?view=all' });
     assert.equal(htmlIndex.statusCode, 200);
     assert.match(htmlIndex.body, /2 of 3 phases complete/);
     assert.match(htmlIndex.body, /\/tmp\/sample\/thoughts\/plans\/sample-plan\.html/);
@@ -1533,7 +1533,7 @@ test('deferred lifecycle hides plans from active index and preserves agent-visib
     assert.match(deferredShell.body, /id="archive-plan"/);
     assert.doesNotMatch(deferredShell.body, /id="defer-plan"/);
 
-    const activeIndex = await app.inject({ method: 'GET', url: '/' });
+    const activeIndex = await app.inject({ method: 'GET', url: '/?view=all' });
     assert.match(activeIndex.body, /Deferred \(1\) →/);
     assert.doesNotMatch(activeIndex.body, /sample-plan<\/a>/);
 
@@ -1754,7 +1754,7 @@ test('index prioritizes started plan progress from most complete to least comple
       assert.equal(registered.statusCode, 200);
     }
 
-    const htmlIndex = await app.inject({ method: 'GET', url: '/' });
+    const htmlIndex = await app.inject({ method: 'GET', url: '/?view=all' });
     assert.equal(htmlIndex.statusCode, 200);
     const positions = ['done-plan', 'mostly-complete-plan', 'quarter-complete-plan', 'not-started-plan'].map(slug => htmlIndex.body.indexOf(slug));
     assert.deepEqual(positions.map(position => position >= 0), [true, true, true, true]);
@@ -1831,7 +1831,7 @@ test('index uses plan source modified time instead of comment activity', async (
     assert.notEqual(olderPlan.modifiedAt, olderPlan.activityAt);
     assert.match(invalidPlan.modifiedAt, /^\d{4}-\d{2}-\d{2}T/);
 
-    const htmlIndex = await app.inject({ method: 'GET', url: '/' });
+    const htmlIndex = await app.inject({ method: 'GET', url: '/?view=all' });
     assert.match(htmlIndex.body, new RegExp(`<time datetime="${new Date(olderMtime).toISOString()}" data-local-timestamp>`));
     assert.match(htmlIndex.body, new RegExp(`<time datetime="${new Date(newerMtime).toISOString()}" data-local-timestamp>`));
   } finally {
@@ -1865,7 +1865,7 @@ test('index makes failed filesystem source sync obvious before opening a plan', 
     assert.equal(registered.statusCode, 200);
     assert.equal(registered.json().data.sourceSync.status, 'failed');
 
-    const index = await app.inject({ method: 'GET', url: '/' });
+    const index = await app.inject({ method: 'GET', url: '/?view=all' });
     assert.equal(index.statusCode, 200);
     assert.match(index.body, /1 plan · source file missing/);
     assert.match(index.body, /data-attention-filter/);
@@ -1903,7 +1903,7 @@ test('archive page keeps archived context while noting failed source sync', asyn
     const planId = registered.json().data.planId;
     assert.equal((await app.inject({ method: 'POST', url: `/api/plans/${planId}/archive` })).statusCode, 200);
 
-    const index = await app.inject({ method: 'GET', url: '/' });
+    const index = await app.inject({ method: 'GET', url: '/?view=all' });
     assert.doesNotMatch(index.body, /archived-missing-source/);
 
     const archive = await app.inject({ method: 'GET', url: '/archive' });
@@ -1933,7 +1933,7 @@ test('archive page renders archived plans and restore controls without mixing ac
     assert.equal((await app.inject({ method: 'POST', url: `/api/plans/${olderId}/archive` })).statusCode, 200);
     assert.equal((await app.inject({ method: 'POST', url: `/api/plans/${newerId}/archive` })).statusCode, 200);
 
-    const index = await app.inject({ method: 'GET', url: '/' });
+    const index = await app.inject({ method: 'GET', url: '/?view=all' });
     assert.match(index.body, /Archived \(2\) →/);
     assert.match(index.body, /active-plan/);
     assert.doesNotMatch(index.body, /older-archive/);
@@ -1951,7 +1951,7 @@ test('archive page renders archived plans and restore controls without mixing ac
 
     const restored = await app.inject({ method: 'POST', url: `/api/plans/${newerId}/unarchive` });
     assert.equal(restored.statusCode, 200);
-    const postRestoreIndex = await app.inject({ method: 'GET', url: '/' });
+    const postRestoreIndex = await app.inject({ method: 'GET', url: '/?view=all' });
     assert.match(postRestoreIndex.body, /newer-archive/);
     const postRestoreArchive = await app.inject({ method: 'GET', url: '/archive' });
     assert.doesNotMatch(postRestoreArchive.body, /newer-archive/);
@@ -1976,6 +1976,197 @@ test('empty archive page is quiet and archived shell shows restore state', async
     assert.match(shell.body, /Archived/);
     assert.match(shell.body, /id="restore-plan"/);
     assert.doesNotMatch(shell.body, />Archive plan</);
+  } finally {
+    await app.close();
+  }
+});
+
+test('organization APIs persist columns, pins, projects, and lifecycle metadata', async () => {
+  const app = createApp({ dbPath: tempDbPath('organization-apis') });
+  try {
+    const registered = await app.inject({ method: 'POST', url: '/api/plans/register', payload: sampleRegisterPayload() });
+    assert.equal(registered.statusCode, 200, registered.body);
+    const planId = registered.json().data.planId;
+
+    const initial = await app.inject({ method: 'GET', url: `/api/plans/${planId}` });
+    assert.equal(initial.statusCode, 200, initial.body);
+    assert.equal(initial.json().data.plan.lifecycleState, 'active');
+    assert.equal(initial.json().data.plan.boardColumnKey, 'backlog');
+    assert.equal(initial.json().data.plan.projectName, 'sample');
+    assert.equal(initial.json().data.plan.projectKey, 'sample');
+    assert.equal(initial.json().data.plan.pinnedAt, undefined);
+
+    const completeHtml = '<!doctype html><html><body><section id="progress"><h2>Progress</h2><ul><li><input type="checkbox" checked /> Phase 1 - Done</li></ul></section></body></html>';
+    const complete = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload({ slug: 'complete-new-plan', planPath: 'thoughts/plans/complete-new-plan.html', html: completeHtml, fileHash: sha256(completeHtml) })
+    });
+    assert.equal(complete.statusCode, 200, complete.body);
+    const completeDetail = await app.inject({ method: 'GET', url: `/api/plans/${complete.json().data.planId}` });
+    assert.equal(completeDetail.json().data.plan.boardColumnKey, 'backlog');
+    assert.equal(completeDetail.json().data.progress.completedPhases, 1);
+
+    const kanban = await app.inject({ method: 'GET', url: '/' });
+    assert.equal(kanban.statusCode, 200);
+    assert.match(kanban.body, /Plans · Kanban/);
+    assert.match(kanban.body, /data-column-key="backlog"/);
+    assert.match(kanban.body, /data-plan-id="[^"]+" data-column="backlog"/);
+    assert.match(kanban.body, /Configure columns/);
+    assert.match(kanban.body, /Execution not ready/);
+
+    const columns = await app.inject({ method: 'GET', url: '/api/board-columns' });
+    assert.equal(columns.statusCode, 200);
+    assert.deepEqual(columns.json().data.columns.map((column: { key: string }) => column.key), ['backlog', 'ready_to_pull', 'in_progress', 'done']);
+
+    const occupiedHide = await app.inject({
+      method: 'PUT',
+      url: '/api/board-columns',
+      payload: { columns: [{ key: 'backlog', label: 'Backlog', position: 0, hidden: true }] }
+    });
+    assert.equal(occupiedHide.statusCode, 409);
+    assert.equal(occupiedHide.json().error.code, 'invalid_state');
+    assert.match(occupiedHide.json().error.nextAction, /Move plans out of the column/);
+
+    const savedColumns = await app.inject({
+      method: 'PUT',
+      url: '/api/board-columns',
+      payload: {
+        columns: [
+          { key: 'in_progress', label: 'Doing', position: 0 },
+          { key: 'backlog', label: 'Backlog', position: 1 },
+          { key: 'ready_to_pull', label: 'Ready to Pull', position: 2 },
+          { key: 'done', label: 'Done', position: 3, isDone: true }
+        ]
+      }
+    });
+    assert.equal(savedColumns.statusCode, 200, savedColumns.body);
+    assert.deepEqual(savedColumns.json().data.columns.filter((column: { hiddenAt?: string }) => !column.hiddenAt).map((column: { key: string }) => column.key), ['in_progress', 'backlog', 'ready_to_pull', 'done']);
+
+    const moved = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/column`, payload: { boardColumnKey: 'in_progress' } });
+    assert.equal(moved.statusCode, 200, moved.body);
+    assert.equal(moved.json().data.plan.boardColumnKey, 'in_progress');
+    assert.equal(moved.json().data.column.label, 'Doing');
+
+    const pinned = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/pin`, payload: { pinned: true } });
+    assert.equal(pinned.statusCode, 200, pinned.body);
+    assert.match(pinned.json().data.plan.pinnedAt, /^\d{4}-\d{2}-\d{2}T/);
+
+    const project = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/project`, payload: { projectName: 'Issue 43', projectKey: 'issue-43' } });
+    assert.equal(project.statusCode, 200, project.body);
+    assert.equal(project.json().data.plan.projectName, 'Issue 43');
+    assert.equal(project.json().data.plan.projectKey, 'issue-43');
+    assert.match(project.json().data.plan.projectOverriddenAt, /^\d{4}-\d{2}-\d{2}T/);
+
+    const deferred = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/lifecycle`, payload: { lifecycleState: 'deferred' } });
+    assert.equal(deferred.statusCode, 200, deferred.body);
+    assert.equal(deferred.json().data.plan.lifecycleState, 'deferred');
+    assert.match(deferred.json().data.plan.deferredAt, /^\d{4}-\d{2}-\d{2}T/);
+
+    const active = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/lifecycle`, payload: { lifecycleState: 'active' } });
+    assert.equal(active.statusCode, 200, active.body);
+    assert.equal(active.json().data.plan.lifecycleState, 'active');
+    assert.equal(active.json().data.plan.deferredAt, undefined);
+
+    const changedToCollab = await app.inject({ method: 'PATCH', url: `/api/plans/${planId}`, payload: { reviewMode: 'collaboration' } });
+    assert.equal(changedToCollab.statusCode, 200, changedToCollab.body);
+    assert.equal(changedToCollab.json().data.plan.boardColumnKey, undefined);
+    const invalidColumn = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/column`, payload: { boardColumnKey: 'done' } });
+    assert.equal(invalidColumn.statusCode, 400);
+    assert.equal(invalidColumn.json().error.code, 'not_applicable');
+  } finally {
+    await app.close();
+  }
+});
+
+test('hidden backlog does not orphan new planning documents', async () => {
+  const app = createApp({ dbPath: tempDbPath('hidden-backlog-default') });
+  try {
+    const hideBacklog = await app.inject({
+      method: 'PUT',
+      url: '/api/board-columns',
+      payload: { columns: [{ key: 'backlog', label: 'Backlog', position: 0, hidden: true }] }
+    });
+    assert.equal(hideBacklog.statusCode, 200, hideBacklog.body);
+
+    const registered = await app.inject({ method: 'POST', url: '/api/plans/register', payload: sampleRegisterPayload({ slug: 'visible-default', planPath: 'thoughts/plans/visible-default.html' }) });
+    assert.equal(registered.statusCode, 200, registered.body);
+    const detail = await app.inject({ method: 'GET', url: `/api/plans/${registered.json().data.planId}` });
+    assert.equal(detail.json().data.plan.boardColumnKey, 'ready_to_pull');
+
+    const kanban = await app.inject({ method: 'GET', url: '/' });
+    assert.match(kanban.body, /data-column-key="ready_to_pull"/);
+    assert.match(kanban.body, /visible-default/);
+    assert.doesNotMatch(kanban.body, /data-column-key="backlog"/);
+
+    const hideEveryColumn = await app.inject({
+      method: 'PUT',
+      url: '/api/board-columns',
+      payload: {
+        columns: [
+          { key: 'backlog', label: 'Backlog', position: 0, hidden: true },
+          { key: 'ready_to_pull', label: 'Ready to Pull', position: 1, hidden: true },
+          { key: 'in_progress', label: 'In Progress', position: 2, hidden: true },
+          { key: 'done', label: 'Done', position: 3, hidden: true }
+        ]
+      }
+    });
+    assert.equal(hideEveryColumn.statusCode, 400);
+  } finally {
+    await app.close();
+  }
+});
+
+test('lifecycle API active transition immediately syncs filesystem sources', async () => {
+  const app = createApp({ dbPath: tempDbPath('lifecycle-active-sync') });
+  const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-review-lifecycle-active-sync-'));
+  const sourcePath = path.join(sourceDir, 'live-plan.html');
+  const html = '<!doctype html><html><body><main><p>Before lifecycle sync.</p></main></body></html>';
+  fs.writeFileSync(sourcePath, html);
+  const stat = fs.statSync(sourcePath);
+  try {
+    const registered = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload({
+        planPath: 'live-plan.html',
+        slug: 'lifecycle-active-sync',
+        html,
+        fileHash: sha256(html),
+        sourcePath,
+        sourceMtimeMs: stat.mtimeMs,
+        sourceSize: stat.size,
+        watchMode: 'filesystem',
+        assets: []
+      })
+    });
+    assert.equal(registered.statusCode, 200, registered.body);
+    const planId = registered.json().data.planId;
+    assert.equal((await app.inject({ method: 'PUT', url: `/api/plans/${planId}/lifecycle`, payload: { lifecycleState: 'deferred' } })).statusCode, 200);
+
+    const changedHtml = '<!doctype html><html><body><main><p>Lifecycle active sync updated.</p></main></body></html>';
+    fs.writeFileSync(sourcePath, changedHtml);
+    const active = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/lifecycle`, payload: { lifecycleState: 'active' } });
+    assert.equal(active.statusCode, 200, active.body);
+    assert.match((await app.inject({ method: 'GET', url: `/render/${planId}` })).body, /Lifecycle active sync updated/);
+  } finally {
+    await app.close();
+    fs.rmSync(sourceDir, { recursive: true, force: true });
+  }
+});
+
+test('review client consumes organization events and paginates quick-open source data', async () => {
+  const app = createApp({ dbPath: tempDbPath('organization-client-events') });
+  try {
+    const registered = await app.inject({ method: 'POST', url: '/api/plans/register', payload: sampleRegisterPayload() });
+    assert.equal(registered.statusCode, 200, registered.body);
+    const client = await app.inject({ method: 'GET', url: '/client.js' });
+    assert.equal(client.statusCode, 200);
+    for (const eventType of ['plan.lifecycle.changed', 'plan.column.changed', 'plan.pin.changed', 'plan.project.changed']) {
+      assert.match(client.body, new RegExp(eventType.replaceAll('.', '\\.')));
+    }
+    assert.match(client.body, /includeArchived=true&includeDeferred=true&limit=200/);
+    assert.match(client.body, /while \(cursor\)/);
   } finally {
     await app.close();
   }
@@ -3118,6 +3309,87 @@ function runCli(args: string[]): Promise<{ code: number | null; stdout: string; 
   });
 }
 
+test('CLI organization commands map to REST endpoints', async () => {
+  const calls: Array<{ method?: string; url?: string; body?: unknown }> = [];
+  const columns = [
+    { key: 'backlog', label: 'Backlog', position: 0, isDone: false },
+    { key: 'ready_to_pull', label: 'Ready to Pull', position: 1, isDone: false },
+    { key: 'in_progress', label: 'In Progress', position: 2, isDone: false },
+    { key: 'done', label: 'Done', position: 3, isDone: true }
+  ];
+  const server = http.createServer((request, response) => {
+    const finish = (body?: unknown) => {
+      calls.push({ method: request.method, url: request.url, body });
+      response.setHeader('content-type', 'application/json');
+      if (request.url === '/api/board-columns' && request.method === 'GET') {
+        response.end(JSON.stringify({ ok: true, data: { columns } }));
+        return;
+      }
+      if (request.url === '/api/board-columns' && request.method === 'PUT') {
+        response.end(JSON.stringify({ ok: true, data: { columns: (body as { columns: unknown[] }).columns } }));
+        return;
+      }
+      if (request.url?.startsWith('/api/plans/plan_1/') && request.method === 'PUT') {
+        response.end(JSON.stringify({ ok: true, data: { plan: { id: 'plan_1' }, changed: true } }));
+        return;
+      }
+      response.statusCode = 404;
+      response.end(JSON.stringify({ ok: false, error: { code: 'not_found', message: 'not found' } }));
+    };
+    if (request.method === 'GET') {
+      finish();
+      return;
+    }
+    let body = '';
+    request.on('data', chunk => { body += chunk; });
+    request.on('end', () => finish(body ? JSON.parse(body) : undefined));
+  });
+
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address();
+    assert(address && typeof address !== 'string');
+    const serviceUrl = `http://127.0.0.1:${address.port}`;
+
+    const list = await runCli(['columns', 'list', '--url', serviceUrl]);
+    assert.equal(list.code, 0, list.stderr);
+    assert.match(list.stdout, /backlog\tBacklog\t0\tno/);
+
+    const saveOrder = await runCli(['columns', 'save-order', 'done,backlog', '--url', serviceUrl, '--json']);
+    assert.equal(saveOrder.code, 0, saveOrder.stderr);
+    assert.deepEqual(JSON.parse(saveOrder.stdout).columns.map((column: { key: string; position: number }) => [column.key, column.position]), [
+      ['done', 0],
+      ['backlog', 1],
+      ['ready_to_pull', 2],
+      ['in_progress', 3]
+    ]);
+
+    assert.equal((await runCli(['column', 'set', 'plan_1', 'in_progress', '--url', serviceUrl])).code, 0);
+    assert.equal((await runCli(['pin', 'plan_1', '--url', serviceUrl])).code, 0);
+    assert.equal((await runCli(['unpin', 'plan_1', '--url', serviceUrl])).code, 0);
+    assert.equal((await runCli(['project', 'set', 'plan_1', 'Issue 43', '--project-key', 'issue-43', '--url', serviceUrl])).code, 0);
+    assert.equal((await runCli(['lifecycle', 'set', 'plan_1', 'deferred', '--url', serviceUrl])).code, 0);
+
+    assert.deepEqual(calls.map(call => [call.method, call.url, call.body]), [
+      ['GET', '/api/board-columns', undefined],
+      ['GET', '/api/board-columns', undefined],
+      ['PUT', '/api/board-columns', { columns: [
+        { key: 'done', label: 'Done', position: 0, isDone: true },
+        { key: 'backlog', label: 'Backlog', position: 1, isDone: false },
+        { key: 'ready_to_pull', label: 'Ready to Pull', position: 2, isDone: false },
+        { key: 'in_progress', label: 'In Progress', position: 3, isDone: false }
+      ] }],
+      ['PUT', '/api/plans/plan_1/column', { boardColumnKey: 'in_progress' }],
+      ['PUT', '/api/plans/plan_1/pin', { pinned: true }],
+      ['PUT', '/api/plans/plan_1/pin', { pinned: false }],
+      ['PUT', '/api/plans/plan_1/project', { projectName: 'Issue 43', projectKey: 'issue-43' }],
+      ['PUT', '/api/plans/plan_1/lifecycle', { lifecycleState: 'deferred' }]
+    ]);
+  } finally {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
+
 test('CLI show and comments add expose native agent comment contract', async () => {
   const requests: Array<{ url?: string; body?: unknown }> = [];
   const server = http.createServer((request, response) => {
@@ -4005,7 +4277,7 @@ test('index groups plans by repo and sorts API plans by comment activity', async
     assert.equal(invalidCursor.statusCode, 400);
     assert.equal(invalidCursor.json().error.code, 'validation_failed');
 
-    const htmlIndex = await app.inject({ method: 'GET', url: '/' });
+    const htmlIndex = await app.inject({ method: 'GET', url: '/?view=all' });
     assert.match(htmlIndex.body, /class="repo-group"/);
     assert.match(htmlIndex.body, />sample</);
     assert.match(htmlIndex.body, />other</);
@@ -4656,7 +4928,7 @@ test('filesystem source recovery watcher syncs after startup read failure', asyn
       const current = await recoveryApp.inject({ method: 'GET', url: `/api/plans/${planId}` });
       return current.json().data.plan.lastSyncStatus === 'failed';
     });
-    const failedIndex = await recoveryApp.inject({ method: 'GET', url: '/' });
+    const failedIndex = await recoveryApp.inject({ method: 'GET', url: '/?view=all' });
     assert.match(failedIndex.body, /Source missing/);
     assert.match(failedIndex.body, /data-needs-attention="true"/);
 
@@ -4668,7 +4940,7 @@ test('filesystem source recovery watcher syncs after startup read failure', asyn
     });
     const recovered = await recoveryApp.inject({ method: 'GET', url: `/api/plans/${planId}` });
     assert.equal(recovered.json().data.plan.lastSyncStatus, 'synced');
-    const recoveredIndex = await recoveryApp.inject({ method: 'GET', url: '/' });
+    const recoveredIndex = await recoveryApp.inject({ method: 'GET', url: '/?view=all' });
     assert.doesNotMatch(recoveredIndex.body, /Source missing/);
     assert.doesNotMatch(recoveredIndex.body, /data-needs-attention="true"/);
   } finally {

@@ -101,8 +101,11 @@ try {
   const index = await context.get('/');
   assert.equal(index.ok(), true);
   const indexHtml = await index.text();
-  assert.match(indexHtml, /Plan Review Index/);
+  assert.match(indexHtml, /Plans · Kanban/);
   assert.match(indexHtml, /rel="icon" type="image\/svg\+xml" href="\/favicon\.svg"/);
+  const allDocumentsIndex = await context.get('/?view=all');
+  assert.equal(allDocumentsIndex.ok(), true);
+  assert.match(await allDocumentsIndex.text(), /Plan Review Index/);
   const favicon = await context.get('/favicon.svg');
   assert.equal(favicon.ok(), true);
   assert.equal(favicon.headers()['cache-control'], 'no-store');
@@ -487,7 +490,7 @@ try {
     }
 
 	    const page = await browser.newPage();
-    await page.goto(`${baseUrl}/`);
+    await page.goto(`${baseUrl}/?view=all`);
     await page.waitForSelector('[data-attention-filter]');
     assert.equal(await page.locator('.plan-card').count(), 2);
     await page.fill('#q', 'e2e');
@@ -674,16 +677,14 @@ try {
     assert.equal(await page.locator('#plan-frame').count(), 1);
     await page.keyboard.press('Control+O');
     await page.waitForSelector('#quick-open-dialog:not([hidden])');
-    await page.waitForSelector('#quick-open-error:not([hidden])');
-    assert.match(await page.locator('#quick-open-error').innerText(), /could not be loaded|unable to load/i);
-    await page.keyboard.press('Tab');
-    assert.equal(await page.evaluate(() => document.activeElement?.id), 'quick-open-retry');
-    await page.keyboard.press('Enter');
     await page.waitForSelector('#quick-open-error', { state: 'hidden' });
-    await page.waitForSelector('#plan-list-error', { state: 'hidden' });
-    assert.match(await page.locator('#plan-list-nav').innerText(), /E2E Plan/);
+    await page.fill('#quick-open-input', 'E2E Plan');
+    await page.waitForFunction(() => document.querySelector('#quick-open-results')?.textContent?.includes('E2E Plan'));
     await page.keyboard.press('Escape');
     await page.waitForSelector('#quick-open-dialog', { state: 'hidden' });
+    await page.click('#plan-list-retry');
+    await page.waitForSelector('#plan-list-error', { state: 'hidden' });
+    assert.match(await page.locator('#plan-list-nav').innerText(), /E2E Plan/);
     await page.waitForTimeout(500);
     assert.equal(planListRequests <= 3, true, `navigator refresh made too many requests: ${planListRequests}`);
     await page.unroute('**/api/plans/navigator?limit=200&currentPlanId=*');
@@ -1909,7 +1910,7 @@ try {
       await dialog.dismiss();
     });
 
-    await page.goto(`${baseUrl}/`);
+    await page.goto(`${baseUrl}/?view=all`);
     await page.route(`**/api/plans/${registered.planId}/archive`, route => route.abort('failed'));
     await page.click(`[data-archive-plan="${registered.planId}"]`);
     await page.waitForSelector('.archive-toast.error');
@@ -1978,7 +1979,7 @@ try {
     assert.equal(await page.locator(`[data-plan-nav-item][data-plan-id="${registered.planId}"]`).count(), 0);
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+O' : 'Control+O');
     await page.waitForSelector('#quick-open-backdrop:not([hidden])');
-    assert.equal(await page.locator(`[data-quick-open-result][data-plan-id="${registered.planId}"]`).count(), 0);
+    assert.equal(await page.locator(`[data-quick-open-result][data-plan-id="${registered.planId}"]`).count(), 1);
     await page.keyboard.press('Escape');
     await page.evaluate(() => {
       const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
@@ -2129,7 +2130,7 @@ try {
     await syncPage.goto(`${baseUrl}/p/${syncRegistered.planId}`);
     await syncPage.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.body?.textContent?.includes('Source sync v1'));
     await syncPage.waitForSelector('#plan-navbar');
-    assert.equal(await syncPage.locator('#plan-navbar a.nav-index').getAttribute('href'), '/');
+    assert.equal(await syncPage.locator('#plan-navbar .doc-kind-seg.active').getAttribute('href'), '/');
     const openSyncComposer = async () => {
       await syncPage.evaluate(() => {
         const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame');

@@ -23,11 +23,16 @@ import {
   registerPlanSchema,
   releaseCommentSchema,
   resolveCommentSchema,
-  resumePlanSchema
+  resumePlanSchema,
+  saveBoardColumnsSchema,
+  setPlanBoardColumnSchema,
+  setPlanLifecycleSchema,
+  setPlanPinnedSchema,
+  setPlanProjectSchema
 } from '../schemas.js';
 import { renderPlan } from '../render/render.js';
 import { buildRegistrationAgentInstructions } from '../registrationInstructions.js';
-import { PlanReviewStore, type StoredEvent } from '../storage/database.js';
+import { PlanReviewStore, type BoardColumnRecord, type StoredEvent } from '../storage/database.js';
 import { SourceSyncService } from './sourceSync.js';
 import { fail, ok, PlanReviewError } from '../util.js';
 import { planTitleFallback, renderedHtmlTitle, reviewShellTitle } from '../planTitles.js';
@@ -174,7 +179,7 @@ function planCardSearch(item: ListedPlan): string {
   const prTerms = pr ? ` ${pr.url} ${pr.number} ${pr.state} ${pr.status ?? ''} ${pr.merged ? 'merged' : ''} pr ${pr.status ?? pr.state} pr ${pr.state} pull request pr` : ' no pr unlinked';
   const linearTerms = ` ${metadata?.linearIssue ?? ''} ${item.plan.linearIssueKey ?? ''} ${item.plan.linearIssueUrl ?? ''}`;
   const attentionTerms = planNeedsAttention(item) ? ' needs attention source missing source unavailable failed cached copy' : '';
-  return `${item.plan.repoName} ${item.plan.repoKey} ${item.plan.slug} ${item.plan.reviewMode} ${fullyQualifiedPlanPath(item)} ${metadata?.worktreePath ?? ''} ${metadata?.branch ?? ''} ${item.latestNote?.body ?? ''}${linearTerms}${prTerms}${attentionTerms}`.toLowerCase();
+  return `${item.plan.repoName} ${item.plan.repoKey} ${item.plan.slug} ${item.plan.reviewMode} ${item.plan.projectKey} ${item.plan.projectName} ${item.plan.lifecycleState} ${item.plan.boardColumnKey ?? ''} ${item.plan.pinnedAt ? 'pinned' : 'unpinned'} ${metadata?.executionReady ? 'execution ready ready' : 'execution not ready not-ready'} ${fullyQualifiedPlanPath(item)} ${metadata?.worktreePath ?? ''} ${metadata?.branch ?? ''} ${item.latestNote?.body ?? ''}${linearTerms}${prTerms}${attentionTerms}`.toLowerCase();
 }
 
 function hasStartedPlanProgress(item: ListedPlan): boolean {
@@ -277,7 +282,53 @@ function repoGroupsHtml(plans: ListedPlan[]): string {
   return groups.join('\n');
 }
 
-function indexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCount: number, deferredCount: number): string {
+function organizationIndexStyles(): string {
+  return `.doc-kind-switcher{display:inline-flex;gap:2px;padding:3px;border:1px solid #334155;border-radius:999px;background:#08111f}.doc-kind-seg{border-radius:999px;padding:6px 10px;color:#a7b0c0;font-size:12px;font-weight:850;text-decoration:none}.doc-kind-seg.active{background:#0ea5e9;color:#e0f2fe}.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px}.kanban-board{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}.kanban-column{background:#0b1220;border:1px solid #334155;border-radius:12px;padding:10px;min-height:180px}.kanban-column h2{font-size:16px;margin:0 0 8px;display:flex;justify-content:space-between}.kanban-card{border:1px solid #253248;border-radius:10px;background:#111827;padding:12px;margin:8px 0}.kanban-card[draggable=true]{cursor:grab}.kanban-card.pinned{border-color:#facc15}.badge{display:inline-block;border:1px solid #475569;border-radius:999px;padding:1px 7px;background:#0b1220;color:#cbd5e1;font-size:12px;margin:2px}.badge.ready{border-color:#22c55e;color:#bbf7d0}.badge.not-ready{border-color:#f59e0b;color:#fde68a}.pin-button{border:1px solid #facc15!important;color:#fef08a!important}.drop-target{outline:2px dashed #7dd3fc;outline-offset:-4px}.card-summary{color:#cbd5e1;font-size:13px}.card-detail-link{display:inline-block;margin-top:8px;font-weight:800}.collab-card{border-left-color:#a78bfa}.organizer-error{border:1px solid #fb7185;border-radius:8px;background:rgba(251,113,133,.12);color:#fecdd3;padding:10px;margin:12px 0}`;
+}
+
+function documentViewSwitcher(active: 'kanban' | 'all' | 'collab'): string {
+  const link = (view: 'kanban' | 'all' | 'collab', label: string, href: string) => `<a class="doc-kind-seg${active === view ? ' active' : ''}" href="${href}">${label}</a>`;
+  return `<nav class="doc-kind-switcher" aria-label="Document view selector">${link('kanban', 'Kanban', '/')}${link('all', 'All documents', '/?view=all')}${link('collab', 'Collab docs', '/?view=collab')}</nav>`;
+}
+
+function boardColumnLabel(columns: BoardColumnRecord[], key: string | undefined): string {
+  return columns.find(column => column.key === key)?.label ?? key ?? 'Unassigned';
+}
+
+function summaryForItem(item: ListedPlan): string {
+  return item.latestNote?.body ?? `${displayTitle(item)} · ${fullyQualifiedPlanPath(item)}`;
+}
+
+function issueBadgeHtml(item: ListedPlan): string {
+  if (item.plan.linearIssueKey) return `<span class="badge">Linear: <a href="${escapeHtml(item.plan.linearIssueUrl)}" target="_blank" rel="noreferrer">${escapeHtml(item.plan.linearIssueKey)}</a></span>`;
+  return '<span class="badge">Linear: none</span>';
+}
+
+function planBadgesHtml(item: ListedPlan, columns: BoardColumnRecord[]): string {
+  const ready = item.plan.publicationMetadata?.executionReady;
+  const progress = item.progress.totalPhases ? `${item.progress.completedPhases} of ${item.progress.totalPhases} phases complete` : 'No phases';
+  const attentionBadge = planNeedsAttention(item) ? '<span class="badge not-ready">Needs attention</span><span class="badge not-ready">Source missing</span>' : '';
+  return `<div class="card-meta"><span class="badge">${item.plan.reviewMode === 'collaboration' ? 'Collab doc' : 'Plan'}</span><span class="badge">Project: ${escapeHtml(item.plan.projectName)}</span>${issueBadgeHtml(item)}<span class="badge">State: ${escapeHtml(item.plan.lifecycleState)}</span>${item.plan.reviewMode === 'planning' ? `<span class="badge">Status: ${escapeHtml(boardColumnLabel(columns, item.plan.boardColumnKey))}</span><span class="badge ${ready ? 'ready' : 'not-ready'}">${ready ? 'Execution ready' : 'Execution not ready'}</span><span class="badge">Progress: ${escapeHtml(progress)}</span>` : ''}<span class="badge">Pending: ${item.counts.pending}</span>${item.plan.pinnedAt ? '<span class="badge">Pinned</span>' : ''}${attentionBadge}</div>`;
+}
+
+function kanbanCardHtml(item: ListedPlan, columns: BoardColumnRecord[]): string {
+  return `<article class="kanban-card${item.plan.pinnedAt ? ' pinned' : ''}" draggable="true" data-plan-id="${escapeHtml(item.plan.id)}" data-column="${escapeHtml(item.plan.boardColumnKey ?? '')}"><div class="plan-card-header"><strong><a href="/p/${escapeHtml(item.plan.id)}">${escapeHtml(displayTitle(item))}</a></strong><button class="pin-button" type="button" data-pin-plan="${escapeHtml(item.plan.id)}" aria-pressed="${item.plan.pinnedAt ? 'true' : 'false'}">${item.plan.pinnedAt ? '★' : '☆'}</button></div><p class="card-summary">${escapeHtml(summaryForItem(item))}</p>${planBadgesHtml(item, columns)}<a class="card-detail-link" href="/p/${escapeHtml(item.plan.id)}">Details / Open</a></article>`;
+}
+
+function kanbanIndexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCount: number, deferredCount: number, columns: BoardColumnRecord[]): string {
+  const planning = plans.filter(item => item.plan.reviewMode === 'planning');
+  const cardsFor = (column: BoardColumnRecord) => planning.filter(item => item.plan.boardColumnKey === column.key).sort((a, b) => (Boolean(a.plan.pinnedAt) === Boolean(b.plan.pinnedAt) ? 0 : a.plan.pinnedAt ? -1 : 1) || String(b.activityAt).localeCompare(String(a.activityAt)) || displayTitle(a).localeCompare(displayTitle(b))).map(item => kanbanCardHtml(item, columns)).join('\n');
+  const board = columns.map(column => `<section class="kanban-column" data-column-key="${escapeHtml(column.key)}"><h2>${escapeHtml(column.label)} <span>${planning.filter(item => item.plan.boardColumnKey === column.key).length}</span></h2>${cardsFor(column) || '<p class="muted">No plans.</p>'}</section>`).join('\n');
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Plans · Kanban</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"><style>${baseIndexStyles()}${organizationIndexStyles()}</style></head><body><main><div class="topbar"><button class="nav-link" type="button" aria-label="Menu">☰</button>${documentViewSwitcher('kanban')}<div class="plan-actions"><a class="nav-link primary" href="/columns">Configure columns</a><a class="nav-link primary" href="/deferred">Deferred (${deferredCount})</a><a class="nav-link primary" href="/archive">Archived (${archivedCount})</a></div></div><div class="page-header"><div><h1>Plans · Kanban</h1><p class="muted">Columns are workflow status for planning documents. Execution readiness is a separate badge.</p></div></div><div id="organizer-error" class="organizer-error" hidden></div><section class="kanban-board" aria-label="Plan board columns">${board}</section><script>${localTimestampScript()}\n${organizationScript()}</script></main></body></html>`;
+}
+
+function organizationScript(): string {
+  return `let draggedPlanId=null;document.addEventListener('dragstart',event=>{const card=event.target instanceof Element?event.target.closest('[data-plan-id]'):null;if(!card)return;draggedPlanId=card.dataset.planId;event.dataTransfer?.setData('text/plain',draggedPlanId||'');});document.addEventListener('dragover',event=>{const col=event.target instanceof Element?event.target.closest('[data-column-key]'):null;if(!col)return;event.preventDefault();col.classList.add('drop-target');});document.addEventListener('dragleave',event=>{const col=event.target instanceof Element?event.target.closest('[data-column-key]'):null;col?.classList.remove('drop-target');});document.addEventListener('drop',async event=>{const col=event.target instanceof Element?event.target.closest('[data-column-key]'):null;if(!col||!draggedPlanId)return;event.preventDefault();col.classList.remove('drop-target');const card=document.querySelector('[data-plan-id="'+CSS.escape(draggedPlanId)+'"]');const previous=card?.parentElement;col.appendChild(card);const res=await fetch('/api/plans/'+encodeURIComponent(draggedPlanId)+'/column',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({boardColumnKey:col.dataset.columnKey})}).catch(()=>null);if(!res?.ok){previous?.appendChild(card);const box=document.getElementById('organizer-error');if(box){box.hidden=false;box.textContent='Column update failed; the card was restored.';}}});document.addEventListener('click',async event=>{const button=event.target instanceof Element?event.target.closest('[data-pin-plan]'):null;if(!button)return;const planId=button.dataset.pinPlan;const pinned=button.getAttribute('aria-pressed')!=='true';const res=await fetch('/api/plans/'+encodeURIComponent(planId)+'/pin',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({pinned})}).catch(()=>null);if(res?.ok)window.location.reload();});`;
+}
+
+function indexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCount: number, deferredCount: number, columns: BoardColumnRecord[] = [], view: 'kanban' | 'all' | 'collab' = 'kanban'): string {
+  if (view === 'kanban') return kanbanIndexHtml(plans, archivedCount, deferredCount, columns);
+  if (view === 'collab') plans = plans.filter(item => item.plan.reviewMode === 'collaboration');
   const repos = [...new Set(plans.map(item => item.plan.repoName))].sort();
   const attentionCount = plans.filter(planNeedsAttention).length;
   const attentionSummary = attentionCount
@@ -288,8 +339,8 @@ function indexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCoun
   const rows = [repoGroupsHtml(startedPlans), repoGroupsHtml(notStartedPlans)].filter(Boolean).join('\n');
   return `<!doctype html><html><head><meta charset="utf-8"><title>Plan Review Index</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <style>${baseIndexStyles()}</style>
-  </head><body><main><div class="page-header"><div><h1>Plan Review Index</h1><p class="muted">Active plans are shown by default.</p></div><div class="plan-actions"><a class="nav-link primary" href="/deferred">Deferred (${deferredCount}) →</a><a class="nav-link primary" href="/archive">Archived (${archivedCount}) →</a></div></div>${attentionSummary}<div class="toolbar"><input id="q" placeholder="Filter plans" aria-label="Filter plans"><select id="repo" aria-label="Filter by repo"><option value="">All repos</option>${repos.map(repo => `<option value="${escapeHtml(repo)}">${escapeHtml(repo)}</option>`).join('')}</select></div><div id="plans">${rows || '<p>No active plans registered.</p>'}</div><script>
+    <style>${baseIndexStyles()}${organizationIndexStyles()}</style>
+  </head><body><main><div class="topbar"><button class="nav-link" type="button" aria-label="Menu">☰</button>${documentViewSwitcher(view)}<div class="plan-actions"><a class="nav-link primary" href="/deferred">Deferred (${deferredCount}) →</a><a class="nav-link primary" href="/archive">Archived (${archivedCount}) →</a></div></div><div class="page-header"><div><h1>Plan Review Index · ${view === 'collab' ? 'Collab docs' : 'All documents'}</h1><p class="muted">${view === 'collab' ? 'Collaboration documents are listed independently without plan-only controls.' : 'Planning and collaboration documents are shown together.'}</p></div></div>${attentionSummary}<div class="toolbar"><input id="q" placeholder="Filter plans" aria-label="Filter plans"><select id="repo" aria-label="Filter by repo"><option value="">All repos</option>${repos.map(repo => `<option value="${escapeHtml(repo)}">${escapeHtml(repo)}</option>`).join('')}</select></div><div id="plans">${rows || '<p>No active plans registered.</p>'}</div><script>
   const q=document.getElementById('q'), repo=document.getElementById('repo'), attentionFilter=document.querySelector('[data-attention-filter]'), cards=[...document.querySelectorAll('.plan-card')];
   let attentionOnly=false;
   function matchesSearch(card,text){if(!text)return true; const status=card.dataset.prStatus; if(text==='merged')return status==='merged'; if(text==='unmerged')return !!status&&status!=='merged'&&status!=='unlinked'; return card.dataset.search.includes(text);}  function apply(){const text=q.value.toLowerCase().trim(), r=repo.value; cards.forEach(card=>{card.hidden=!!((r&&card.dataset.repo!==r)||(text&&!matchesSearch(card,text))||(attentionOnly&&card.dataset.needsAttention!=='true'));}); document.querySelectorAll('.repo-group').forEach(group=>{group.hidden=!group.querySelector('.plan-card:not([hidden])');});}
@@ -383,7 +434,7 @@ function deferredHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedC
   </script></main></body></html>`;
 }
 
-function filterPlans(plans: ReturnType<PlanReviewStore['listPlans']>, query: { q?: string; repoKey?: string; status?: string; limit?: string; cursor?: string; currentPlanId?: string }) {
+function filterPlans(plans: ReturnType<PlanReviewStore['listPlans']>, query: { q?: string; repoKey?: string; status?: string; reviewMode?: 'planning' | 'collaboration'; boardColumnKey?: string; limit?: string; cursor?: string; currentPlanId?: string }) {
   const parseInteger = (value: string | undefined, name: string, min: number, max?: number): number | undefined => {
     if (value === undefined) return undefined;
     if (!/^\d+$/.test(value)) {
@@ -398,13 +449,15 @@ function filterPlans(plans: ReturnType<PlanReviewStore['listPlans']>, query: { q
   const text = query.q?.toLowerCase();
   const filtered = plans.filter(item => {
     const matchesRepo = !query.repoKey || item.plan.repoKey === query.repoKey;
+    const matchesMode = !query.reviewMode || item.plan.reviewMode === query.reviewMode;
+    const matchesColumn = !query.boardColumnKey || item.plan.boardColumnKey === query.boardColumnKey;
     const matchesStatus = !query.status || Number(item.counts[query.status as keyof typeof item.counts] ?? 0) > 0;
     const haystack = planCardSearch(item);
     const trimmedText = text?.trim();
     const prStatus = item.plan.pullRequest?.status ?? item.plan.pullRequest?.state;
     const matchesText = !trimmedText
       || (trimmedText === 'merged' ? prStatus === 'merged' : trimmedText === 'unmerged' ? Boolean(item.plan.pullRequest && prStatus !== 'merged') : haystack.includes(trimmedText));
-    return matchesRepo && matchesStatus && matchesText;
+    return matchesRepo && matchesMode && matchesColumn && matchesStatus && matchesText;
   });
   const offset = parseInteger(query.cursor, 'cursor', 0) ?? 0;
   const limit = parseInteger(query.limit, 'limit', 1, 200);
@@ -439,17 +492,22 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
   const buildButton = isCollaboration ? '' : '<button id="build-plan" type="button">Build Plan</button>';
   const planNavToggle = '<button id="desktop-plan-nav-toggle" class="tool-button" type="button" aria-controls="plan-list-nav" aria-expanded="true" aria-label="Plan Navigator" title="Plan Navigator">☰</button>';
   const downloadAction = `<a id="download-raw-plan" class="tool-button download-tool" href="/download/${escapedPlanId}" aria-label="Download raw plan" title="Download raw plan HTML; ZIP includes required assets." download>⬇</a>`;
-  const commentsButton = '<button id="desktop-comments-toggle" class="comments-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Open comments">Comments <span id="desktop-comments-count" class="comments-count" hidden></span></button>';
-  const indexLink = isCollaboration ? '<a class="nav-index" href="/">← Document index</a>' : '<a class="nav-index" href="/">← Plan index</a>';
+  const commentsButton = '<button id="desktop-comments-toggle" class="comments-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Open comments" title="Comments">Comments <span id="desktop-comments-count" class="comments-count" hidden></span></button>';
+  const indexLink = documentViewSwitcher(isCollaboration ? 'collab' : 'kanban');
+  const pinControl = isCollaboration ? '' : `<button id="pin-plan" class="pin-button" type="button" data-pin-plan="${escapedPlanId}" aria-pressed="${plan.pinnedAt ? 'true' : 'false'}" aria-label="${plan.pinnedAt ? 'Unpin plan' : 'Pin plan'}" title="${plan.pinnedAt ? 'Unpin plan' : 'Pin plan'}">${plan.pinnedAt ? '★' : '☆'}</button>`;
+  const projectControl = `<label class="org-control">Project <input id="project-control" value="${escapeHtml(plan.projectName)}" aria-label="Project"></label>`;
+  const stateControl = `<label class="org-control">State <select id="lifecycle-control" aria-label="State"><option value="active"${plan.lifecycleState === 'active' ? ' selected' : ''}>Active</option><option value="deferred"${plan.lifecycleState === 'deferred' ? ' selected' : ''}>Deferred</option><option value="archived"${plan.lifecycleState === 'archived' ? ' selected' : ''}>Archived</option></select></label>`;
+  const columnControl = isCollaboration ? '' : `<label class="org-control">Status <input id="column-control" value="${escapeHtml(plan.boardColumnKey ?? '')}" aria-label="Status"></label>`;
+  const organizationControls = `${pinControl}${projectControl}${stateControl}${columnControl}`;
   const archiveLabel = isCollaboration ? 'Archive document' : 'Archive plan';
   const restoreLabel = isCollaboration ? 'Restore document' : 'Restore plan';
   const resumeLabel = isCollaboration ? 'Resume document' : 'Resume plan';
   const deferAction = isCollaboration ? '' : '<button id="defer-plan" type="button">Defer plan</button>';
   const navActions = plan.archivedAt
-    ? `${planNavToggle}<a class="nav-index" href="/archive">← Archive</a>${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="archive-status">Archived</span><button id="restore-plan" type="button">${restoreLabel}</button>${commentsButton}`
+    ? `${planNavToggle}${indexLink}${organizationControls}${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="archive-status">Archived</span><button id="restore-plan" type="button">${restoreLabel}</button>${commentsButton}`
     : plan.lifecycleState === 'deferred'
-      ? `${planNavToggle}<a class="nav-index" href="/deferred">← Deferred</a>${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="archive-status">Deferred</span><button id="resume-plan" type="button">${resumeLabel}</button><button id="archive-plan" type="button">${archiveLabel}</button><button id="restore-plan" type="button" hidden>${restoreLabel}</button>${commentsButton}`
-      : `${planNavToggle}${indexLink}${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="archive-status" hidden></span>${deferAction}<button id="archive-plan" type="button">${archiveLabel}</button><button id="restore-plan" type="button" hidden>${restoreLabel}</button>${commentsButton}`;
+      ? `${planNavToggle}${indexLink}${organizationControls}${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="archive-status">Deferred</span><button id="resume-plan" type="button">${resumeLabel}</button><button id="archive-plan" type="button">${archiveLabel}</button><button id="restore-plan" type="button" hidden>${restoreLabel}</button>${commentsButton}`
+      : `${planNavToggle}${indexLink}${organizationControls}${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="archive-status" hidden></span>${deferAction}<button id="archive-plan" type="button">${archiveLabel}</button><button id="restore-plan" type="button" hidden>${restoreLabel}</button>${commentsButton}`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapedShellTitle}</title>
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
@@ -464,10 +522,10 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
     <div id="archive-toast" role="status" aria-label="Archived plan undo toast" hidden><div><strong id="archive-toast-title"></strong><p id="archive-toast-message"></p></div><button id="archive-toast-undo" type="button">Undo</button></div>
     <div id="quick-open-backdrop" hidden>
       <section id="quick-open-dialog" role="dialog" aria-modal="true" aria-labelledby="quick-open-title" aria-describedby="quick-open-status">
-        <div class="quick-open-header"><div><h2 id="quick-open-title">Quick open ${escapeHtml(documentKind)}</h2><p id="quick-open-status">Search active ${escapeHtml(isCollaboration ? 'documents' : 'plans')}.</p></div><span class="quick-open-shortcut">⌘O</span></div>
-        <input id="quick-open-input" type="search" role="combobox" aria-controls="quick-open-results" aria-expanded="true" aria-autocomplete="list" autocomplete="off" spellcheck="false" placeholder="Search active ${escapeHtml(isCollaboration ? 'documents' : 'plans')}">
+        <div class="quick-open-header"><div><h2 id="quick-open-title">Quick open ${escapeHtml(documentKind)}</h2><p id="quick-open-status">Search all registered documents across lifecycle, columns, readiness, pins, and collaboration docs.</p></div><span class="quick-open-shortcut">⌘O</span></div>
+        <input id="quick-open-input" type="search" role="combobox" aria-controls="quick-open-results" aria-expanded="true" aria-autocomplete="list" autocomplete="off" spellcheck="false" placeholder="Search all documents">
         <div id="quick-open-error" hidden>Plans could not be loaded. <button id="quick-open-retry" type="button">Retry</button></div>
-        <div id="quick-open-empty" hidden>No matching active ${escapeHtml(isCollaboration ? 'documents' : 'plans')}.</div>
+        <div id="quick-open-empty" hidden>No matching documents.</div>
         <div id="quick-open-results" role="listbox" aria-label="Quick open results"><div id="quick-open-result-list"></div></div>
       </section>
     </div>
@@ -498,7 +556,7 @@ const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" 
 
 const clientCss = `
 body{--plan-nav-width:260px;--comments-width:48px;margin:0;background:#0b1020;color:#e5e7eb;font-family:system-ui,sans-serif}body.plan-nav-collapsed{--plan-nav-width:0}body.comments-open{--comments-width:320px}
-#plan-navbar{min-height:86px;box-sizing:border-box;display:grid;grid-template-rows:auto auto;gap:8px;padding:10px 16px;border-bottom:1px solid #2b364d;background:#0f172a}#plan-navbar-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}#plan-navbar a{color:#7dd3fc;text-decoration:none;font-weight:700}#plan-navbar a.nav-index{margin-right:auto}#plan-navbar button,#plan-navbar .tool-button{background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px 10px;cursor:pointer}#plan-navbar button:hover,#plan-navbar .tool-button:hover{border-color:#93c5fd}#plan-navbar .tool-button{display:inline-flex;align-items:center;justify-content:center;min-width:38px;min-height:34px;box-sizing:border-box;line-height:1}.download-tool{border-color:rgba(56,189,248,.72)!important;background:#075985!important;color:#ecfeff!important}#current-plan-bar{display:flex;align-items:center;gap:8px;min-width:0;border-top:1px solid rgba(71,85,105,.55);padding-top:8px;color:#cbd5e1}#current-plan-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f8fafc}.archive-status{color:#cbd5e1;border:1px solid #475569;background:#1e293b;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:800}#restore-plan{border-color:#22c55e;color:#bbf7d0}.comments-toggle{display:inline-flex;align-items:center;gap:6px}.comments-count{min-width:18px;height:18px;border-radius:999px;background:#7e22ce;color:white;display:inline-grid;place-items:center;padding:0 5px;font-size:11px;font-weight:900}
+#plan-navbar{min-height:86px;box-sizing:border-box;display:grid;grid-template-rows:auto auto;gap:8px;padding:10px 16px;border-bottom:1px solid #2b364d;background:#0f172a}#plan-navbar-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}#plan-navbar a{color:#7dd3fc;text-decoration:none;font-weight:700}#plan-navbar a.nav-index{margin-right:auto}#plan-navbar .doc-kind-switcher{margin-right:auto}.org-control{display:inline-flex;align-items:center;gap:5px;border:1px solid #334155;border-radius:8px;background:#111827;padding:3px 6px;color:#cbd5e1;font-size:12px;font-weight:800}.org-control input,.org-control select{max-width:150px;background:#020617;color:#e5e7eb;border:1px solid #7dd3fc;border-radius:6px;padding:6px 8px}.pin-button{border-color:#facc15!important;color:#fef08a!important}#plan-navbar button,#plan-navbar .tool-button{background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px 10px;cursor:pointer}#plan-navbar button:hover,#plan-navbar .tool-button:hover{border-color:#93c5fd}#plan-navbar .tool-button{display:inline-flex;align-items:center;justify-content:center;min-width:38px;min-height:34px;box-sizing:border-box;line-height:1}.download-tool{border-color:rgba(56,189,248,.72)!important;background:#075985!important;color:#ecfeff!important}#current-plan-bar{display:flex;align-items:center;gap:8px;min-width:0;border-top:1px solid rgba(71,85,105,.55);padding-top:8px;color:#cbd5e1}#current-plan-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f8fafc}.archive-status{color:#cbd5e1;border:1px solid #475569;background:#1e293b;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:800}#restore-plan{border-color:#22c55e;color:#bbf7d0}.comments-toggle{display:inline-flex;align-items:center;gap:6px}.comments-count{min-width:18px;height:18px;border-radius:999px;background:#7e22ce;color:white;display:inline-grid;place-items:center;padding:0 5px;font-size:11px;font-weight:900}
 #app{display:grid;grid-template-columns:var(--plan-nav-width) minmax(0,1fr) var(--comments-width);min-height:calc(100vh - 86px);transition:grid-template-columns .18s ease}
 #plan-list-nav{grid-column:1;border-right:1px solid #2b364d;background:#0b1220;padding:14px;overflow:auto}body.plan-nav-collapsed #plan-list-nav{padding:0;border-right:0;overflow:hidden}body.plan-nav-collapsed #plan-list-nav>*{visibility:hidden}#plan-list-nav h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#a7b0c0;margin:0}.plan-list-header{display:flex;align-items:center;justify-content:space-between;gap:8px}.plan-list-error{border:1px solid #f59e0b;background:rgba(245,158,11,.12);color:#fde68a;border-radius:8px;padding:8px;margin:10px 0;font-size:13px}.plan-list-empty{color:#a7b0c0;font-size:13px}.plan-nav-item{display:grid;gap:5px;padding:10px;margin:8px 0;border:1px solid #253248;border-radius:10px;background:#101827;color:#cbd5e1;text-decoration:none}.plan-nav-item:hover{border-color:#64748b}.plan-nav-item.active{border-color:#38bdf8;background:linear-gradient(135deg,rgba(14,165,233,.18),rgba(16,24,39,.95))}.plan-nav-item.attention{border-color:#f59e0b}.plan-nav-title{font-size:13px;font-weight:850;color:#f8fafc;line-height:1.25}.plan-nav-meta{display:flex;gap:6px;align-items:center;flex-wrap:wrap;color:#a7b0c0;font-size:11px}.plan-nav-submeta{color:#8fa0b8;font-size:11px}.plan-nav-pill{border:1px solid #475569;border-radius:999px;padding:1px 6px;background:#0b1220}.plan-nav-pill.ready{border-color:#22c55e;color:#bbf7d0}.plan-nav-pill.not-ready{border-color:#f59e0b;color:#fde68a}
 #review{grid-column:2;position:relative;min-width:0}#sidebar{grid-column:3;grid-row:1;border-left:1px solid #2b364d;padding:0;background:#111827;overflow:hidden}#sidebar>h1,#sidebar>#sync-warning,#sidebar>#plan-notes-panel,#sidebar>#deferred-refresh-notice,#sidebar>#comments{display:none}body.comments-open #sidebar{padding:16px;overflow:auto}body.comments-open #sidebar>h1,body.comments-open #sidebar>#sync-warning,body.comments-open #sidebar>#plan-notes-panel,body.comments-open #sidebar>#deferred-refresh-notice,body.comments-open #sidebar>#comments{display:block}
@@ -532,6 +590,10 @@ const archivePlanButton = document.getElementById('archive-plan');
 const restorePlanButton = document.getElementById('restore-plan');
 const deferPlanButton = document.getElementById('defer-plan');
 const resumePlanButton = document.getElementById('resume-plan');
+const pinPlanButton = document.getElementById('pin-plan');
+const projectControl = document.getElementById('project-control');
+const lifecycleControl = document.getElementById('lifecycle-control');
+const columnControl = document.getElementById('column-control');
 const executionReviewButton = document.getElementById('request-execution-review');
 const buildPlanButton = document.getElementById('build-plan');
 const planNotes = document.getElementById('plan-notes');
@@ -613,6 +675,9 @@ let mermaidInitialized = false;
 let mermaidRenderGeneration = 0;
 let navigatorItems = [];
 let navigatorLoadError = null;
+let quickOpenItems = [];
+let quickOpenLoadPromise = null;
+let quickOpenLoadError = null;
 let quickOpenMatches = [];
 let quickOpenActiveIndex = 0;
 let quickOpenPreviousFocus = null;
@@ -848,6 +913,42 @@ resumePlanButton?.addEventListener('click', async () => {
     return;
   }
   window.location.href = '/';
+});
+async function saveOrganizerField(path, body, control){
+  if (control) control.disabled = true;
+  const res = await fetch('/api/plans/'+encodeURIComponent(planId)+path, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).catch(() => null);
+  if (!res?.ok) {
+    if (control) control.disabled = false;
+    alert('Unable to update '+documentKind+' organization.');
+    return null;
+  }
+  const json = await res.json().catch(() => null);
+  if (control) control.disabled = false;
+  void loadPlanNavigator();
+  return json;
+}
+pinPlanButton?.addEventListener('click', async () => {
+  const pinned = pinPlanButton.getAttribute('aria-pressed') !== 'true';
+  const json = await saveOrganizerField('/pin', { pinned }, pinPlanButton);
+  if (!json?.ok) return;
+  pinPlanButton.setAttribute('aria-pressed', String(pinned));
+  pinPlanButton.setAttribute('aria-label', pinned ? 'Unpin plan' : 'Pin plan');
+  pinPlanButton.setAttribute('title', pinned ? 'Unpin plan' : 'Pin plan');
+  pinPlanButton.textContent = pinned ? '★' : '☆';
+});
+projectControl?.addEventListener('change', async () => {
+  const projectName = projectControl.value.trim();
+  if (!projectName) return;
+  await saveOrganizerField('/project', { projectName }, projectControl);
+});
+lifecycleControl?.addEventListener('change', async () => {
+  const json = await saveOrganizerField('/lifecycle', { lifecycleState: lifecycleControl.value }, lifecycleControl);
+  if (json?.ok) window.location.reload();
+});
+columnControl?.addEventListener('change', async () => {
+  const boardColumnKey = columnControl.value.trim();
+  if (!boardColumnKey) return;
+  await saveOrganizerField('/column', { boardColumnKey }, columnControl);
 });
 addPlanNoteButton?.addEventListener('click', async () => {
   const body = planNoteBody?.value.trim();
@@ -1099,7 +1200,11 @@ function handlePlanReviewEvent(event){
     || event.type === 'comment.released'
     || event.type === 'comment.deleted'
     || event.type === 'comment.thread_entry.created'
-    || event.type === 'plan.mode.changed') {
+    || event.type === 'plan.mode.changed'
+    || event.type === 'plan.lifecycle.changed'
+    || event.type === 'plan.column.changed'
+    || event.type === 'plan.pin.changed'
+    || event.type === 'plan.project.changed') {
     scheduleMetaLoad();
   }
 }
@@ -1163,8 +1268,8 @@ function planItemAttention(item){ return item?.plan?.watchMode === 'filesystem' 
 function planItemRatio(item){ return item?.progress?.totalPhases > 0 ? item.progress.completedPhases / item.progress.totalPhases : 0; }
 function planItemRank(item){ if (planItemAttention(item)) return 3; if (planItemComplete(item)) return 0; if (item?.plan?.publicationMetadata?.executionReady) return 1; return 2; }
 function planItemTitle(item){ return String(item?.displayTitle || item?.plan?.repoName + ' / ' + item?.plan?.slug); }
-function sortPlanNavItems(items){ return [...items].sort((a,b)=>planItemRank(a)-planItemRank(b)||planItemRatio(b)-planItemRatio(a)||String(b.activityAt||'').localeCompare(String(a.activityAt||''))||planItemTitle(a).localeCompare(planItemTitle(b))||String(a?.plan?.id||'').localeCompare(String(b?.plan?.id||''))); }
-function planItemStatus(item){ if (planItemAttention(item)) return 'Needs attention'; if (planItemComplete(item)) return 'Complete'; if (item?.plan?.reviewMode === 'collaboration') return 'Collaboration'; if (item?.plan?.publicationMetadata?.executionReady) return 'Execution ready'; return 'Execution not ready'; }
+function sortPlanNavItems(items){ return [...items].sort((a,b)=>(Boolean(a?.plan?.pinnedAt)===Boolean(b?.plan?.pinnedAt)?0:a?.plan?.pinnedAt?-1:1)||planItemRank(a)-planItemRank(b)||planItemRatio(b)-planItemRatio(a)||String(b.activityAt||'').localeCompare(String(a.activityAt||''))||planItemTitle(a).localeCompare(planItemTitle(b))||String(a?.plan?.id||'').localeCompare(String(b?.plan?.id||''))); }
+function planItemStatus(item){ if (planItemAttention(item)) return 'Needs attention'; if (item?.plan?.reviewMode === 'collaboration') return 'Collaboration'; if (item?.plan?.lifecycleState === 'archived') return 'Archived · '+(item?.plan?.boardColumnKey || 'No column'); if (item?.plan?.lifecycleState === 'deferred') return 'Deferred · '+(item?.plan?.boardColumnKey || 'No column'); if (item?.plan?.boardColumnKey) return item.plan.boardColumnKey; if (planItemComplete(item)) return 'Complete'; if (item?.plan?.publicationMetadata?.executionReady) return 'Execution ready'; return 'Execution not ready'; }
 function planItemProgress(item){ return item?.progress?.totalPhases ? item.progress.completedPhases + '/' + item.progress.totalPhases : 'No phases'; }
 function renderPlanNavigatorItems(items, label = 'plans'){
   if (!planListItems) return;
@@ -1210,19 +1315,20 @@ function quickOpenFuzzyScore(item, query){
   const status = planItemStatus(item);
   const progress = planItemProgress(item);
   const commentsText = 'pending '+Number(item?.counts?.pending || 0)+' claimed '+Number(item?.counts?.claimed || 0)+' acknowledged '+Number(item?.counts?.acknowledged || 0)+' resolved '+Number(item?.counts?.resolved || 0);
-  const metadataText = [item?.plan?.repoName, item?.plan?.slug, item?.plan?.repoKey, item?.plan?.reviewMode, metadata.linearIssue, item?.plan?.linearIssueKey, status, progress, commentsText, item?.latestNote?.body].join(' ');
+  const metadataText = [item?.plan?.repoName, item?.plan?.slug, item?.plan?.repoKey, item?.plan?.reviewMode, item?.plan?.projectKey, item?.plan?.projectName, item?.plan?.lifecycleState, item?.plan?.boardColumnKey, item?.plan?.pinnedAt ? 'pinned' : '', metadata.executionReady ? 'execution ready' : 'execution not ready', metadata.linearIssue, item?.plan?.linearIssueKey, status, progress, commentsText, item?.latestNote?.body].join(' ');
   const pathText = [item?.plan?.planPath, item?.plan?.sourcePath, item?.plan?.rootPath, metadata.worktreePath, metadata.branch].join(' ');
   const score = Math.max(quickOpenFieldScore(title, query, 3000), quickOpenFieldScore(metadataText, query, 1500), quickOpenFieldScore(pathText, query, 250));
   if (!score) return 0;
   return score + (item?.plan?.id === planId ? -10 : 0);
 }
 function quickOpenMeta(item){
-  return [item?.plan?.repoName, item?.plan?.slug, planItemStatus(item), planItemProgress(item), 'pending '+Number(item?.counts?.pending || 0), item?.modifiedAt ? 'updated '+new Date(item.modifiedAt).toLocaleDateString() : ''].filter(Boolean).join(' · ');
+  return [item?.plan?.reviewMode, item?.plan?.projectName, item?.plan?.lifecycleState, item?.plan?.boardColumnKey, item?.plan?.publicationMetadata?.executionReady ? 'execution ready' : '', item?.plan?.pinnedAt ? 'pinned' : '', planItemProgress(item), 'pending '+Number(item?.counts?.pending || 0), item?.modifiedAt ? 'updated '+new Date(item.modifiedAt).toLocaleDateString() : ''].filter(Boolean).join(' · ');
 }
 function quickOpenResultsFor(query){
+  const items = quickOpenItems.length ? quickOpenItems : navigatorItems;
   const sorted = query.trim()
-    ? navigatorItems.map(item => ({ item, score: quickOpenFuzzyScore(item, query) })).filter(match => match.score > 0).sort((a,b)=>b.score-a.score||planItemTitle(a.item).localeCompare(planItemTitle(b.item))||String(a.item?.plan?.id||'').localeCompare(String(b.item?.plan?.id||''))).map(match => match.item)
-    : sortPlanNavItems(navigatorItems);
+    ? items.map(item => ({ item, score: quickOpenFuzzyScore(item, query) })).filter(match => match.score > 0).sort((a,b)=>b.score-a.score||planItemTitle(a.item).localeCompare(planItemTitle(b.item))||String(a.item?.plan?.id||'').localeCompare(String(b.item?.plan?.id||''))).map(match => match.item)
+    : sortPlanNavItems(items);
   return sorted.slice(0, 15);
 }
 function setQuickOpenActiveIndex(index){
@@ -1244,14 +1350,14 @@ function setQuickOpenActiveIndex(index){
 function renderQuickOpenResults(){
   if (!quickOpenResultList) return;
   const query = quickOpenInput?.value || '';
-  quickOpenMatches = navigatorLoadError ? [] : quickOpenResultsFor(query);
-  const hasError = Boolean(navigatorLoadError);
+  quickOpenMatches = quickOpenLoadError ? [] : quickOpenResultsFor(query);
+  const hasError = Boolean(quickOpenLoadError);
   if (quickOpenError) { quickOpenError.hidden = !hasError; quickOpenError.firstChild.textContent = hasError ? 'Plans could not be loaded. ' : ''; }
   if (quickOpenEmpty) quickOpenEmpty.hidden = hasError || quickOpenMatches.length > 0;
   quickOpenResultList.innerHTML = quickOpenMatches.map((item, index) => '<div id="quick-open-result-'+index+'" class="quick-open-result" role="option" tabindex="-1" data-quick-open-result data-plan-id="'+escapeHtml(String(item?.plan?.id || ''))+'"><span class="quick-open-result-title">'+escapeHtml(planItemTitle(item))+'</span><span class="quick-open-result-meta">'+escapeHtml(quickOpenMeta(item))+'</span></div>').join('');
   if (quickOpenStatus) {
-    if (hasError) quickOpenStatus.textContent = 'Active '+documentKind+'s could not be loaded. Retry when the service is reachable.';
-    else quickOpenStatus.textContent = quickOpenMatches.length ? quickOpenMatches.length+' matching active '+documentKind+(quickOpenMatches.length === 1 ? '' : 's')+'.' : 'No matching active '+documentKind+'s.';
+    if (hasError) quickOpenStatus.textContent = 'Documents could not be loaded. Retry when the service is reachable.';
+    else quickOpenStatus.textContent = quickOpenMatches.length ? quickOpenMatches.length+' matching document'+(quickOpenMatches.length === 1 ? '' : 's')+'.' : 'No matching documents.';
   }
   setQuickOpenActiveIndex(0);
 }
@@ -1269,6 +1375,7 @@ function openQuickOpen(){
   quickOpenInput.value = '';
   renderQuickOpenResults();
   quickOpenInput.focus({ preventScroll: true });
+  void loadQuickOpenItems().then(() => { if (quickOpenVisible()) renderQuickOpenResults(); }).catch(error => { quickOpenLoadError = error; if (quickOpenVisible()) renderQuickOpenResults(); });
   if (!navigatorItems.length && !navigatorLoadError) void loadPlanNavigator().then(() => { if (quickOpenVisible()) renderQuickOpenResults(); });
 }
 function closeQuickOpen(){
@@ -1340,6 +1447,24 @@ function handleQuickOpenKeydown(event){
     selectQuickOpenResult();
   }
 }
+async function loadQuickOpenItems(){
+  if (quickOpenLoadPromise) return quickOpenLoadPromise;
+  quickOpenLoadPromise = (async () => {
+    const items = [];
+    let cursor = '';
+    do {
+      const url = '/api/plans?includeArchived=true&includeDeferred=true&limit=200' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : '');
+      const res = await fetch(url, { cache: 'no-store' });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error?.message || 'Unable to load quick-open documents');
+      items.push(...(Array.isArray(json.data.plans) ? json.data.plans : []));
+      cursor = json.data.nextCursor || '';
+    } while (cursor);
+    quickOpenItems = items;
+    quickOpenLoadError = null;
+  })().finally(() => { quickOpenLoadPromise = null; });
+  return quickOpenLoadPromise;
+}
 async function loadPlanNavigator(){
   if (!planListItems) return;
   try {
@@ -1360,7 +1485,11 @@ async function loadPlanNavigator(){
   }
 }
 planListRetry?.addEventListener('click', () => { void loadPlanNavigator(); });
-quickOpenRetry?.addEventListener('click', () => { void loadPlanNavigator(); });
+quickOpenRetry?.addEventListener('click', () => {
+  quickOpenItems = [];
+  quickOpenLoadError = null;
+  void Promise.all([loadQuickOpenItems(), loadPlanNavigator()]).then(renderQuickOpenResults).catch(error => { quickOpenLoadError = error; renderQuickOpenResults(); void loadPlanNavigator(); });
+});
 quickOpenInput?.addEventListener('input', renderQuickOpenResults);
 quickOpenResultList?.addEventListener('mousemove', event => {
   const row = event.target instanceof Element ? event.target.closest('[data-quick-open-result]') : null;
@@ -2775,12 +2904,13 @@ export function createApp(options: AppOptions): FastifyInstance {
   });
 
   app.get('/', async (request, reply) => {
-    const query = request.query as { q?: string; repoKey?: string; status?: string };
+    const query = request.query as { q?: string; repoKey?: string; status?: string; view?: 'kanban' | 'all' | 'collab' };
     const allPlans = store.listPlans({ includeArchived: true, includeDeferred: true });
     const activePlans = allPlans.filter(item => item.plan.lifecycleState === 'active');
     const archivedCount = allPlans.filter(item => item.plan.lifecycleState === 'archived').length;
     const deferredCount = allPlans.filter(item => item.plan.lifecycleState === 'deferred').length;
-    reply.type('text/html').send(indexHtml(filterPlans(activePlans, query).plans, archivedCount, deferredCount));
+    const view = query.view === 'all' || query.view === 'collab' ? query.view : 'kanban';
+    reply.type('text/html').send(indexHtml(filterPlans(activePlans, query).plans, archivedCount, deferredCount, store.listBoardColumns(), view));
   });
 
   app.get('/deferred', async (_request, reply) => {
@@ -2791,6 +2921,11 @@ export function createApp(options: AppOptions): FastifyInstance {
   app.get('/archive', async (_request, reply) => {
     const allPlans = store.listPlans({ includeArchived: true, includeDeferred: true });
     reply.type('text/html').send(archiveHtml(allPlans, allPlans.filter(item => item.plan.lifecycleState === 'deferred').length));
+  });
+
+  app.get('/columns', async (_request, reply) => {
+    const rows = store.listBoardColumns({ includeHidden: true }).map(column => `<tr><td><code>${escapeHtml(column.key)}</code></td><td>${escapeHtml(column.label)}</td><td>${column.position}</td><td>${column.isDone ? 'Done' : 'Workflow'}</td></tr>`).join('');
+    reply.type('text/html').send(`<!doctype html><html><head><meta charset="utf-8"><title>Board columns</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"><style>${baseIndexStyles()}${organizationIndexStyles()}</style></head><body><main><div class="topbar"><button class="nav-link" type="button" aria-label="Menu">☰</button>${documentViewSwitcher('kanban')}<a class="nav-link primary" href="/">Back to Kanban</a></div><h1>Board columns</h1><p class="muted">Column labels and order are persisted in the local database.</p><table><thead><tr><th>Stable key</th><th>Label</th><th>Position</th><th>Behavior</th></tr></thead><tbody>${rows}</tbody></table></main></body></html>`);
   });
 
   app.get('/api/plans', async (request, reply) => {
@@ -2813,7 +2948,7 @@ export function createApp(options: AppOptions): FastifyInstance {
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) {
         throw new PlanReviewError('validation_failed', 'limit must be between 1 and 200', 400, { limit: query.limit });
       }
-      return ok({ plans: store.listPlans({ limit, currentPlanId: query.currentPlanId }) });
+      return ok({ plans: store.listPlans({ includeArchived: true, includeDeferred: true, limit, currentPlanId: query.currentPlanId }) });
     } catch (error) {
       sendError(reply, error);
     }
@@ -2861,7 +2996,7 @@ export function createApp(options: AppOptions): FastifyInstance {
       try {
         title = renderedHtmlTitle(store.getRenderedHtml(plan.id)) ?? title;
       } catch {}
-      reply.header('Cache-Control', 'no-store').type('text/html').send(reviewShell(plan, title, reviewShellTitle(title), store.listPlans({ limit: 200, currentPlanId: plan.id })));
+      reply.header('Cache-Control', 'no-store').type('text/html').send(reviewShell(plan, title, reviewShellTitle(title), store.listPlans({ includeArchived: true, includeDeferred: true, limit: 200, currentPlanId: plan.id })));
     } catch (error) {
       sendError(reply, error);
     }
@@ -2932,6 +3067,76 @@ export function createApp(options: AppOptions): FastifyInstance {
       const { plan } = store.getPlan(planId);
       const input = changePlanModeSchema.parse(request.body);
       const result = store.changePlanMode(plan.id, input.reviewMode);
+      bus.emitEvent(result.event);
+      return ok({ plan: result.plan, changed: result.changed });
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.get('/api/board-columns', async (_request, reply) => {
+    try {
+      return ok({ columns: store.listBoardColumns() });
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.put('/api/board-columns', async (request, reply) => {
+    try {
+      return ok(store.saveBoardColumns(saveBoardColumnsSchema.parse(request.body)));
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.put('/api/plans/:planId/lifecycle', async (request, reply) => {
+    try {
+      const { planId } = request.params as { planId: string };
+      const input = setPlanLifecycleSchema.parse(request.body);
+      const result = store.setPlanLifecycleState(planId, input.lifecycleState);
+      bus.emitEvent(result.event);
+      if (result.plan.lifecycleState === 'active') {
+        await sourceSync.register(result.plan.id);
+        await sourceSync.syncNow(result.plan.id, 'manual');
+      } else {
+        await sourceSync.unregister(result.plan.id);
+      }
+      return ok({ plan: result.plan, changed: result.changed });
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.put('/api/plans/:planId/column', async (request, reply) => {
+    try {
+      const { planId } = request.params as { planId: string };
+      const input = setPlanBoardColumnSchema.parse(request.body);
+      const result = store.setPlanBoardColumn(planId, input.boardColumnKey);
+      bus.emitEvent(result.event);
+      return ok({ plan: result.plan, column: result.column, changed: result.changed });
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.put('/api/plans/:planId/pin', async (request, reply) => {
+    try {
+      const { planId } = request.params as { planId: string };
+      const input = setPlanPinnedSchema.parse(request.body);
+      const result = store.setPlanPinned(planId, input.pinned);
+      bus.emitEvent(result.event);
+      return ok({ plan: result.plan, changed: result.changed });
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.put('/api/plans/:planId/project', async (request, reply) => {
+    try {
+      const { planId } = request.params as { planId: string };
+      const input = setPlanProjectSchema.parse(request.body);
+      const result = store.setPlanProject(planId, input);
       bus.emitEvent(result.event);
       return ok({ plan: result.plan, changed: result.changed });
     } catch (error) {
