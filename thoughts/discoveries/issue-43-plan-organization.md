@@ -41,7 +41,7 @@ Fix applied:
 - Review shell Status now renders as a `<select>` populated from persisted board columns.
 - Project override remains available through API/CLI, not as the top-bar control.
 - Plan text now explicitly records this distinction.
-- Regression tests assert there are no `project-control` or `column-control` text inputs, Status contains configured column labels, and client code navigates for project selection instead of calling the project override endpoint.
+- Superseded by later demo feedback: Project, State, and Status are now explicitly labeled filters that narrow the navigator/list and do not navigate away or call project/lifecycle/column mutation endpoints.
 
 Verification:
 
@@ -52,14 +52,14 @@ Verification:
 
 Demo feedback clarified three Kanban issues:
 
-- The white squares on cards were default-styled pin buttons, not an intended affordance.
+- The white squares on cards were default-styled pin buttons, and Kanban cards should not expose pin controls at all.
 - The Kanban board was constrained by the normal centered `<main>` max width instead of using the browser width.
 - Users need to hide columns they are not using.
 
 Fix applied:
 
 - Kanban pages now use a full-width `.kanban-page` layout and responsive column grid.
-- Pin controls now render as dark star buttons with explicit sizing/background.
+- Kanban cards no longer render pin buttons, pinned badges, pinned styling, or pinned-first sorting.
 - `/columns` now includes a visibility editor backed by persisted board-column `hiddenAt` state.
 - Empty columns can be hidden; occupied columns show a disabled hide control with move-first guidance so plans do not silently disappear.
 - Plan text and contract coverage now lock the intended behavior.
@@ -71,3 +71,27 @@ Verification:
 - `bun run test` — PASS
 - PM/product rereview — `PRODUCT_CLEAN`
 - Adversarial implementation rereview — `CLEAN_FOR_PR_UPDATE`
+
+## 2026-06-21 demo feedback: top-bar filters and icon actions
+
+Demo feedback clarified that the review-shell Project, State, and Status controls are filters, not current-plan mutation controls:
+
+- Project filters the navigator/list by project and must not navigate to the Kanban view.
+- State filters the navigator/list by lifecycle state and must not defer/archive/resume the current plan.
+- Status filters the navigator/list by configured board column and must not move the current plan.
+- All documents top-bar actions must match the planned icon-action style instead of old text buttons.
+
+Fix applied:
+
+- Review-shell controls are now named and labeled `Filter: Project`, `Filter: State`, and `Filter: Status` in UI, code, and plan text.
+- Filter controls update the navigator/list client-side and do not call project/lifecycle/column mutation endpoints.
+- Active filters load the all-documents source so deferred/archived/status filters have complete results while preserving the current document in the navigator.
+- All documents Deferred/Archived actions now render as icon actions with accessible labels/tooltips.
+
+Verification:
+
+- `bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "deferred lifecycle hides|archive page renders|organization APIs persist|review shell exposes titled"` — PASS
+- `bun run test:e2e` — PASS
+- `bun run test` — PASS
+- GPT plan-faithfulness review — `CONSENSUS_CLEAN`
+- GLM plan-faithfulness review — `CONSENSUS_CLEAN`

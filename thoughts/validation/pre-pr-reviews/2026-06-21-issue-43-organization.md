@@ -60,7 +60,6 @@ Comparison: uncommitted working-tree diff on the feature branch, including the u
 ## Remaining non-blocking observations
 
 - `plan.columns.changed` is declared but not emitted for board-column configuration changes. Current column settings persist correctly; stale concurrent Kanban tabs require manual reload. Logged as follow-up.
-- Review-shell Status uses a free-text column-key input. Invalid labels fail safely with the existing organizer alert. Logged as follow-up UX polish.
 - API/CLI pin/project commands can apply to collaboration documents, while board-column moves remain planning-only. This is a minor consistency follow-up, not a data-loss or security risk.
 
 ## PR feedback cycle
@@ -89,23 +88,29 @@ Comparison: uncommitted working-tree diff on the feature branch, including the u
 
 | Source | Severity | Finding | Decision | Evidence |
 | --- | --- | --- | --- | --- |
-| User demo feedback | P2 | Review-shell Project was editable even though it should select all plans in that project; Status was free text even though it should be a configured-state dropdown; top-bar controls drifted from the plan mock. | Fixed | Project now renders as a project selector that navigates to `/?projectKey=...`; Status renders as a configured board-column selector; plan text and regression tests now lock this intent. |
-| User demo feedback | P2 | Kanban cards showed unexplained white square pin buttons, the board did not use the full browser width, and there was no browser control to hide unused columns. | Fixed | Kanban uses a full-width responsive page, pin controls are dark star buttons, `/columns` exposes persisted visibility toggles, and occupied columns cannot be hidden until plans are moved. |
+| User demo feedback | P2 | Review-shell Project was editable/navigation-like, State changed the current plan, Status moved the current plan, and those controls were filters by product intent. The All documents top bar still used old text links instead of icon actions. | Fixed | Review-shell controls are now named/labeled `Filter: Project`, `Filter: State`, and `Filter: Status`; they filter the navigator/list without calling project/lifecycle/column mutation endpoints or navigating to Kanban. All documents Deferred/Archived actions render as icon actions with accessible labels/tooltips. Plan text and regression tests lock this intent. |
+| User demo feedback | P2 | Kanban cards showed unexplained white square pin buttons, pins do not make sense on Kanban cards, the board did not use the full browser width, and there was no browser control to hide unused columns. | Fixed | Kanban uses a full-width responsive page, cards do not render pin controls/badges/styling/sort priority, `/columns` exposes persisted visibility toggles, and occupied columns cannot be hidden until plans are moved. |
 
 ## Demo feedback verification
 
-- `bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "review shell exposes titled left navigator"` — PASS
+- `bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "review shell exposes titled left navigator|organization APIs persist|deferred lifecycle hides|archive page renders"` — PASS
 - `bun run test:e2e` — PASS
-- `bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "organization APIs persist"` — PASS
 - `bun run test` — PASS
 
 ## Kanban demo feedback rereview
 
 | Reviewer | Verdict | Notes |
 | --- | --- | --- |
-| PM/product rereview | `PRODUCT_CLEAN` | No P1/P2 product blockers found after full-width Kanban, pin styling, and column visibility fixes. |
+| PM/product rereview | `PRODUCT_CLEAN` | No P1/P2 product blockers found after full-width Kanban, pin removal from Kanban cards, and column visibility fixes. |
 | Adversarial implementation rereview | `CLEAN_FOR_PR_UPDATE` | No P1/P2 implementation blockers found in the latest diff. |
+
+## Top-bar filter and icon-action rereview
+
+| Reviewer | Verdict | Notes |
+| --- | --- | --- |
+| GPT plan-faithfulness review | `CONSENSUS_CLEAN` | Verified Project/State/Status are filters, mutation/navigation handlers were removed, All documents uses icon actions, Kanban no-pin behavior remains intact, and tests lock the intent. |
+| GLM plan-faithfulness review | `CONSENSUS_CLEAN` | Verified UI/code/plan/test alignment for filter labels, navigator-only filtering, icon-action top bars, Kanban no-pin/responsive/column-hide behavior, and strengthened regression coverage. |
 
 ## Final gate result
 
-PASS — GPT verdict `CLEAN_FOR_PR`; GLM verdict `CLEAN_FOR_PR`; PR-feedback PM verdict `PRODUCT_CLEAN`; PR-feedback adversarial verdict `CLEAN_FOR_PR_UPDATE`; demo feedback targeted gates PASS; Kanban demo PM/adversarial rereviews clean.
+PASS — GPT verdict `CLEAN_FOR_PR`; GLM verdict `CLEAN_FOR_PR`; PR-feedback PM verdict `PRODUCT_CLEAN`; PR-feedback adversarial verdict `CLEAN_FOR_PR_UPDATE`; demo feedback targeted gates PASS; Kanban demo PM/adversarial rereviews clean; top-bar GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`.

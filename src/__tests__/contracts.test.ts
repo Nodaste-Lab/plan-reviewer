@@ -1526,7 +1526,7 @@ test('deferred lifecycle hides plans from active index and preserves agent-visib
     assert.match(deferredPage.body, /Deferred Plans/);
     assert.match(deferredPage.body, /Blocked on PM review; resume at P3/);
     assert.match(deferredPage.body, /data-resume-plan=/);
-    assert.match(deferredPage.body, /href="\/archive">Archived/);
+    assert.match(deferredPage.body, /href="\/archive"[^>]*aria-label="Archived \(0\)"[^>]*title="Archived \(0\)"[^>]*>🗄<\/a>/);
 
     const deferredShell = await app.inject({ method: 'GET', url: `/p/${planId}` });
     assert.match(deferredShell.body, /id="resume-plan"/);
@@ -1534,7 +1534,7 @@ test('deferred lifecycle hides plans from active index and preserves agent-visib
     assert.doesNotMatch(deferredShell.body, /id="defer-plan"/);
 
     const activeIndex = await app.inject({ method: 'GET', url: '/?view=all' });
-    assert.match(activeIndex.body, /Deferred \(1\) →/);
+    assert.match(activeIndex.body, /href="\/deferred"[^>]*aria-label="Deferred \(1\)"[^>]*title="Deferred \(1\)"[^>]*>⏸<\/a>/);
     assert.doesNotMatch(activeIndex.body, /sample-plan<\/a>/);
 
     const resumed = await app.inject({ method: 'POST', url: `/api/plans/${planId}/resume`, payload: { note: 'Resuming after review.' } });
@@ -1606,11 +1606,16 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     assert.match(shell.body, /id="desktop-plan-nav-toggle"[^>]*aria-controls="plan-list-nav"[^>]*aria-expanded="true"/);
     assert.match(shell.body, /id="desktop-comments-toggle"[^>]*aria-controls="sidebar"[^>]*aria-expanded="false"/);
     assert.match(shell.body, /id="current-plan-bar"/);
-    assert.match(shell.body, /<select id="project-control"[^>]*aria-label="Project"/);
-    assert.doesNotMatch(shell.body, /<input id="project-control"/);
-    assert.match(shell.body, /<select id="column-control"[^>]*aria-label="Status"/);
-    assert.match(shell.body, /<option value="backlog"[^>]*>Backlog<\/option>/);
-    assert.doesNotMatch(shell.body, /<input id="column-control"/);
+    assert.match(shell.body, /Filter: Project <select id="project-filter-control"[^>]*aria-label="Filter by project"/);
+    assert.match(shell.body, /Filter: State <select id="state-filter-control"[^>]*aria-label="Filter by state"/);
+    assert.match(shell.body, /Filter: Status <select id="status-filter-control"[^>]*aria-label="Filter by status"/);
+    assert.match(shell.body, /<option value="">All projects<\/option>/);
+    assert.match(shell.body, /<option value="">All states<\/option>/);
+    assert.match(shell.body, /<option value="">All statuses<\/option>/);
+    assert.match(shell.body, /<option value="backlog">Backlog<\/option>/);
+    assert.doesNotMatch(shell.body, /id="project-control"/);
+    assert.doesNotMatch(shell.body, /id="lifecycle-control"/);
+    assert.doesNotMatch(shell.body, /id="column-control"/);
     const shellCss = await app.inject({ method: 'GET', url: '/client.css' });
     assert.equal(shellCss.statusCode, 200);
     assert.match(shellCss.body, /--plan-nav-width:260px/);
@@ -1628,8 +1633,15 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     assert.match(shellClient.body, /frame\.contentDocument.*keydown/s);
     assert.match(shellClient.body, /setPlanNavOpen\(open\)/);
     assert.match(shellClient.body, /planListNav\.inert = !open/);
-    assert.match(shellClient.body, /projectKey=\' \+ encodeURIComponent\(projectKey\)/);
+    assert.match(shellClient.body, /projectFilterControl/);
+    assert.match(shellClient.body, /stateFilterControl/);
+    assert.match(shellClient.body, /statusFilterControl/);
+    assert.match(shellClient.body, /itemMatchesNavigatorFilters/);
+    assert.match(shellClient.body, /loadNavigatorFilterSource/);
+    assert.doesNotMatch(shellClient.body, /projectKey=\' \+ encodeURIComponent\(projectKey\)/);
     assert.doesNotMatch(shellClient.body, /saveOrganizerField\('\/project'/);
+    assert.doesNotMatch(shellClient.body, /saveOrganizerField\('\/lifecycle'/);
+    assert.doesNotMatch(shellClient.body, /saveOrganizerField\('\/column'/);
     assert.match(shellClient.body, /navigatorItems/);
     assert.match(shellClient.body, /openQuickOpen/);
     assert.match(shellClient.body, /quickOpenFuzzyScore/);
@@ -1981,7 +1993,7 @@ test('archive page renders archived plans and restore controls without mixing ac
     assert.equal((await app.inject({ method: 'POST', url: `/api/plans/${newerId}/archive` })).statusCode, 200);
 
     const index = await app.inject({ method: 'GET', url: '/?view=all' });
-    assert.match(index.body, /Archived \(2\) →/);
+    assert.match(index.body, /href="\/archive"[^>]*aria-label="Archived \(2\)"[^>]*title="Archived \(2\)"[^>]*>🗄<\/a>/);
     assert.match(index.body, /active-plan/);
     assert.doesNotMatch(index.body, /older-archive/);
     assert.doesNotMatch(index.body, /newer-archive/);
@@ -2059,11 +2071,20 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     assert.match(kanban.body, /Plans · Kanban/);
     assert.match(kanban.body, /<main class="kanban-page">/);
     assert.match(kanban.body, /\.kanban-page\{max-width:none;width:100%/);
-    assert.match(kanban.body, /\.kanban-card \.pin-button\{[^}]*background:#0b1220!important/);
+    assert.doesNotMatch(kanban.body, /data-pin-plan/);
+    assert.doesNotMatch(kanban.body, /\.kanban-card \.pin-button/);
+    assert.doesNotMatch(kanban.body, /<span class="badge">Pinned<\/span>/);
     assert.match(kanban.body, /data-column-key="backlog"/);
     assert.match(kanban.body, /data-plan-id="[^"]+" data-column="backlog"/);
-    assert.match(kanban.body, /Configure columns/);
+    assert.match(kanban.body, /aria-label="Configure columns"[^>]*title="Configure columns"[^>]*>⚙<\/a>/);
     assert.match(kanban.body, /Execution not ready/);
+    const allDocuments = await app.inject({ method: 'GET', url: '/?view=all' });
+    assert.equal(allDocuments.statusCode, 200);
+    assert.match(allDocuments.body, /Plan Review Index · All documents/);
+    assert.match(allDocuments.body, /aria-label="Deferred \(0\)"[^>]*title="Deferred \(0\)"[^>]*>⏸<\/a>/);
+    assert.match(allDocuments.body, /aria-label="Archived \(0\)"[^>]*title="Archived \(0\)"[^>]*>🗄<\/a>/);
+    assert.doesNotMatch(allDocuments.body, />Deferred \(0\) →<\/a>/);
+    assert.doesNotMatch(allDocuments.body, />Archived \(0\) →<\/a>/);
 
     const columns = await app.inject({ method: 'GET', url: '/api/board-columns' });
     assert.equal(columns.statusCode, 200);
@@ -2123,6 +2144,10 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     const pinned = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/pin`, payload: { pinned: true } });
     assert.equal(pinned.statusCode, 200, pinned.body);
     assert.match(pinned.json().data.plan.pinnedAt, /^\d{4}-\d{2}-\d{2}T/);
+    const pinnedKanban = await app.inject({ method: 'GET', url: '/' });
+    assert.doesNotMatch(pinnedKanban.body, /data-pin-plan/);
+    assert.doesNotMatch(pinnedKanban.body, /<span class="badge">Pinned<\/span>/);
+    assert.match(pinnedKanban.body, new RegExp(`data-plan-id="${planId}"`));
 
     const project = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/project`, payload: { projectName: 'Issue 43', projectKey: 'issue-43' } });
     assert.equal(project.statusCode, 200, project.body);

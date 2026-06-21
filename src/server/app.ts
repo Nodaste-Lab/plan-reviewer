@@ -290,12 +290,16 @@ function repoGroupsHtml(plans: ListedPlan[]): string {
 }
 
 function organizationIndexStyles(): string {
-  return `.doc-kind-switcher{display:inline-flex;gap:2px;padding:3px;border:1px solid #334155;border-radius:999px;background:#08111f}.doc-kind-seg{border-radius:999px;padding:6px 10px;color:#a7b0c0;font-size:12px;font-weight:850;text-decoration:none}.doc-kind-seg.active{background:#0ea5e9;color:#e0f2fe}.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px}.kanban-page{max-width:none;width:100%;box-sizing:border-box;padding:24px clamp(14px,2vw,32px)}.kanban-board{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:16px;align-items:start}.kanban-column{background:#0b1220;border:1px solid #334155;border-radius:12px;padding:12px;min-height:180px}.kanban-column h2{font-size:16px;margin:0 0 8px;display:flex;justify-content:space-between}.kanban-card{border:1px solid #253248;border-radius:10px;background:#111827;padding:12px;margin:8px 0}.kanban-card[draggable=true]{cursor:grab}.kanban-card.pinned{border-color:#facc15}.kanban-card .pin-button{display:inline-grid;place-items:center;width:34px;height:34px;padding:0;border:1px solid #facc15!important;border-radius:8px;background:#0b1220!important;color:#fef08a!important;font-size:18px;line-height:1;box-shadow:none}.kanban-card .pin-button:hover{background:#172033!important;border-color:#fde047!important}.badge{display:inline-block;border:1px solid #475569;border-radius:999px;padding:1px 7px;background:#0b1220;color:#cbd5e1;font-size:12px;margin:2px}.badge.ready{border-color:#22c55e;color:#bbf7d0}.badge.not-ready{border-color:#f59e0b;color:#fde68a}.drop-target{outline:2px dashed #7dd3fc;outline-offset:-4px}.card-summary{color:#cbd5e1;font-size:13px}.card-detail-link{display:inline-block;margin-top:8px;font-weight:800}.collab-card{border-left-color:#a78bfa}.organizer-error{border:1px solid #fb7185;border-radius:8px;background:rgba(251,113,133,.12);color:#fecdd3;padding:10px;margin:12px 0}.columns-table{width:100%;border-collapse:collapse;margin:16px 0}.columns-table th,.columns-table td{border-bottom:1px solid #334155;padding:10px;text-align:left}.columns-table input[type=checkbox]{width:18px;height:18px}.columns-save{display:flex;gap:10px;align-items:center}.columns-message{color:#a7b0c0}`;
+  return `.doc-kind-switcher{display:inline-flex;gap:2px;padding:3px;border:1px solid #334155;border-radius:999px;background:#08111f}.doc-kind-seg{border-radius:999px;padding:6px 10px;color:#a7b0c0;font-size:12px;font-weight:850;text-decoration:none}.doc-kind-seg.active{background:#0ea5e9;color:#e0f2fe}.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px}.kanban-page{max-width:none;width:100%;box-sizing:border-box;padding:24px clamp(14px,2vw,32px)}.kanban-board{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:16px;align-items:start}.kanban-column{background:#0b1220;border:1px solid #334155;border-radius:12px;padding:12px;min-height:180px}.kanban-column h2{font-size:16px;margin:0 0 8px;display:flex;justify-content:space-between}.kanban-card{border:1px solid #253248;border-radius:10px;background:#111827;padding:12px;margin:8px 0}.kanban-card[draggable=true]{cursor:grab}.badge{display:inline-block;border:1px solid #475569;border-radius:999px;padding:1px 7px;background:#0b1220;color:#cbd5e1;font-size:12px;margin:2px}.badge.ready{border-color:#22c55e;color:#bbf7d0}.badge.not-ready{border-color:#f59e0b;color:#fde68a}.drop-target{outline:2px dashed #7dd3fc;outline-offset:-4px}.card-summary{color:#cbd5e1;font-size:13px}.card-detail-link{display:inline-block;margin-top:8px;font-weight:800}.collab-card{border-left-color:#a78bfa}.organizer-error{border:1px solid #fb7185;border-radius:8px;background:rgba(251,113,133,.12);color:#fecdd3;padding:10px;margin:12px 0}.columns-table{width:100%;border-collapse:collapse;margin:16px 0}.columns-table th,.columns-table td{border-bottom:1px solid #334155;padding:10px;text-align:left}.columns-table input[type=checkbox]{width:18px;height:18px}.columns-save{display:flex;gap:10px;align-items:center}.columns-message{color:#a7b0c0}.topbar-icon-action{display:inline-flex;align-items:center;justify-content:center;min-width:38px;min-height:34px;padding:8px 10px;box-sizing:border-box;font-size:16px;line-height:1}`;
 }
 
 function documentViewSwitcher(active: 'kanban' | 'all' | 'collab'): string {
   const link = (view: 'kanban' | 'all' | 'collab', label: string, href: string) => `<a class="doc-kind-seg${active === view ? ' active' : ''}" href="${href}">${label}</a>`;
   return `<nav class="doc-kind-switcher" aria-label="Document view selector">${link('kanban', 'Kanban', '/')}${link('all', 'All documents', '/?view=all')}${link('collab', 'Collab docs', '/?view=collab')}</nav>`;
+}
+
+function topbarIconAction(href: string, label: string, icon: string): string {
+  return `<a class="nav-link primary topbar-icon-action" href="${escapeHtml(href)}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">${escapeHtml(icon)}</a>`;
 }
 
 function boardColumnLabel(columns: BoardColumnRecord[], key: string | undefined): string {
@@ -315,23 +319,23 @@ function planBadgesHtml(item: ListedPlan, columns: BoardColumnRecord[]): string 
   const ready = item.plan.publicationMetadata?.executionReady;
   const progress = item.progress.totalPhases ? `${item.progress.completedPhases} of ${item.progress.totalPhases} phases complete` : 'No phases';
   const attentionBadge = planNeedsAttention(item) ? '<span class="badge not-ready">Needs attention</span><span class="badge not-ready">Source missing</span>' : '';
-  return `<div class="card-meta"><span class="badge">${item.plan.reviewMode === 'collaboration' ? 'Collab doc' : 'Plan'}</span><span class="badge">Project: ${escapeHtml(item.plan.projectName)}</span>${issueBadgeHtml(item)}<span class="badge">State: ${escapeHtml(item.plan.lifecycleState)}</span>${item.plan.reviewMode === 'planning' ? `<span class="badge">Status: ${escapeHtml(boardColumnLabel(columns, item.plan.boardColumnKey))}</span><span class="badge ${ready ? 'ready' : 'not-ready'}">${ready ? 'Execution ready' : 'Execution not ready'}</span><span class="badge">Progress: ${escapeHtml(progress)}</span>` : ''}<span class="badge">Pending: ${item.counts.pending}</span>${item.plan.pinnedAt ? '<span class="badge">Pinned</span>' : ''}${attentionBadge}</div>`;
+  return `<div class="card-meta"><span class="badge">${item.plan.reviewMode === 'collaboration' ? 'Collab doc' : 'Plan'}</span><span class="badge">Project: ${escapeHtml(item.plan.projectName)}</span>${issueBadgeHtml(item)}<span class="badge">State: ${escapeHtml(item.plan.lifecycleState)}</span>${item.plan.reviewMode === 'planning' ? `<span class="badge">Status: ${escapeHtml(boardColumnLabel(columns, item.plan.boardColumnKey))}</span><span class="badge ${ready ? 'ready' : 'not-ready'}">${ready ? 'Execution ready' : 'Execution not ready'}</span><span class="badge">Progress: ${escapeHtml(progress)}</span>` : ''}<span class="badge">Pending: ${item.counts.pending}</span>${attentionBadge}</div>`;
 }
 
 function kanbanCardHtml(item: ListedPlan, columns: BoardColumnRecord[]): string {
-  return `<article class="kanban-card${item.plan.pinnedAt ? ' pinned' : ''}" draggable="true" data-plan-id="${escapeHtml(item.plan.id)}" data-column="${escapeHtml(item.plan.boardColumnKey ?? '')}"><div class="plan-card-header"><strong><a href="/p/${escapeHtml(item.plan.id)}">${escapeHtml(displayTitle(item))}</a></strong><button class="pin-button" type="button" data-pin-plan="${escapeHtml(item.plan.id)}" aria-pressed="${item.plan.pinnedAt ? 'true' : 'false'}">${item.plan.pinnedAt ? '★' : '☆'}</button></div><p class="card-summary">${escapeHtml(summaryForItem(item))}</p>${planBadgesHtml(item, columns)}<a class="card-detail-link" href="/p/${escapeHtml(item.plan.id)}">Details / Open</a></article>`;
+  return `<article class="kanban-card" draggable="true" data-plan-id="${escapeHtml(item.plan.id)}" data-column="${escapeHtml(item.plan.boardColumnKey ?? '')}"><div class="plan-card-header"><strong><a href="/p/${escapeHtml(item.plan.id)}">${escapeHtml(displayTitle(item))}</a></strong></div><p class="card-summary">${escapeHtml(summaryForItem(item))}</p>${planBadgesHtml(item, columns)}<a class="card-detail-link" href="/p/${escapeHtml(item.plan.id)}">Details / Open</a></article>`;
 }
 
 function kanbanIndexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCount: number, deferredCount: number, columns: BoardColumnRecord[], projectName?: string): string {
   const planning = plans.filter(item => item.plan.reviewMode === 'planning');
-  const cardsFor = (column: BoardColumnRecord) => planning.filter(item => item.plan.boardColumnKey === column.key).sort((a, b) => (Boolean(a.plan.pinnedAt) === Boolean(b.plan.pinnedAt) ? 0 : a.plan.pinnedAt ? -1 : 1) || String(b.activityAt).localeCompare(String(a.activityAt)) || displayTitle(a).localeCompare(displayTitle(b))).map(item => kanbanCardHtml(item, columns)).join('\n');
+  const cardsFor = (column: BoardColumnRecord) => planning.filter(item => item.plan.boardColumnKey === column.key).sort((a, b) => String(b.activityAt).localeCompare(String(a.activityAt)) || displayTitle(a).localeCompare(displayTitle(b))).map(item => kanbanCardHtml(item, columns)).join('\n');
   const board = columns.map(column => `<section class="kanban-column" data-column-key="${escapeHtml(column.key)}"><h2>${escapeHtml(column.label)} <span>${planning.filter(item => item.plan.boardColumnKey === column.key).length}</span></h2>${cardsFor(column) || '<p class="muted">No plans.</p>'}</section>`).join('\n');
   const projectSummary = projectName ? `<p class="muted">Project: ${escapeHtml(projectName)} · <a href="/">Show all projects</a></p>` : '';
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Plans · Kanban</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"><style>${baseIndexStyles()}${organizationIndexStyles()}</style></head><body><main class="kanban-page"><div class="topbar"><button class="nav-link" type="button" aria-label="Menu">☰</button>${documentViewSwitcher('kanban')}<div class="plan-actions"><a class="nav-link primary" href="/columns">Configure columns</a><a class="nav-link primary" href="/deferred">Deferred (${deferredCount})</a><a class="nav-link primary" href="/archive">Archived (${archivedCount})</a></div></div><div class="page-header"><div><h1>Plans · Kanban</h1><p class="muted">Columns are workflow status for planning documents. Execution readiness is a separate badge.</p>${projectSummary}</div></div><div id="organizer-error" class="organizer-error" hidden></div><section class="kanban-board" aria-label="Plan board columns">${board}</section><script>${localTimestampScript()}\n${organizationScript()}</script></main></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Plans · Kanban</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"><style>${baseIndexStyles()}${organizationIndexStyles()}</style></head><body><main class="kanban-page"><div class="topbar"><button class="nav-link" type="button" aria-label="Menu">☰</button>${documentViewSwitcher('kanban')}<div class="plan-actions">${topbarIconAction('/columns', 'Configure columns', '⚙')}${topbarIconAction('/deferred', `Deferred (${deferredCount})`, '⏸')}${topbarIconAction('/archive', `Archived (${archivedCount})`, '🗄')}</div></div><div class="page-header"><div><h1>Plans · Kanban</h1><p class="muted">Columns are workflow status for planning documents. Execution readiness is a separate badge.</p>${projectSummary}</div></div><div id="organizer-error" class="organizer-error" hidden></div><section class="kanban-board" aria-label="Plan board columns">${board}</section><script>${localTimestampScript()}\n${organizationScript()}</script></main></body></html>`;
 }
 
 function organizationScript(): string {
-  return `let draggedPlanId=null;document.addEventListener('dragstart',event=>{const card=event.target instanceof Element?event.target.closest('[data-plan-id]'):null;if(!card)return;draggedPlanId=card.dataset.planId;event.dataTransfer?.setData('text/plain',draggedPlanId||'');});document.addEventListener('dragover',event=>{const col=event.target instanceof Element?event.target.closest('[data-column-key]'):null;if(!col)return;event.preventDefault();col.classList.add('drop-target');});document.addEventListener('dragleave',event=>{const col=event.target instanceof Element?event.target.closest('[data-column-key]'):null;col?.classList.remove('drop-target');});document.addEventListener('drop',async event=>{const col=event.target instanceof Element?event.target.closest('[data-column-key]'):null;if(!col||!draggedPlanId)return;event.preventDefault();col.classList.remove('drop-target');const card=document.querySelector('[data-plan-id="'+CSS.escape(draggedPlanId)+'"]');const previous=card?.parentElement;col.appendChild(card);const res=await fetch('/api/plans/'+encodeURIComponent(draggedPlanId)+'/column',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({boardColumnKey:col.dataset.columnKey})}).catch(()=>null);if(!res?.ok){previous?.appendChild(card);const box=document.getElementById('organizer-error');if(box){box.hidden=false;box.textContent='Column update failed; the card was restored.';}}});document.addEventListener('click',async event=>{const button=event.target instanceof Element?event.target.closest('[data-pin-plan]'):null;if(!button)return;const planId=button.dataset.pinPlan;const pinned=button.getAttribute('aria-pressed')!=='true';const res=await fetch('/api/plans/'+encodeURIComponent(planId)+'/pin',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({pinned})}).catch(()=>null);if(res?.ok)window.location.reload();});`;
+  return `let draggedPlanId=null;document.addEventListener('dragstart',event=>{const card=event.target instanceof Element?event.target.closest('[data-plan-id]'):null;if(!card)return;draggedPlanId=card.dataset.planId;event.dataTransfer?.setData('text/plain',draggedPlanId||'');});document.addEventListener('dragover',event=>{const col=event.target instanceof Element?event.target.closest('[data-column-key]'):null;if(!col)return;event.preventDefault();col.classList.add('drop-target');});document.addEventListener('dragleave',event=>{const col=event.target instanceof Element?event.target.closest('[data-column-key]'):null;col?.classList.remove('drop-target');});document.addEventListener('drop',async event=>{const col=event.target instanceof Element?event.target.closest('[data-column-key]'):null;if(!col||!draggedPlanId)return;event.preventDefault();col.classList.remove('drop-target');const card=document.querySelector('[data-plan-id="'+CSS.escape(draggedPlanId)+'"]');const previous=card?.parentElement;col.appendChild(card);const res=await fetch('/api/plans/'+encodeURIComponent(draggedPlanId)+'/column',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({boardColumnKey:col.dataset.columnKey})}).catch(()=>null);if(!res?.ok){previous?.appendChild(card);const box=document.getElementById('organizer-error');if(box){box.hidden=false;box.textContent='Column update failed; the card was restored.';}}});`;
 }
 
 function indexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCount: number, deferredCount: number, columns: BoardColumnRecord[] = [], view: 'kanban' | 'all' | 'collab' = 'kanban', projectName?: string): string {
@@ -348,7 +352,7 @@ function indexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCoun
   return `<!doctype html><html><head><meta charset="utf-8"><title>Plan Review Index</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <style>${baseIndexStyles()}${organizationIndexStyles()}</style>
-  </head><body><main><div class="topbar"><button class="nav-link" type="button" aria-label="Menu">☰</button>${documentViewSwitcher(view)}<div class="plan-actions"><a class="nav-link primary" href="/deferred">Deferred (${deferredCount}) →</a><a class="nav-link primary" href="/archive">Archived (${archivedCount}) →</a></div></div><div class="page-header"><div><h1>Plan Review Index · ${view === 'collab' ? 'Collab docs' : 'All documents'}</h1><p class="muted">${view === 'collab' ? 'Collaboration documents are listed independently without plan-only controls.' : 'Planning and collaboration documents are shown together.'}</p></div></div>${attentionSummary}<div class="toolbar"><input id="q" placeholder="Filter plans" aria-label="Filter plans"><select id="repo" aria-label="Filter by repo"><option value="">All repos</option>${repos.map(repo => `<option value="${escapeHtml(repo)}">${escapeHtml(repo)}</option>`).join('')}</select></div><div id="plans">${rows || '<p>No active plans registered.</p>'}</div><script>
+  </head><body><main><div class="topbar"><button class="nav-link" type="button" aria-label="Menu">☰</button>${documentViewSwitcher(view)}<div class="plan-actions">${topbarIconAction('/deferred', `Deferred (${deferredCount})`, '⏸')}${topbarIconAction('/archive', `Archived (${archivedCount})`, '🗄')}</div></div><div class="page-header"><div><h1>Plan Review Index · ${view === 'collab' ? 'Collab docs' : 'All documents'}</h1><p class="muted">${view === 'collab' ? 'Collaboration documents are listed independently without plan-only controls.' : 'Planning and collaboration documents are shown together.'}</p></div></div>${attentionSummary}<div class="toolbar"><input id="q" placeholder="Filter plans" aria-label="Filter plans"><select id="repo" aria-label="Filter by repo"><option value="">All repos</option>${repos.map(repo => `<option value="${escapeHtml(repo)}">${escapeHtml(repo)}</option>`).join('')}</select></div><div id="plans">${rows || '<p>No active plans registered.</p>'}</div><script>
   const q=document.getElementById('q'), repo=document.getElementById('repo'), attentionFilter=document.querySelector('[data-attention-filter]'), cards=[...document.querySelectorAll('.plan-card')];
   let attentionOnly=false;
   function matchesSearch(card,text){if(!text)return true; const status=card.dataset.prStatus; if(text==='merged')return status==='merged'; if(text==='unmerged')return !!status&&status!=='merged'&&status!=='unlinked'; return card.dataset.search.includes(text);}  function apply(){const text=q.value.toLowerCase().trim(), r=repo.value; cards.forEach(card=>{card.hidden=!!((r&&card.dataset.repo!==r)||(text&&!matchesSearch(card,text))||(attentionOnly&&card.dataset.needsAttention!=='true'));}); document.querySelectorAll('.repo-group').forEach(group=>{group.hidden=!group.querySelector('.plan-card:not([hidden])');});}
@@ -391,8 +395,8 @@ function archiveHtml(plans: ReturnType<PlanReviewStore['listPlans']>, deferredCo
   const filteredEmpty = '<p class="empty-state" id="archive-filter-empty" hidden>No archived plans match the current filters. <button type="button" id="clear-filters">Clear filters</button></p>';
   return `<!doctype html><html><head><meta charset="utf-8"><title>Archived Plans</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <style>${baseIndexStyles()}</style>
-  </head><body><main><div class="page-header"><div><h1>Archived Plans</h1><p class="muted">Archived plans stay out of the active index but remain inspectable and restorable.</p></div><div class="plan-actions"><a class="nav-link primary" href="/">← Active index</a><a class="nav-link primary" href="/deferred">Deferred (${deferredCount}) →</a></div></div><div class="toolbar"><input id="q" placeholder="Filter archived plans" aria-label="Filter archived plans"><select id="repo" aria-label="Filter by repo"><option value="">All repos</option>${repos.map(repo => `<option value="${escapeHtml(repo)}">${escapeHtml(repo)}</option>`).join('')}</select></div><p class="muted" id="archive-count">${archivedPlans.length} archived</p><div id="plans">${rows || empty}</div>${rows ? filteredEmpty : ''}<script>
+    <style>${baseIndexStyles()}${organizationIndexStyles()}</style>
+  </head><body><main><div class="topbar"><button class="nav-link" type="button" aria-label="Menu">☰</button>${documentViewSwitcher('all')}<div class="plan-actions">${topbarIconAction('/', 'Active index', '⌂')}${topbarIconAction('/deferred', `Deferred (${deferredCount})`, '⏸')}</div></div><div class="page-header"><div><h1>Archived Plans</h1><p class="muted">Archived plans stay out of the active index but remain inspectable and restorable.</p></div></div><div class="toolbar"><input id="q" placeholder="Filter archived plans" aria-label="Filter archived plans"><select id="repo" aria-label="Filter by repo"><option value="">All repos</option>${repos.map(repo => `<option value="${escapeHtml(repo)}">${escapeHtml(repo)}</option>`).join('')}</select></div><p class="muted" id="archive-count">${archivedPlans.length} archived</p><div id="plans">${rows || empty}</div>${rows ? filteredEmpty : ''}<script>
   const q=document.getElementById('q'), repo=document.getElementById('repo'), cards=[...document.querySelectorAll('.plan-card')], filteredEmpty=document.getElementById('archive-filter-empty'), count=document.getElementById('archive-count');
   function matchesSearch(card,text){if(!text)return true; const status=card.dataset.prStatus; if(text==='merged')return status==='merged'; if(text==='unmerged')return !!status&&status!=='merged'&&status!=='unlinked'; return card.dataset.search.includes(text);}  function apply(){const text=q.value.toLowerCase().trim(), r=repo.value; let visible=0; cards.forEach(card=>{card.hidden=!!((r&&card.dataset.repo!==r)||(text&&!matchesSearch(card,text))); if(!card.hidden) visible++;}); if(filteredEmpty) filteredEmpty.hidden=visible>0||cards.length===0; if(count) count.textContent=visible+' archived';}
   ${localTimestampScript()}
@@ -426,8 +430,8 @@ function deferredHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedC
   const filteredEmpty = '<p class="empty-state" id="deferred-filter-empty" hidden>No deferred plans match the current filters. <button type="button" id="clear-filters">Clear filters</button></p>';
   return `<!doctype html><html><head><meta charset="utf-8"><title>Deferred Plans</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <style>${baseIndexStyles()}</style>
-  </head><body><main><div class="page-header"><div><h1>Deferred Plans</h1><p class="muted">Deferred plans are paused for later pickup and keep their notes with the plan.</p></div><div class="plan-actions"><a class="nav-link primary" href="/">← Active index</a><a class="nav-link primary" href="/archive">Archived (${archivedCount}) →</a></div></div><div class="toolbar"><input id="q" placeholder="Filter deferred plans" aria-label="Filter deferred plans"><select id="repo" aria-label="Filter by repo"><option value="">All repos</option>${repos.map(repo => `<option value="${escapeHtml(repo)}">${escapeHtml(repo)}</option>`).join('')}</select></div><p class="muted" id="deferred-count">${deferredPlans.length} deferred</p><div id="plans">${rows || empty}</div>${rows ? filteredEmpty : ''}<script>
+    <style>${baseIndexStyles()}${organizationIndexStyles()}</style>
+  </head><body><main><div class="topbar"><button class="nav-link" type="button" aria-label="Menu">☰</button>${documentViewSwitcher('all')}<div class="plan-actions">${topbarIconAction('/', 'Active index', '⌂')}${topbarIconAction('/archive', `Archived (${archivedCount})`, '🗄')}</div></div><div class="page-header"><div><h1>Deferred Plans</h1><p class="muted">Deferred plans are paused for later pickup and keep their notes with the plan.</p></div></div><div class="toolbar"><input id="q" placeholder="Filter deferred plans" aria-label="Filter deferred plans"><select id="repo" aria-label="Filter by repo"><option value="">All repos</option>${repos.map(repo => `<option value="${escapeHtml(repo)}">${escapeHtml(repo)}</option>`).join('')}</select></div><p class="muted" id="deferred-count">${deferredPlans.length} deferred</p><div id="plans">${rows || empty}</div>${rows ? filteredEmpty : ''}<script>
   const q=document.getElementById('q'), repo=document.getElementById('repo'), cards=[...document.querySelectorAll('.plan-card')], filteredEmpty=document.getElementById('deferred-filter-empty'), count=document.getElementById('deferred-count');
   function apply(){const text=q.value.toLowerCase(), r=repo.value; let visible=0; cards.forEach(card=>{card.hidden=!!((r&&card.dataset.repo!==r)||(text&&!card.dataset.search.includes(text))); if(!card.hidden) visible++;}); if(filteredEmpty) filteredEmpty.hidden=visible>0||cards.length===0; if(count) count.textContent=visible+' deferred';}
   ${localTimestampScript()}
@@ -497,28 +501,28 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
   const documentKind = isCollaboration ? 'document' : 'plan';
   const readyLabel = isCollaboration ? 'Collaboration mode' : plan.publicationMetadata?.executionReady ? 'Execution ready' : 'Execution not ready';
   const encodedTitleFallback = escapeHtml(encodeClientData(reviewShellTitle(planTitleFallback(plan))));
-  const reviewButton = isCollaboration ? '' : '<button id="request-execution-review" type="button">Request execution-ready review</button>';
-  const buildButton = isCollaboration ? '' : '<button id="build-plan" type="button">Build Plan</button>';
+  const reviewButton = isCollaboration ? '' : '<button id="request-execution-review" class="tool-button" type="button" aria-label="Request execution-ready review" title="Request execution-ready review">✓</button>';
+  const buildButton = isCollaboration ? '' : '<button id="build-plan" class="tool-button" type="button" aria-label="Build Plan" title="Build Plan">⚒</button>';
   const planNavToggle = '<button id="desktop-plan-nav-toggle" class="tool-button" type="button" aria-controls="plan-list-nav" aria-expanded="true" aria-label="Plan Navigator" title="Plan Navigator">☰</button>';
   const downloadAction = `<a id="download-raw-plan" class="tool-button download-tool" href="/download/${escapedPlanId}" aria-label="Download raw plan" title="Download raw plan HTML; ZIP includes required assets." download>⬇</a>`;
-  const commentsButton = '<button id="desktop-comments-toggle" class="comments-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Open comments" title="Comments">Comments <span id="desktop-comments-count" class="comments-count" hidden></span></button>';
+  const commentsButton = '<button id="desktop-comments-toggle" class="tool-button comments-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Open comments" title="Comments">💬 <span id="desktop-comments-count" class="comments-count" hidden></span></button>';
   const indexLink = documentViewSwitcher(isCollaboration ? 'collab' : 'kanban');
   const pinControl = isCollaboration ? '' : `<button id="pin-plan" class="pin-button" type="button" data-pin-plan="${escapedPlanId}" aria-pressed="${plan.pinnedAt ? 'true' : 'false'}" aria-label="${plan.pinnedAt ? 'Unpin plan' : 'Pin plan'}" title="${plan.pinnedAt ? 'Unpin plan' : 'Pin plan'}">${plan.pinnedAt ? '★' : '☆'}</button>`;
   const projectOptions = [...new Map(projectPlans.map(item => [item.plan.projectKey, item.plan.projectName])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
   if (!projectOptions.some(([key]) => key === plan.projectKey)) projectOptions.push([plan.projectKey, plan.projectName]);
-  const projectControl = `<label class="org-control">Project <select id="project-control" aria-label="Project">${projectOptions.map(([key, name]) => `<option value="${escapeHtml(key)}"${key === plan.projectKey ? ' selected' : ''}>${escapeHtml(name)}</option>`).join('')}</select></label>`;
-  const stateControl = `<label class="org-control">State <select id="lifecycle-control" aria-label="State"><option value="active"${plan.lifecycleState === 'active' ? ' selected' : ''}>Active</option><option value="deferred"${plan.lifecycleState === 'deferred' ? ' selected' : ''}>Deferred</option><option value="archived"${plan.lifecycleState === 'archived' ? ' selected' : ''}>Archived</option></select></label>`;
-  const columnControl = isCollaboration ? '' : `<label class="org-control">Status <select id="column-control" aria-label="Status">${columns.map(column => `<option value="${escapeHtml(column.key)}"${column.key === plan.boardColumnKey ? ' selected' : ''}>${escapeHtml(column.label)}</option>`).join('')}</select></label>`;
-  const organizationControls = `${pinControl}${projectControl}${stateControl}${columnControl}`;
+  const projectFilterControl = `<label class="filter-control">Filter: Project <select id="project-filter-control" aria-label="Filter by project"><option value="">All projects</option>${projectOptions.map(([key, name]) => `<option value="${escapeHtml(key)}">${escapeHtml(name)}</option>`).join('')}</select></label>`;
+  const stateFilterControl = `<label class="filter-control">Filter: State <select id="state-filter-control" aria-label="Filter by state"><option value="">All states</option><option value="active">Active</option><option value="deferred">Deferred</option><option value="archived">Archived</option></select></label>`;
+  const statusFilterControl = isCollaboration ? '' : `<label class="filter-control">Filter: Status <select id="status-filter-control" aria-label="Filter by status"><option value="">All statuses</option>${columns.map(column => `<option value="${escapeHtml(column.key)}">${escapeHtml(column.label)}</option>`).join('')}</select></label>`;
+  const organizationControls = `${pinControl}${projectFilterControl}${stateFilterControl}${statusFilterControl}`;
   const archiveLabel = isCollaboration ? 'Archive document' : 'Archive plan';
   const restoreLabel = isCollaboration ? 'Restore document' : 'Restore plan';
   const resumeLabel = isCollaboration ? 'Resume document' : 'Resume plan';
-  const deferAction = isCollaboration ? '' : '<button id="defer-plan" type="button">Defer plan</button>';
+  const deferAction = isCollaboration ? '' : '<button id="defer-plan" class="tool-button" type="button" aria-label="Defer plan" title="Defer plan">⏸</button>';
   const navActions = plan.archivedAt
-    ? `${planNavToggle}${indexLink}${organizationControls}${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="archive-status">Archived</span><button id="restore-plan" type="button">${restoreLabel}</button>${commentsButton}`
+    ? `${planNavToggle}${indexLink}${organizationControls}${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="archive-status">Archived</span><button id="restore-plan" class="tool-button" type="button" aria-label="${restoreLabel}" title="${restoreLabel}">↩</button>${commentsButton}`
     : plan.lifecycleState === 'deferred'
-      ? `${planNavToggle}${indexLink}${organizationControls}${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="archive-status">Deferred</span><button id="resume-plan" type="button">${resumeLabel}</button><button id="archive-plan" type="button">${archiveLabel}</button><button id="restore-plan" type="button" hidden>${restoreLabel}</button>${commentsButton}`
-      : `${planNavToggle}${indexLink}${organizationControls}${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="archive-status" hidden></span>${deferAction}<button id="archive-plan" type="button">${archiveLabel}</button><button id="restore-plan" type="button" hidden>${restoreLabel}</button>${commentsButton}`;
+      ? `${planNavToggle}${indexLink}${organizationControls}${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="archive-status">Deferred</span><button id="resume-plan" class="tool-button" type="button" aria-label="${resumeLabel}" title="${resumeLabel}">▶</button><button id="archive-plan" class="tool-button" type="button" aria-label="${archiveLabel}" title="${archiveLabel}">🗄</button><button id="restore-plan" class="tool-button" type="button" aria-label="${restoreLabel}" title="${restoreLabel}" hidden>↩</button>${commentsButton}`
+      : `${planNavToggle}${indexLink}${organizationControls}${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="archive-status" hidden></span>${deferAction}<button id="archive-plan" class="tool-button" type="button" aria-label="${archiveLabel}" title="${archiveLabel}">🗄</button><button id="restore-plan" class="tool-button" type="button" aria-label="${restoreLabel}" title="${restoreLabel}" hidden>↩</button>${commentsButton}`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapedShellTitle}</title>
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
@@ -567,7 +571,7 @@ const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" 
 
 const clientCss = `
 body{--plan-nav-width:260px;--comments-width:48px;margin:0;background:#0b1020;color:#e5e7eb;font-family:system-ui,sans-serif}body.plan-nav-collapsed{--plan-nav-width:0}body.comments-open{--comments-width:320px}
-#plan-navbar{min-height:86px;box-sizing:border-box;display:grid;grid-template-rows:auto auto;gap:8px;padding:10px 16px;border-bottom:1px solid #2b364d;background:#0f172a}#plan-navbar-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}#plan-navbar a{color:#7dd3fc;text-decoration:none;font-weight:700}#plan-navbar a.nav-index{margin-right:auto}#plan-navbar .doc-kind-switcher{margin-right:auto}.org-control{display:inline-flex;align-items:center;gap:5px;border:1px solid #334155;border-radius:8px;background:#111827;padding:3px 6px;color:#cbd5e1;font-size:12px;font-weight:800}.org-control input,.org-control select{max-width:150px;background:#020617;color:#e5e7eb;border:1px solid #7dd3fc;border-radius:6px;padding:6px 8px}.pin-button{border-color:#facc15!important;color:#fef08a!important}#plan-navbar button,#plan-navbar .tool-button{background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px 10px;cursor:pointer}#plan-navbar button:hover,#plan-navbar .tool-button:hover{border-color:#93c5fd}#plan-navbar .tool-button{display:inline-flex;align-items:center;justify-content:center;min-width:38px;min-height:34px;box-sizing:border-box;line-height:1}.download-tool{border-color:rgba(56,189,248,.72)!important;background:#075985!important;color:#ecfeff!important}#current-plan-bar{display:flex;align-items:center;gap:8px;min-width:0;border-top:1px solid rgba(71,85,105,.55);padding-top:8px;color:#cbd5e1}#current-plan-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f8fafc}.archive-status{color:#cbd5e1;border:1px solid #475569;background:#1e293b;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:800}#restore-plan{border-color:#22c55e;color:#bbf7d0}.comments-toggle{display:inline-flex;align-items:center;gap:6px}.comments-count{min-width:18px;height:18px;border-radius:999px;background:#7e22ce;color:white;display:inline-grid;place-items:center;padding:0 5px;font-size:11px;font-weight:900}
+#plan-navbar{min-height:86px;box-sizing:border-box;display:grid;grid-template-rows:auto auto;gap:8px;padding:10px 16px;border-bottom:1px solid #2b364d;background:#0f172a}#plan-navbar-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}#plan-navbar a{color:#7dd3fc;text-decoration:none;font-weight:700}#plan-navbar a.nav-index{margin-right:auto}#plan-navbar .doc-kind-switcher{margin-right:auto}.filter-control{display:inline-flex;align-items:center;gap:5px;border:1px solid #334155;border-radius:8px;background:#111827;padding:3px 6px;color:#cbd5e1;font-size:12px;font-weight:800}.filter-control select{max-width:150px;background:#020617;color:#e5e7eb;border:1px solid #7dd3fc;border-radius:6px;padding:6px 8px}.pin-button{border-color:#facc15!important;color:#fef08a!important}#plan-navbar button,#plan-navbar .tool-button{background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px 10px;cursor:pointer}#plan-navbar button:hover,#plan-navbar .tool-button:hover{border-color:#93c5fd}#plan-navbar .tool-button{display:inline-flex;align-items:center;justify-content:center;min-width:38px;min-height:34px;box-sizing:border-box;line-height:1}.download-tool{border-color:rgba(56,189,248,.72)!important;background:#075985!important;color:#ecfeff!important}#current-plan-bar{display:flex;align-items:center;gap:8px;min-width:0;border-top:1px solid rgba(71,85,105,.55);padding-top:8px;color:#cbd5e1}#current-plan-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f8fafc}.archive-status{color:#cbd5e1;border:1px solid #475569;background:#1e293b;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:800}#restore-plan{border-color:#22c55e;color:#bbf7d0}.comments-toggle{display:inline-flex;align-items:center;gap:6px}.comments-count{min-width:18px;height:18px;border-radius:999px;background:#7e22ce;color:white;display:inline-grid;place-items:center;padding:0 5px;font-size:11px;font-weight:900}
 #app{display:grid;grid-template-columns:var(--plan-nav-width) minmax(0,1fr) var(--comments-width);min-height:calc(100vh - 86px);transition:grid-template-columns .18s ease}
 #plan-list-nav{grid-column:1;border-right:1px solid #2b364d;background:#0b1220;padding:14px;overflow:auto}body.plan-nav-collapsed #plan-list-nav{padding:0;border-right:0;overflow:hidden}body.plan-nav-collapsed #plan-list-nav>*{visibility:hidden}#plan-list-nav h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#a7b0c0;margin:0}.plan-list-header{display:flex;align-items:center;justify-content:space-between;gap:8px}.plan-list-error{border:1px solid #f59e0b;background:rgba(245,158,11,.12);color:#fde68a;border-radius:8px;padding:8px;margin:10px 0;font-size:13px}.plan-list-empty{color:#a7b0c0;font-size:13px}.plan-nav-item{display:grid;gap:5px;padding:10px;margin:8px 0;border:1px solid #253248;border-radius:10px;background:#101827;color:#cbd5e1;text-decoration:none}.plan-nav-item:hover{border-color:#64748b}.plan-nav-item.active{border-color:#38bdf8;background:linear-gradient(135deg,rgba(14,165,233,.18),rgba(16,24,39,.95))}.plan-nav-item.attention{border-color:#f59e0b}.plan-nav-title{font-size:13px;font-weight:850;color:#f8fafc;line-height:1.25}.plan-nav-meta{display:flex;gap:6px;align-items:center;flex-wrap:wrap;color:#a7b0c0;font-size:11px}.plan-nav-submeta{color:#8fa0b8;font-size:11px}.plan-nav-pill{border:1px solid #475569;border-radius:999px;padding:1px 6px;background:#0b1220}.plan-nav-pill.ready{border-color:#22c55e;color:#bbf7d0}.plan-nav-pill.not-ready{border-color:#f59e0b;color:#fde68a}
 #review{grid-column:2;position:relative;min-width:0}#sidebar{grid-column:3;grid-row:1;border-left:1px solid #2b364d;padding:0;background:#111827;overflow:hidden}#sidebar>h1,#sidebar>#sync-warning,#sidebar>#plan-notes-panel,#sidebar>#deferred-refresh-notice,#sidebar>#comments{display:none}body.comments-open #sidebar{padding:16px;overflow:auto}body.comments-open #sidebar>h1,body.comments-open #sidebar>#sync-warning,body.comments-open #sidebar>#plan-notes-panel,body.comments-open #sidebar>#deferred-refresh-notice,body.comments-open #sidebar>#comments{display:block}
@@ -602,10 +606,9 @@ const restorePlanButton = document.getElementById('restore-plan');
 const deferPlanButton = document.getElementById('defer-plan');
 const resumePlanButton = document.getElementById('resume-plan');
 const pinPlanButton = document.getElementById('pin-plan');
-const projectControl = document.getElementById('project-control');
-const lifecycleControl = document.getElementById('lifecycle-control');
-let lifecycleControlPreviousValue = lifecycleControl?.value || '';
-const columnControl = document.getElementById('column-control');
+const projectFilterControl = document.getElementById('project-filter-control');
+const stateFilterControl = document.getElementById('state-filter-control');
+const statusFilterControl = document.getElementById('status-filter-control');
 const executionReviewButton = document.getElementById('request-execution-review');
 const buildPlanButton = document.getElementById('build-plan');
 const planNotes = document.getElementById('plan-notes');
@@ -690,6 +693,7 @@ let navigatorLoadError = null;
 let quickOpenItems = [];
 let quickOpenLoadPromise = null;
 let quickOpenLoadError = null;
+let navigatorFilterLoadPromise = null;
 let quickOpenMatches = [];
 let quickOpenActiveIndex = 0;
 let quickOpenPreviousFocus = null;
@@ -946,35 +950,28 @@ pinPlanButton?.addEventListener('click', async () => {
   pinPlanButton.setAttribute('title', pinned ? 'Unpin plan' : 'Pin plan');
   pinPlanButton.textContent = pinned ? '★' : '☆';
 });
-projectControl?.addEventListener('change', () => {
-  const projectKey = projectControl.value.trim();
-  if (!projectKey) return;
-  window.location.href = '/?projectKey=' + encodeURIComponent(projectKey);
-});
-lifecycleControl?.addEventListener('change', async () => {
-  const lifecycleState = lifecycleControl.value;
-  const body = { lifecycleState };
-  if (lifecycleState === 'deferred') {
-    const note = prompt('Why defer this '+documentKind+', and what should the next agent know?');
-    if (!note || !note.trim()) {
-      lifecycleControl.value = lifecycleControlPreviousValue;
-      return;
-    }
-    body.note = note;
+async function loadNavigatorFilterSource(){
+  if (!navigatorFiltersActive()) {
+    renderPlanNavigatorItems(navigatorItems, document.querySelector('#plan-list-nav')?.getAttribute('aria-label') === 'Active documents' ? 'documents' : 'plans');
+    return;
   }
-  const json = await saveOrganizerField('/lifecycle', body, lifecycleControl);
-  if (json?.ok) {
-    lifecycleControlPreviousValue = lifecycleState;
-    window.location.reload();
-  } else {
-    lifecycleControl.value = lifecycleControlPreviousValue;
+  if (quickOpenItems.length) {
+    renderPlanNavigatorItems(quickOpenItems, 'documents');
+    return;
   }
-});
-columnControl?.addEventListener('change', async () => {
-  const boardColumnKey = columnControl.value.trim();
-  if (!boardColumnKey) return;
-  await saveOrganizerField('/column', { boardColumnKey }, columnControl);
-});
+  if (!navigatorFilterLoadPromise) navigatorFilterLoadPromise = loadQuickOpenItems().finally(() => { navigatorFilterLoadPromise = null; });
+  await navigatorFilterLoadPromise;
+  renderPlanNavigatorItems(quickOpenItems, 'documents');
+}
+function applyNavigatorFilters(){
+  void loadNavigatorFilterSource().catch(error => {
+    navigatorLoadError = error;
+    if (planListError) { planListError.hidden = false; planListError.textContent = 'Unable to filter documents. The current plan remains reviewable.'; }
+  });
+}
+projectFilterControl?.addEventListener('change', applyNavigatorFilters);
+stateFilterControl?.addEventListener('change', applyNavigatorFilters);
+statusFilterControl?.addEventListener('change', applyNavigatorFilters);
 addPlanNoteButton?.addEventListener('click', async () => {
   const body = planNoteBody?.value.trim();
   if (!body) return;
@@ -1296,15 +1293,33 @@ function planItemTitle(item){ return String(item?.displayTitle || item?.plan?.re
 function sortPlanNavItems(items){ return [...items].sort((a,b)=>(Boolean(a?.plan?.pinnedAt)===Boolean(b?.plan?.pinnedAt)?0:a?.plan?.pinnedAt?-1:1)||planItemRank(a)-planItemRank(b)||planItemRatio(b)-planItemRatio(a)||String(b.activityAt||'').localeCompare(String(a.activityAt||''))||planItemTitle(a).localeCompare(planItemTitle(b))||String(a?.plan?.id||'').localeCompare(String(b?.plan?.id||''))); }
 function planItemStatus(item){ if (planItemAttention(item)) return 'Needs attention'; if (item?.plan?.reviewMode === 'collaboration') return 'Collaboration'; if (item?.plan?.lifecycleState === 'archived') return 'Archived · '+(item?.plan?.boardColumnKey || 'No column'); if (item?.plan?.lifecycleState === 'deferred') return 'Deferred · '+(item?.plan?.boardColumnKey || 'No column'); if (item?.plan?.boardColumnKey) return item.plan.boardColumnKey; if (planItemComplete(item)) return 'Complete'; if (item?.plan?.publicationMetadata?.executionReady) return 'Execution ready'; return 'Execution not ready'; }
 function planItemProgress(item){ return item?.progress?.totalPhases ? item.progress.completedPhases + '/' + item.progress.totalPhases : 'No phases'; }
+function navigatorFiltersActive(){ return Boolean(projectFilterControl?.value || stateFilterControl?.value || statusFilterControl?.value); }
+function itemMatchesNavigatorFilters(item){
+  const project = projectFilterControl?.value || '';
+  const state = stateFilterControl?.value || '';
+  const status = statusFilterControl?.value || '';
+  if (project && item?.plan?.projectKey !== project) return false;
+  if (state && item?.plan?.lifecycleState !== state) return false;
+  if (status && item?.plan?.boardColumnKey !== status) return false;
+  return true;
+}
+function filteredNavigatorItems(items){
+  if (!navigatorFiltersActive()) return items;
+  const filtered = items.filter(itemMatchesNavigatorFilters);
+  const current = items.find(item => String(item?.plan?.id || '') === planId);
+  return current && !filtered.some(item => String(item?.plan?.id || '') === planId) ? [current, ...filtered] : filtered;
+}
 function renderPlanNavigatorItems(items, label = 'plans'){
   if (!planListItems) return;
-  const html = sortPlanNavItems(items).map(item => {
+  const visibleItems = filteredNavigatorItems(items);
+  const html = sortPlanNavItems(visibleItems).map(item => {
     const id = String(item?.plan?.id || '');
     const active = id === planId;
     const status = planItemStatus(item);
     return '<a class="plan-nav-item'+(active ? ' active' : '')+(planItemAttention(item) ? ' attention' : '')+'" href="/p/'+encodeURIComponent(id)+'" data-plan-nav-item data-plan-id="'+escapeHtml(id)+'" aria-current="'+(active ? 'page' : 'false')+'"><span class="plan-nav-title">'+escapeHtml(planItemTitle(item))+'</span><span class="plan-nav-meta"><span class="plan-nav-pill '+(item?.plan?.reviewMode === 'collaboration' || item?.plan?.publicationMetadata?.executionReady ? 'ready' : 'not-ready')+'">'+escapeHtml(status)+'</span><span>'+escapeHtml(planItemProgress(item))+'</span></span><span class="plan-nav-submeta">pending '+Number(item?.counts?.pending || 0)+' · updated '+escapeHtml(String(item?.modifiedAt || ''))+'</span></a>';
   }).join('');
-  planListItems.innerHTML = html || '<p class="plan-list-empty">No active '+(label === 'documents' ? 'documents' : 'plans')+'.</p>';
+  const filtered = navigatorFiltersActive();
+  planListItems.innerHTML = html || '<p class="plan-list-empty">No '+(filtered ? 'matching ' : 'active ')+(label === 'documents' ? 'documents' : 'plans')+'.</p>';
 }
 function quickOpenVisible(){ return Boolean(quickOpenBackdrop && !quickOpenBackdrop.hidden); }
 function normalizeQuickOpenText(value){ return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
@@ -1498,7 +1513,8 @@ async function loadPlanNavigator(){
     if (!json.ok) throw new Error(json.error?.message || 'Unable to load plans');
     navigatorItems = Array.isArray(json.data.plans) ? json.data.plans : [];
     navigatorLoadError = null;
-    renderPlanNavigatorItems(navigatorItems, document.querySelector('#plan-list-nav')?.getAttribute('aria-label') === 'Active documents' ? 'documents' : 'plans');
+    if (navigatorFiltersActive()) await loadNavigatorFilterSource();
+    else renderPlanNavigatorItems(navigatorItems, document.querySelector('#plan-list-nav')?.getAttribute('aria-label') === 'Active documents' ? 'documents' : 'plans');
     if (planListError) planListError.hidden = true;
     if (planListRetry) planListRetry.hidden = true;
     if (quickOpenVisible()) renderQuickOpenResults();
@@ -2961,7 +2977,7 @@ export function createApp(options: AppOptions): FastifyInstance {
       const title = hideDisabled ? `Move ${count} plan${count === 1 ? '' : 's'} out before hiding this column.` : 'Hide this column from the Kanban board.';
       return `<tr data-column-row data-key="${escapeHtml(column.key)}" data-label="${escapeHtml(column.label)}" data-position="${column.position}" data-is-done="${column.isDone ? 'true' : 'false'}"><td><code>${escapeHtml(column.key)}</code></td><td>${escapeHtml(column.label)}</td><td>${column.position}</td><td>${column.isDone ? 'Done' : 'Workflow'}</td><td>${count}</td><td><label title="${escapeHtml(title)}"><input type="checkbox" data-column-hidden ${column.hiddenAt ? 'checked' : ''} ${hideDisabled ? 'disabled' : ''}> Hide</label>${hideDisabled ? ` <span class="muted">Move ${count} plan${count === 1 ? '' : 's'} first</span>` : ''}</td></tr>`;
     }).join('');
-    reply.type('text/html').send(`<!doctype html><html><head><meta charset="utf-8"><title>Board columns</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"><style>${baseIndexStyles()}${organizationIndexStyles()}</style></head><body><main><div class="topbar"><button class="nav-link" type="button" aria-label="Menu">☰</button>${documentViewSwitcher('kanban')}<a class="nav-link primary" href="/">Back to Kanban</a></div><h1>Board columns</h1><p class="muted">Column labels, order, done behavior, and visibility are persisted in the local database. Empty columns can be hidden from the Kanban board; occupied columns must be emptied before hiding so plans do not disappear.</p><div id="organizer-error" class="organizer-error" hidden></div><table class="columns-table"><thead><tr><th>Stable key</th><th>Label</th><th>Position</th><th>Behavior</th><th>Plans</th><th>Visibility</th></tr></thead><tbody>${rows}</tbody></table><div class="columns-save"><button id="save-columns" class="nav-link primary" type="button">Save visibility</button><span id="columns-message" class="columns-message"></span></div><script>
+    reply.type('text/html').send(`<!doctype html><html><head><meta charset="utf-8"><title>Board columns</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"><style>${baseIndexStyles()}${organizationIndexStyles()}</style></head><body><main><div class="topbar"><button class="nav-link" type="button" aria-label="Menu">☰</button>${documentViewSwitcher('kanban')}<div class="plan-actions">${topbarIconAction('/', 'Back to Kanban', '←')}</div></div><h1>Board columns</h1><p class="muted">Column labels, order, done behavior, and visibility are persisted in the local database. Empty columns can be hidden from the Kanban board; occupied columns must be emptied before hiding so plans do not disappear.</p><div id="organizer-error" class="organizer-error" hidden></div><table class="columns-table"><thead><tr><th>Stable key</th><th>Label</th><th>Position</th><th>Behavior</th><th>Plans</th><th>Visibility</th></tr></thead><tbody>${rows}</tbody></table><div class="columns-save"><button id="save-columns" class="nav-link primary" type="button">Save visibility</button><span id="columns-message" class="columns-message"></span></div><script>
       const message=document.getElementById('columns-message'), error=document.getElementById('organizer-error');
       document.getElementById('save-columns')?.addEventListener('click', async event => {
         const button=event.currentTarget;

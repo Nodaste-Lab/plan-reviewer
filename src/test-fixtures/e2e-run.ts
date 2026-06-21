@@ -2034,9 +2034,9 @@ try {
     await page.waitForSelector('#archive-toast:not([hidden])');
     await page.waitForFunction(() => document.querySelector<HTMLElement>('#resume-plan')?.hidden === true && document.querySelector<HTMLElement>('#restore-plan')?.hidden === false && document.querySelector<HTMLElement>('#archive-status')?.textContent === 'Archived');
     await page.click('#archive-toast-undo');
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#archive-status')?.hidden === true);
     await page.waitForSelector('#archive-plan');
     assert.equal(await page.locator('#resume-plan').count(), 0);
-    assert.equal(await page.locator('#archive-status').evaluate((status: HTMLElement) => status.hidden), true);
     await context.post(`/api/plans/${deferredRegistered.planId}/defer`, { data: { note: 'Paused for deferred archive undo e2e' } });
 
     await page.goto(`${baseUrl}/deferred`);
