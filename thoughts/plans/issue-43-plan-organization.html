@@ -782,7 +782,7 @@ bun run test:fixtures</pre>
       <li>Open GitHub issue <a href="https://github.com/Nodaste-Lab/plan-reviewer/issues/43">#43</a> and this registered plan.</li>
       <li>Process browser-review comments through <code>plan-review agent next</code> before editing.</li>
       <li>Implementation is complete through Phase 4.</li>
-      <li>Verification passed: <code>bun run test</code>, <code>bun run test:e2e</code>, and <code>bun run test:fixtures</code>.</li>
+      <li>Verification passed after PR-feedback fixes: <code>bun run test</code>, <code>bun run test:e2e</code>, and <code>bun run test:fixtures</code>.</li>
       <li>Before handoff, review the final scoped diff and preserve the existing untracked plan file <code>thoughts/plans/pi-plan-mode-registration-monitor-fix.html</code>; it predates this work.</li>
     </ol>
   </section>
@@ -800,6 +800,7 @@ bun run test:fixtures</pre>
       <li id="log-2026-06-21-execution-ready">2026-06-21: After the CLI/test parity blocker was integrated, both independent rerun reviewers returned <code>PLAN_EXECUTION_READY</code>; the plan was re-registered with <code>--execution-ready true</code> and is ready for scoped execution.</li>
       <li id="log-2026-06-21-implementation-complete">2026-06-21: Implemented organization metadata, configurable board columns, Kanban/All/Collab views, review-shell organization controls, quick-open search expansion, CLI parity, and regression coverage. Verification passed with <code>bun run test</code>, <code>bun run test:e2e</code>, and <code>bun run test:fixtures</code>.</li>
       <li id="log-2026-06-21-pre-pr-review-followups">2026-06-21: Pre-PR GPT and GLM rereviews returned <code>CLEAN_FOR_PR</code>. Non-blocking follow-ups logged separately: emit <code>plan.columns.changed</code> for concurrent column-config refreshes, replace the review-shell free-text Status control with visible column choices, and decide whether pin/project commands should be planning-only or apply to collaboration documents.</li>
+      <li id="log-2026-06-21-pr-feedback-review">2026-06-21: PR feedback found the left navigator was no longer active-only. Fixed the navigator API and archive event path so active docs remain the default list while only the current archived/deferred document is appended. The requested PM/product and adversarial rereviews also found and then verified a missed deferred-lifecycle issue: generic State/API/CLI deferral now requires an agent-visible note and routes through the existing defer behavior. Rereview verdicts: <code>PRODUCT_CLEAN</code> and <code>CLEAN_FOR_PR_UPDATE</code>.</li>
     </ul>
   </section>
 </main>

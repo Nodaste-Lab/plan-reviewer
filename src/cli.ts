@@ -891,12 +891,13 @@ async function setPlanMode(planId: string, reviewMode: string, options: { url?: 
   else process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
 }
 
-async function setPlanLifecycle(planId: string, lifecycleState: string, options: { url?: string; json?: boolean }) {
+async function setPlanLifecycle(planId: string, lifecycleState: string, options: { url?: string; note?: string; json?: boolean }) {
+  if (lifecycleState === 'deferred' && !options.note?.trim()) throw new PlanReviewError('validation_failed', 'lifecycle set deferred requires --note <reason>', 1, { planId }, 'Retry with --note "why paused and next step", or use plan-review defer <planId> --note "...".');
   const serviceUrl = resolveServiceUrl(options.url);
   const data = await requestJson<unknown>(`${serviceUrl}/api/plans/${planId}/lifecycle`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ lifecycleState })
+    body: JSON.stringify({ lifecycleState, ...(options.note?.trim() ? { note: options.note } : {}) })
   });
   if (options.json) printJson(data);
   else process.stdout.write(`Lifecycle set to ${lifecycleState} for ${planId}\n`);
@@ -1272,6 +1273,7 @@ export async function main(argv: string[] = process.argv.slice(2)) {
   const lifecycle = program.command('lifecycle');
   lifecycle.command('set <planId> <state>')
     .option('--url <url>')
+    .option('--note <reason>')
     .option('--json')
     .action(setPlanLifecycle);
 

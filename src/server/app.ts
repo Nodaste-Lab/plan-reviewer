@@ -236,6 +236,13 @@ function planNavigatorItemHtml(item: ListedPlan, currentPlanId: string): string 
   </a>`;
 }
 
+function planNavigatorItemsFor(store: PlanReviewStore, options: { limit: number; currentPlanId?: string }): ListedPlan[] {
+  const activePlans = store.listPlans({ limit: options.limit, currentPlanId: options.currentPlanId });
+  if (!options.currentPlanId || activePlans.some(item => item.plan.id === options.currentPlanId)) return activePlans;
+  const current = store.listPlans({ includeArchived: true, includeDeferred: true, limit: 1, currentPlanId: options.currentPlanId }).find(item => item.plan.id === options.currentPlanId);
+  return current ? [...activePlans, current] : activePlans;
+}
+
 function planNavigatorHtml(plans: ListedPlan[], currentPlanId: string, label = 'plans'): string {
   const items = sortPlansForNavigator(plans).map(item => planNavigatorItemHtml(item, currentPlanId)).join('');
   const title = label === 'documents' ? 'Active documents' : 'Active plans';
@@ -593,6 +600,7 @@ const resumePlanButton = document.getElementById('resume-plan');
 const pinPlanButton = document.getElementById('pin-plan');
 const projectControl = document.getElementById('project-control');
 const lifecycleControl = document.getElementById('lifecycle-control');
+let lifecycleControlPreviousValue = lifecycleControl?.value || '';
 const columnControl = document.getElementById('column-control');
 const executionReviewButton = document.getElementById('request-execution-review');
 const buildPlanButton = document.getElementById('build-plan');
@@ -835,10 +843,8 @@ function setArchivedShellState(archived){
   if (resumePlanButton) resumePlanButton.hidden = true;
   if (restorePlanButton) { restorePlanButton.hidden = !archived; restorePlanButton.disabled = false; }
 }
-function reconcileActiveNavigation(archived){
-  if (archived) navigatorItems = navigatorItems.filter(item => String(item?.plan?.id || '') !== String(planId));
-  renderPlanNavigatorItems(navigatorItems, document.querySelector('#plan-list-nav')?.getAttribute('aria-label') === 'Active documents' ? 'documents' : 'plans');
-  if (quickOpenVisible()) renderQuickOpenResults();
+async function reconcileActiveNavigation(){
+  await loadPlanNavigator();
 }
 function restartArchiveToastDismissal(delay = 10000){
   archiveToastTimer = setTimeout(dismissArchiveToast, delay);
@@ -878,7 +884,7 @@ archivePlanButton?.addEventListener('click', async () => {
     return;
   }
   setArchivedShellState(true);
-  reconcileActiveNavigation(true);
+  await reconcileActiveNavigation();
   showArchiveToast('Archived this '+documentKind+'.');
 });
 restorePlanButton?.addEventListener('click', async () => {
@@ -942,8 +948,23 @@ projectControl?.addEventListener('change', async () => {
   await saveOrganizerField('/project', { projectName }, projectControl);
 });
 lifecycleControl?.addEventListener('change', async () => {
-  const json = await saveOrganizerField('/lifecycle', { lifecycleState: lifecycleControl.value }, lifecycleControl);
-  if (json?.ok) window.location.reload();
+  const lifecycleState = lifecycleControl.value;
+  const body = { lifecycleState };
+  if (lifecycleState === 'deferred') {
+    const note = prompt('Why defer this '+documentKind+', and what should the next agent know?');
+    if (!note || !note.trim()) {
+      lifecycleControl.value = lifecycleControlPreviousValue;
+      return;
+    }
+    body.note = note;
+  }
+  const json = await saveOrganizerField('/lifecycle', body, lifecycleControl);
+  if (json?.ok) {
+    lifecycleControlPreviousValue = lifecycleState;
+    window.location.reload();
+  } else {
+    lifecycleControl.value = lifecycleControlPreviousValue;
+  }
 });
 columnControl?.addEventListener('change', async () => {
   const boardColumnKey = columnControl.value.trim();
@@ -2948,7 +2969,7 @@ export function createApp(options: AppOptions): FastifyInstance {
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) {
         throw new PlanReviewError('validation_failed', 'limit must be between 1 and 200', 400, { limit: query.limit });
       }
-      return ok({ plans: store.listPlans({ includeArchived: true, includeDeferred: true, limit, currentPlanId: query.currentPlanId }) });
+      return ok({ plans: planNavigatorItemsFor(store, { limit, currentPlanId: query.currentPlanId }) });
     } catch (error) {
       sendError(reply, error);
     }
@@ -2996,7 +3017,7 @@ export function createApp(options: AppOptions): FastifyInstance {
       try {
         title = renderedHtmlTitle(store.getRenderedHtml(plan.id)) ?? title;
       } catch {}
-      reply.header('Cache-Control', 'no-store').type('text/html').send(reviewShell(plan, title, reviewShellTitle(title), store.listPlans({ includeArchived: true, includeDeferred: true, limit: 200, currentPlanId: plan.id })));
+      reply.header('Cache-Control', 'no-store').type('text/html').send(reviewShell(plan, title, reviewShellTitle(title), planNavigatorItemsFor(store, { limit: 200, currentPlanId: plan.id })));
     } catch (error) {
       sendError(reply, error);
     }
@@ -3094,6 +3115,12 @@ export function createApp(options: AppOptions): FastifyInstance {
     try {
       const { planId } = request.params as { planId: string };
       const input = setPlanLifecycleSchema.parse(request.body);
+      if (input.lifecycleState === 'deferred') {
+        const result = store.deferPlan(planId, { note: input.note!, createdBy: input.createdBy, clientMutationId: input.clientMutationId });
+        for (const event of result.events) bus.emitEvent(event);
+        await sourceSync.unregister(result.plan.id);
+        return ok({ plan: result.plan, note: result.note, changed: true });
+      }
       const result = store.setPlanLifecycleState(planId, input.lifecycleState);
       bus.emitEvent(result.event);
       if (result.plan.lifecycleState === 'active') {

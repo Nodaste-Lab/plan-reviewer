@@ -1976,7 +1976,7 @@ try {
     assert.match(page.url(), new RegExp(`/p/${registered.planId}$`));
     await page.waitForFunction(() => document.querySelector<HTMLElement>('#archive-status')?.hidden === false && document.querySelector('#plan-navbar')?.textContent?.includes('Archived'));
     await page.waitForFunction(() => document.querySelector<HTMLElement>('#restore-plan')?.hidden === false);
-    assert.equal(await page.locator(`[data-plan-nav-item][data-plan-id="${registered.planId}"]`).count(), 0);
+    assert.equal(await page.locator(`[data-plan-nav-item][data-plan-id="${registered.planId}"]`).count(), 1);
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+O' : 'Control+O');
     await page.waitForSelector('#quick-open-backdrop:not([hidden])');
     assert.equal(await page.locator(`[data-quick-open-result][data-plan-id="${registered.planId}"]`).count(), 1);

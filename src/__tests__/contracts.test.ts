@@ -1638,6 +1638,46 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
   }
 });
 
+test('navigator keeps lifecycle-hidden documents out except the current page', async () => {
+  const app = createApp({ dbPath: tempDbPath('navigator-active-only') });
+  const titledPayload = (slug: string, title: string) => {
+    const html = `<!doctype html><html><head><title>${title}</title></head><body><main><p>${title}</p></main></body></html>`;
+    return sampleRegisterPayload({ slug, planPath: `thoughts/plans/${slug}.html`, html, fileHash: sha256(html) });
+  };
+  try {
+    const active = await app.inject({ method: 'POST', url: '/api/plans/register', payload: titledPayload('active-nav-only', 'Active navigator plan') });
+    const archived = await app.inject({ method: 'POST', url: '/api/plans/register', payload: titledPayload('archived-nav-only', 'Archived navigator plan') });
+    const deferred = await app.inject({ method: 'POST', url: '/api/plans/register', payload: titledPayload('deferred-nav-only', 'Deferred navigator plan') });
+    assert.equal(active.statusCode, 200);
+    assert.equal(archived.statusCode, 200);
+    assert.equal(deferred.statusCode, 200);
+    const activeId = active.json().data.planId;
+    const archivedId = archived.json().data.planId;
+    const deferredId = deferred.json().data.planId;
+    assert.equal((await app.inject({ method: 'POST', url: `/api/plans/${archivedId}/archive` })).statusCode, 200);
+    assert.equal((await app.inject({ method: 'POST', url: `/api/plans/${deferredId}/defer`, payload: { note: 'Pause hidden navigator plan.' } })).statusCode, 200);
+
+    const activeNav = await app.inject({ method: 'GET', url: `/api/plans/navigator?limit=20&currentPlanId=${activeId}` });
+    assert.equal(activeNav.statusCode, 200, activeNav.body);
+    assert.equal(activeNav.json().data.plans.some((item: { plan: { id: string } }) => item.plan.id === activeId), true);
+    assert.equal(activeNav.json().data.plans.some((item: { plan: { id: string } }) => item.plan.id === archivedId), false);
+    assert.equal(activeNav.json().data.plans.some((item: { plan: { id: string } }) => item.plan.id === deferredId), false);
+
+    const archivedNav = await app.inject({ method: 'GET', url: `/api/plans/navigator?limit=20&currentPlanId=${archivedId}` });
+    assert.equal(archivedNav.statusCode, 200, archivedNav.body);
+    assert.equal(archivedNav.json().data.plans.some((item: { plan: { id: string } }) => item.plan.id === activeId), true);
+    assert.equal(archivedNav.json().data.plans.some((item: { plan: { id: string } }) => item.plan.id === archivedId), true);
+    assert.equal(archivedNav.json().data.plans.some((item: { plan: { id: string } }) => item.plan.id === deferredId), false);
+
+    const archivedShell = await app.inject({ method: 'GET', url: `/p/${archivedId}` });
+    assert.equal(archivedShell.statusCode, 200);
+    assert.match(archivedShell.body, /Archived navigator plan/);
+    assert.doesNotMatch(archivedShell.body, /Deferred navigator plan/);
+  } finally {
+    await app.close();
+  }
+});
+
 test('navigator applies execution-ready rank before bounded ordering', async () => {
   const app = createApp({ dbPath: tempDbPath('left-navigator-ready-bound') });
   const progressPlan = (slug: string, title: string, completed: number, executionReady = false) => {
@@ -2058,10 +2098,16 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     assert.equal(project.json().data.plan.projectKey, 'issue-43');
     assert.match(project.json().data.plan.projectOverriddenAt, /^\d{4}-\d{2}-\d{2}T/);
 
-    const deferred = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/lifecycle`, payload: { lifecycleState: 'deferred' } });
+    const missingDeferNote = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/lifecycle`, payload: { lifecycleState: 'deferred' } });
+    assert.equal(missingDeferNote.statusCode, 400);
+    assert.equal(missingDeferNote.json().error.code, 'validation_failed');
+
+    const deferred = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/lifecycle`, payload: { lifecycleState: 'deferred', note: 'Pause until issue 43 is ready.' } });
     assert.equal(deferred.statusCode, 200, deferred.body);
     assert.equal(deferred.json().data.plan.lifecycleState, 'deferred');
     assert.match(deferred.json().data.plan.deferredAt, /^\d{4}-\d{2}-\d{2}T/);
+    assert.equal(deferred.json().data.note.body, 'Pause until issue 43 is ready.');
+    assert.equal(deferred.json().data.plan.deferredNoteId, deferred.json().data.note.id);
 
     const active = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/lifecycle`, payload: { lifecycleState: 'active' } });
     assert.equal(active.statusCode, 200, active.body);
@@ -2142,7 +2188,7 @@ test('lifecycle API active transition immediately syncs filesystem sources', asy
     });
     assert.equal(registered.statusCode, 200, registered.body);
     const planId = registered.json().data.planId;
-    assert.equal((await app.inject({ method: 'PUT', url: `/api/plans/${planId}/lifecycle`, payload: { lifecycleState: 'deferred' } })).statusCode, 200);
+    assert.equal((await app.inject({ method: 'PUT', url: `/api/plans/${planId}/lifecycle`, payload: { lifecycleState: 'deferred', note: 'Pause filesystem sync for lifecycle test.' } })).statusCode, 200);
 
     const changedHtml = '<!doctype html><html><body><main><p>Lifecycle active sync updated.</p></main></body></html>';
     fs.writeFileSync(sourcePath, changedHtml);
@@ -3368,7 +3414,10 @@ test('CLI organization commands map to REST endpoints', async () => {
     assert.equal((await runCli(['pin', 'plan_1', '--url', serviceUrl])).code, 0);
     assert.equal((await runCli(['unpin', 'plan_1', '--url', serviceUrl])).code, 0);
     assert.equal((await runCli(['project', 'set', 'plan_1', 'Issue 43', '--project-key', 'issue-43', '--url', serviceUrl])).code, 0);
-    assert.equal((await runCli(['lifecycle', 'set', 'plan_1', 'deferred', '--url', serviceUrl])).code, 0);
+    const missingLifecycleNote = await runCli(['lifecycle', 'set', 'plan_1', 'deferred', '--url', serviceUrl]);
+    assert.equal(missingLifecycleNote.code, 1);
+    assert.match(missingLifecycleNote.stderr, /lifecycle set deferred requires --note/);
+    assert.equal((await runCli(['lifecycle', 'set', 'plan_1', 'deferred', '--note', 'Pause via lifecycle command.', '--url', serviceUrl])).code, 0);
 
     assert.deepEqual(calls.map(call => [call.method, call.url, call.body]), [
       ['GET', '/api/board-columns', undefined],
@@ -3383,7 +3432,7 @@ test('CLI organization commands map to REST endpoints', async () => {
       ['PUT', '/api/plans/plan_1/pin', { pinned: true }],
       ['PUT', '/api/plans/plan_1/pin', { pinned: false }],
       ['PUT', '/api/plans/plan_1/project', { projectName: 'Issue 43', projectKey: 'issue-43' }],
-      ['PUT', '/api/plans/plan_1/lifecycle', { lifecycleState: 'deferred' }]
+      ['PUT', '/api/plans/plan_1/lifecycle', { lifecycleState: 'deferred', note: 'Pause via lifecycle command.' }]
     ]);
   } finally {
     await new Promise<void>(resolve => server.close(() => resolve()));

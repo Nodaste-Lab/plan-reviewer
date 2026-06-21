@@ -291,7 +291,14 @@ export const changePlanModeSchema = z.object({
 });
 
 export const setPlanLifecycleSchema = z.object({
-  lifecycleState: planLifecycleStateSchema
+  lifecycleState: planLifecycleStateSchema,
+  note: z.string().trim().min(1).optional(),
+  createdBy: noteAuthorSchema,
+  clientMutationId: z.string().optional()
+}).superRefine((value, context) => {
+  if (value.lifecycleState === 'deferred' && !value.note) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['note'], message: 'note is required when deferring a plan' });
+  }
 });
 
 export const setPlanBoardColumnSchema = z.object({
