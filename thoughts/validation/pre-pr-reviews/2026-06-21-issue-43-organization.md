@@ -90,12 +90,22 @@ Comparison: uncommitted working-tree diff on the feature branch, including the u
 | Source | Severity | Finding | Decision | Evidence |
 | --- | --- | --- | --- | --- |
 | User demo feedback | P2 | Review-shell Project was editable even though it should select all plans in that project; Status was free text even though it should be a configured-state dropdown; top-bar controls drifted from the plan mock. | Fixed | Project now renders as a project selector that navigates to `/?projectKey=...`; Status renders as a configured board-column selector; plan text and regression tests now lock this intent. |
+| User demo feedback | P2 | Kanban cards showed unexplained white square pin buttons, the board did not use the full browser width, and there was no browser control to hide unused columns. | Fixed | Kanban uses a full-width responsive page, pin controls are dark star buttons, `/columns` exposes persisted visibility toggles, and occupied columns cannot be hidden until plans are moved. |
 
 ## Demo feedback verification
 
 - `bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "review shell exposes titled left navigator"` — PASS
 - `bun run test:e2e` — PASS
+- `bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "organization APIs persist"` — PASS
+- `bun run test` — PASS
+
+## Kanban demo feedback rereview
+
+| Reviewer | Verdict | Notes |
+| --- | --- | --- |
+| PM/product rereview | `PRODUCT_CLEAN` | No P1/P2 product blockers found after full-width Kanban, pin styling, and column visibility fixes. |
+| Adversarial implementation rereview | `CLEAN_FOR_PR_UPDATE` | No P1/P2 implementation blockers found in the latest diff. |
 
 ## Final gate result
 
-PASS — GPT verdict `CLEAN_FOR_PR`; GLM verdict `CLEAN_FOR_PR`; PR-feedback PM verdict `PRODUCT_CLEAN`; PR-feedback adversarial verdict `CLEAN_FOR_PR_UPDATE`; demo feedback targeted gates PASS.
+PASS — GPT verdict `CLEAN_FOR_PR`; GLM verdict `CLEAN_FOR_PR`; PR-feedback PM verdict `PRODUCT_CLEAN`; PR-feedback adversarial verdict `CLEAN_FOR_PR_UPDATE`; demo feedback targeted gates PASS; Kanban demo PM/adversarial rereviews clean.

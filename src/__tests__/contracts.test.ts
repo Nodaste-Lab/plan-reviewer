@@ -2057,6 +2057,9 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     const kanban = await app.inject({ method: 'GET', url: '/' });
     assert.equal(kanban.statusCode, 200);
     assert.match(kanban.body, /Plans · Kanban/);
+    assert.match(kanban.body, /<main class="kanban-page">/);
+    assert.match(kanban.body, /\.kanban-page\{max-width:none;width:100%/);
+    assert.match(kanban.body, /\.kanban-card \.pin-button\{[^}]*background:#0b1220!important/);
     assert.match(kanban.body, /data-column-key="backlog"/);
     assert.match(kanban.body, /data-plan-id="[^"]+" data-column="backlog"/);
     assert.match(kanban.body, /Configure columns/);
@@ -2065,6 +2068,11 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     const columns = await app.inject({ method: 'GET', url: '/api/board-columns' });
     assert.equal(columns.statusCode, 200);
     assert.deepEqual(columns.json().data.columns.map((column: { key: string }) => column.key), ['backlog', 'ready_to_pull', 'in_progress', 'done']);
+    const columnsPage = await app.inject({ method: 'GET', url: '/columns' });
+    assert.equal(columnsPage.statusCode, 200);
+    assert.match(columnsPage.body, /Save visibility/);
+    assert.match(columnsPage.body, /data-key="backlog"[\s\S]*data-column-hidden[\s\S]*disabled/);
+    assert.match(columnsPage.body, /data-key="ready_to_pull"[\s\S]*data-column-hidden/);
 
     const occupiedHide = await app.inject({
       method: 'PUT',
@@ -2089,6 +2097,23 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     });
     assert.equal(savedColumns.statusCode, 200, savedColumns.body);
     assert.deepEqual(savedColumns.json().data.columns.filter((column: { hiddenAt?: string }) => !column.hiddenAt).map((column: { key: string }) => column.key), ['in_progress', 'backlog', 'ready_to_pull', 'done']);
+
+    const hiddenReadyColumn = await app.inject({
+      method: 'PUT',
+      url: '/api/board-columns',
+      payload: {
+        columns: [
+          { key: 'in_progress', label: 'Doing', position: 0 },
+          { key: 'backlog', label: 'Backlog', position: 1 },
+          { key: 'ready_to_pull', label: 'Ready to Pull', position: 2, hidden: true },
+          { key: 'done', label: 'Done', position: 3, isDone: true }
+        ]
+      }
+    });
+    assert.equal(hiddenReadyColumn.statusCode, 200, hiddenReadyColumn.body);
+    assert.deepEqual(hiddenReadyColumn.json().data.columns.filter((column: { hiddenAt?: string }) => !column.hiddenAt).map((column: { key: string }) => column.key), ['in_progress', 'backlog', 'done']);
+    const hiddenReadyKanban = await app.inject({ method: 'GET', url: '/' });
+    assert.doesNotMatch(hiddenReadyKanban.body, /data-column-key="ready_to_pull"/);
 
     const moved = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/column`, payload: { boardColumnKey: 'in_progress' } });
     assert.equal(moved.statusCode, 200, moved.body);

@@ -47,3 +47,27 @@ Verification:
 
 - `bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "review shell exposes titled left navigator"` — PASS
 - `bun run test:e2e` — PASS
+
+## 2026-06-21 demo feedback: Kanban board polish and column hiding
+
+Demo feedback clarified three Kanban issues:
+
+- The white squares on cards were default-styled pin buttons, not an intended affordance.
+- The Kanban board was constrained by the normal centered `<main>` max width instead of using the browser width.
+- Users need to hide columns they are not using.
+
+Fix applied:
+
+- Kanban pages now use a full-width `.kanban-page` layout and responsive column grid.
+- Pin controls now render as dark star buttons with explicit sizing/background.
+- `/columns` now includes a visibility editor backed by persisted board-column `hiddenAt` state.
+- Empty columns can be hidden; occupied columns show a disabled hide control with move-first guidance so plans do not silently disappear.
+- Plan text and contract coverage now lock the intended behavior.
+
+Verification:
+
+- `bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "organization APIs persist"` — PASS
+- `bun run test:e2e` — PASS
+- `bun run test` — PASS
+- PM/product rereview — `PRODUCT_CLEAN`
+- Adversarial implementation rereview — `CLEAN_FOR_PR_UPDATE`
