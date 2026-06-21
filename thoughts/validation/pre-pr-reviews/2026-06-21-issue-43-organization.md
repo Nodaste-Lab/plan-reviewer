@@ -125,6 +125,20 @@ Comparison: uncommitted working-tree diff on the feature branch, including the u
 - GPT selector plan-faithfulness review — `CONSENSUS_CLEAN`
 - GLM selector plan-faithfulness review — `CONSENSUS_CLEAN`
 
+## Project parent-repo correction
+
+| Source | Severity | Finding | Decision | Evidence |
+| --- | --- | --- | --- | --- |
+| User demo feedback | P2 | The Project filter is not useful if project inference presents linked-worktree branch folders instead of the actual parent repo/project. | Fixed | Project inference now derives the parent repo with `git rev-parse --path-format=absolute --git-common-dir` when the registered root is a linked worktree, then falls back to `repoName` and root basename. Startup backfill re-derives non-overridden project metadata so previously stored worktree-folder projects are repaired when the parent can be derived. Contract coverage registers a real linked worktree and verifies the Project filter shows the parent repo while excluding the worktree folder for fresh and simulated legacy rows. |
+
+## Project parent-repo verification
+
+- `bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "project inference uses the parent git repo"` — PASS after adding legacy non-overridden-row repair coverage
+- `bun run test:e2e` — PASS
+- `bun run test` — PASS
+- GPT parent-project plan-faithfulness review — first pass `BLOCKED` on legacy-row repair; rerun `CONSENSUS_CLEAN`
+- GLM parent-project plan-faithfulness review — rerun `CONSENSUS_CLEAN`
+
 ## Final gate result
 
-PASS — GPT verdict `CLEAN_FOR_PR`; GLM verdict `CLEAN_FOR_PR`; PR-feedback PM verdict `PRODUCT_CLEAN`; PR-feedback adversarial verdict `CLEAN_FOR_PR_UPDATE`; demo feedback targeted gates PASS; Kanban demo PM/adversarial rereviews clean; top-bar GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`; mode-selector GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`.
+PASS — GPT verdict `CLEAN_FOR_PR`; GLM verdict `CLEAN_FOR_PR`; PR-feedback PM verdict `PRODUCT_CLEAN`; PR-feedback adversarial verdict `CLEAN_FOR_PR_UPDATE`; demo feedback targeted gates PASS; Kanban demo PM/adversarial rereviews clean; top-bar GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`; mode-selector GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`; parent-project GPT/GLM rereviews both `CONSENSUS_CLEAN` after fixing the legacy non-overridden-row repair blocker.

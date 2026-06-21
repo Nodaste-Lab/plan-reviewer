@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -220,7 +221,28 @@ function normalizeProjectKey(value: string): string {
   return normalized || 'uncategorized';
 }
 
+function gitParentRepoName(rootPath?: string | null): string | undefined {
+  const root = optionalString(rootPath);
+  if (!root) return undefined;
+  try {
+    if (!fs.statSync(root).isDirectory()) return undefined;
+  } catch {
+    return undefined;
+  }
+  const result = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: root, encoding: 'utf8' });
+  if (result.error || result.status !== 0) return undefined;
+  const commonDir = result.stdout.trim();
+  if (!commonDir) return undefined;
+  const repoDir = path.basename(commonDir) === '.git' ? path.dirname(commonDir) : commonDir.replace(/\.git$/, '');
+  const repoName = path.basename(repoDir);
+  return repoName || undefined;
+}
+
 function inferProjectName(input: { rootPath?: string | null; repoName?: string | null; sourcePath?: string | null; planPath?: string | null }): string {
+  const gitParent = gitParentRepoName(input.rootPath);
+  if (gitParent) return gitParent;
+  const repoName = optionalString(input.repoName);
+  if (repoName) return repoName;
   const root = optionalString(input.rootPath);
   if (root) {
     const base = path.basename(root);
@@ -232,7 +254,7 @@ function inferProjectName(input: { rootPath?: string | null; repoName?: string |
     const thoughtsIndex = parts.indexOf('thoughts');
     if (thoughtsIndex > 0) return parts[thoughtsIndex - 1];
   }
-  return optionalString(input.repoName) ?? 'Uncategorized';
+  return 'Uncategorized';
 }
 
 function defaultBoardColumnForProgress(progress: PlanProgress): string {
@@ -708,14 +730,15 @@ export class PlanReviewStore {
       LEFT JOIN plan_versions v ON v.id = (
         SELECT id FROM plan_versions WHERE plan_id = p.id ORDER BY created_at DESC LIMIT 1
       )
-      WHERE p.project_key IS NULL OR p.project_name IS NULL OR (p.review_mode = 'planning' AND p.board_column_key IS NULL) OR (p.review_mode = 'collaboration' AND p.board_column_key IS NOT NULL)
+      WHERE p.project_overridden_at IS NULL OR p.project_key IS NULL OR p.project_name IS NULL OR (p.review_mode = 'planning' AND p.board_column_key IS NULL) OR (p.review_mode = 'collaboration' AND p.board_column_key IS NOT NULL)
     `).all() as Array<Record<string, unknown>>;
     if (rows.length === 0) return;
     const update = this.db.prepare('UPDATE plans SET project_key = ?, project_name = ?, board_column_key = ?, updated_at = updated_at WHERE id = ?');
     const tx = this.db.transaction(() => {
       for (const row of rows) {
-        const projectName = optionalString(row.projectName) ?? inferProjectName({ rootPath: optionalString(row.rootPath), repoName: optionalString(row.repoName), sourcePath: optionalString(row.sourcePath), planPath: optionalString(row.planPath) });
-        const projectKey = optionalString(row.projectKey) ?? normalizeProjectKey(projectName);
+        const inferredProjectName = inferProjectName({ rootPath: optionalString(row.rootPath), repoName: optionalString(row.repoName), sourcePath: optionalString(row.sourcePath), planPath: optionalString(row.planPath) });
+        const projectName = optionalString(row.projectOverriddenAt) ? (optionalString(row.projectName) ?? inferredProjectName) : inferredProjectName;
+        const projectKey = optionalString(row.projectOverriddenAt) ? (optionalString(row.projectKey) ?? normalizeProjectKey(projectName)) : normalizeProjectKey(projectName);
         const progress = parseJson<PlanProgress | null>(row.progressJson as string | null, null) ?? { totalPhases: 0, completedPhases: 0, phases: [] };
         const boardColumnKey = row.reviewMode === 'planning' ? (optionalString(row.boardColumnKey) ?? this.defaultVisibleBoardColumnKey(defaultBoardColumnForProgress(progress))) : null;
         update.run(projectKey, projectName, boardColumnKey, row.id);

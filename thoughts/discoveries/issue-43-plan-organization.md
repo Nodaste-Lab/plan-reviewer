@@ -33,12 +33,10 @@ Verification after PR-feedback fixes:
 
 ## 2026-06-21 demo feedback: review-shell top bar
 
-Demo feedback clarified that the top-bar Project and Status controls had drifted from the plan mock. Project was incorrectly implemented as an editable project-name text field, but its intended role is project navigation/scoping: choosing a project opens the Kanban board filtered to that project. Status was incorrectly implemented as a free-text board-column key field, but its intended role is selecting one of the configured board columns.
+Demo feedback clarified that the top-bar Project and Status controls had drifted from the plan mock. Project was incorrectly implemented as an editable project-name text field, and Status was incorrectly implemented as a free-text board-column key field.
 
 Fix applied:
 
-- Review shell Project now renders as a `<select>` of registered project groups and navigates to `/?projectKey=...`.
-- Review shell Status now renders as a `<select>` populated from persisted board columns.
 - Project override remains available through API/CLI, not as the top-bar control.
 - Plan text now explicitly records this distinction.
 - Superseded by later demo feedback: Project, State, and Status are now explicitly labeled filters that narrow the navigator/list and do not navigate away or call project/lifecycle/column mutation endpoints.
@@ -113,3 +111,19 @@ Verification:
 - `bun run test` — PASS
 - GPT selector plan-faithfulness review — `CONSENSUS_CLEAN`
 - GLM selector plan-faithfulness review — `CONSENSUS_CLEAN`
+
+## 2026-06-21 demo feedback: project means parent repo, not worktree
+
+Demo feedback clarified that the Project filter is misleading if inferred from linked-worktree folder names such as `issue-43-organization`. Product intent is to group by the parent repository/project when the service can derive it.
+
+Fix applied:
+
+- Project inference now probes `git rev-parse --path-format=absolute --git-common-dir` for the registered root/worktree path.
+- Linked worktrees derive `projectName`/`projectKey` from the parent repository directory, e.g. `parent-repo`, not the worktree folder.
+- If Git metadata is unavailable, inference falls back to `repoName`, then the registered root basename, then source path heuristics.
+- Startup backfill re-derives non-overridden project metadata, so rows that previously stored a worktree folder are repaired when the parent repo can still be derived.
+- Contract coverage creates a real linked git worktree and verifies the Project filter options include the parent repo and exclude the worktree folder for both fresh registration and a simulated legacy non-overridden row.
+
+Verification:
+
+- `bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "project inference uses the parent git repo"` — PASS after legacy-row backfill coverage

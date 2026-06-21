@@ -2043,6 +2043,79 @@ test('empty archive page is quiet and archived shell shows restore state', async
   }
 });
 
+test('project inference uses the parent git repo for linked worktrees', async t => {
+  if (spawnSync('git', ['--version'], { encoding: 'utf8' }).status !== 0) {
+    t.skip('git is unavailable');
+    return;
+  }
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-review-git-parent-'));
+  const parentRepo = path.join(tempRoot, 'parent-repo');
+  const worktreePath = path.join(tempRoot, 'worktrees', 'issue-43-organization');
+  fs.mkdirSync(parentRepo, { recursive: true });
+  try {
+    for (const [command, args, cwd] of [
+      ['git', ['init'], parentRepo],
+      ['git', ['config', 'user.email', 'test@example.com'], parentRepo],
+      ['git', ['config', 'user.name', 'Test User'], parentRepo]
+    ] as Array<[string, string[], string]>) {
+      const result = spawnSync(command, args, { cwd, encoding: 'utf8' });
+      assert.equal(result.status, 0, result.stderr);
+    }
+    fs.writeFileSync(path.join(parentRepo, 'README.md'), 'parent repo');
+    assert.equal(spawnSync('git', ['add', 'README.md'], { cwd: parentRepo, encoding: 'utf8' }).status, 0);
+    assert.equal(spawnSync('git', ['commit', '-m', 'init'], { cwd: parentRepo, encoding: 'utf8' }).status, 0);
+    const worktree = spawnSync('git', ['worktree', 'add', '-b', 'issue-43-organization', worktreePath], { cwd: parentRepo, encoding: 'utf8' });
+    assert.equal(worktree.status, 0, worktree.stderr);
+
+    const dbPath = tempDbPath('git-parent-project');
+    const app = createApp({ dbPath });
+    let planId = '';
+    try {
+      const payload = sampleRegisterPayload({
+        repoKey: `${worktreePath}@test`,
+        repoName: 'issue-43-organization',
+        remoteUrl: undefined,
+        rootPath: worktreePath,
+        branch: 'issue-43-organization',
+        publicationMetadata: { worktreePath, branch: 'issue-43-organization', executionReady: false, executionReadyBasis: 'agent-review-results' }
+      });
+      const registered = await app.inject({ method: 'POST', url: '/api/plans/register', payload });
+      assert.equal(registered.statusCode, 200, registered.body);
+      planId = registered.json().data.planId;
+      const detail = await app.inject({ method: 'GET', url: `/api/plans/${planId}` });
+      assert.equal(detail.json().data.plan.projectName, 'parent-repo');
+      assert.equal(detail.json().data.plan.projectKey, 'parent-repo');
+      const shell = await app.inject({ method: 'GET', url: `/p/${planId}` });
+      assert.match(shell.body, />parent-repo<\/option>/);
+      assert.doesNotMatch(shell.body, />issue-43-organization<\/option>/);
+    } finally {
+      await app.close();
+    }
+
+    const db = new Database(dbPath);
+    try {
+      db.prepare("UPDATE plans SET project_key = 'issue-43-organization', project_name = 'issue-43-organization', project_overridden_at = NULL WHERE id = ?").run(planId);
+    } finally {
+      db.close();
+    }
+
+    const restarted = createApp({ dbPath });
+    try {
+      const repaired = await restarted.inject({ method: 'GET', url: `/api/plans/${planId}` });
+      assert.equal(repaired.statusCode, 200, repaired.body);
+      assert.equal(repaired.json().data.plan.projectName, 'parent-repo');
+      assert.equal(repaired.json().data.plan.projectKey, 'parent-repo');
+      const repairedShell = await restarted.inject({ method: 'GET', url: `/p/${planId}` });
+      assert.match(repairedShell.body, />parent-repo<\/option>/);
+      assert.doesNotMatch(repairedShell.body, />issue-43-organization<\/option>/);
+    } finally {
+      await restarted.close();
+    }
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('organization APIs persist columns, pins, projects, and lifecycle metadata', async () => {
   const app = createApp({ dbPath: tempDbPath('organization-apis') });
   try {
