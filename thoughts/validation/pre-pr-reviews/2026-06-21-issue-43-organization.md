@@ -139,6 +139,20 @@ Comparison: uncommitted working-tree diff on the feature branch, including the u
 - GPT parent-project plan-faithfulness review — first pass `BLOCKED` on legacy-row repair; rerun `CONSENSUS_CLEAN`
 - GLM parent-project plan-faithfulness review — rerun `CONSENSUS_CLEAN`
 
+## Screen-specific top actions correction
+
+| Source | Severity | Finding | Decision | Evidence |
+| --- | --- | --- | --- | --- |
+| User demo feedback | P2 | Some top-screen buttons were present on screens where they did not make functional sense. | Fixed | Kanban now shows only Configure columns; All documents remains the lifecycle hub with Deferred/Archived shortcuts; Collab docs omits lifecycle and plan-only top actions; Deferred/Archived list pages only link to the sibling lifecycle list and no longer show duplicate Active-index/current-screen actions. Contract coverage asserts the absence of irrelevant top actions on Kanban, Collab docs, Deferred, and Archived screens. |
+
+## Screen-specific top actions verification
+
+- `bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "organization APIs persist|deferred lifecycle hides|archive page renders"` — PASS
+- `bun run test:e2e` — PASS
+- `bun run test` — PASS
+- GPT top-action review — `CONSENSUS_CLEAN`
+- GLM top-action review — `CONSENSUS_CLEAN`
+
 ## Final gate result
 
-PASS — GPT verdict `CLEAN_FOR_PR`; GLM verdict `CLEAN_FOR_PR`; PR-feedback PM verdict `PRODUCT_CLEAN`; PR-feedback adversarial verdict `CLEAN_FOR_PR_UPDATE`; demo feedback targeted gates PASS; Kanban demo PM/adversarial rereviews clean; top-bar GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`; mode-selector GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`; parent-project GPT/GLM rereviews both `CONSENSUS_CLEAN` after fixing the legacy non-overridden-row repair blocker.
+PASS — GPT verdict `CLEAN_FOR_PR`; GLM verdict `CLEAN_FOR_PR`; PR-feedback PM verdict `PRODUCT_CLEAN`; PR-feedback adversarial verdict `CLEAN_FOR_PR_UPDATE`; demo feedback targeted gates PASS; Kanban demo PM/adversarial rereviews clean; top-bar GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`; mode-selector GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`; parent-project GPT/GLM rereviews both `CONSENSUS_CLEAN`; screen-specific top-action GPT/GLM rereviews both `CONSENSUS_CLEAN`.

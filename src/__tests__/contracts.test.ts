@@ -1527,6 +1527,8 @@ test('deferred lifecycle hides plans from active index and preserves agent-visib
     assert.match(deferredPage.body, /Blocked on PM review; resume at P3/);
     assert.match(deferredPage.body, /data-resume-plan=/);
     assert.match(deferredPage.body, /href="\/archive"[^>]*aria-label="Archived \(0\)"[^>]*title="Archived \(0\)"[^>]*>🗄<\/a>/);
+    assert.doesNotMatch(deferredPage.body, /aria-label="Active index"/);
+    assert.doesNotMatch(deferredPage.body, /aria-label="Deferred \(/);
 
     const deferredShell = await app.inject({ method: 'GET', url: `/p/${planId}` });
     assert.match(deferredShell.body, /id="resume-plan"/);
@@ -2004,6 +2006,8 @@ test('archive page renders archived plans and restore controls without mixing ac
     const archive = await app.inject({ method: 'GET', url: '/archive' });
     assert.equal(archive.statusCode, 200);
     assert.match(archive.body, /Archived Plans/);
+    assert.doesNotMatch(archive.body, /aria-label="Active index"/);
+    assert.doesNotMatch(archive.body, /aria-label="Archived \(/);
     assert.match(archive.body, /newer-archive/);
     assert.match(archive.body, /older-archive/);
     assert.doesNotMatch(archive.body, /active-plan/);
@@ -2155,12 +2159,20 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     assert.match(kanban.body, /\.doc-kind-seg\{border-radius:999px;padding:5px 10px;color:#a7b0c0;font-size:12px;font-weight:850;text-decoration:none;white-space:nowrap\}/);
     assert.match(kanban.body, /\.doc-kind-seg\.active\{background:#0ea5e9;color:#e0f2fe\}/);
     assert.match(kanban.body, /aria-label="Configure columns"[^>]*title="Configure columns"[^>]*>⚙<\/a>/);
+    assert.doesNotMatch(kanban.body, /aria-label="Deferred \(/);
+    assert.doesNotMatch(kanban.body, /aria-label="Archived \(/);
     assert.match(kanban.body, /Execution not ready/);
     const allDocuments = await app.inject({ method: 'GET', url: '/?view=all' });
     assert.equal(allDocuments.statusCode, 200);
     assert.match(allDocuments.body, /Plan Review Index · All documents/);
     assert.match(allDocuments.body, /aria-label="Deferred \(0\)"[^>]*title="Deferred \(0\)"[^>]*>⏸<\/a>/);
     assert.match(allDocuments.body, /aria-label="Archived \(0\)"[^>]*title="Archived \(0\)"[^>]*>🗄<\/a>/);
+    const collabDocuments = await app.inject({ method: 'GET', url: '/?view=collab' });
+    assert.equal(collabDocuments.statusCode, 200);
+    assert.match(collabDocuments.body, /Plan Review Index · Collab docs/);
+    assert.doesNotMatch(collabDocuments.body, /aria-label="Deferred \(/);
+    assert.doesNotMatch(collabDocuments.body, /aria-label="Archived \(/);
+    assert.doesNotMatch(collabDocuments.body, /Configure columns/);
     assert.doesNotMatch(allDocuments.body, />Deferred \(0\) →<\/a>/);
     assert.doesNotMatch(allDocuments.body, />Archived \(0\) →<\/a>/);
 

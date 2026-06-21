@@ -127,3 +127,19 @@ Fix applied:
 Verification:
 
 - `bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "project inference uses the parent git repo"` — PASS after legacy-row backfill coverage
+
+## 2026-06-21 demo feedback: top buttons by screen
+
+Demo feedback clarified that the top action cluster must be screen-specific. Some screens had valid global navigation mixed with actions that did not make sense in that context.
+
+Fix applied:
+
+- Kanban now shows only Configure columns in the top action cluster; Deferred and Archived shortcuts are omitted from the workflow board.
+- All documents remains the mixed-discovery lifecycle hub and keeps Deferred/Archived shortcuts.
+- Collab docs no longer shows Deferred/Archived shortcuts or any plan-only top actions.
+- Deferred and Archived list pages no longer show a duplicate Active-index/home icon or an action for the current screen; each only links to the sibling lifecycle list.
+- Contract coverage asserts the absence of irrelevant top actions on Kanban, Collab docs, Deferred, and Archived screens.
+
+Verification:
+
+- `bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "organization APIs persist|deferred lifecycle hides|archive page renders"` — PASS
