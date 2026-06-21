@@ -85,6 +85,17 @@ Comparison: uncommitted working-tree diff on the feature branch, including the u
 | PM/product rereview | `PRODUCT_CLEAN` | No P1/P2 product blockers found after fixes. |
 | Adversarial implementation rereview | `CLEAN_FOR_PR_UPDATE` | No P1/P2 blockers found after fixes. |
 
+## Demo feedback cycle
+
+| Source | Severity | Finding | Decision | Evidence |
+| --- | --- | --- | --- | --- |
+| User demo feedback | P2 | Review-shell Project was editable even though it should select all plans in that project; Status was free text even though it should be a configured-state dropdown; top-bar controls drifted from the plan mock. | Fixed | Project now renders as a project selector that navigates to `/?projectKey=...`; Status renders as a configured board-column selector; plan text and regression tests now lock this intent. |
+
+## Demo feedback verification
+
+- `bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "review shell exposes titled left navigator"` — PASS
+- `bun run test:e2e` — PASS
+
 ## Final gate result
 
-PASS — GPT verdict `CLEAN_FOR_PR`; GLM verdict `CLEAN_FOR_PR`; PR-feedback PM verdict `PRODUCT_CLEAN`; PR-feedback adversarial verdict `CLEAN_FOR_PR_UPDATE`.
+PASS — GPT verdict `CLEAN_FOR_PR`; GLM verdict `CLEAN_FOR_PR`; PR-feedback PM verdict `PRODUCT_CLEAN`; PR-feedback adversarial verdict `CLEAN_FOR_PR_UPDATE`; demo feedback targeted gates PASS.

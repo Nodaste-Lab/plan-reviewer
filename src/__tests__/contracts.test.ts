@@ -1606,6 +1606,11 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     assert.match(shell.body, /id="desktop-plan-nav-toggle"[^>]*aria-controls="plan-list-nav"[^>]*aria-expanded="true"/);
     assert.match(shell.body, /id="desktop-comments-toggle"[^>]*aria-controls="sidebar"[^>]*aria-expanded="false"/);
     assert.match(shell.body, /id="current-plan-bar"/);
+    assert.match(shell.body, /<select id="project-control"[^>]*aria-label="Project"/);
+    assert.doesNotMatch(shell.body, /<input id="project-control"/);
+    assert.match(shell.body, /<select id="column-control"[^>]*aria-label="Status"/);
+    assert.match(shell.body, /<option value="backlog"[^>]*>Backlog<\/option>/);
+    assert.doesNotMatch(shell.body, /<input id="column-control"/);
     const shellCss = await app.inject({ method: 'GET', url: '/client.css' });
     assert.equal(shellCss.statusCode, 200);
     assert.match(shellCss.body, /--plan-nav-width:260px/);
@@ -1623,6 +1628,8 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     assert.match(shellClient.body, /frame\.contentDocument.*keydown/s);
     assert.match(shellClient.body, /setPlanNavOpen\(open\)/);
     assert.match(shellClient.body, /planListNav\.inert = !open/);
+    assert.match(shellClient.body, /projectKey=\' \+ encodeURIComponent\(projectKey\)/);
+    assert.doesNotMatch(shellClient.body, /saveOrganizerField\('\/project'/);
     assert.match(shellClient.body, /navigatorItems/);
     assert.match(shellClient.body, /openQuickOpen/);
     assert.match(shellClient.body, /quickOpenFuzzyScore/);
@@ -2097,6 +2104,11 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     assert.equal(project.json().data.plan.projectName, 'Issue 43');
     assert.equal(project.json().data.plan.projectKey, 'issue-43');
     assert.match(project.json().data.plan.projectOverriddenAt, /^\d{4}-\d{2}-\d{2}T/);
+    const projectFilteredIndex = await app.inject({ method: 'GET', url: '/?projectKey=issue-43' });
+    assert.equal(projectFilteredIndex.statusCode, 200);
+    assert.match(projectFilteredIndex.body, /Project: Issue 43/);
+    assert.match(projectFilteredIndex.body, /Show all projects/);
+    assert.match(projectFilteredIndex.body, new RegExp(`data-plan-id="${planId}"`));
 
     const missingDeferNote = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/lifecycle`, payload: { lifecycleState: 'deferred' } });
     assert.equal(missingDeferNote.statusCode, 400);

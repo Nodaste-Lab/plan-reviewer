@@ -30,3 +30,20 @@ Verification after PR-feedback fixes:
 - `bun run test` — PASS
 - PM/product rereview — `PRODUCT_CLEAN`
 - Adversarial implementation rereview — `CLEAN_FOR_PR_UPDATE`
+
+## 2026-06-21 demo feedback: review-shell top bar
+
+Demo feedback clarified that the top-bar Project and Status controls had drifted from the plan mock. Project was incorrectly implemented as an editable project-name text field, but its intended role is project navigation/scoping: choosing a project opens the Kanban board filtered to that project. Status was incorrectly implemented as a free-text board-column key field, but its intended role is selecting one of the configured board columns.
+
+Fix applied:
+
+- Review shell Project now renders as a `<select>` of registered project groups and navigates to `/?projectKey=...`.
+- Review shell Status now renders as a `<select>` populated from persisted board columns.
+- Project override remains available through API/CLI, not as the top-bar control.
+- Plan text now explicitly records this distinction.
+- Regression tests assert there are no `project-control` or `column-control` text inputs, Status contains configured column labels, and client code navigates for project selection instead of calling the project override endpoint.
+
+Verification:
+
+- `bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "review shell exposes titled left navigator"` — PASS
+- `bun run test:e2e` — PASS

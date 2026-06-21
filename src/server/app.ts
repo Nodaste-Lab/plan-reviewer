@@ -322,19 +322,20 @@ function kanbanCardHtml(item: ListedPlan, columns: BoardColumnRecord[]): string 
   return `<article class="kanban-card${item.plan.pinnedAt ? ' pinned' : ''}" draggable="true" data-plan-id="${escapeHtml(item.plan.id)}" data-column="${escapeHtml(item.plan.boardColumnKey ?? '')}"><div class="plan-card-header"><strong><a href="/p/${escapeHtml(item.plan.id)}">${escapeHtml(displayTitle(item))}</a></strong><button class="pin-button" type="button" data-pin-plan="${escapeHtml(item.plan.id)}" aria-pressed="${item.plan.pinnedAt ? 'true' : 'false'}">${item.plan.pinnedAt ? '★' : '☆'}</button></div><p class="card-summary">${escapeHtml(summaryForItem(item))}</p>${planBadgesHtml(item, columns)}<a class="card-detail-link" href="/p/${escapeHtml(item.plan.id)}">Details / Open</a></article>`;
 }
 
-function kanbanIndexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCount: number, deferredCount: number, columns: BoardColumnRecord[]): string {
+function kanbanIndexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCount: number, deferredCount: number, columns: BoardColumnRecord[], projectName?: string): string {
   const planning = plans.filter(item => item.plan.reviewMode === 'planning');
   const cardsFor = (column: BoardColumnRecord) => planning.filter(item => item.plan.boardColumnKey === column.key).sort((a, b) => (Boolean(a.plan.pinnedAt) === Boolean(b.plan.pinnedAt) ? 0 : a.plan.pinnedAt ? -1 : 1) || String(b.activityAt).localeCompare(String(a.activityAt)) || displayTitle(a).localeCompare(displayTitle(b))).map(item => kanbanCardHtml(item, columns)).join('\n');
   const board = columns.map(column => `<section class="kanban-column" data-column-key="${escapeHtml(column.key)}"><h2>${escapeHtml(column.label)} <span>${planning.filter(item => item.plan.boardColumnKey === column.key).length}</span></h2>${cardsFor(column) || '<p class="muted">No plans.</p>'}</section>`).join('\n');
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Plans · Kanban</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"><style>${baseIndexStyles()}${organizationIndexStyles()}</style></head><body><main><div class="topbar"><button class="nav-link" type="button" aria-label="Menu">☰</button>${documentViewSwitcher('kanban')}<div class="plan-actions"><a class="nav-link primary" href="/columns">Configure columns</a><a class="nav-link primary" href="/deferred">Deferred (${deferredCount})</a><a class="nav-link primary" href="/archive">Archived (${archivedCount})</a></div></div><div class="page-header"><div><h1>Plans · Kanban</h1><p class="muted">Columns are workflow status for planning documents. Execution readiness is a separate badge.</p></div></div><div id="organizer-error" class="organizer-error" hidden></div><section class="kanban-board" aria-label="Plan board columns">${board}</section><script>${localTimestampScript()}\n${organizationScript()}</script></main></body></html>`;
+  const projectSummary = projectName ? `<p class="muted">Project: ${escapeHtml(projectName)} · <a href="/">Show all projects</a></p>` : '';
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Plans · Kanban</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"><style>${baseIndexStyles()}${organizationIndexStyles()}</style></head><body><main><div class="topbar"><button class="nav-link" type="button" aria-label="Menu">☰</button>${documentViewSwitcher('kanban')}<div class="plan-actions"><a class="nav-link primary" href="/columns">Configure columns</a><a class="nav-link primary" href="/deferred">Deferred (${deferredCount})</a><a class="nav-link primary" href="/archive">Archived (${archivedCount})</a></div></div><div class="page-header"><div><h1>Plans · Kanban</h1><p class="muted">Columns are workflow status for planning documents. Execution readiness is a separate badge.</p>${projectSummary}</div></div><div id="organizer-error" class="organizer-error" hidden></div><section class="kanban-board" aria-label="Plan board columns">${board}</section><script>${localTimestampScript()}\n${organizationScript()}</script></main></body></html>`;
 }
 
 function organizationScript(): string {
   return `let draggedPlanId=null;document.addEventListener('dragstart',event=>{const card=event.target instanceof Element?event.target.closest('[data-plan-id]'):null;if(!card)return;draggedPlanId=card.dataset.planId;event.dataTransfer?.setData('text/plain',draggedPlanId||'');});document.addEventListener('dragover',event=>{const col=event.target instanceof Element?event.target.closest('[data-column-key]'):null;if(!col)return;event.preventDefault();col.classList.add('drop-target');});document.addEventListener('dragleave',event=>{const col=event.target instanceof Element?event.target.closest('[data-column-key]'):null;col?.classList.remove('drop-target');});document.addEventListener('drop',async event=>{const col=event.target instanceof Element?event.target.closest('[data-column-key]'):null;if(!col||!draggedPlanId)return;event.preventDefault();col.classList.remove('drop-target');const card=document.querySelector('[data-plan-id="'+CSS.escape(draggedPlanId)+'"]');const previous=card?.parentElement;col.appendChild(card);const res=await fetch('/api/plans/'+encodeURIComponent(draggedPlanId)+'/column',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({boardColumnKey:col.dataset.columnKey})}).catch(()=>null);if(!res?.ok){previous?.appendChild(card);const box=document.getElementById('organizer-error');if(box){box.hidden=false;box.textContent='Column update failed; the card was restored.';}}});document.addEventListener('click',async event=>{const button=event.target instanceof Element?event.target.closest('[data-pin-plan]'):null;if(!button)return;const planId=button.dataset.pinPlan;const pinned=button.getAttribute('aria-pressed')!=='true';const res=await fetch('/api/plans/'+encodeURIComponent(planId)+'/pin',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({pinned})}).catch(()=>null);if(res?.ok)window.location.reload();});`;
 }
 
-function indexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCount: number, deferredCount: number, columns: BoardColumnRecord[] = [], view: 'kanban' | 'all' | 'collab' = 'kanban'): string {
-  if (view === 'kanban') return kanbanIndexHtml(plans, archivedCount, deferredCount, columns);
+function indexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCount: number, deferredCount: number, columns: BoardColumnRecord[] = [], view: 'kanban' | 'all' | 'collab' = 'kanban', projectName?: string): string {
+  if (view === 'kanban') return kanbanIndexHtml(plans, archivedCount, deferredCount, columns, projectName);
   if (view === 'collab') plans = plans.filter(item => item.plan.reviewMode === 'collaboration');
   const repos = [...new Set(plans.map(item => item.plan.repoName))].sort();
   const attentionCount = plans.filter(planNeedsAttention).length;
@@ -441,7 +442,7 @@ function deferredHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedC
   </script></main></body></html>`;
 }
 
-function filterPlans(plans: ReturnType<PlanReviewStore['listPlans']>, query: { q?: string; repoKey?: string; status?: string; reviewMode?: 'planning' | 'collaboration'; boardColumnKey?: string; limit?: string; cursor?: string; currentPlanId?: string }) {
+function filterPlans(plans: ReturnType<PlanReviewStore['listPlans']>, query: { q?: string; repoKey?: string; projectKey?: string; status?: string; reviewMode?: 'planning' | 'collaboration'; boardColumnKey?: string; limit?: string; cursor?: string; currentPlanId?: string }) {
   const parseInteger = (value: string | undefined, name: string, min: number, max?: number): number | undefined => {
     if (value === undefined) return undefined;
     if (!/^\d+$/.test(value)) {
@@ -456,6 +457,7 @@ function filterPlans(plans: ReturnType<PlanReviewStore['listPlans']>, query: { q
   const text = query.q?.toLowerCase();
   const filtered = plans.filter(item => {
     const matchesRepo = !query.repoKey || item.plan.repoKey === query.repoKey;
+    const matchesProject = !query.projectKey || item.plan.projectKey === query.projectKey;
     const matchesMode = !query.reviewMode || item.plan.reviewMode === query.reviewMode;
     const matchesColumn = !query.boardColumnKey || item.plan.boardColumnKey === query.boardColumnKey;
     const matchesStatus = !query.status || Number(item.counts[query.status as keyof typeof item.counts] ?? 0) > 0;
@@ -464,7 +466,7 @@ function filterPlans(plans: ReturnType<PlanReviewStore['listPlans']>, query: { q
     const prStatus = item.plan.pullRequest?.status ?? item.plan.pullRequest?.state;
     const matchesText = !trimmedText
       || (trimmedText === 'merged' ? prStatus === 'merged' : trimmedText === 'unmerged' ? Boolean(item.plan.pullRequest && prStatus !== 'merged') : haystack.includes(trimmedText));
-    return matchesRepo && matchesMode && matchesColumn && matchesStatus && matchesText;
+    return matchesRepo && matchesProject && matchesMode && matchesColumn && matchesStatus && matchesText;
   });
   const offset = parseInteger(query.cursor, 'cursor', 0) ?? 0;
   const limit = parseInteger(query.limit, 'limit', 1, 200);
@@ -487,7 +489,7 @@ function buildPlanRequestBody(planPath: string): string {
   return `Use the plan-reviewer-build skill for this plan.\nPlan path: ${planPath}`;
 }
 
-function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], currentTitle: string, shellTitle: string, plans: ListedPlan[]): string {
+function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], currentTitle: string, shellTitle: string, plans: ListedPlan[], columns: BoardColumnRecord[], projectPlans: ListedPlan[]): string {
   const escapedPlanId = escapeHtml(plan.id);
   const escapedShellTitle = escapeHtml(shellTitle);
   const escapedCurrentTitle = escapeHtml(currentTitle);
@@ -502,9 +504,11 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
   const commentsButton = '<button id="desktop-comments-toggle" class="comments-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Open comments" title="Comments">Comments <span id="desktop-comments-count" class="comments-count" hidden></span></button>';
   const indexLink = documentViewSwitcher(isCollaboration ? 'collab' : 'kanban');
   const pinControl = isCollaboration ? '' : `<button id="pin-plan" class="pin-button" type="button" data-pin-plan="${escapedPlanId}" aria-pressed="${plan.pinnedAt ? 'true' : 'false'}" aria-label="${plan.pinnedAt ? 'Unpin plan' : 'Pin plan'}" title="${plan.pinnedAt ? 'Unpin plan' : 'Pin plan'}">${plan.pinnedAt ? '★' : '☆'}</button>`;
-  const projectControl = `<label class="org-control">Project <input id="project-control" value="${escapeHtml(plan.projectName)}" aria-label="Project"></label>`;
+  const projectOptions = [...new Map(projectPlans.map(item => [item.plan.projectKey, item.plan.projectName])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  if (!projectOptions.some(([key]) => key === plan.projectKey)) projectOptions.push([plan.projectKey, plan.projectName]);
+  const projectControl = `<label class="org-control">Project <select id="project-control" aria-label="Project">${projectOptions.map(([key, name]) => `<option value="${escapeHtml(key)}"${key === plan.projectKey ? ' selected' : ''}>${escapeHtml(name)}</option>`).join('')}</select></label>`;
   const stateControl = `<label class="org-control">State <select id="lifecycle-control" aria-label="State"><option value="active"${plan.lifecycleState === 'active' ? ' selected' : ''}>Active</option><option value="deferred"${plan.lifecycleState === 'deferred' ? ' selected' : ''}>Deferred</option><option value="archived"${plan.lifecycleState === 'archived' ? ' selected' : ''}>Archived</option></select></label>`;
-  const columnControl = isCollaboration ? '' : `<label class="org-control">Status <input id="column-control" value="${escapeHtml(plan.boardColumnKey ?? '')}" aria-label="Status"></label>`;
+  const columnControl = isCollaboration ? '' : `<label class="org-control">Status <select id="column-control" aria-label="Status">${columns.map(column => `<option value="${escapeHtml(column.key)}"${column.key === plan.boardColumnKey ? ' selected' : ''}>${escapeHtml(column.label)}</option>`).join('')}</select></label>`;
   const organizationControls = `${pinControl}${projectControl}${stateControl}${columnControl}`;
   const archiveLabel = isCollaboration ? 'Archive document' : 'Archive plan';
   const restoreLabel = isCollaboration ? 'Restore document' : 'Restore plan';
@@ -942,10 +946,10 @@ pinPlanButton?.addEventListener('click', async () => {
   pinPlanButton.setAttribute('title', pinned ? 'Unpin plan' : 'Pin plan');
   pinPlanButton.textContent = pinned ? '★' : '☆';
 });
-projectControl?.addEventListener('change', async () => {
-  const projectName = projectControl.value.trim();
-  if (!projectName) return;
-  await saveOrganizerField('/project', { projectName }, projectControl);
+projectControl?.addEventListener('change', () => {
+  const projectKey = projectControl.value.trim();
+  if (!projectKey) return;
+  window.location.href = '/?projectKey=' + encodeURIComponent(projectKey);
 });
 lifecycleControl?.addEventListener('change', async () => {
   const lifecycleState = lifecycleControl.value;
@@ -2925,13 +2929,15 @@ export function createApp(options: AppOptions): FastifyInstance {
   });
 
   app.get('/', async (request, reply) => {
-    const query = request.query as { q?: string; repoKey?: string; status?: string; view?: 'kanban' | 'all' | 'collab' };
+    const query = request.query as { q?: string; repoKey?: string; projectKey?: string; status?: string; view?: 'kanban' | 'all' | 'collab' };
     const allPlans = store.listPlans({ includeArchived: true, includeDeferred: true });
     const activePlans = allPlans.filter(item => item.plan.lifecycleState === 'active');
     const archivedCount = allPlans.filter(item => item.plan.lifecycleState === 'archived').length;
     const deferredCount = allPlans.filter(item => item.plan.lifecycleState === 'deferred').length;
     const view = query.view === 'all' || query.view === 'collab' ? query.view : 'kanban';
-    reply.type('text/html').send(indexHtml(filterPlans(activePlans, query).plans, archivedCount, deferredCount, store.listBoardColumns(), view));
+    const filtered = filterPlans(activePlans, query).plans;
+    const projectName = query.projectKey ? allPlans.find(item => item.plan.projectKey === query.projectKey)?.plan.projectName : undefined;
+    reply.type('text/html').send(indexHtml(filtered, archivedCount, deferredCount, store.listBoardColumns(), view, projectName));
   });
 
   app.get('/deferred', async (_request, reply) => {
@@ -2951,7 +2957,7 @@ export function createApp(options: AppOptions): FastifyInstance {
 
   app.get('/api/plans', async (request, reply) => {
     try {
-      const query = request.query as { q?: string; repoKey?: string; status?: string; lifecycle?: 'active' | 'deferred' | 'archived'; limit?: string; cursor?: string; currentPlanId?: string; includeArchived?: string; includeDeferred?: string };
+      const query = request.query as { q?: string; repoKey?: string; projectKey?: string; status?: string; lifecycle?: 'active' | 'deferred' | 'archived'; limit?: string; cursor?: string; currentPlanId?: string; includeArchived?: string; includeDeferred?: string };
       const { plans, nextCursor } = filterPlans(store.listPlans({ includeArchived: query.includeArchived === 'true', includeDeferred: query.includeDeferred === 'true', lifecycleState: query.lifecycle }), query);
       return ok({ plans, nextCursor });
     } catch (error) {
@@ -3017,7 +3023,7 @@ export function createApp(options: AppOptions): FastifyInstance {
       try {
         title = renderedHtmlTitle(store.getRenderedHtml(plan.id)) ?? title;
       } catch {}
-      reply.header('Cache-Control', 'no-store').type('text/html').send(reviewShell(plan, title, reviewShellTitle(title), planNavigatorItemsFor(store, { limit: 200, currentPlanId: plan.id })));
+      reply.header('Cache-Control', 'no-store').type('text/html').send(reviewShell(plan, title, reviewShellTitle(title), planNavigatorItemsFor(store, { limit: 200, currentPlanId: plan.id }), store.listBoardColumns(), store.listPlans({ includeArchived: true, includeDeferred: true })));
     } catch (error) {
       sendError(reply, error);
     }
