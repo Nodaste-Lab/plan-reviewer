@@ -1802,7 +1802,7 @@ export class PlanReviewStore {
     const tx = this.db.transaction(() => {
       const { plan } = this.getPlan(identifier);
       if (plan.reviewMode !== 'planning') {
-        throw new PlanReviewError('not_applicable', 'Collaboration documents cannot be moved to board columns', 400, { planId: plan.id, reviewMode: plan.reviewMode }, 'Use the Collab docs view for collaboration documents; board columns apply only to planning documents.');
+        throw new PlanReviewError('not_applicable', 'Collaboration documents cannot be moved to board columns', 400, { planId: plan.id, reviewMode: plan.reviewMode }, 'Use All documents with Filter by type set to Collaborative; board columns apply only to planning documents.');
       }
       const column = this.requireVisibleBoardColumn(boardColumnKey);
       const changed = plan.boardColumnKey !== column.key;

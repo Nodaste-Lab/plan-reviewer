@@ -96,7 +96,7 @@ Verification:
 
 ## 2026-06-21 demo feedback: mode selector style
 
-Demo feedback clarified that the shared `Kanban | All documents | Collab docs` selector itself still did not match the plan prototype. Root cause: index pages used segmented selector styles, but the review shell stylesheet only had a generic `#plan-navbar a` rule, so selector anchors rendered like ordinary blue text links. The index selector also used 6px vertical segment padding while the plan prototype uses 5px.
+Demo feedback clarified that the shared `Kanban | All documents` selector itself still did not match the plan prototype. Root cause: index pages used segmented selector styles, but the review shell stylesheet only had a generic `#plan-navbar a` rule, so selector anchors rendered like ordinary blue text links. The index selector also used 6px vertical segment padding while the plan prototype uses 5px.
 
 Fix applied:
 
@@ -135,11 +135,13 @@ Demo feedback clarified that the top action cluster must be screen-specific. Som
 Fix applied:
 
 - Kanban now shows only Configure columns in the top action cluster; Deferred and Archived shortcuts are omitted from the workflow board.
+- Kanban and board-column configuration screens no longer show the menu/collapse-left-nav button because those screens do not have a left navigator.
+- The mode selector is simplified to `Kanban | All documents`; collaboration documents are selected with the All Documents `Filter by type` control (`Plan` or `Collaborative`).
+- All Documents renders the complete active document list and applies Type client-side so users can switch between Plan and Collaborative without a reload; legacy `view=collab` only preselects the Collaborative filter.
 - All documents remains the mixed-discovery lifecycle hub and keeps Deferred/Archived shortcuts.
-- Collab docs no longer shows Deferred/Archived shortcuts or any plan-only top actions.
 - Deferred and Archived list pages no longer show a duplicate Active-index/home icon or an action for the current screen; each only links to the sibling lifecycle list.
-- Contract coverage asserts the absence of irrelevant top actions on Kanban, Collab docs, Deferred, and Archived screens.
+- Contract coverage asserts the absence of irrelevant top actions on Kanban, the two-state selector, and the All Documents type filter.
 
 Verification:
 
-- `bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "organization APIs persist|deferred lifecycle hides|archive page renders"` — PASS
+- `bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "organization APIs persist"` — PASS

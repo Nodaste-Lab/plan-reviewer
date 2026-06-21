@@ -2146,11 +2146,15 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     assert.equal(completeDetail.json().data.plan.boardColumnKey, 'backlog');
     assert.equal(completeDetail.json().data.progress.completedPhases, 1);
 
+    const collab = await app.inject({ method: 'POST', url: '/api/plans/register', payload: sampleRegisterPayload({ reviewMode: 'collaboration', publicationMetadata: undefined, planPath: 'docs/collab.html', slug: 'collab-doc' }) });
+    assert.equal(collab.statusCode, 200, collab.body);
+
     const kanban = await app.inject({ method: 'GET', url: '/' });
     assert.equal(kanban.statusCode, 200);
     assert.match(kanban.body, /Plans · Kanban/);
     assert.match(kanban.body, /<main class="kanban-page">/);
     assert.match(kanban.body, /\.kanban-page\{max-width:none;width:100%/);
+    assert.doesNotMatch(kanban.body, /aria-label="Menu">☰<\/button>/);
     assert.doesNotMatch(kanban.body, /data-pin-plan/);
     assert.doesNotMatch(kanban.body, /\.kanban-card \.pin-button/);
     assert.doesNotMatch(kanban.body, /<span class="badge">Pinned<\/span>/);
@@ -2161,18 +2165,25 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     assert.match(kanban.body, /aria-label="Configure columns"[^>]*title="Configure columns"[^>]*>⚙<\/a>/);
     assert.doesNotMatch(kanban.body, /aria-label="Deferred \(/);
     assert.doesNotMatch(kanban.body, /aria-label="Archived \(/);
+    assert.doesNotMatch(kanban.body, /Collab docs/);
     assert.match(kanban.body, /Execution not ready/);
     const allDocuments = await app.inject({ method: 'GET', url: '/?view=all' });
     assert.equal(allDocuments.statusCode, 200);
     assert.match(allDocuments.body, /Plan Review Index · All documents/);
+    assert.match(allDocuments.body, /aria-label="Filter by type"/);
+    assert.match(allDocuments.body, /<option value="plan">Plan<\/option>/);
+    assert.match(allDocuments.body, /<option value="collaborative">Collaborative<\/option>/);
+    assert.match(allDocuments.body, /data-type="plan"/);
+    assert.match(allDocuments.body, /data-type="collaborative"/);
+    assert.doesNotMatch(allDocuments.body, /Collab docs/);
     assert.match(allDocuments.body, /aria-label="Deferred \(0\)"[^>]*title="Deferred \(0\)"[^>]*>⏸<\/a>/);
     assert.match(allDocuments.body, /aria-label="Archived \(0\)"[^>]*title="Archived \(0\)"[^>]*>🗄<\/a>/);
-    const collabDocuments = await app.inject({ method: 'GET', url: '/?view=collab' });
+    const collabDocuments = await app.inject({ method: 'GET', url: '/?view=all&type=collaborative' });
     assert.equal(collabDocuments.statusCode, 200);
-    assert.match(collabDocuments.body, /Plan Review Index · Collab docs/);
-    assert.doesNotMatch(collabDocuments.body, /aria-label="Deferred \(/);
-    assert.doesNotMatch(collabDocuments.body, /aria-label="Archived \(/);
-    assert.doesNotMatch(collabDocuments.body, /Configure columns/);
+    assert.match(collabDocuments.body, /Plan Review Index · All documents/);
+    assert.match(collabDocuments.body, /<option value="collaborative" selected>Collaborative<\/option>/);
+    assert.match(collabDocuments.body, /data-type="collaborative"/);
+    assert.match(collabDocuments.body, /data-type="plan"/);
     assert.doesNotMatch(allDocuments.body, />Deferred \(0\) →<\/a>/);
     assert.doesNotMatch(allDocuments.body, />Archived \(0\) →<\/a>/);
 

@@ -115,7 +115,7 @@ Comparison: uncommitted working-tree diff on the feature branch, including the u
 
 | Source | Severity | Finding | Decision | Evidence |
 | --- | --- | --- | --- | --- |
-| User demo feedback | P2 | The shared `Kanban | All documents | Collab docs` mode selector still did not visually match the plan prototype. | Fixed | Review-shell CSS now defines the planned segmented selector under `#plan-navbar`, preventing generic blue navbar link styling from overriding the mode selector. Shared index selector segment padding now matches the plan prototype (`5px 10px`). Contract tests assert both shell and index selector CSS. |
+| User demo feedback | P2 | The shared `Kanban | All documents` mode selector still did not visually match the plan prototype. | Fixed | Review-shell CSS now defines the planned segmented selector under `#plan-navbar`, preventing generic blue navbar link styling from overriding the mode selector. Shared index selector segment padding now matches the plan prototype (`5px 10px`). Contract tests assert both shell and index selector CSS. |
 
 ## Mode selector verification
 
@@ -143,16 +143,29 @@ Comparison: uncommitted working-tree diff on the feature branch, including the u
 
 | Source | Severity | Finding | Decision | Evidence |
 | --- | --- | --- | --- | --- |
-| User demo feedback | P2 | Some top-screen buttons were present on screens where they did not make functional sense. | Fixed | Kanban now shows only Configure columns; All documents remains the lifecycle hub with Deferred/Archived shortcuts; Collab docs omits lifecycle and plan-only top actions; Deferred/Archived list pages only link to the sibling lifecycle list and no longer show duplicate Active-index/current-screen actions. Contract coverage asserts the absence of irrelevant top actions on Kanban, Collab docs, Deferred, and Archived screens. |
+| User demo feedback | P2 | Some top-screen buttons were present on screens where they did not make functional sense. | Fixed | Kanban now shows only Configure columns and no menu/collapse-left-nav button; All documents remains the lifecycle hub with Deferred/Archived shortcuts and adds `Filter by type` for Plan vs Collaborative documents; the selector is simplified to `Kanban | All documents`; Deferred/Archived list pages only link to the sibling lifecycle list and no longer show duplicate Active-index/current-screen actions. Contract coverage asserts the absence of irrelevant Kanban controls plus the two-state selector and type filter. |
 
 ## Screen-specific top actions verification
 
-- `bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "organization APIs persist|deferred lifecycle hides|archive page renders"` — PASS
+- `bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "organization APIs persist"` — PASS
 - `bun run test:e2e` — PASS
 - `bun run test` — PASS
 - GPT top-action review — `CONSENSUS_CLEAN`
 - GLM top-action review — `CONSENSUS_CLEAN`
 
+## Selector simplification and Kanban no-left-nav correction
+
+| Source | Severity | Finding | Decision | Evidence |
+| --- | --- | --- | --- | --- |
+| User demo feedback | P2 | The third collaboration-document selector mode should be removed; collaboration documents should be filtered inside All Documents, and Kanban should not show a left-nav collapse/menu button when there is no left nav. | Fixed | Shared selector renders only `Kanban` and `All documents`; All Documents renders `Filter by type` with `Plan` and `Collaborative`; legacy `view=collab` resolves to All Documents with the Collaborative type selected; Kanban and column configuration omit the menu/collapse-left-nav button. Contract coverage asserts the two-state selector, type filter, collaboration access, and no Kanban menu button. |
+
+## Selector simplification verification
+
+- `bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "organization APIs persist"` — PASS
+- `bun run test:e2e && bun run test` — PASS
+- GPT selector/type review — first rerun found stale plan copy; final rerun `CONSENSUS_CLEAN`
+- GLM selector/type review — `CONSENSUS_CLEAN`
+
 ## Final gate result
 
-PASS — GPT verdict `CLEAN_FOR_PR`; GLM verdict `CLEAN_FOR_PR`; PR-feedback PM verdict `PRODUCT_CLEAN`; PR-feedback adversarial verdict `CLEAN_FOR_PR_UPDATE`; demo feedback targeted gates PASS; Kanban demo PM/adversarial rereviews clean; top-bar GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`; mode-selector GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`; parent-project GPT/GLM rereviews both `CONSENSUS_CLEAN`; screen-specific top-action GPT/GLM rereviews both `CONSENSUS_CLEAN`.
+PASS — GPT verdict `CLEAN_FOR_PR`; GLM verdict `CLEAN_FOR_PR`; PR-feedback PM verdict `PRODUCT_CLEAN`; PR-feedback adversarial verdict `CLEAN_FOR_PR_UPDATE`; demo feedback targeted gates PASS; Kanban demo PM/adversarial rereviews clean; top-bar GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`; mode-selector GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`; parent-project GPT/GLM rereviews both `CONSENSUS_CLEAN`; screen-specific top-action GPT/GLM rereviews both `CONSENSUS_CLEAN`; selector/type-filter GPT/GLM final rereviews both `CONSENSUS_CLEAN`.
