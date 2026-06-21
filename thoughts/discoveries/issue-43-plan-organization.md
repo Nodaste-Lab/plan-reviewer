@@ -95,3 +95,21 @@ Verification:
 - `bun run test` — PASS
 - GPT plan-faithfulness review — `CONSENSUS_CLEAN`
 - GLM plan-faithfulness review — `CONSENSUS_CLEAN`
+
+## 2026-06-21 demo feedback: mode selector style
+
+Demo feedback clarified that the shared `Kanban | All documents | Collab docs` selector itself still did not match the plan prototype. Root cause: index pages used segmented selector styles, but the review shell stylesheet only had a generic `#plan-navbar a` rule, so selector anchors rendered like ordinary blue text links. The index selector also used 6px vertical segment padding while the plan prototype uses 5px.
+
+Fix applied:
+
+- Review shell CSS now defines the same `.doc-kind-switcher`, `.doc-kind-seg`, and `.doc-kind-seg.active` segmented/pill styles scoped under `#plan-navbar` so they override generic navbar link styling.
+- Shared index selector segment padding now matches the plan prototype (`5px 10px`) and preserves nowrap segment labels.
+- Contract tests assert the review-shell and index selector CSS so this cannot silently regress to text-link styling.
+
+Verification:
+
+- `bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "review shell exposes titled left navigator|organization APIs persist"` — PASS
+- `bun run test:e2e` — PASS
+- `bun run test` — PASS
+- GPT selector plan-faithfulness review — `CONSENSUS_CLEAN`
+- GLM selector plan-faithfulness review — `CONSENSUS_CLEAN`

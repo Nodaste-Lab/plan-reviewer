@@ -1621,6 +1621,9 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     assert.match(shellCss.body, /--plan-nav-width:260px/);
     assert.match(shellCss.body, /body\.plan-nav-collapsed\{--plan-nav-width:0\}/);
     assert.match(shellCss.body, /grid-template-columns:var\(--plan-nav-width\) minmax\(0,1fr\) var\(--comments-width\)/);
+    assert.match(shellCss.body, /#plan-navbar \.doc-kind-switcher\{display:inline-flex;gap:2px;padding:3px;border:1px solid #334155;border-radius:999px;background:#08111f/);
+    assert.match(shellCss.body, /#plan-navbar \.doc-kind-seg\{border-radius:999px;padding:5px 10px;color:#a7b0c0;font-size:12px;font-weight:850;text-decoration:none;white-space:nowrap\}/);
+    assert.match(shellCss.body, /#plan-navbar \.doc-kind-seg\.active\{background:#0ea5e9;color:#e0f2fe\}/);
     assert.match(shellCss.body, /#quick-open-backdrop/);
     assert.match(shellCss.body, /#quick-open-result-list/);
     assert.match(shellCss.body, /\.quick-open-result\.active/);
@@ -2076,6 +2079,8 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     assert.doesNotMatch(kanban.body, /<span class="badge">Pinned<\/span>/);
     assert.match(kanban.body, /data-column-key="backlog"/);
     assert.match(kanban.body, /data-plan-id="[^"]+" data-column="backlog"/);
+    assert.match(kanban.body, /\.doc-kind-seg\{border-radius:999px;padding:5px 10px;color:#a7b0c0;font-size:12px;font-weight:850;text-decoration:none;white-space:nowrap\}/);
+    assert.match(kanban.body, /\.doc-kind-seg\.active\{background:#0ea5e9;color:#e0f2fe\}/);
     assert.match(kanban.body, /aria-label="Configure columns"[^>]*title="Configure columns"[^>]*>⚙<\/a>/);
     assert.match(kanban.body, /Execution not ready/);
     const allDocuments = await app.inject({ method: 'GET', url: '/?view=all' });

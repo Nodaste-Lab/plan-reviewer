@@ -111,6 +111,20 @@ Comparison: uncommitted working-tree diff on the feature branch, including the u
 | GPT plan-faithfulness review | `CONSENSUS_CLEAN` | Verified Project/State/Status are filters, mutation/navigation handlers were removed, All documents uses icon actions, Kanban no-pin behavior remains intact, and tests lock the intent. |
 | GLM plan-faithfulness review | `CONSENSUS_CLEAN` | Verified UI/code/plan/test alignment for filter labels, navigator-only filtering, icon-action top bars, Kanban no-pin/responsive/column-hide behavior, and strengthened regression coverage. |
 
+## Mode selector style correction
+
+| Source | Severity | Finding | Decision | Evidence |
+| --- | --- | --- | --- | --- |
+| User demo feedback | P2 | The shared `Kanban | All documents | Collab docs` mode selector still did not visually match the plan prototype. | Fixed | Review-shell CSS now defines the planned segmented selector under `#plan-navbar`, preventing generic blue navbar link styling from overriding the mode selector. Shared index selector segment padding now matches the plan prototype (`5px 10px`). Contract tests assert both shell and index selector CSS. |
+
+## Mode selector verification
+
+- `bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "review shell exposes titled left navigator|organization APIs persist"` — PASS
+- `bun run test:e2e` — PASS
+- `bun run test` — PASS
+- GPT selector plan-faithfulness review — `CONSENSUS_CLEAN`
+- GLM selector plan-faithfulness review — `CONSENSUS_CLEAN`
+
 ## Final gate result
 
-PASS — GPT verdict `CLEAN_FOR_PR`; GLM verdict `CLEAN_FOR_PR`; PR-feedback PM verdict `PRODUCT_CLEAN`; PR-feedback adversarial verdict `CLEAN_FOR_PR_UPDATE`; demo feedback targeted gates PASS; Kanban demo PM/adversarial rereviews clean; top-bar GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`.
+PASS — GPT verdict `CLEAN_FOR_PR`; GLM verdict `CLEAN_FOR_PR`; PR-feedback PM verdict `PRODUCT_CLEAN`; PR-feedback adversarial verdict `CLEAN_FOR_PR_UPDATE`; demo feedback targeted gates PASS; Kanban demo PM/adversarial rereviews clean; top-bar GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`; mode-selector GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`.
