@@ -206,7 +206,8 @@ function planNavigatorRank(item: ListedPlan): number {
 }
 
 function sortPlansForNavigator(plans: ListedPlan[]): ListedPlan[] {
-  return [...plans].sort((a, b) => planNavigatorRank(a) - planNavigatorRank(b)
+  return [...plans].sort((a, b) => (Boolean(a.plan.pinnedAt) === Boolean(b.plan.pinnedAt) ? 0 : a.plan.pinnedAt ? -1 : 1)
+    || planNavigatorRank(a) - planNavigatorRank(b)
     || planProgressRatio(b) - planProgressRatio(a)
     || String(b.activityAt).localeCompare(String(a.activityAt))
     || displayTitle(a).localeCompare(displayTitle(b))
@@ -1051,11 +1052,7 @@ async function loadNavigatorFilterSource(){
     renderPlanNavigatorItems(navigatorItems, document.querySelector('#plan-list-nav')?.getAttribute('aria-label') === 'Active documents' ? 'documents' : 'plans');
     return;
   }
-  if (quickOpenItems.length) {
-    renderPlanNavigatorItems(quickOpenItems, 'documents');
-    return;
-  }
-  if (!navigatorFilterLoadPromise) navigatorFilterLoadPromise = loadQuickOpenItems().finally(() => { navigatorFilterLoadPromise = null; });
+  if (!navigatorFilterLoadPromise) navigatorFilterLoadPromise = loadQuickOpenItems({ force: true }).finally(() => { navigatorFilterLoadPromise = null; });
   await navigatorFilterLoadPromise;
   renderPlanNavigatorItems(quickOpenItems, 'documents');
 }
@@ -1318,6 +1315,7 @@ function handlePlanReviewEvent(event){
     return;
   }
   if (event.type === 'plan.sync.failed'
+    || event.type === 'plan.columns.changed'
     || event.type === 'plan.note.created'
     || event.type === 'plan.deferred'
     || event.type === 'plan.resumed'
@@ -1593,8 +1591,10 @@ function handleQuickOpenKeydown(event){
     selectQuickOpenResult();
   }
 }
-async function loadQuickOpenItems(){
+async function loadQuickOpenItems(options = {}){
   if (quickOpenLoadPromise) return quickOpenLoadPromise;
+  if (!options.force && quickOpenItems.length) return Promise.resolve();
+  if (options.force) quickOpenItems = [];
   quickOpenLoadPromise = (async () => {
     const items = [];
     let cursor = '';
@@ -3074,14 +3074,14 @@ export function createApp(options: AppOptions): FastifyInstance {
 
   app.get('/columns', async (_request, reply) => {
     const columns = store.listBoardColumns({ includeHidden: true });
-    const planningPlans = store.listPlans({ includeArchived: true, includeDeferred: true }).filter(item => item.plan.reviewMode === 'planning');
+    const planningPlans = store.listPlans().filter(item => item.plan.reviewMode === 'planning');
     const planCounts = new Map<string, number>();
     for (const item of planningPlans) planCounts.set(item.plan.boardColumnKey ?? '', (planCounts.get(item.plan.boardColumnKey ?? '') ?? 0) + 1);
     const rows = columns.map(column => {
       const count = planCounts.get(column.key) ?? 0;
       const hideDisabled = !column.hiddenAt && count > 0;
       const title = hideDisabled ? `Move ${count} plan${count === 1 ? '' : 's'} out before hiding this column.` : 'Hide this column from the Kanban board.';
-      return `<tr data-column-row data-key="${escapeHtml(column.key)}" data-label="${escapeHtml(column.label)}" data-position="${column.position}" data-is-done="${column.isDone ? 'true' : 'false'}"><td><code>${escapeHtml(column.key)}</code></td><td>${escapeHtml(column.label)}</td><td>${column.position}</td><td>${column.isDone ? 'Done' : 'Workflow'}</td><td>${count}</td><td><label title="${escapeHtml(title)}"><input type="checkbox" data-column-hidden ${column.hiddenAt ? 'checked' : ''} ${hideDisabled ? 'disabled' : ''}> Hide</label>${hideDisabled ? ` <span class="muted">Move ${count} plan${count === 1 ? '' : 's'} first</span>` : ''}</td></tr>`;
+      return `<tr data-column-row data-key="${escapeHtml(column.key)}" data-position="${column.position}" data-is-done="${column.isDone ? 'true' : 'false'}"><td><code>${escapeHtml(column.key)}</code></td><td><input data-column-label aria-label="Label for ${escapeHtml(column.key)}" value="${escapeHtml(column.label)}"></td><td>${column.position}</td><td>${column.isDone ? 'Done' : 'Workflow'}</td><td>${count}</td><td><label title="${escapeHtml(title)}"><input type="checkbox" data-column-hidden ${column.hiddenAt ? 'checked' : ''} ${hideDisabled ? 'disabled' : ''}> Hide</label>${hideDisabled ? ` <span class="muted">Move ${count} plan${count === 1 ? '' : 's'} first</span>` : ''}</td></tr>`;
     }).join('');
     reply.type('text/html').send(`<!doctype html><html><head><meta charset="utf-8"><title>Board columns</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"><style>${baseIndexStyles()}${organizationIndexStyles()}</style></head><body><main><div class="topbar">${documentViewSwitcher('kanban')}<div class="plan-actions">${topbarIconAction('/', 'Back to Kanban', '←')}</div></div><h1>Board columns</h1><p class="muted">Column labels, order, done behavior, and visibility are persisted in the local database. Empty columns can be hidden from the Kanban board; occupied columns must be emptied before hiding so plans do not disappear.</p><div id="organizer-error" class="organizer-error" hidden></div><table class="columns-table"><thead><tr><th>Stable key</th><th>Label</th><th>Position</th><th>Behavior</th><th>Plans</th><th>Visibility</th></tr></thead><tbody>${rows}</tbody></table><div class="columns-save"><button id="save-columns" class="nav-link primary" type="button">Save visibility</button><span id="columns-message" class="columns-message"></span></div><script>
       const message=document.getElementById('columns-message'), error=document.getElementById('organizer-error');
@@ -3090,7 +3090,7 @@ export function createApp(options: AppOptions): FastifyInstance {
         button.disabled=true;
         if(error) error.hidden=true;
         if(message) message.textContent='Saving…';
-        const columns=[...document.querySelectorAll('[data-column-row]')].map(row=>({key:row.dataset.key,label:row.dataset.label,position:Number(row.dataset.position),isDone:row.dataset.isDone==='true',hidden:Boolean(row.querySelector('[data-column-hidden]')?.checked)}));
+        const columns=[...document.querySelectorAll('[data-column-row]')].map(row=>({key:row.dataset.key,label:row.querySelector('[data-column-label]')?.value||row.dataset.key,position:Number(row.dataset.position),isDone:row.dataset.isDone==='true',hidden:Boolean(row.querySelector('[data-column-hidden]')?.checked)}));
         const res=await fetch('/api/board-columns',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({columns})}).catch(()=>null);
         if(!res?.ok){
           button.disabled=false;
@@ -3107,7 +3107,7 @@ export function createApp(options: AppOptions): FastifyInstance {
 
   app.get('/api/plans', async (request, reply) => {
     try {
-      const query = request.query as { q?: string; repoKey?: string; projectKey?: string; status?: string; lifecycle?: 'active' | 'deferred' | 'archived'; limit?: string; cursor?: string; currentPlanId?: string; includeArchived?: string; includeDeferred?: string };
+      const query = request.query as { q?: string; repoKey?: string; projectKey?: string; status?: string; reviewMode?: 'planning' | 'collaboration'; boardColumnKey?: string; lifecycle?: 'active' | 'deferred' | 'archived'; limit?: string; cursor?: string; currentPlanId?: string; includeArchived?: string; includeDeferred?: string };
       const { plans, nextCursor } = filterPlans(store.listPlans({ includeArchived: query.includeArchived === 'true', includeDeferred: query.includeDeferred === 'true', lifecycleState: query.lifecycle }), query);
       return ok({ plans, nextCursor });
     } catch (error) {
@@ -3264,7 +3264,9 @@ export function createApp(options: AppOptions): FastifyInstance {
 
   app.put('/api/board-columns', async (request, reply) => {
     try {
-      return ok(store.saveBoardColumns(saveBoardColumnsSchema.parse(request.body)));
+      const result = store.saveBoardColumns(saveBoardColumnsSchema.parse(request.body));
+      for (const event of result.events) bus.emitEvent(event);
+      return ok(result);
     } catch (error) {
       sendError(reply, error);
     }
@@ -3282,11 +3284,13 @@ export function createApp(options: AppOptions): FastifyInstance {
       }
       const result = store.setPlanLifecycleState(planId, input.lifecycleState);
       bus.emitEvent(result.event);
-      if (result.plan.lifecycleState === 'active') {
-        await sourceSync.register(result.plan.id);
-        await sourceSync.syncNow(result.plan.id, 'manual');
-      } else {
-        await sourceSync.unregister(result.plan.id);
+      if (result.changed) {
+        if (result.plan.lifecycleState === 'active') {
+          await sourceSync.register(result.plan.id);
+          await sourceSync.syncNow(result.plan.id, 'manual');
+        } else {
+          await sourceSync.unregister(result.plan.id);
+        }
       }
       return ok({ plan: result.plan, changed: result.changed });
     } catch (error) {

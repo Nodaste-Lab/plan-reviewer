@@ -242,6 +242,29 @@ Comparison: `origin/main...HEAD`, plus the local README documentation fix before
 - GPT-5.5 pre-PR rereview — `CLEAN_FOR_PR`
 - GLM-5.2 pre-PR rereview — `CLEAN_FOR_PR`
 
+## P3 follow-up resolution
+
+Verification:
+
+- `bun run test` — PASS
+- `bun run test:e2e` — PASS
+- `bun run test:fixtures` — PASS
+- GPT P3 cleanup review — `CLEAN_FOR_PR`
+- GLM P3 cleanup review — `CLEAN_FOR_PR`
+
+| Prior P3 | Resolution | Evidence |
+| --- | --- | --- |
+| `plan.columns.changed` was declared but not emitted/consumed. | `saveBoardColumns` now emits `plan.columns.changed` events and the review shell consumes them through the metadata reload path. | Contract coverage asserts column-save responses include `plan.columns.changed`; client text coverage includes the event consumer. |
+| Column-label editing was API-only. | `/columns` now renders editable label inputs and CLI adds `plan-review columns rename <key> <label>`. | Contract coverage asserts label inputs and CLI REST mapping for `columns rename`. |
+| Server-rendered navigator did not apply pinned-first ordering. | Server navigator sorting now matches client pinned-first ordering. | Build/contracts passed after sort change. |
+| Column occupancy counted deferred/archived plans. | Hide blocking now counts only active planning documents; deferred/archived plans in hidden columns are reassigned to a visible column on resume/unarchive/active lifecycle transition. | Contract coverage hides a deferred plan's column and asserts active transition moves it to `backlog`. |
+| `/api/plans` had dead `reviewMode` and `boardColumnKey` filter parameters. | The route query now accepts and passes those filters to `filterPlans`. | Contract coverage exercises `reviewMode=planning&boardColumnKey=in_progress` and the inverse collaborative query. |
+| Startup project backfill ran a git check per non-overridden row. | Backfill now caches git-parent repo lookups per root path. | Typecheck/contract suite passed. |
+| Filtered navigator could reuse stale all-document source. | Filtered navigator loads force-refresh all-document source data instead of reusing the quick-open cache. | Build/contracts passed after client update. |
+| Filtered archive status could lag cosmetically. | The same forced filtered source reload refreshes the archived item status after navigator reload. | Build/contracts passed after client update. |
+| `lifecycle set active` could resync no-op active plans. | The server only registers/syncs/unregisters source watchers when lifecycle actually changes. | Contract coverage asserts a second active lifecycle call returns `changed: false`; build/contracts passed. |
+| Pin/project commands applied to collaboration documents. | Planning-only organization commands now reject collaboration documents with `not_applicable`; changing a pinned plan to collaboration clears `pinnedAt`. | Contract coverage asserts collaborative column, pin, and project mutations reject. |
+
 ## Final gate result
 
-PASS — GPT verdict `CLEAN_FOR_PR`; GLM verdict `CLEAN_FOR_PR`; PR-feedback PM verdict `PRODUCT_CLEAN`; PR-feedback adversarial verdict `CLEAN_FOR_PR_UPDATE`; demo feedback targeted gates PASS; Kanban demo PM/adversarial rereviews clean; top-bar GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`; mode-selector GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`; parent-project GPT/GLM rereviews both `CONSENSUS_CLEAN`; screen-specific top-action GPT/GLM rereviews both `CONSENSUS_CLEAN`; selector/type-filter GPT/GLM final rereviews both `CONSENSUS_CLEAN`; All Documents/lifecycle no-left-nav GPT/GLM rereviews both `CONSENSUS_CLEAN`; plan-shell selector / All Documents width GPT/GLM rereviews both `CONSENSUS_CLEAN`; plan-shell navigator filter persistence GPT/GLM rereviews both `CONSENSUS_CLEAN`; plan-shell navigator filtered-render GPT/GLM rereviews both `CONSENSUS_CLEAN`; formal pre-PR GPT/GLM rereviews both `CLEAN_FOR_PR`.
+PASS — GPT verdict `CLEAN_FOR_PR`; GLM verdict `CLEAN_FOR_PR`; PR-feedback PM verdict `PRODUCT_CLEAN`; PR-feedback adversarial verdict `CLEAN_FOR_PR_UPDATE`; demo feedback targeted gates PASS; Kanban demo PM/adversarial rereviews clean; top-bar GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`; mode-selector GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`; parent-project GPT/GLM rereviews both `CONSENSUS_CLEAN`; screen-specific top-action GPT/GLM rereviews both `CONSENSUS_CLEAN`; selector/type-filter GPT/GLM final rereviews both `CONSENSUS_CLEAN`; All Documents/lifecycle no-left-nav GPT/GLM rereviews both `CONSENSUS_CLEAN`; plan-shell selector / All Documents width GPT/GLM rereviews both `CONSENSUS_CLEAN`; plan-shell navigator filter persistence GPT/GLM rereviews both `CONSENSUS_CLEAN`; plan-shell navigator filtered-render GPT/GLM rereviews both `CONSENSUS_CLEAN`; formal pre-PR GPT/GLM rereviews both `CLEAN_FOR_PR`; P3 cleanup GPT/GLM reviews both `CLEAN_FOR_PR`.

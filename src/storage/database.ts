@@ -238,8 +238,11 @@ function gitParentRepoName(rootPath?: string | null): string | undefined {
   return repoName || undefined;
 }
 
-function inferProjectName(input: { rootPath?: string | null; repoName?: string | null; sourcePath?: string | null; planPath?: string | null }): string {
-  const gitParent = gitParentRepoName(input.rootPath);
+function inferProjectName(input: { rootPath?: string | null; repoName?: string | null; sourcePath?: string | null; planPath?: string | null }, gitParentCache?: Map<string, string | undefined>): string {
+  const rootCacheKey = optionalString(input.rootPath);
+  const gitParent = rootCacheKey && gitParentCache
+    ? (gitParentCache.has(rootCacheKey) ? gitParentCache.get(rootCacheKey) : (() => { const value = gitParentRepoName(rootCacheKey); gitParentCache.set(rootCacheKey, value); return value; })())
+    : gitParentRepoName(input.rootPath);
   if (gitParent) return gitParent;
   const repoName = optionalString(input.repoName);
   if (repoName) return repoName;
@@ -733,10 +736,11 @@ export class PlanReviewStore {
       WHERE p.project_overridden_at IS NULL OR p.project_key IS NULL OR p.project_name IS NULL OR (p.review_mode = 'planning' AND p.board_column_key IS NULL) OR (p.review_mode = 'collaboration' AND p.board_column_key IS NOT NULL)
     `).all() as Array<Record<string, unknown>>;
     if (rows.length === 0) return;
+    const gitParentCache = new Map<string, string | undefined>();
     const update = this.db.prepare('UPDATE plans SET project_key = ?, project_name = ?, board_column_key = ?, updated_at = updated_at WHERE id = ?');
     const tx = this.db.transaction(() => {
       for (const row of rows) {
-        const inferredProjectName = inferProjectName({ rootPath: optionalString(row.rootPath), repoName: optionalString(row.repoName), sourcePath: optionalString(row.sourcePath), planPath: optionalString(row.planPath) });
+        const inferredProjectName = inferProjectName({ rootPath: optionalString(row.rootPath), repoName: optionalString(row.repoName), sourcePath: optionalString(row.sourcePath), planPath: optionalString(row.planPath) }, gitParentCache);
         const projectName = optionalString(row.projectOverriddenAt) ? (optionalString(row.projectName) ?? inferredProjectName) : inferredProjectName;
         const projectKey = optionalString(row.projectOverriddenAt) ? (optionalString(row.projectKey) ?? normalizeProjectKey(projectName)) : normalizeProjectKey(projectName);
         const progress = parseJson<PlanProgress | null>(row.progressJson as string | null, null) ?? { totalPhases: 0, completedPhases: 0, phases: [] };
@@ -868,10 +872,15 @@ export class PlanReviewStore {
     return columns.find(column => column.key === preferredKey)?.key ?? columns[0]?.key ?? 'backlog';
   }
 
-  saveBoardColumns(input: SaveBoardColumnsInput): { columns: BoardColumnRecord[]; event?: StoredEvent } {
+  private visibleBoardColumnKey(currentKey?: string): string | null {
+    if (!currentKey) return null;
+    return this.listBoardColumns().some(column => column.key === currentKey) ? currentKey : this.defaultVisibleBoardColumnKey(currentKey);
+  }
+
+  saveBoardColumns(input: SaveBoardColumnsInput): { columns: BoardColumnRecord[]; events: StoredEvent[] } {
     const now = nowIso();
     const seen = new Set<string>();
-    const occupiedPlanCount = this.db.prepare("SELECT COUNT(*) AS count FROM plans WHERE review_mode = 'planning' AND board_column_key = ?");
+    const occupiedPlanCount = this.db.prepare("SELECT COUNT(*) AS count FROM plans WHERE review_mode = 'planning' AND lifecycle_state = 'active' AND board_column_key = ?");
     const tx = this.db.transaction(() => {
       const nextVisibility = new Map(this.listBoardColumns({ includeHidden: true }).map(column => [column.key, !column.hiddenAt]));
       for (const column of input.columns) nextVisibility.set(column.key, !column.hidden);
@@ -893,7 +902,10 @@ export class PlanReviewStore {
       }
       return this.listBoardColumns({ includeHidden: true });
     });
-    return { columns: tx() };
+    const columns = tx();
+    const planRows = this.db.prepare('SELECT id FROM plans').all() as Array<{ id: string }>;
+    const events = planRows.map(row => this.addEvent(row.id, 'plan.columns.changed', { eventType: 'plan.columns.changed', planId: row.id, columns }));
+    return { columns, events };
   }
 
   getPullRequest(planId: string): PlanPullRequest | null {
@@ -1769,7 +1781,8 @@ export class PlanReviewStore {
       }
       const now = nowIso();
       const boardColumn = reviewMode === 'planning' ? (plan.boardColumnKey ?? this.defaultVisibleBoardColumnKey('backlog')) : null;
-      this.db.prepare('UPDATE plans SET review_mode = ?, board_column_key = ?, updated_at = ? WHERE id = ?').run(reviewMode, boardColumn, now, plan.id);
+      const pinnedAt = reviewMode === 'planning' ? plan.pinnedAt ?? null : null;
+      this.db.prepare('UPDATE plans SET review_mode = ?, board_column_key = ?, pinned_at = ?, updated_at = ? WHERE id = ?').run(reviewMode, boardColumn, pinnedAt, now, plan.id);
       const updated = this.getPlan(plan.id).plan;
       const event = this.addEvent(plan.id, 'plan.mode.changed', { eventType: 'plan.mode.changed', planId: plan.id, reviewMode, changed: true });
       return { plan: updated, event, changed: true };
@@ -1788,7 +1801,7 @@ export class PlanReviewStore {
         } else if (lifecycleState === 'deferred') {
           this.db.prepare("UPDATE plans SET lifecycle_state = 'deferred', archived_at = NULL, deferred_at = COALESCE(deferred_at, ?), updated_at = ? WHERE id = ?").run(now, now, plan.id);
         } else {
-          this.db.prepare("UPDATE plans SET lifecycle_state = 'active', archived_at = NULL, deferred_at = NULL, deferred_note_id = NULL, updated_at = ? WHERE id = ?").run(now, plan.id);
+          this.db.prepare("UPDATE plans SET lifecycle_state = 'active', archived_at = NULL, deferred_at = NULL, deferred_note_id = NULL, board_column_key = COALESCE(?, board_column_key), updated_at = ? WHERE id = ?").run(this.visibleBoardColumnKey(plan.boardColumnKey), now, plan.id);
         }
       }
       const updated = this.getPlan(plan.id).plan;
@@ -1817,6 +1830,9 @@ export class PlanReviewStore {
   setPlanPinned(identifier: string, pinned: boolean): { plan: PlanRecord; event: StoredEvent; changed: boolean } {
     const tx = this.db.transaction(() => {
       const { plan } = this.getPlan(identifier);
+      if (plan.reviewMode !== 'planning') {
+        throw new PlanReviewError('not_applicable', 'Collaboration documents cannot be pinned as plans', 400, { planId: plan.id, reviewMode: plan.reviewMode }, 'Use All documents with Filter by type set to Collaborative; pinning applies only to planning documents.');
+      }
       const changed = Boolean(plan.pinnedAt) !== pinned;
       const pinnedAt = pinned ? (plan.pinnedAt ?? nowIso()) : null;
       if (changed) this.db.prepare('UPDATE plans SET pinned_at = ?, updated_at = ? WHERE id = ?').run(pinnedAt, nowIso(), plan.id);
@@ -1830,6 +1846,9 @@ export class PlanReviewStore {
   setPlanProject(identifier: string, input: { projectName: string; projectKey?: string }): { plan: PlanRecord; event: StoredEvent; changed: boolean } {
     const tx = this.db.transaction(() => {
       const { plan } = this.getPlan(identifier);
+      if (plan.reviewMode !== 'planning') {
+        throw new PlanReviewError('not_applicable', 'Collaboration documents cannot use planning project overrides', 400, { planId: plan.id, reviewMode: plan.reviewMode }, 'Use All documents with Filter by type set to Collaborative; project overrides apply only to planning documents.');
+      }
       const projectName = input.projectName.trim();
       const projectKey = input.projectKey?.trim() || normalizeProjectKey(projectName);
       const changed = plan.projectName !== projectName || plan.projectKey !== projectKey || !plan.projectOverriddenAt;
@@ -1891,8 +1910,8 @@ export class PlanReviewStore {
         note = this.getPlanNote(noteId);
         events.push(this.addEvent(plan.id, 'plan.note.created', { eventType: 'plan.note.created', planId: plan.id, note }));
       }
-      this.db.prepare("UPDATE plans SET lifecycle_state = 'active', deferred_at = NULL, deferred_note_id = NULL, updated_at = ? WHERE id = ?")
-        .run(now, plan.id);
+      this.db.prepare("UPDATE plans SET lifecycle_state = 'active', deferred_at = NULL, deferred_note_id = NULL, board_column_key = COALESCE(?, board_column_key), updated_at = ? WHERE id = ?")
+        .run(this.visibleBoardColumnKey(plan.boardColumnKey), now, plan.id);
       const updated = this.getPlan(plan.id).plan;
       events.push(this.addEvent(plan.id, 'plan.resumed', { eventType: 'plan.resumed', planId: plan.id, resumedAt: now, noteId: note?.id }));
       return { plan: updated, note, events };
@@ -1915,7 +1934,7 @@ export class PlanReviewStore {
     const { plan } = this.getPlan(identifier);
     const unarchivedAt = nowIso();
     if (plan.archivedAt) {
-      this.db.prepare("UPDATE plans SET archived_at = NULL, lifecycle_state = 'active', deferred_at = NULL, deferred_note_id = NULL, updated_at = ? WHERE id = ?").run(unarchivedAt, plan.id);
+      this.db.prepare("UPDATE plans SET archived_at = NULL, lifecycle_state = 'active', deferred_at = NULL, deferred_note_id = NULL, board_column_key = COALESCE(?, board_column_key), updated_at = ? WHERE id = ?").run(this.visibleBoardColumnKey(plan.boardColumnKey), unarchivedAt, plan.id);
     }
     const updated = this.getPlan(plan.id).plan;
     const event = this.addEvent(plan.id, 'plan.unarchived', { eventType: 'plan.unarchived', planId: plan.id, unarchivedAt });

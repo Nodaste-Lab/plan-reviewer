@@ -2210,6 +2210,8 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     const columnsPage = await app.inject({ method: 'GET', url: '/columns' });
     assert.equal(columnsPage.statusCode, 200);
     assert.match(columnsPage.body, /Save visibility/);
+    assert.match(columnsPage.body, /data-column-label/);
+    assert.match(columnsPage.body, /aria-label="Label for backlog"/);
     assert.match(columnsPage.body, /data-key="backlog"[\s\S]*data-column-hidden[\s\S]*disabled/);
     assert.match(columnsPage.body, /data-key="ready_to_pull"[\s\S]*data-column-hidden/);
 
@@ -2251,6 +2253,8 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     });
     assert.equal(hiddenReadyColumn.statusCode, 200, hiddenReadyColumn.body);
     assert.deepEqual(hiddenReadyColumn.json().data.columns.filter((column: { hiddenAt?: string }) => !column.hiddenAt).map((column: { key: string }) => column.key), ['in_progress', 'backlog', 'done']);
+    assert.ok(Array.isArray(hiddenReadyColumn.json().data.events));
+    assert.equal(hiddenReadyColumn.json().data.events.some((event: { eventType: string }) => event.eventType === 'plan.columns.changed'), true);
     const hiddenReadyKanban = await app.inject({ method: 'GET', url: '/' });
     assert.doesNotMatch(hiddenReadyKanban.body, /data-column-key="ready_to_pull"/);
 
@@ -2278,6 +2282,13 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     assert.match(projectFilteredIndex.body, /Show all projects/);
     assert.match(projectFilteredIndex.body, new RegExp(`data-plan-id="${planId}"`));
 
+    const apiColumnFilter = await app.inject({ method: 'GET', url: '/api/plans?reviewMode=planning&boardColumnKey=in_progress' });
+    assert.equal(apiColumnFilter.statusCode, 200, apiColumnFilter.body);
+    assert.equal(apiColumnFilter.json().data.plans.some((item: { plan: { id: string } }) => item.plan.id === planId), true);
+    const apiCollabColumnFilter = await app.inject({ method: 'GET', url: '/api/plans?reviewMode=collaboration&boardColumnKey=in_progress' });
+    assert.equal(apiCollabColumnFilter.statusCode, 200, apiCollabColumnFilter.body);
+    assert.equal(apiCollabColumnFilter.json().data.plans.some((item: { plan: { id: string } }) => item.plan.id === planId), false);
+
     const missingDeferNote = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/lifecycle`, payload: { lifecycleState: 'deferred' } });
     assert.equal(missingDeferNote.statusCode, 400);
     assert.equal(missingDeferNote.json().error.code, 'validation_failed');
@@ -2289,17 +2300,43 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     assert.equal(deferred.json().data.note.body, 'Pause until issue 43 is ready.');
     assert.equal(deferred.json().data.plan.deferredNoteId, deferred.json().data.note.id);
 
+    const hideInactiveColumn = await app.inject({
+      method: 'PUT',
+      url: '/api/board-columns',
+      payload: {
+        columns: [
+          { key: 'in_progress', label: 'Doing', position: 0, hidden: true },
+          { key: 'backlog', label: 'Backlog', position: 1 },
+          { key: 'ready_to_pull', label: 'Ready to Pull', position: 2, hidden: true },
+          { key: 'done', label: 'Done', position: 3, isDone: true }
+        ]
+      }
+    });
+    assert.equal(hideInactiveColumn.statusCode, 200, hideInactiveColumn.body);
+
     const active = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/lifecycle`, payload: { lifecycleState: 'active' } });
     assert.equal(active.statusCode, 200, active.body);
     assert.equal(active.json().data.plan.lifecycleState, 'active');
     assert.equal(active.json().data.plan.deferredAt, undefined);
+    assert.equal(active.json().data.plan.boardColumnKey, 'backlog');
+
+    const noOpActive = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/lifecycle`, payload: { lifecycleState: 'active' } });
+    assert.equal(noOpActive.statusCode, 200, noOpActive.body);
+    assert.equal(noOpActive.json().data.changed, false);
 
     const changedToCollab = await app.inject({ method: 'PATCH', url: `/api/plans/${planId}`, payload: { reviewMode: 'collaboration' } });
     assert.equal(changedToCollab.statusCode, 200, changedToCollab.body);
     assert.equal(changedToCollab.json().data.plan.boardColumnKey, undefined);
+    assert.equal(changedToCollab.json().data.plan.pinnedAt, undefined);
     const invalidColumn = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/column`, payload: { boardColumnKey: 'done' } });
     assert.equal(invalidColumn.statusCode, 400);
     assert.equal(invalidColumn.json().error.code, 'not_applicable');
+    const invalidPin = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/pin`, payload: { pinned: true } });
+    assert.equal(invalidPin.statusCode, 400);
+    assert.equal(invalidPin.json().error.code, 'not_applicable');
+    const invalidProject = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/project`, payload: { projectName: 'Collab override' } });
+    assert.equal(invalidProject.statusCode, 400);
+    assert.equal(invalidProject.json().error.code, 'not_applicable');
   } finally {
     await app.close();
   }
@@ -3590,6 +3627,10 @@ test('CLI organization commands map to REST endpoints', async () => {
       ['in_progress', 3]
     ]);
 
+    const rename = await runCli(['columns', 'rename', 'in_progress', 'Doing', '--url', serviceUrl, '--json']);
+    assert.equal(rename.code, 0, rename.stderr);
+    assert.equal(JSON.parse(rename.stdout).columns.find((column: { key: string }) => column.key === 'in_progress').label, 'Doing');
+
     assert.equal((await runCli(['column', 'set', 'plan_1', 'in_progress', '--url', serviceUrl])).code, 0);
     assert.equal((await runCli(['pin', 'plan_1', '--url', serviceUrl])).code, 0);
     assert.equal((await runCli(['unpin', 'plan_1', '--url', serviceUrl])).code, 0);
@@ -3607,6 +3648,13 @@ test('CLI organization commands map to REST endpoints', async () => {
         { key: 'backlog', label: 'Backlog', position: 1, isDone: false },
         { key: 'ready_to_pull', label: 'Ready to Pull', position: 2, isDone: false },
         { key: 'in_progress', label: 'In Progress', position: 3, isDone: false }
+      ] }],
+      ['GET', '/api/board-columns', undefined],
+      ['PUT', '/api/board-columns', { columns: [
+        { key: 'backlog', label: 'Backlog', position: 0, isDone: false },
+        { key: 'ready_to_pull', label: 'Ready to Pull', position: 1, isDone: false },
+        { key: 'in_progress', label: 'Doing', position: 2, isDone: false },
+        { key: 'done', label: 'Done', position: 3, isDone: true }
       ] }],
       ['PUT', '/api/plans/plan_1/column', { boardColumnKey: 'in_progress' }],
       ['PUT', '/api/plans/plan_1/pin', { pinned: true }],

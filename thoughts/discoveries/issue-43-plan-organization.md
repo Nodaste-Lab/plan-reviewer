@@ -10,11 +10,17 @@ Verification passed after implementation fixes:
 - GPT-5.5 pre-PR rereview — `CLEAN_FOR_PR`
 - GLM-5.2 pre-PR rereview — `CLEAN_FOR_PR`
 
-Non-blocking follow-ups from rereview:
+The later P3 cleanup resolved the non-blocking review follow-ups instead of leaving them deferred:
 
-1. `plan.columns.changed` is declared but not emitted for board-column configuration changes. Persisted column configuration works; concurrent Kanban tabs may need manual reload to see order/label changes.
-2. The review-shell Status organization control is currently a free-text board-column-key input. Invalid labels fail safely through the existing organizer alert; a follow-up can replace it with visible configured column choices.
-3. Pin/project API and CLI commands currently apply to collaboration documents too, while board-column moves remain planning-only. Decide in a follow-up whether this is intended cross-document organization or should be planning-only.
+1. `plan.columns.changed` is emitted on board-column configuration saves and consumed by review-shell metadata reloads.
+2. Column label editing is exposed in `/columns` and through `plan-review columns rename <key> <label>`.
+3. Server-rendered and client-rendered left navigators both use pinned-first ordering.
+4. Column hiding blocks only active planning documents; deferred/archived documents in a hidden column are moved to the first visible column on resume/unarchive/active lifecycle transition.
+5. `/api/plans` now honors `reviewMode` and `boardColumnKey` query filters.
+6. Startup project backfill caches git parent-repo probes by root path.
+7. Filtered left navigators force-refresh the all-documents source instead of reusing stale quick-open cache data.
+8. No-op `lifecycle set active` calls no longer register/sync source watchers.
+9. Planning-only organization commands reject collaboration documents consistently for column, pin, and project mutations.
 
 ## 2026-06-21 PR feedback follow-up
 

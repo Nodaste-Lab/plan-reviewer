@@ -101,11 +101,12 @@ The index has two primary document views:
 
 Board columns are workflow status only. They are independent from lifecycle (`active`, `deferred`, `archived`) and independent from execution readiness. A plan can be in a "ready" board column while still reporting `executionReady: false` until the reviewed-plan gate has passed.
 
-Use the browser `/columns` page to hide empty columns. Occupied columns cannot be hidden until their plans move elsewhere. Use the CLI for ordering and inspection:
+Use the browser `/columns` page to edit labels and hide empty columns. Columns with active plans cannot be hidden until those plans move elsewhere; deferred/archived plans in a hidden column are moved to the first visible column if they are resumed/restored. Use the CLI for ordering, label editing, and inspection:
 
 ```bash
 plan-review columns list --json
 plan-review columns save-order backlog,ready_to_pull,in_progress,done --json
+plan-review columns rename in_progress "Doing" --json
 plan-review column set plan_123 in_progress --json
 ```
 
@@ -123,14 +124,14 @@ plan-review lifecycle set plan_123 deferred --note "Waiting on design review" --
 plan-review lifecycle set plan_123 archived --json
 ```
 
-Pinning is a visibility aid for plan/document navigation, not a readiness signal:
+Pinning is a planning-document visibility aid, not a readiness signal:
 
 ```bash
 plan-review pin plan_123 --json
 plan-review unpin plan_123 --json
 ```
 
-In a review page, the left navigator's Project, State, and Status controls are filters. They narrow the navigator only; they do not change project labels, lifecycle, or board columns. When you switch plans through the left navigator, the filter state is carried in the destination URL so the next page renders already filtered. Press <kbd>⌘O</kbd> in the review shell for global quick open across active, deferred, archived, planning, and collaboration documents regardless of the current view/filter.
+In a review page, the left navigator's Project, State, and Status controls are filters. They narrow the navigator only; they do not change project labels, lifecycle, or board columns. Project override, pin, and board-column commands apply to planning documents; collaboration documents remain discoverable through All documents and reject planning-only organization commands with a clear not-applicable error. When you switch plans through the left navigator, the filter state is carried in the destination URL so the next page renders already filtered. Press <kbd>⌘O</kbd> in the review shell for global quick open across active, deferred, archived, planning, and collaboration documents regardless of the current view/filter.
 
 ## Agent Listener Contract
 
