@@ -1608,6 +1608,8 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     assert.match(shell.body, /id="quick-open-retry"/);
     assert.match(shell.body, /id="desktop-plan-nav-toggle"[^>]*aria-controls="plan-list-nav"[^>]*aria-expanded="true"/);
     assert.match(shell.body, /id="desktop-comments-toggle"[^>]*aria-controls="sidebar"[^>]*aria-expanded="false"/);
+    assert.match(shell.body, /<nav class="doc-kind-switcher" aria-label="Document view selector"><a class="doc-kind-seg" href="\/">Kanban<\/a><a class="doc-kind-seg" href="\/\?view=all">All documents<\/a><\/nav>/);
+    assert.doesNotMatch(shell.body, /class="doc-kind-seg active"/);
     assert.match(shell.body, /id="current-plan-bar"/);
     assert.match(shell.body, /Filter: Project <select id="project-filter-control"[^>]*aria-label="Filter by project"/);
     assert.match(shell.body, /Filter: State <select id="state-filter-control"[^>]*aria-label="Filter by state"/);
@@ -2155,7 +2157,7 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     assert.equal(kanban.statusCode, 200);
     assert.match(kanban.body, /Plans · Kanban/);
     assert.match(kanban.body, /<main class="kanban-page">/);
-    assert.match(kanban.body, /\.kanban-page\{max-width:none;width:100%/);
+    assert.match(kanban.body, /\.kanban-page,\.documents-page\{max-width:none;width:100%/);
     assert.doesNotMatch(kanban.body, /aria-label="Menu">☰<\/button>/);
     assert.doesNotMatch(kanban.body, /data-pin-plan/);
     assert.doesNotMatch(kanban.body, /\.kanban-card \.pin-button/);
@@ -2172,7 +2174,9 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     const allDocuments = await app.inject({ method: 'GET', url: '/?view=all' });
     assert.equal(allDocuments.statusCode, 200);
     assert.match(allDocuments.body, /Plan Review Index · All documents/);
-    assert.match(allDocuments.body, /<div class="topbar"><nav class="doc-kind-switcher" aria-label="Document view selector">/);
+    assert.match(allDocuments.body, /<main class="documents-page"><div class="topbar"><nav class="doc-kind-switcher" aria-label="Document view selector">/);
+    assert.match(allDocuments.body, /\.documents-page \.toolbar\{grid-template-columns:minmax\(0,1fr\) minmax\(160px,220px\) minmax\(160px,220px\)\}/);
+    assert.match(allDocuments.body, /@media\(max-width:760px\)\{\.documents-page \.toolbar\{grid-template-columns:1fr\}\}/);
     assert.doesNotMatch(allDocuments.body, /aria-label="Menu">☰<\/button>/);
     assert.match(allDocuments.body, /aria-label="Filter by type"/);
     assert.match(allDocuments.body, /<option value="plan">Plan<\/option>/);

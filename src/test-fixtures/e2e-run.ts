@@ -2130,7 +2130,8 @@ try {
     await syncPage.goto(`${baseUrl}/p/${syncRegistered.planId}`);
     await syncPage.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.body?.textContent?.includes('Source sync v1'));
     await syncPage.waitForSelector('#plan-navbar');
-    assert.equal(await syncPage.locator('#plan-navbar .doc-kind-seg.active').getAttribute('href'), '/');
+    assert.equal(await syncPage.locator('#plan-navbar .doc-kind-seg.active').count(), 0);
+    assert.deepEqual(await syncPage.locator('#plan-navbar .doc-kind-seg').evaluateAll(links => links.map(link => link.getAttribute('href'))), ['/', '/?view=all']);
     const openSyncComposer = async () => {
       await syncPage.evaluate(() => {
         const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame');

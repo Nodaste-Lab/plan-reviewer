@@ -174,6 +174,21 @@ Comparison: uncommitted working-tree diff on the feature branch, including the u
 - GPT All Documents/lifecycle topbar review — `CONSENSUS_CLEAN`
 - GLM All Documents/lifecycle topbar review — `CONSENSUS_CLEAN`
 
+## Plan-shell selector and All Documents width correction
+
+| Source | Severity | Finding | Decision | Evidence |
+| --- | --- | --- | --- | --- |
+| User demo feedback | P2 | While viewing a specific plan, the `Kanban | All documents` selector looked like one active index mode instead of two navigation options; All Documents still inherited the narrow centered index width. | Fixed | Plan/document review shells render both selector links without an active segment; All Documents uses a `documents-page` full-width wrapper and a three-column responsive toolbar for text, repo, and Type filters. Contract/e2e coverage asserts no active shell selector segment, the two shell links, the full-width All Documents class/style, and the type-filter toolbar layout. |
+
+## Plan-shell selector and All Documents width verification
+
+- `bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "review shell exposes compact download and plan navigator tools|organization APIs persist"` — PASS
+- `bun run test:e2e` — PASS
+- `bun run test` — PASS
+- Served smoke on `4318` — PASS for unselected plan-shell selector links, All Documents full-width wrapper, full-width CSS, and mobile toolbar override
+- GPT plan-shell selector / All Documents width review — `CONSENSUS_CLEAN`
+- GLM plan-shell selector / All Documents width review — `CONSENSUS_CLEAN`
+
 ## Final gate result
 
-PASS — GPT verdict `CLEAN_FOR_PR`; GLM verdict `CLEAN_FOR_PR`; PR-feedback PM verdict `PRODUCT_CLEAN`; PR-feedback adversarial verdict `CLEAN_FOR_PR_UPDATE`; demo feedback targeted gates PASS; Kanban demo PM/adversarial rereviews clean; top-bar GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`; mode-selector GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`; parent-project GPT/GLM rereviews both `CONSENSUS_CLEAN`; screen-specific top-action GPT/GLM rereviews both `CONSENSUS_CLEAN`; selector/type-filter GPT/GLM final rereviews both `CONSENSUS_CLEAN`; All Documents/lifecycle no-left-nav GPT/GLM rereviews both `CONSENSUS_CLEAN`.
+PASS — GPT verdict `CLEAN_FOR_PR`; GLM verdict `CLEAN_FOR_PR`; PR-feedback PM verdict `PRODUCT_CLEAN`; PR-feedback adversarial verdict `CLEAN_FOR_PR_UPDATE`; demo feedback targeted gates PASS; Kanban demo PM/adversarial rereviews clean; top-bar GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`; mode-selector GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`; parent-project GPT/GLM rereviews both `CONSENSUS_CLEAN`; screen-specific top-action GPT/GLM rereviews both `CONSENSUS_CLEAN`; selector/type-filter GPT/GLM final rereviews both `CONSENSUS_CLEAN`; All Documents/lifecycle no-left-nav GPT/GLM rereviews both `CONSENSUS_CLEAN`; plan-shell selector / All Documents width GPT/GLM rereviews both `CONSENSUS_CLEAN`.
