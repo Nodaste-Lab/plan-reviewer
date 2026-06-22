@@ -638,8 +638,9 @@ try {
     await page.waitForFunction(() => !document.body.classList.contains('comments-open'));
     await page.selectOption('#state-filter-control', 'active');
     await page.waitForFunction(() => sessionStorage.getItem('plan-reviewer.navigatorFilters.v1')?.includes('"state":"active"'));
-    await page.click(`#plan-list-nav a[href="/p/${navSwitch.planId}"]`);
-    await page.waitForURL(`${baseUrl}/p/${navSwitch.planId}`);
+    await page.waitForFunction(id => document.querySelector(`#plan-list-nav a[data-plan-id="${id}"]`)?.getAttribute('href')?.includes('lifecycle=active'), navSwitch.planId);
+    await page.click(`#plan-list-nav a[data-plan-id="${navSwitch.planId}"]`);
+    await page.waitForURL(`${baseUrl}/p/${navSwitch.planId}?lifecycle=active`);
     assert.equal(await page.locator('#state-filter-control').inputValue(), 'active');
     assert.equal(await page.locator('#plan-list-nav [aria-current="page"]').getAttribute('data-plan-id'), navSwitch.planId);
     await page.selectOption('#state-filter-control', '');

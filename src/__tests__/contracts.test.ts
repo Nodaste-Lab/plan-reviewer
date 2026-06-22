@@ -1700,6 +1700,15 @@ test('navigator keeps lifecycle-hidden documents out except the current page', a
     assert.equal(archivedShell.statusCode, 200);
     assert.match(archivedShell.body, /Archived navigator plan/);
     assert.doesNotMatch(archivedShell.body, /Deferred navigator plan/);
+
+    const filteredShell = await app.inject({ method: 'GET', url: `/p/${activeId}?lifecycle=archived` });
+    assert.equal(filteredShell.statusCode, 200);
+    assert.match(filteredShell.body, /<option value="archived" selected>Archived<\/option>/);
+    const filteredNavHtml = filteredShell.body.slice(filteredShell.body.indexOf('id="plan-list-nav"'), filteredShell.body.indexOf('<main id="review"'));
+    assert.match(filteredNavHtml, /Active navigator plan/);
+    assert.match(filteredNavHtml, /Archived navigator plan/);
+    assert.doesNotMatch(filteredNavHtml, /Deferred navigator plan/);
+    assert.match(filteredNavHtml, new RegExp(`href="/p/${archivedId}\\?lifecycle=archived"`));
   } finally {
     await app.close();
   }

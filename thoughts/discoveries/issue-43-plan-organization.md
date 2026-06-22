@@ -155,5 +155,6 @@ Fix applied:
 
 - The review shell stores non-empty Project/State/Status filter selections in same-tab session storage.
 - The shell restores those selections before the navigator loads on a plan page.
-- Left-navigator clicks save the current filter state before the browser navigates to the next plan.
-- E2E coverage selects a State filter, switches plans via the left navigator, and asserts the filter remains selected on the destination plan page.
+- Left-navigator plan links carry the current filters as canonical query parameters (`projectKey`, `lifecycle`, `boardColumnKey`) so the destination shell server-renders the filtered navigator instead of briefly showing all plans before client-side filtering.
+- Left-navigator clicks save the current filter state and update the clicked link before browser navigation.
+- E2E coverage selects a State filter, verifies the left-nav link carries `lifecycle=active`, switches plans via the left navigator, and asserts the filter remains selected on the destination plan page.

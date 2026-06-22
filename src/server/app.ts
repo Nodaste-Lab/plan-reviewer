@@ -32,7 +32,7 @@ import {
 } from '../schemas.js';
 import { renderPlan } from '../render/render.js';
 import { buildRegistrationAgentInstructions } from '../registrationInstructions.js';
-import { PlanReviewStore, type BoardColumnRecord, type StoredEvent } from '../storage/database.js';
+import { PlanReviewStore, type BoardColumnRecord, type PlanRecord, type StoredEvent } from '../storage/database.js';
 import { SourceSyncService } from './sourceSync.js';
 import { fail, ok, PlanReviewError } from '../util.js';
 import { planTitleFallback, renderedHtmlTitle, reviewShellTitle } from '../planTitles.js';
@@ -226,10 +226,37 @@ function planNavigatorProgress(item: ListedPlan): string {
   return `${item.progress.completedPhases}/${item.progress.totalPhases}`;
 }
 
-function planNavigatorItemHtml(item: ListedPlan, currentPlanId: string): string {
+type ReviewShellNavigatorFilters = { project: string; state: '' | 'active' | 'deferred' | 'archived'; status: string };
+
+function emptyReviewShellNavigatorFilters(): ReviewShellNavigatorFilters {
+  return { project: '', state: '', status: '' };
+}
+
+function reviewShellNavigatorFiltersActive(filters: ReviewShellNavigatorFilters): boolean {
+  return Boolean(filters.project || filters.state || filters.status);
+}
+
+function reviewShellNavigatorFilterSearch(filters: ReviewShellNavigatorFilters): string {
+  const params = new URLSearchParams();
+  if (filters.project) params.set('projectKey', filters.project);
+  if (filters.state) params.set('lifecycle', filters.state);
+  if (filters.status) params.set('boardColumnKey', filters.status);
+  const query = params.toString();
+  return query ? `?${query}` : '';
+}
+
+function planMatchesReviewShellNavigatorFilters(item: ListedPlan, filters: ReviewShellNavigatorFilters): boolean {
+  if (filters.project && item.plan.projectKey !== filters.project) return false;
+  if (filters.state && item.plan.lifecycleState !== filters.state) return false;
+  if (filters.status && item.plan.boardColumnKey !== filters.status) return false;
+  return true;
+}
+
+function planNavigatorItemHtml(item: ListedPlan, currentPlanId: string, filters = emptyReviewShellNavigatorFilters()): string {
   const active = item.plan.id === currentPlanId;
   const status = planNavigatorStatus(item);
-  return `<a class="plan-nav-item${active ? ' active' : ''}${planNeedsAttention(item) ? ' attention' : ''}" href="/p/${escapeHtml(item.plan.id)}" data-plan-nav-item data-plan-id="${escapeHtml(item.plan.id)}" aria-current="${active ? 'page' : 'false'}">
+  const href = `/p/${encodeURIComponent(String(item.plan.id))}${reviewShellNavigatorFilterSearch(filters)}`;
+  return `<a class="plan-nav-item${active ? ' active' : ''}${planNeedsAttention(item) ? ' attention' : ''}" href="${escapeHtml(href)}" data-plan-nav-item data-plan-id="${escapeHtml(item.plan.id)}" aria-current="${active ? 'page' : 'false'}">
     <span class="plan-nav-title">${escapeHtml(displayTitle(item))}</span>
     <span class="plan-nav-meta"><span class="plan-nav-pill ${item.plan.reviewMode === 'collaboration' || item.plan.publicationMetadata?.executionReady ? 'ready' : 'not-ready'}">${escapeHtml(status)}</span><span>${escapeHtml(planNavigatorProgress(item))}</span></span>
     <span class="plan-nav-submeta">pending ${item.counts.pending} · updated <time datetime="${escapeHtml(item.modifiedAt)}" data-local-timestamp>${escapeHtml(item.modifiedAt)}</time></span>
@@ -243,8 +270,27 @@ function planNavigatorItemsFor(store: PlanReviewStore, options: { limit: number;
   return current ? [...activePlans, current] : activePlans;
 }
 
-function planNavigatorHtml(plans: ListedPlan[], currentPlanId: string, label = 'plans'): string {
-  const items = sortPlansForNavigator(plans).map(item => planNavigatorItemHtml(item, currentPlanId)).join('');
+function normalizeReviewShellNavigatorFilters(query: { projectKey?: string; lifecycle?: string; boardColumnKey?: string }, currentPlan: PlanRecord, columns: BoardColumnRecord[], projectPlans: ListedPlan[]): ReviewShellNavigatorFilters {
+  const projectKeys = new Set(projectPlans.map(item => item.plan.projectKey).filter(Boolean));
+  projectKeys.add(currentPlan.projectKey);
+  const columnKeys = new Set(columns.map(column => column.key));
+  return {
+    project: query.projectKey && projectKeys.has(query.projectKey) ? query.projectKey : '',
+    state: query.lifecycle === 'active' || query.lifecycle === 'deferred' || query.lifecycle === 'archived' ? query.lifecycle : '',
+    status: currentPlan.reviewMode !== 'collaboration' && query.boardColumnKey && columnKeys.has(query.boardColumnKey) ? query.boardColumnKey : ''
+  };
+}
+
+function filteredReviewShellNavigatorItems(store: PlanReviewStore, currentPlanId: string, filters: ReviewShellNavigatorFilters): ListedPlan[] {
+  if (!reviewShellNavigatorFiltersActive(filters)) return planNavigatorItemsFor(store, { limit: 200, currentPlanId });
+  const items = store.listPlans({ includeArchived: true, includeDeferred: true });
+  const filtered = items.filter(item => planMatchesReviewShellNavigatorFilters(item, filters));
+  const current = items.find(item => item.plan.id === currentPlanId);
+  return current && !filtered.some(item => item.plan.id === currentPlanId) ? [current, ...filtered] : filtered;
+}
+
+function planNavigatorHtml(plans: ListedPlan[], currentPlanId: string, label = 'plans', filters = emptyReviewShellNavigatorFilters()): string {
+  const items = sortPlansForNavigator(plans).map(item => planNavigatorItemHtml(item, currentPlanId, filters)).join('');
   const title = label === 'documents' ? 'Active documents' : 'Active plans';
   const empty = label === 'documents' ? 'No active documents.' : 'No active plans.';
   return `<aside id="plan-list-nav" aria-label="${escapeHtml(title)}"><div class="plan-list-header"><h2>${escapeHtml(title)}</h2><button id="plan-list-retry" type="button" hidden>Retry</button></div><div class="plan-list-error" id="plan-list-error" hidden>Unable to load ${escapeHtml(label)}.</div><div id="plan-list-items">${items || `<p class="plan-list-empty">${escapeHtml(empty)}</p>`}</div></aside>`;
@@ -493,7 +539,7 @@ function buildPlanRequestBody(planPath: string): string {
   return `Use the plan-reviewer-build skill for this plan.\nPlan path: ${planPath}`;
 }
 
-function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], currentTitle: string, shellTitle: string, plans: ListedPlan[], columns: BoardColumnRecord[], projectPlans: ListedPlan[]): string {
+function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], currentTitle: string, shellTitle: string, plans: ListedPlan[], columns: BoardColumnRecord[], projectPlans: ListedPlan[], navigatorFilters = emptyReviewShellNavigatorFilters()): string {
   const escapedPlanId = escapeHtml(plan.id);
   const escapedShellTitle = escapeHtml(shellTitle);
   const escapedCurrentTitle = escapeHtml(currentTitle);
@@ -510,9 +556,10 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
   const pinControl = isCollaboration ? '' : `<button id="pin-plan" class="pin-button" type="button" data-pin-plan="${escapedPlanId}" aria-pressed="${plan.pinnedAt ? 'true' : 'false'}" aria-label="${plan.pinnedAt ? 'Unpin plan' : 'Pin plan'}" title="${plan.pinnedAt ? 'Unpin plan' : 'Pin plan'}">${plan.pinnedAt ? '★' : '☆'}</button>`;
   const projectOptions = [...new Map(projectPlans.map(item => [item.plan.projectKey, item.plan.projectName])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
   if (!projectOptions.some(([key]) => key === plan.projectKey)) projectOptions.push([plan.projectKey, plan.projectName]);
-  const projectFilterControl = `<label class="filter-control">Filter: Project <select id="project-filter-control" aria-label="Filter by project"><option value="">All projects</option>${projectOptions.map(([key, name]) => `<option value="${escapeHtml(key)}">${escapeHtml(name)}</option>`).join('')}</select></label>`;
-  const stateFilterControl = `<label class="filter-control">Filter: State <select id="state-filter-control" aria-label="Filter by state"><option value="">All states</option><option value="active">Active</option><option value="deferred">Deferred</option><option value="archived">Archived</option></select></label>`;
-  const statusFilterControl = isCollaboration ? '' : `<label class="filter-control">Filter: Status <select id="status-filter-control" aria-label="Filter by status"><option value="">All statuses</option>${columns.map(column => `<option value="${escapeHtml(column.key)}">${escapeHtml(column.label)}</option>`).join('')}</select></label>`;
+  const selected = (actual: string, expected: string) => actual === expected ? ' selected' : '';
+  const projectFilterControl = `<label class="filter-control">Filter: Project <select id="project-filter-control" aria-label="Filter by project"><option value="">All projects</option>${projectOptions.map(([key, name]) => `<option value="${escapeHtml(key)}"${selected(navigatorFilters.project, key)}>${escapeHtml(name)}</option>`).join('')}</select></label>`;
+  const stateFilterControl = `<label class="filter-control">Filter: State <select id="state-filter-control" aria-label="Filter by state"><option value="">All states</option><option value="active"${selected(navigatorFilters.state, 'active')}>Active</option><option value="deferred"${selected(navigatorFilters.state, 'deferred')}>Deferred</option><option value="archived"${selected(navigatorFilters.state, 'archived')}>Archived</option></select></label>`;
+  const statusFilterControl = isCollaboration ? '' : `<label class="filter-control">Filter: Status <select id="status-filter-control" aria-label="Filter by status"><option value="">All statuses</option>${columns.map(column => `<option value="${escapeHtml(column.key)}"${selected(navigatorFilters.status, column.key)}>${escapeHtml(column.label)}</option>`).join('')}</select></label>`;
   const organizationControls = `${pinControl}${projectFilterControl}${stateFilterControl}${statusFilterControl}`;
   const archiveLabel = isCollaboration ? 'Archive document' : 'Archive plan';
   const restoreLabel = isCollaboration ? 'Restore document' : 'Restore plan';
@@ -530,7 +577,7 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
   </head><body data-plan-id="${escapedPlanId}" data-review-mode="${escapeHtml(plan.reviewMode)}" data-plan-title-fallback="${encodedTitleFallback}">
     <nav id="plan-navbar" aria-label="Plan actions"><div id="plan-navbar-actions">${navActions}</div><div id="current-plan-bar"><strong id="current-plan-title">${escapedCurrentTitle}</strong><span class="ready-pill ${isCollaboration || plan.publicationMetadata?.executionReady ? 'ready' : 'not-ready'}">${escapeHtml(readyLabel)}</span></div></nav>
     <div id="app">
-      ${planNavigatorHtml(plans, plan.id, isCollaboration ? 'documents' : 'plans')}
+      ${planNavigatorHtml(plans, plan.id, isCollaboration ? 'documents' : 'plans', navigatorFilters)}
       <main id="review"><iframe id="plan-frame" sandbox="allow-same-origin allow-popups" src="/render/${escapedPlanId}"></iframe><div id="plan-touch-layer" aria-hidden="true"></div><button id="mobile-comments-toggle" class="comments-toggle" type="button" aria-controls="sidebar" aria-expanded="false">Comments</button><div id="hover-selection-box" class="selection-box hover" hidden></div><div id="active-selection-box" class="selection-box active" hidden></div></main>
       <aside id="sidebar"><h1>Comments</h1><div id="sync-warning" hidden></div><section id="plan-notes-panel"><h2>${isCollaboration ? 'Document notes' : 'Plan notes'}</h2><div id="plan-notes"></div><textarea id="plan-note-body" placeholder="${isCollaboration ? 'Add context for agents' : 'Add a plan note for agents'}"></textarea><button id="add-plan-note" type="button">Add note</button></section><div id="deferred-refresh-notice" hidden>Document updated in the background. Finish or cancel this comment to refresh.</div><div id="comments"></div></aside>
     </div>
@@ -951,7 +998,27 @@ pinPlanButton?.addEventListener('click', async () => {
   pinPlanButton.textContent = pinned ? '★' : '☆';
 });
 const navigatorFilterStorageKey = 'plan-reviewer.navigatorFilters.v1';
+function urlNavigatorFilters(){
+  const params = new URLSearchParams(window.location.search);
+  return { project: params.get('projectKey') || '', state: params.get('lifecycle') || '', status: params.get('boardColumnKey') || '' };
+}
+function navigatorFilterSearch(filters = currentNavigatorFilters()){
+  const params = new URLSearchParams();
+  if (filters.project) params.set('projectKey', filters.project);
+  if (filters.state) params.set('lifecycle', filters.state);
+  if (filters.status) params.set('boardColumnKey', filters.status);
+  const query = params.toString();
+  return query ? '?' + query : '';
+}
+function planNavigatorHref(id){ return '/p/' + encodeURIComponent(id) + navigatorFilterSearch(); }
+function syncNavigatorFilterUrl(){
+  const url = new URL(window.location.href);
+  url.search = navigatorFilterSearch().slice(1);
+  window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+}
 function readStoredNavigatorFilters(){
+  const urlFilters = urlNavigatorFilters();
+  if (urlFilters.project || urlFilters.state || urlFilters.status) return urlFilters;
   try {
     const parsed = JSON.parse(sessionStorage.getItem(navigatorFilterStorageKey) || '{}');
     return parsed && typeof parsed === 'object' ? parsed : {};
@@ -994,6 +1061,7 @@ async function loadNavigatorFilterSource(){
 }
 function applyNavigatorFilters(){
   saveNavigatorFilters();
+  syncNavigatorFilterUrl();
   void loadNavigatorFilterSource().catch(error => {
     navigatorLoadError = error;
     if (planListError) { planListError.hidden = false; planListError.textContent = 'Unable to filter documents. The current plan remains reviewable.'; }
@@ -1005,7 +1073,10 @@ stateFilterControl?.addEventListener('change', applyNavigatorFilters);
 statusFilterControl?.addEventListener('change', applyNavigatorFilters);
 planListNav?.addEventListener('click', event => {
   const link = event.target instanceof Element ? event.target.closest('[data-plan-nav-item]') : null;
-  if (link) saveNavigatorFilters();
+  if (!link) return;
+  saveNavigatorFilters();
+  const id = link.getAttribute('data-plan-id');
+  if (id) link.setAttribute('href', planNavigatorHref(id));
 });
 addPlanNoteButton?.addEventListener('click', async () => {
   const body = planNoteBody?.value.trim();
@@ -1351,7 +1422,7 @@ function renderPlanNavigatorItems(items, label = 'plans'){
     const id = String(item?.plan?.id || '');
     const active = id === planId;
     const status = planItemStatus(item);
-    return '<a class="plan-nav-item'+(active ? ' active' : '')+(planItemAttention(item) ? ' attention' : '')+'" href="/p/'+encodeURIComponent(id)+'" data-plan-nav-item data-plan-id="'+escapeHtml(id)+'" aria-current="'+(active ? 'page' : 'false')+'"><span class="plan-nav-title">'+escapeHtml(planItemTitle(item))+'</span><span class="plan-nav-meta"><span class="plan-nav-pill '+(item?.plan?.reviewMode === 'collaboration' || item?.plan?.publicationMetadata?.executionReady ? 'ready' : 'not-ready')+'">'+escapeHtml(status)+'</span><span>'+escapeHtml(planItemProgress(item))+'</span></span><span class="plan-nav-submeta">pending '+Number(item?.counts?.pending || 0)+' · updated '+escapeHtml(String(item?.modifiedAt || ''))+'</span></a>';
+    return '<a class="plan-nav-item'+(active ? ' active' : '')+(planItemAttention(item) ? ' attention' : '')+'" href="'+escapeHtml(planNavigatorHref(id))+'" data-plan-nav-item data-plan-id="'+escapeHtml(id)+'" aria-current="'+(active ? 'page' : 'false')+'"><span class="plan-nav-title">'+escapeHtml(planItemTitle(item))+'</span><span class="plan-nav-meta"><span class="plan-nav-pill '+(item?.plan?.reviewMode === 'collaboration' || item?.plan?.publicationMetadata?.executionReady ? 'ready' : 'not-ready')+'">'+escapeHtml(status)+'</span><span>'+escapeHtml(planItemProgress(item))+'</span></span><span class="plan-nav-submeta">pending '+Number(item?.counts?.pending || 0)+' · updated '+escapeHtml(String(item?.modifiedAt || ''))+'</span></a>';
   }).join('');
   const filtered = navigatorFiltersActive();
   planListItems.innerHTML = html || '<p class="plan-list-empty">No '+(filtered ? 'matching ' : 'active ')+(label === 'documents' ? 'documents' : 'plans')+'.</p>';
@@ -3102,7 +3173,10 @@ export function createApp(options: AppOptions): FastifyInstance {
       try {
         title = renderedHtmlTitle(store.getRenderedHtml(plan.id)) ?? title;
       } catch {}
-      reply.header('Cache-Control', 'no-store').type('text/html').send(reviewShell(plan, title, reviewShellTitle(title), planNavigatorItemsFor(store, { limit: 200, currentPlanId: plan.id }), store.listBoardColumns(), store.listPlans({ includeArchived: true, includeDeferred: true })));
+      const columns = store.listBoardColumns();
+      const projectPlans = store.listPlans({ includeArchived: true, includeDeferred: true });
+      const navigatorFilters = normalizeReviewShellNavigatorFilters(request.query as { projectKey?: string; lifecycle?: string; boardColumnKey?: string }, plan, columns, projectPlans);
+      reply.header('Cache-Control', 'no-store').type('text/html').send(reviewShell(plan, title, reviewShellTitle(title), filteredReviewShellNavigatorItems(store, plan.id, navigatorFilters), columns, projectPlans, navigatorFilters));
     } catch (error) {
       sendError(reply, error);
     }
