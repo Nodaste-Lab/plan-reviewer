@@ -135,12 +135,12 @@ Demo feedback clarified that the top action cluster must be screen-specific. Som
 Fix applied:
 
 - Kanban now shows only Configure columns in the top action cluster; Deferred and Archived shortcuts are omitted from the workflow board.
-- Kanban and board-column configuration screens no longer show the menu/collapse-left-nav button because those screens do not have a left navigator.
+- Kanban, All Documents, Deferred, Archived, and board-column configuration screens no longer show the menu/collapse-left-nav button because those screens do not have a left navigator; All Documents and lifecycle list pages anchor `Kanban | All documents` as the first topbar control.
 - The mode selector is simplified to `Kanban | All documents`; collaboration documents are selected with the All Documents `Filter by type` control (`Plan` or `Collaborative`).
 - All Documents renders the complete active document list and applies Type client-side so users can switch between Plan and Collaborative without a reload; legacy `view=collab` only preselects the Collaborative filter.
 - All documents remains the mixed-discovery lifecycle hub and keeps Deferred/Archived shortcuts.
 - Deferred and Archived list pages no longer show a duplicate Active-index/home icon or an action for the current screen; each only links to the sibling lifecycle list.
-- Contract coverage asserts the absence of irrelevant top actions on Kanban, the two-state selector, and the All Documents type filter.
+- Contract coverage asserts the absence of irrelevant top actions on Kanban and All Documents, the left-anchored two-state selector on All Documents, and the All Documents type filter.
 
 Verification:
 

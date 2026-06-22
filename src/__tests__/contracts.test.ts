@@ -1527,6 +1527,7 @@ test('deferred lifecycle hides plans from active index and preserves agent-visib
     assert.match(deferredPage.body, /Blocked on PM review; resume at P3/);
     assert.match(deferredPage.body, /data-resume-plan=/);
     assert.match(deferredPage.body, /href="\/archive"[^>]*aria-label="Archived \(0\)"[^>]*title="Archived \(0\)"[^>]*>🗄<\/a>/);
+    assert.doesNotMatch(deferredPage.body, /aria-label="Menu">☰<\/button>/);
     assert.doesNotMatch(deferredPage.body, /aria-label="Active index"/);
     assert.doesNotMatch(deferredPage.body, /aria-label="Deferred \(/);
 
@@ -2006,6 +2007,7 @@ test('archive page renders archived plans and restore controls without mixing ac
     const archive = await app.inject({ method: 'GET', url: '/archive' });
     assert.equal(archive.statusCode, 200);
     assert.match(archive.body, /Archived Plans/);
+    assert.doesNotMatch(archive.body, /aria-label="Menu">☰<\/button>/);
     assert.doesNotMatch(archive.body, /aria-label="Active index"/);
     assert.doesNotMatch(archive.body, /aria-label="Archived \(/);
     assert.match(archive.body, /newer-archive/);
@@ -2170,6 +2172,8 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     const allDocuments = await app.inject({ method: 'GET', url: '/?view=all' });
     assert.equal(allDocuments.statusCode, 200);
     assert.match(allDocuments.body, /Plan Review Index · All documents/);
+    assert.match(allDocuments.body, /<div class="topbar"><nav class="doc-kind-switcher" aria-label="Document view selector">/);
+    assert.doesNotMatch(allDocuments.body, /aria-label="Menu">☰<\/button>/);
     assert.match(allDocuments.body, /aria-label="Filter by type"/);
     assert.match(allDocuments.body, /<option value="plan">Plan<\/option>/);
     assert.match(allDocuments.body, /<option value="collaborative">Collaborative<\/option>/);

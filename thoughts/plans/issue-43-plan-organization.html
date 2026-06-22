@@ -368,7 +368,6 @@
         <main class="screen index-mock">
           <nav class="mock-navbar" aria-label="All documents actions mockup">
             <div class="mock-actions">
-              <span class="mock-tool">☰</span>
               <div class="doc-kind-switcher" aria-label="Document view selector"><span class="doc-kind-seg">Kanban</span><span class="doc-kind-seg active">All documents</span></div>
               <span class="mock-action-cluster" aria-label="All documents actions"><span class="mock-tool" role="button" aria-label="Deferred documents" title="Deferred documents">⏸</span><span class="mock-tool" role="button" aria-label="Archived documents" title="Archived documents">🗄</span></span>
             </div>
@@ -420,7 +419,6 @@
         <main class="screen index-mock">
           <nav class="mock-navbar" aria-label="All documents actions mockup">
             <div class="mock-actions">
-              <span class="mock-tool">☰</span>
               <div class="doc-kind-switcher" aria-label="Document view selector"><span class="doc-kind-seg">Kanban</span><span class="doc-kind-seg active">All documents</span></div>
               <span class="mock-action-cluster" aria-label="All documents actions"><span class="mock-tool" role="button" aria-label="Deferred documents" title="Deferred documents">⏸</span><span class="mock-tool" role="button" aria-label="Archived documents" title="Archived documents">🗄</span></span>
             </div>
@@ -461,7 +459,7 @@
           </section>
         </main>
       </div>
-      <figcaption>This companion All documents list view uses the same shared top bar shape as the review shell: menu, <strong>Kanban | All documents</strong> selector, then right-aligned screen actions. Deferred/Archived links move into that right action cluster while the page heading, existing text filter, repo select, repo-grouped cards, status metadata, PR, notes, segmented phase progress, comment counts, source state, and timestamps remain below the bar.</figcaption>
+      <figcaption>This companion All documents list view uses the shared top bar with the <strong>Kanban | All documents</strong> selector anchored first on the left, then right-aligned screen actions. Deferred/Archived links move into that right action cluster while the page heading, existing text filter, repo select, type filter, repo-grouped cards, status metadata, PR, notes, segmented phase progress, comment counts, source state, and timestamps remain below the bar.</figcaption>
     </figure>
 
     <figure id="prototype-review-shell-organizer">
@@ -526,15 +524,15 @@
 
   <section id="shared-top-bar-contract">
     <h2>Shared top bar contract</h2>
-    <p>The organizer top bar is a reusable shell component, not a one-off mockup. Every document organizer or review-shell screen that lets the user switch document scope must render the same base structure in the same order: applicable menu affordance, <code>Kanban | All documents</code> selector, screen-specific organization controls, then a right-aligned cluster of single-action icon buttons. The Kanban board itself must not show a menu/collapse-left-nav affordance because it has no left navigator. The <code>All documents</code> selector replaces the old separate Plan index link rather than duplicating it. Screens may omit actions that do not apply, but they must preserve visual rhythm, accessible labels, tooltips, and the relative placement of the shared selector.</p>
+    <p>The organizer top bar is a reusable shell component, not a one-off mockup. Every document organizer or review-shell screen that lets the user switch document scope must render the same base structure in the same order: a menu/collapse affordance only on screens that actually have a left navigator, the <code>Kanban | All documents</code> selector, screen-specific organization controls, then a right-aligned cluster of single-action icon buttons. The Kanban board and All documents index/list must not show a menu/collapse-left-nav affordance because neither screen has a left navigator; their selector is anchored first on the left. The <code>All documents</code> selector replaces the old separate Plan index link rather than duplicating it. Screens may omit actions that do not apply, but they must preserve visual rhythm, accessible labels, tooltips, and the relative placement of the shared selector.</p>
     <table>
       <thead><tr><th>Screen</th><th>Shared selector</th><th>Screen-specific controls</th><th>Right action cluster</th></tr></thead>
       <tbody>
         <tr><td>Kanban index</td><td>Visible; <code>Kanban</code> active</td><td>Board column configuration affordance; no extra Kanban filters in this slice</td><td>Only Configure columns appears in the right action cluster; lifecycle shortcuts are omitted because this screen is the workflow board.</td></tr>
-        <tr><td>All documents index/list</td><td>Visible; <code>All documents</code> active</td><td>Text search, repo/project discovery, and <strong>Filter by type</strong> controls below the bar</td><td>Deferred and Archived remain available as icon actions because this mixed-discovery screen is the lifecycle hub.</td></tr>
+        <tr><td>All documents index/list</td><td>Visible; <code>All documents</code> active and anchored first on the left with no menu/collapse button</td><td>Text search, repo/project discovery, and <strong>Filter by type</strong> controls below the bar</td><td>Deferred and Archived remain available as icon actions because this mixed-discovery screen is the lifecycle hub.</td></tr>
         <tr><td>Planning document review shell</td><td>Visible; preserves current document even when selector would filter it out</td><td>Pin plus explicit filters labeled <strong>Filter: Project</strong>, <strong>Filter: State</strong>, and <strong>Filter: Status</strong>; the filters narrow the left navigator/list only and never mutate the current plan</td><td>Exactly six icon actions on the right when applicable: Download, execution-ready review, Build Plan, Defer, Archive, Comments</td></tr>
         <tr><td>Collaboration document review shell</td><td>Visible; preserves current document even when selector would filter it out</td><td>Source/status controls relevant to collaboration docs</td><td>Download and Comments only unless a collab-specific action exists; no Build Plan or execution-ready controls</td></tr>
-        <tr><td>Deferred/Archived list screens and direct deep links</td><td>Visible with <code>All documents</code> retained as the document-kind context</td><td>State recovery controls such as Resume/Unarchive remain on the affected cards</td><td>The top cluster only links to the sibling lifecycle list: Deferred shows Archived, Archived shows Deferred. It does not show a duplicate Active-index/home button or an action for the current screen.</td></tr>
+        <tr><td>Deferred/Archived list screens and direct deep links</td><td>Visible with <code>All documents</code> retained as the document-kind context and anchored first with no menu/collapse button</td><td>State recovery controls such as Resume/Unarchive remain on the affected cards</td><td>The top cluster only links to the sibling lifecycle list: Deferred shows Archived, Archived shows Deferred. It does not show a duplicate Active-index/home button or an action for the current screen.</td></tr>
         <tr><td>Column configuration screen</td><td>Visible as navigation context unless the screen is opened as a modal/panel</td><td>Column add/reorder/save controls below the bar</td><td>Add, Save, cancel, or close controls grouped as right-side icon actions</td></tr>
       </tbody>
     </table>
@@ -804,7 +802,7 @@ bun run test:fixtures</pre>
       <li id="log-2026-06-21-kanban-demo-correction">2026-06-21: Demo feedback clarified Kanban polish and configuration requirements: the white squares were unintended browser-default pin buttons, the board should consume the full browser width responsively, users need a column-visibility control for hiding empty columns, and Kanban cards should not expose pin controls or pinned-card treatment.</li>
       <li id="log-2026-06-21-mode-selector-style-correction">2026-06-21: Demo feedback clarified that the shared <code>Kanban | All documents</code> mode selector must visually match the plan prototype on every surface, including the review shell: pill container, muted inactive segments, active cyan segment, 5px/10px segment padding, and no fallback blue text-link styling.</li>
       <li id="log-2026-06-21-project-parent-repo-correction">2026-06-21: Demo feedback clarified that the Project filter cannot mean raw worktree folder. Inference now derives the parent repository via Git common-dir for linked worktrees, falls back to <code>repoName</code> only when Git metadata is unavailable, startup backfill repairs non-overridden rows that previously stored worktree-folder projects, and contract coverage verifies the filter options show the parent repo instead of the worktree branch folder.</li>
-      <li id="log-2026-06-21-top-action-matrix-correction">2026-06-21: Demo feedback clarified that every top-screen button must be valid for its current screen. Kanban now shows only Configure columns and no menu/collapse-left-nav affordance, All documents remains the lifecycle hub with Deferred/Archived shortcuts and a Type filter for collaborative documents, and Deferred/Archived list pages only link to their sibling lifecycle list instead of showing duplicate home/current-screen actions.</li>
+      <li id="log-2026-06-21-top-action-matrix-correction">2026-06-21: Demo feedback clarified that every top-screen button must be valid for its current screen. Kanban now shows only Configure columns and no menu/collapse-left-nav affordance; All documents has no menu/collapse-left-nav affordance, anchors <code>Kanban | All documents</code> first on the left, and remains the lifecycle hub with Deferred/Archived shortcuts plus a Type filter for collaborative documents; Deferred/Archived list pages only link to their sibling lifecycle list instead of showing duplicate home/current-screen actions.</li>
     </ul>
   </section>
 </main>
