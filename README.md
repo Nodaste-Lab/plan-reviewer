@@ -90,7 +90,47 @@ plan-review notes add plan_123 --note "Current status: tests need AC-4 coverage"
 plan-review notes list plan_123 --json
 ```
 
-Browser navigation keeps lifecycle buckets separate: `/` shows active plans, `/deferred` shows paused plans with resume controls and latest notes, and `/archive` shows archived plans. Plan detail pages expose notes plus lifecycle actions: active plans can be deferred, deferred plans can be resumed or archived, and archived plans can be restored.
+Browser navigation keeps lifecycle buckets separate: `/` opens the active planning Kanban board, `/?view=all` opens the All documents list, `/deferred` shows paused plans with resume controls and latest notes, and `/archive` shows archived plans. Plan detail pages expose notes plus lifecycle actions: active plans can be deferred, deferred plans can be resumed or archived, and archived plans can be restored.
+
+## Organize Plans and Documents
+
+The index has two primary document views:
+
+- `Kanban` is the planning board. It shows active planning documents grouped into configurable columns.
+- `All documents` is the mixed discovery list. Use `Filter by type` to show only `Plan` or `Collaborative` documents.
+
+Board columns are workflow status only. They are independent from lifecycle (`active`, `deferred`, `archived`) and independent from execution readiness. A plan can be in a "ready" board column while still reporting `executionReady: false` until the reviewed-plan gate has passed.
+
+Use the browser `/columns` page to hide empty columns. Occupied columns cannot be hidden until their plans move elsewhere. Use the CLI for ordering and inspection:
+
+```bash
+plan-review columns list --json
+plan-review columns save-order backlog,ready_to_pull,in_progress,done --json
+plan-review column set plan_123 in_progress --json
+```
+
+Set a user-facing project label without editing source HTML:
+
+```bash
+plan-review project set plan_123 "Plan Reviewer" --json
+```
+
+Use the unified lifecycle command when scripting state changes. Deferring still requires a durable note:
+
+```bash
+plan-review lifecycle set plan_123 active --json
+plan-review lifecycle set plan_123 deferred --note "Waiting on design review" --json
+plan-review lifecycle set plan_123 archived --json
+```
+
+Pinning is a visibility aid for plan/document navigation, not a readiness signal:
+
+```bash
+plan-review pin plan_123 --json
+plan-review unpin plan_123 --json
+```
+
+In a review page, the left navigator's Project, State, and Status controls are filters. They narrow the navigator only; they do not change project labels, lifecycle, or board columns. When you switch plans through the left navigator, the filter state is carried in the destination URL so the next page renders already filtered. Press <kbd>⌘O</kbd> in the review shell for global quick open across active, deferred, archived, planning, and collaboration documents regardless of the current view/filter.
 
 ## Agent Listener Contract
 

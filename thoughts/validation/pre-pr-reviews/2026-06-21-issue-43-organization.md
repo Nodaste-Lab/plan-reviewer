@@ -10,6 +10,7 @@ Comparison: uncommitted working-tree diff on the feature branch, including the u
 
 ## Changed files
 
+- `README.md`
 - `src/schemas.ts`
 - `src/storage/database.ts`
 - `src/server/app.ts`
@@ -219,6 +220,28 @@ Comparison: uncommitted working-tree diff on the feature branch, including the u
 - GPT filtered-render review — `CONSENSUS_CLEAN`
 - GLM filtered-render review — `CONSENSUS_CLEAN`
 
+## Formal pre-PR implementation review — final cycle
+
+Comparison: `origin/main...HEAD`, plus the local README documentation fix before commit.
+
+| Finding | Reviewer | Severity | Scope | Decision | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| README documentation parity was incomplete for the new organization surfaces and CLI commands. | GLM-5.2 pre-PR review | P2 | IN_PLAN | Fixed | `README.md` now documents Kanban vs All documents, `Filter by type`, configurable columns and `/columns`, `columns list`, `columns save-order`, `column set`, `project set`, `lifecycle set` with deferred `--note`, `pin`/`unpin`, execution-readiness independence, left-nav filters, and global `⌘O`. README term checks and build passed. |
+| Initial GPT pre-PR review returned no output. | GPT-5.5 pre-PR review | QUESTION | QUESTION | Reran after docs fix | Empty reviewer output was not counted as a gate verdict; the final GPT rereview returned `CLEAN_FOR_PR`. |
+| `plan.columns.changed` event is declared but not emitted/consumed. | GLM-5.2 pre-PR review | P3 | IN_PLAN | Non-blocking follow-up | Column settings persist and the `/columns` page full-reloads; no live SPA consumer depends on the event. Tracked in this validation note's remaining non-blocking observations. |
+| Column-label editing is API-only. | GLM-5.2 pre-PR review | P3 | IN_PLAN | Non-blocking follow-up | Visibility is exposed in `/columns`, ordering in CLI, and labels are preserved through the API payload. Not a merge blocker. |
+| Minor stale/cosmetic/efficiency observations: initial server nav not pinned-first before client refresh, occupancy counts include deferred/archived plans, unused `/api/plans` filter parameters, startup project backfill runs synchronous git checks, filtered navigator can use a cached all-documents source, archive status pill can lag in a filtered navigator, active lifecycle set can resync no-op plans. | GLM-5.2 pre-PR review | P3 | IN_PLAN | Non-blocking follow-ups | No data loss, security issue, crash, or acceptance-blocking regression; final GLM rereview confirmed no P1/P2 remains. |
+
+## Formal pre-PR implementation review verification
+
+- README documentation term checks — PASS
+- `bun run build` — PASS after README fix
+- `bun run test` — PASS after final rereview
+- `bun run test:e2e` — PASS after final rereview
+- `bun run test:fixtures` — PASS after final rereview
+- GPT-5.5 pre-PR rereview — `CLEAN_FOR_PR`
+- GLM-5.2 pre-PR rereview — `CLEAN_FOR_PR`
+
 ## Final gate result
 
-PASS — GPT verdict `CLEAN_FOR_PR`; GLM verdict `CLEAN_FOR_PR`; PR-feedback PM verdict `PRODUCT_CLEAN`; PR-feedback adversarial verdict `CLEAN_FOR_PR_UPDATE`; demo feedback targeted gates PASS; Kanban demo PM/adversarial rereviews clean; top-bar GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`; mode-selector GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`; parent-project GPT/GLM rereviews both `CONSENSUS_CLEAN`; screen-specific top-action GPT/GLM rereviews both `CONSENSUS_CLEAN`; selector/type-filter GPT/GLM final rereviews both `CONSENSUS_CLEAN`; All Documents/lifecycle no-left-nav GPT/GLM rereviews both `CONSENSUS_CLEAN`; plan-shell selector / All Documents width GPT/GLM rereviews both `CONSENSUS_CLEAN`; plan-shell navigator filter persistence GPT/GLM rereviews both `CONSENSUS_CLEAN`; plan-shell navigator filtered-render GPT/GLM rereviews both `CONSENSUS_CLEAN`.
+PASS — GPT verdict `CLEAN_FOR_PR`; GLM verdict `CLEAN_FOR_PR`; PR-feedback PM verdict `PRODUCT_CLEAN`; PR-feedback adversarial verdict `CLEAN_FOR_PR_UPDATE`; demo feedback targeted gates PASS; Kanban demo PM/adversarial rereviews clean; top-bar GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`; mode-selector GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`; parent-project GPT/GLM rereviews both `CONSENSUS_CLEAN`; screen-specific top-action GPT/GLM rereviews both `CONSENSUS_CLEAN`; selector/type-filter GPT/GLM final rereviews both `CONSENSUS_CLEAN`; All Documents/lifecycle no-left-nav GPT/GLM rereviews both `CONSENSUS_CLEAN`; plan-shell selector / All Documents width GPT/GLM rereviews both `CONSENSUS_CLEAN`; plan-shell navigator filter persistence GPT/GLM rereviews both `CONSENSUS_CLEAN`; plan-shell navigator filtered-render GPT/GLM rereviews both `CONSENSUS_CLEAN`; formal pre-PR GPT/GLM rereviews both `CLEAN_FOR_PR`.
