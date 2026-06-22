@@ -2209,20 +2209,22 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     assert.deepEqual(columns.json().data.columns.map((column: { key: string }) => column.key), ['backlog', 'ready_to_pull', 'in_progress', 'done']);
     const columnsPage = await app.inject({ method: 'GET', url: '/columns' });
     assert.equal(columnsPage.statusCode, 200);
-    assert.match(columnsPage.body, /Save visibility/);
+    assert.match(columnsPage.body, /Save columns/);
     assert.match(columnsPage.body, /data-column-label/);
     assert.match(columnsPage.body, /aria-label="Label for backlog"/);
-    assert.match(columnsPage.body, /data-key="backlog"[\s\S]*data-column-hidden[\s\S]*disabled/);
-    assert.match(columnsPage.body, /data-key="ready_to_pull"[\s\S]*data-column-hidden/);
+    assert.match(columnsPage.body, /data-original-key="backlog"[\s\S]*data-column-hidden/);
+    const backlogRow = columnsPage.body.match(/<tr data-column-row data-original-key="backlog"[\s\S]*?<\/tr>/)?.[0] ?? '';
+    assert.doesNotMatch(backlogRow, /data-column-hidden[^>]*disabled/);
+    assert.match(columnsPage.body, /2 assigned plans will be hidden from the board/);
+    assert.match(columnsPage.body, /data-original-key="ready_to_pull"[\s\S]*data-column-hidden/);
 
     const occupiedHide = await app.inject({
       method: 'PUT',
       url: '/api/board-columns',
       payload: { columns: [{ key: 'backlog', label: 'Backlog', position: 0, hidden: true }] }
     });
-    assert.equal(occupiedHide.statusCode, 409);
-    assert.equal(occupiedHide.json().error.code, 'invalid_state');
-    assert.match(occupiedHide.json().error.nextAction, /Move plans out of the column/);
+    assert.equal(occupiedHide.statusCode, 200, occupiedHide.body);
+    assert.ok(occupiedHide.json().data.columns.find((column: { key: string }) => column.key === 'backlog').hiddenAt);
 
     const savedColumns = await app.inject({
       method: 'PUT',
@@ -2318,7 +2320,7 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     assert.equal(active.statusCode, 200, active.body);
     assert.equal(active.json().data.plan.lifecycleState, 'active');
     assert.equal(active.json().data.plan.deferredAt, undefined);
-    assert.equal(active.json().data.plan.boardColumnKey, 'backlog');
+    assert.equal(active.json().data.plan.boardColumnKey, 'in_progress');
 
     const noOpActive = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/lifecycle`, payload: { lifecycleState: 'active' } });
     assert.equal(noOpActive.statusCode, 200, noOpActive.body);
@@ -2375,6 +2377,62 @@ test('hidden backlog does not orphan new planning documents', async () => {
       }
     });
     assert.equal(hideEveryColumn.statusCode, 400);
+  } finally {
+    await app.close();
+  }
+});
+
+test('board column rename migrates plans and hiding occupied columns removes them from Kanban', async () => {
+  const { app, planId } = await registeredApp('board-column-rename-hide');
+  try {
+    const columnsPage = await app.inject({ method: 'GET', url: '/columns' });
+    assert.equal(columnsPage.statusCode, 200, columnsPage.body);
+    assert.doesNotMatch(columnsPage.body, /Move 1 plan first/);
+    assert.match(columnsPage.body, /will be hidden from the board/);
+
+    const renameAndHide = await app.inject({
+      method: 'PUT',
+      url: '/api/board-columns',
+      payload: { columns: [{ originalKey: 'backlog', key: 'triage', label: 'Triage', position: 0, hidden: true }] }
+    });
+    assert.equal(renameAndHide.statusCode, 200, renameAndHide.body);
+    assert.equal(renameAndHide.json().data.columns.find((column: { key: string }) => column.key === 'triage').label, 'Triage');
+    assert.ok(renameAndHide.json().data.columns.find((column: { key: string }) => column.key === 'triage').hiddenAt);
+
+    const detail = await app.inject({ method: 'GET', url: `/api/plans/${planId}` });
+    assert.equal(detail.statusCode, 200, detail.body);
+    assert.equal(detail.json().data.plan.boardColumnKey, 'triage');
+
+    const hiddenKanban = await app.inject({ method: 'GET', url: '/' });
+    assert.equal(hiddenKanban.statusCode, 200, hiddenKanban.body);
+    assert.doesNotMatch(hiddenKanban.body, /data-column-key="triage"/);
+    assert.doesNotMatch(hiddenKanban.body, /sample-plan/);
+
+    const deferred = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/lifecycle`, payload: { lifecycleState: 'deferred', note: 'Pause while hidden.' } });
+    assert.equal(deferred.statusCode, 200, deferred.body);
+    const resumed = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/lifecycle`, payload: { lifecycleState: 'active' } });
+    assert.equal(resumed.statusCode, 200, resumed.body);
+    assert.equal(resumed.json().data.plan.boardColumnKey, 'triage');
+    const hiddenAfterResume = await app.inject({ method: 'GET', url: '/' });
+    assert.doesNotMatch(hiddenAfterResume.body, /sample-plan/);
+
+    const archived = await app.inject({ method: 'POST', url: `/api/plans/${planId}/archive` });
+    assert.equal(archived.statusCode, 200, archived.body);
+    const unarchived = await app.inject({ method: 'POST', url: `/api/plans/${planId}/unarchive` });
+    assert.equal(unarchived.statusCode, 200, unarchived.body);
+    assert.equal(unarchived.json().data.plan.boardColumnKey, 'triage');
+    const hiddenAfterUnarchive = await app.inject({ method: 'GET', url: '/' });
+    assert.doesNotMatch(hiddenAfterUnarchive.body, /sample-plan/);
+
+    const showAgain = await app.inject({
+      method: 'PUT',
+      url: '/api/board-columns',
+      payload: { columns: [{ originalKey: 'triage', key: 'triage', label: 'Triage', position: 0, hidden: false }] }
+    });
+    assert.equal(showAgain.statusCode, 200, showAgain.body);
+    const visibleKanban = await app.inject({ method: 'GET', url: '/' });
+    assert.match(visibleKanban.body, /data-column-key="triage"/);
+    assert.match(visibleKanban.body, /Sample Plan/);
   } finally {
     await app.close();
   }
@@ -3629,7 +3687,7 @@ test('CLI organization commands map to REST endpoints', async () => {
 
     const rename = await runCli(['columns', 'rename', 'in_progress', 'Doing', '--url', serviceUrl, '--json']);
     assert.equal(rename.code, 0, rename.stderr);
-    assert.equal(JSON.parse(rename.stdout).columns.find((column: { key: string }) => column.key === 'in_progress').label, 'Doing');
+    assert.equal(JSON.parse(rename.stdout).columns.find((column: { key: string }) => column.key === 'doing').label, 'Doing');
 
     assert.equal((await runCli(['column', 'set', 'plan_1', 'in_progress', '--url', serviceUrl])).code, 0);
     assert.equal((await runCli(['pin', 'plan_1', '--url', serviceUrl])).code, 0);
@@ -3653,7 +3711,7 @@ test('CLI organization commands map to REST endpoints', async () => {
       ['PUT', '/api/board-columns', { columns: [
         { key: 'backlog', label: 'Backlog', position: 0, isDone: false },
         { key: 'ready_to_pull', label: 'Ready to Pull', position: 1, isDone: false },
-        { key: 'in_progress', label: 'Doing', position: 2, isDone: false },
+        { key: 'doing', label: 'Doing', position: 2, isDone: false, originalKey: 'in_progress' },
         { key: 'done', label: 'Done', position: 3, isDone: true }
       ] }],
       ['PUT', '/api/plans/plan_1/column', { boardColumnKey: 'in_progress' }],
