@@ -189,6 +189,21 @@ Comparison: uncommitted working-tree diff on the feature branch, including the u
 - GPT plan-shell selector / All Documents width review — `CONSENSUS_CLEAN`
 - GLM plan-shell selector / All Documents width review — `CONSENSUS_CLEAN`
 
+## Plan-shell navigator filter persistence correction
+
+| Source | Severity | Finding | Decision | Evidence |
+| --- | --- | --- | --- | --- |
+| User demo feedback | P2 | While viewing a plan, changing plans through the left navigator reset the top Project/State/Status filters even though those controls are navigator/list state. | Fixed | The review shell stores non-empty Project/State/Status filter selections in same-tab session storage, restores them before navigator loading on the destination plan page, saves them before left-nav plan clicks, and fails soft if storage is unavailable. E2E coverage selects a State filter, switches plans through the left navigator, and asserts the filter remains selected. |
+
+## Plan-shell navigator filter persistence verification
+
+- `bun run build` — PASS
+- `bun run test:e2e` — PASS
+- `bun run test` — PASS
+- Served smoke on `4318` — PASS for shell filter controls, left-nav items, and served `/client.js` containing filter restore/save code
+- GPT final filter-persistence review — `CONSENSUS_CLEAN`
+- GLM final filter-persistence review — `CONSENSUS_CLEAN`
+
 ## Final gate result
 
-PASS — GPT verdict `CLEAN_FOR_PR`; GLM verdict `CLEAN_FOR_PR`; PR-feedback PM verdict `PRODUCT_CLEAN`; PR-feedback adversarial verdict `CLEAN_FOR_PR_UPDATE`; demo feedback targeted gates PASS; Kanban demo PM/adversarial rereviews clean; top-bar GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`; mode-selector GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`; parent-project GPT/GLM rereviews both `CONSENSUS_CLEAN`; screen-specific top-action GPT/GLM rereviews both `CONSENSUS_CLEAN`; selector/type-filter GPT/GLM final rereviews both `CONSENSUS_CLEAN`; All Documents/lifecycle no-left-nav GPT/GLM rereviews both `CONSENSUS_CLEAN`; plan-shell selector / All Documents width GPT/GLM rereviews both `CONSENSUS_CLEAN`.
+PASS — GPT verdict `CLEAN_FOR_PR`; GLM verdict `CLEAN_FOR_PR`; PR-feedback PM verdict `PRODUCT_CLEAN`; PR-feedback adversarial verdict `CLEAN_FOR_PR_UPDATE`; demo feedback targeted gates PASS; Kanban demo PM/adversarial rereviews clean; top-bar GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`; mode-selector GPT/GLM plan-faithfulness rereviews both `CONSENSUS_CLEAN`; parent-project GPT/GLM rereviews both `CONSENSUS_CLEAN`; screen-specific top-action GPT/GLM rereviews both `CONSENSUS_CLEAN`; selector/type-filter GPT/GLM final rereviews both `CONSENSUS_CLEAN`; All Documents/lifecycle no-left-nav GPT/GLM rereviews both `CONSENSUS_CLEAN`; plan-shell selector / All Documents width GPT/GLM rereviews both `CONSENSUS_CLEAN`; plan-shell navigator filter persistence GPT/GLM rereviews both `CONSENSUS_CLEAN`.

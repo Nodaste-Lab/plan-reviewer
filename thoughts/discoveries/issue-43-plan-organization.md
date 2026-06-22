@@ -146,3 +146,14 @@ Fix applied:
 Verification:
 
 - `bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "organization APIs persist"` — PASS
+
+## 2026-06-21 demo feedback: navigator filters persist across plan switches
+
+Demo feedback clarified that the review-shell top filters are navigator/list state, not per-plan state. Switching plans in the left navigator must keep selected Project/State/Status filters instead of rebuilding them at defaults.
+
+Fix applied:
+
+- The review shell stores non-empty Project/State/Status filter selections in same-tab session storage.
+- The shell restores those selections before the navigator loads on a plan page.
+- Left-navigator clicks save the current filter state before the browser navigates to the next plan.
+- E2E coverage selects a State filter, switches plans via the left navigator, and asserts the filter remains selected on the destination plan page.

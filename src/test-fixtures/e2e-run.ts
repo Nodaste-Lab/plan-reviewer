@@ -636,9 +636,13 @@ try {
     assert.equal(await page.locator('#desktop-comments-toggle').getAttribute('aria-expanded'), 'true');
     await page.click('#desktop-comments-toggle');
     await page.waitForFunction(() => !document.body.classList.contains('comments-open'));
+    await page.selectOption('#state-filter-control', 'active');
+    await page.waitForFunction(() => sessionStorage.getItem('plan-reviewer.navigatorFilters.v1')?.includes('"state":"active"'));
     await page.click(`#plan-list-nav a[href="/p/${navSwitch.planId}"]`);
     await page.waitForURL(`${baseUrl}/p/${navSwitch.planId}`);
+    assert.equal(await page.locator('#state-filter-control').inputValue(), 'active');
     assert.equal(await page.locator('#plan-list-nav [aria-current="page"]').getAttribute('data-plan-id'), navSwitch.planId);
+    await page.selectOption('#state-filter-control', '');
     await page.goto(`${baseUrl}/p/${linkedPlan.planId}`);
     await page.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#linked-plan-link'));
     const modifiedPlanLinkDefaultPrevented = await page.evaluate(() => {

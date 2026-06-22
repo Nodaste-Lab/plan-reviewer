@@ -950,6 +950,35 @@ pinPlanButton?.addEventListener('click', async () => {
   pinPlanButton.setAttribute('title', pinned ? 'Unpin plan' : 'Pin plan');
   pinPlanButton.textContent = pinned ? '★' : '☆';
 });
+const navigatorFilterStorageKey = 'plan-reviewer.navigatorFilters.v1';
+function readStoredNavigatorFilters(){
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem(navigatorFilterStorageKey) || '{}');
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch { return {}; }
+}
+function selectHasValue(control, value){ return Boolean(control && [...control.options].some(option => option.value === value)); }
+function restoreNavigatorFilters(){
+  const stored = readStoredNavigatorFilters();
+  if (selectHasValue(projectFilterControl, stored.project)) projectFilterControl.value = stored.project;
+  if (selectHasValue(stateFilterControl, stored.state)) stateFilterControl.value = stored.state;
+  if (selectHasValue(statusFilterControl, stored.status)) statusFilterControl.value = stored.status;
+}
+function currentNavigatorFilters(){
+  const stored = readStoredNavigatorFilters();
+  return {
+    project: projectFilterControl ? projectFilterControl.value : String(stored.project || ''),
+    state: stateFilterControl ? stateFilterControl.value : String(stored.state || ''),
+    status: statusFilterControl ? statusFilterControl.value : String(stored.status || '')
+  };
+}
+function saveNavigatorFilters(){
+  const filters = currentNavigatorFilters();
+  try {
+    if (filters.project || filters.state || filters.status) sessionStorage.setItem(navigatorFilterStorageKey, JSON.stringify(filters));
+    else sessionStorage.removeItem(navigatorFilterStorageKey);
+  } catch {}
+}
 async function loadNavigatorFilterSource(){
   if (!navigatorFiltersActive()) {
     renderPlanNavigatorItems(navigatorItems, document.querySelector('#plan-list-nav')?.getAttribute('aria-label') === 'Active documents' ? 'documents' : 'plans');
@@ -964,14 +993,20 @@ async function loadNavigatorFilterSource(){
   renderPlanNavigatorItems(quickOpenItems, 'documents');
 }
 function applyNavigatorFilters(){
+  saveNavigatorFilters();
   void loadNavigatorFilterSource().catch(error => {
     navigatorLoadError = error;
     if (planListError) { planListError.hidden = false; planListError.textContent = 'Unable to filter documents. The current plan remains reviewable.'; }
   });
 }
+restoreNavigatorFilters();
 projectFilterControl?.addEventListener('change', applyNavigatorFilters);
 stateFilterControl?.addEventListener('change', applyNavigatorFilters);
 statusFilterControl?.addEventListener('change', applyNavigatorFilters);
+planListNav?.addEventListener('click', event => {
+  const link = event.target instanceof Element ? event.target.closest('[data-plan-nav-item]') : null;
+  if (link) saveNavigatorFilters();
+});
 addPlanNoteButton?.addEventListener('click', async () => {
   const body = planNoteBody?.value.trim();
   if (!body) return;
