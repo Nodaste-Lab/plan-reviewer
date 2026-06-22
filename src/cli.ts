@@ -28,6 +28,11 @@ interface PlanApiRecord {
     reviewMode: 'planning' | 'collaboration';
     publicationMetadata?: { branch: string; executionReady: boolean; linearIssue?: string };
     pullRequest?: PlanPullRequest | null;
+    lifecycleState?: string;
+    boardColumnKey?: string;
+    pinnedAt?: string;
+    projectKey?: string;
+    projectName?: string;
   };
 }
 
@@ -269,9 +274,9 @@ async function printIndex(options: { url?: string; json?: boolean; q?: string; r
     const table = rows.map(item => {
       const pr = item.plan.pullRequest;
       const prLabel = pr ? `PR ${pr.status ?? pr.state} #${pr.number}` : 'No PR';
-      return `${item.plan.repoName}\t${item.plan.slug}\t${item.plan.publicationMetadata?.branch ?? item.plan.branch ?? '-'}\t${item.plan.publicationMetadata?.linearIssue ?? '-'}\t${prLabel}\tmode:${item.plan.reviewMode} executionReady:${item.plan.publicationMetadata?.executionReady ?? '-'}\tpending:${item.counts.pending} claimed:${item.counts.claimed} ack:${item.counts.acknowledged} resolved:${item.counts.resolved}\t${fullUrl(serviceUrl, item.reviewUrl)}`;
+      return `${item.plan.repoName}\t${item.plan.slug}\t${item.plan.projectName ?? '-'}\t${item.plan.lifecycleState ?? '-'}\t${item.plan.boardColumnKey ?? '-'}\t${item.plan.pinnedAt ? 'pinned' : '-'}\t${item.plan.publicationMetadata?.branch ?? item.plan.branch ?? '-'}\t${item.plan.publicationMetadata?.linearIssue ?? '-'}\t${prLabel}\tmode:${item.plan.reviewMode} executionReady:${item.plan.publicationMetadata?.executionReady ?? '-'}\tpending:${item.counts.pending} claimed:${item.counts.claimed} ack:${item.counts.acknowledged} resolved:${item.counts.resolved}\t${fullUrl(serviceUrl, item.reviewUrl)}`;
     });
-    process.stdout.write(`Index URL: ${serviceUrl}/\nRepo\tDocument\tBranch\tLinear\tPR\tMode / Execution Ready\tStatus\tReview URL\n${table.join('\n')}${data.nextCursor ? `\nNext cursor: ${data.nextCursor}` : ''}\n`);
+    process.stdout.write(`Index URL: ${serviceUrl}/\nRepo\tDocument\tProject\tLifecycle\tColumn\tPin\tBranch\tLinear\tPR\tMode / Execution Ready\tStatus\tReview URL\n${table.join('\n')}${data.nextCursor ? `\nNext cursor: ${data.nextCursor}` : ''}\n`);
   }
 }
 
@@ -886,6 +891,89 @@ async function setPlanMode(planId: string, reviewMode: string, options: { url?: 
   else process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
 }
 
+async function setPlanLifecycle(planId: string, lifecycleState: string, options: { url?: string; note?: string; json?: boolean }) {
+  if (lifecycleState === 'deferred' && !options.note?.trim()) throw new PlanReviewError('validation_failed', 'lifecycle set deferred requires --note <reason>', 1, { planId }, 'Retry with --note "why paused and next step", or use plan-review defer <planId> --note "...".');
+  const serviceUrl = resolveServiceUrl(options.url);
+  const data = await requestJson<unknown>(`${serviceUrl}/api/plans/${planId}/lifecycle`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ lifecycleState, ...(options.note?.trim() ? { note: options.note } : {}) })
+  });
+  if (options.json) printJson(data);
+  else process.stdout.write(`Lifecycle set to ${lifecycleState} for ${planId}\n`);
+}
+
+async function setPlanColumn(planId: string, boardColumnKey: string, options: { url?: string; json?: boolean }) {
+  const serviceUrl = resolveServiceUrl(options.url);
+  const data = await requestJson<unknown>(`${serviceUrl}/api/plans/${planId}/column`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ boardColumnKey })
+  });
+  if (options.json) printJson(data);
+  else process.stdout.write(`Column set to ${boardColumnKey} for ${planId}\n`);
+}
+
+async function setPlanPin(planId: string, pinned: boolean, options: { url?: string; json?: boolean }) {
+  const serviceUrl = resolveServiceUrl(options.url);
+  const data = await requestJson<unknown>(`${serviceUrl}/api/plans/${planId}/pin`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ pinned })
+  });
+  if (options.json) printJson(data);
+  else process.stdout.write(`${pinned ? 'Pinned' : 'Unpinned'} ${planId}\n`);
+}
+
+async function setPlanProject(planId: string, projectName: string, options: { url?: string; projectKey?: string; json?: boolean }) {
+  const serviceUrl = resolveServiceUrl(options.url);
+  const data = await requestJson<unknown>(`${serviceUrl}/api/plans/${planId}/project`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ projectName, projectKey: options.projectKey })
+  });
+  if (options.json) printJson(data);
+  else process.stdout.write(`Project set to ${projectName} for ${planId}\n`);
+}
+
+async function listColumns(options: { url?: string; json?: boolean }) {
+  const serviceUrl = resolveServiceUrl(options.url);
+  const data = await requestJson<{ columns: Array<{ key: string; label: string; position: number; isDone: boolean; hiddenAt?: string }> }>(`${serviceUrl}/api/board-columns`);
+  if (options.json) printJson(data);
+  else process.stdout.write(`Key\tLabel\tPosition\tDone\n${data.columns.map(column => `${column.key}\t${column.label}\t${column.position}\t${column.isDone ? 'yes' : 'no'}`).join('\n')}\n`);
+}
+
+async function saveColumnOrder(order: string, options: { url?: string; json?: boolean }) {
+  const serviceUrl = resolveServiceUrl(options.url);
+  const current = await requestJson<{ columns: Array<{ key: string; label: string; position: number; isDone: boolean; hiddenAt?: string }> }>(`${serviceUrl}/api/board-columns`);
+  const keys = order.split(',').map(item => item.trim()).filter(Boolean);
+  const columnsByKey = new Map(current.columns.map(column => [column.key, column]));
+  const missing = keys.filter(key => !columnsByKey.has(key));
+  if (missing.length) throw new PlanReviewError('validation_failed', `Unknown board column keys: ${missing.join(', ')}`, 1, { missing }, 'Run plan-review columns list and retry with existing keys.');
+  const ordered = [...keys.map((key, index) => ({ ...columnsByKey.get(key)!, position: index })), ...current.columns.filter(column => !keys.includes(column.key)).map((column, index) => ({ ...column, position: keys.length + index }))];
+  const data = await requestJson<unknown>(`${serviceUrl}/api/board-columns`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ columns: ordered })
+  });
+  if (options.json) printJson(data);
+  else process.stdout.write(`Saved column order: ${ordered.map(column => column.key).join(', ')}\n`);
+}
+
+async function renameColumn(key: string, label: string, options: { url?: string; json?: boolean }) {
+  const serviceUrl = resolveServiceUrl(options.url);
+  const current = await requestJson<{ columns: Array<{ key: string; label: string; position: number; isDone: boolean; hiddenAt?: string }> }>(`${serviceUrl}/api/board-columns`);
+  const columns = current.columns.map(column => column.key === key ? { ...column, label } : column);
+  if (!columns.some(column => column.key === key)) throw new PlanReviewError('validation_failed', `Unknown board column key: ${key}`, 1, { key }, 'Run plan-review columns list and retry with an existing key.');
+  const data = await requestJson<unknown>(`${serviceUrl}/api/board-columns`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ columns })
+  });
+  if (options.json) printJson(data);
+  else process.stdout.write(`Renamed column ${key} to ${label}\n`);
+}
+
 async function releaseComment(commentId: string, options: { url?: string; claim?: string; reason?: string; json?: boolean }) {
   if (!options.claim) throw new PlanReviewError('claim_required', 'release requires --claim <claim-id>', 1, { commentId }, 'Pass the active claim id with --claim <claim-id>.');
   const serviceUrl = resolveServiceUrl(options.url);
@@ -1188,6 +1276,52 @@ export async function main(argv: string[] = process.argv.slice(2)) {
     .option('--url <url>')
     .option('--json')
     .action(setPlanMode);
+
+  const project = program.command('project');
+  project.command('set <planId> <projectName>')
+    .option('--url <url>')
+    .option('--project-key <key>')
+    .option('--json')
+    .action(setPlanProject);
+
+  const lifecycle = program.command('lifecycle');
+  lifecycle.command('set <planId> <state>')
+    .option('--url <url>')
+    .option('--note <reason>')
+    .option('--json')
+    .action(setPlanLifecycle);
+
+  const column = program.command('column');
+  column.command('set <planId> <columnKey>')
+    .option('--url <url>')
+    .option('--json')
+    .action(setPlanColumn);
+
+  const columns = program.command('columns');
+  columns.command('list')
+    .option('--url <url>')
+    .option('--json')
+    .action(listColumns);
+  columns.command('save-order <keys>')
+    .description('Save board column order from a comma-separated key list')
+    .option('--url <url>')
+    .option('--json')
+    .action(saveColumnOrder);
+  columns.command('rename <key> <label>')
+    .description('Rename a board column label')
+    .option('--url <url>')
+    .option('--json')
+    .action(renameColumn);
+
+  program.command('pin <planId>')
+    .option('--url <url>')
+    .option('--json')
+    .action((planId, options) => setPlanPin(planId, true, options));
+
+  program.command('unpin <planId>')
+    .option('--url <url>')
+    .option('--json')
+    .action((planId, options) => setPlanPin(planId, false, options));
 
   program.command('release <commentId>')
     .option('--url <url>')

@@ -23,11 +23,16 @@ import {
   registerPlanSchema,
   releaseCommentSchema,
   resolveCommentSchema,
-  resumePlanSchema
+  resumePlanSchema,
+  saveBoardColumnsSchema,
+  setPlanBoardColumnSchema,
+  setPlanLifecycleSchema,
+  setPlanPinnedSchema,
+  setPlanProjectSchema
 } from '../schemas.js';
 import { renderPlan } from '../render/render.js';
 import { buildRegistrationAgentInstructions } from '../registrationInstructions.js';
-import { PlanReviewStore, type StoredEvent } from '../storage/database.js';
+import { PlanReviewStore, type BoardColumnRecord, type PlanRecord, type StoredEvent } from '../storage/database.js';
 import { SourceSyncService } from './sourceSync.js';
 import { fail, ok, PlanReviewError } from '../util.js';
 import { planTitleFallback, renderedHtmlTitle, reviewShellTitle } from '../planTitles.js';
@@ -174,7 +179,7 @@ function planCardSearch(item: ListedPlan): string {
   const prTerms = pr ? ` ${pr.url} ${pr.number} ${pr.state} ${pr.status ?? ''} ${pr.merged ? 'merged' : ''} pr ${pr.status ?? pr.state} pr ${pr.state} pull request pr` : ' no pr unlinked';
   const linearTerms = ` ${metadata?.linearIssue ?? ''} ${item.plan.linearIssueKey ?? ''} ${item.plan.linearIssueUrl ?? ''}`;
   const attentionTerms = planNeedsAttention(item) ? ' needs attention source missing source unavailable failed cached copy' : '';
-  return `${item.plan.repoName} ${item.plan.repoKey} ${item.plan.slug} ${item.plan.reviewMode} ${fullyQualifiedPlanPath(item)} ${metadata?.worktreePath ?? ''} ${metadata?.branch ?? ''} ${item.latestNote?.body ?? ''}${linearTerms}${prTerms}${attentionTerms}`.toLowerCase();
+  return `${item.plan.repoName} ${item.plan.repoKey} ${item.plan.slug} ${item.plan.reviewMode} ${item.plan.projectKey} ${item.plan.projectName} ${item.plan.lifecycleState} ${item.plan.boardColumnKey ?? ''} ${item.plan.pinnedAt ? 'pinned' : 'unpinned'} ${metadata?.executionReady ? 'execution ready ready' : 'execution not ready not-ready'} ${fullyQualifiedPlanPath(item)} ${metadata?.worktreePath ?? ''} ${metadata?.branch ?? ''} ${item.latestNote?.body ?? ''}${linearTerms}${prTerms}${attentionTerms}`.toLowerCase();
 }
 
 function hasStartedPlanProgress(item: ListedPlan): boolean {
@@ -201,7 +206,8 @@ function planNavigatorRank(item: ListedPlan): number {
 }
 
 function sortPlansForNavigator(plans: ListedPlan[]): ListedPlan[] {
-  return [...plans].sort((a, b) => planNavigatorRank(a) - planNavigatorRank(b)
+  return [...plans].sort((a, b) => (Boolean(a.plan.pinnedAt) === Boolean(b.plan.pinnedAt) ? 0 : a.plan.pinnedAt ? -1 : 1)
+    || planNavigatorRank(a) - planNavigatorRank(b)
     || planProgressRatio(b) - planProgressRatio(a)
     || String(b.activityAt).localeCompare(String(a.activityAt))
     || displayTitle(a).localeCompare(displayTitle(b))
@@ -221,18 +227,71 @@ function planNavigatorProgress(item: ListedPlan): string {
   return `${item.progress.completedPhases}/${item.progress.totalPhases}`;
 }
 
-function planNavigatorItemHtml(item: ListedPlan, currentPlanId: string): string {
+type ReviewShellNavigatorFilters = { project: string; state: '' | 'active' | 'deferred' | 'archived'; status: string };
+
+function emptyReviewShellNavigatorFilters(): ReviewShellNavigatorFilters {
+  return { project: '', state: '', status: '' };
+}
+
+function reviewShellNavigatorFiltersActive(filters: ReviewShellNavigatorFilters): boolean {
+  return Boolean(filters.project || filters.state || filters.status);
+}
+
+function reviewShellNavigatorFilterSearch(filters: ReviewShellNavigatorFilters): string {
+  const params = new URLSearchParams();
+  if (filters.project) params.set('projectKey', filters.project);
+  if (filters.state) params.set('lifecycle', filters.state);
+  if (filters.status) params.set('boardColumnKey', filters.status);
+  const query = params.toString();
+  return query ? `?${query}` : '';
+}
+
+function planMatchesReviewShellNavigatorFilters(item: ListedPlan, filters: ReviewShellNavigatorFilters): boolean {
+  if (filters.project && item.plan.projectKey !== filters.project) return false;
+  if (filters.state && item.plan.lifecycleState !== filters.state) return false;
+  if (filters.status && item.plan.boardColumnKey !== filters.status) return false;
+  return true;
+}
+
+function planNavigatorItemHtml(item: ListedPlan, currentPlanId: string, filters = emptyReviewShellNavigatorFilters()): string {
   const active = item.plan.id === currentPlanId;
   const status = planNavigatorStatus(item);
-  return `<a class="plan-nav-item${active ? ' active' : ''}${planNeedsAttention(item) ? ' attention' : ''}" href="/p/${escapeHtml(item.plan.id)}" data-plan-nav-item data-plan-id="${escapeHtml(item.plan.id)}" aria-current="${active ? 'page' : 'false'}">
+  const href = `/p/${encodeURIComponent(String(item.plan.id))}${reviewShellNavigatorFilterSearch(filters)}`;
+  return `<a class="plan-nav-item${active ? ' active' : ''}${planNeedsAttention(item) ? ' attention' : ''}" href="${escapeHtml(href)}" data-plan-nav-item data-plan-id="${escapeHtml(item.plan.id)}" aria-current="${active ? 'page' : 'false'}">
     <span class="plan-nav-title">${escapeHtml(displayTitle(item))}</span>
     <span class="plan-nav-meta"><span class="plan-nav-pill ${item.plan.reviewMode === 'collaboration' || item.plan.publicationMetadata?.executionReady ? 'ready' : 'not-ready'}">${escapeHtml(status)}</span><span>${escapeHtml(planNavigatorProgress(item))}</span></span>
     <span class="plan-nav-submeta">pending ${item.counts.pending} · updated <time datetime="${escapeHtml(item.modifiedAt)}" data-local-timestamp>${escapeHtml(item.modifiedAt)}</time></span>
   </a>`;
 }
 
-function planNavigatorHtml(plans: ListedPlan[], currentPlanId: string, label = 'plans'): string {
-  const items = sortPlansForNavigator(plans).map(item => planNavigatorItemHtml(item, currentPlanId)).join('');
+function planNavigatorItemsFor(store: PlanReviewStore, options: { limit: number; currentPlanId?: string }): ListedPlan[] {
+  const activePlans = store.listPlans({ limit: options.limit, currentPlanId: options.currentPlanId });
+  if (!options.currentPlanId || activePlans.some(item => item.plan.id === options.currentPlanId)) return activePlans;
+  const current = store.listPlans({ includeArchived: true, includeDeferred: true, limit: 1, currentPlanId: options.currentPlanId }).find(item => item.plan.id === options.currentPlanId);
+  return current ? [...activePlans, current] : activePlans;
+}
+
+function normalizeReviewShellNavigatorFilters(query: { projectKey?: string; lifecycle?: string; boardColumnKey?: string }, currentPlan: PlanRecord, columns: BoardColumnRecord[], projectPlans: ListedPlan[]): ReviewShellNavigatorFilters {
+  const projectKeys = new Set(projectPlans.map(item => item.plan.projectKey).filter(Boolean));
+  projectKeys.add(currentPlan.projectKey);
+  const columnKeys = new Set(columns.map(column => column.key));
+  return {
+    project: query.projectKey && projectKeys.has(query.projectKey) ? query.projectKey : '',
+    state: query.lifecycle === 'active' || query.lifecycle === 'deferred' || query.lifecycle === 'archived' ? query.lifecycle : '',
+    status: currentPlan.reviewMode !== 'collaboration' && query.boardColumnKey && columnKeys.has(query.boardColumnKey) ? query.boardColumnKey : ''
+  };
+}
+
+function filteredReviewShellNavigatorItems(store: PlanReviewStore, currentPlanId: string, filters: ReviewShellNavigatorFilters): ListedPlan[] {
+  if (!reviewShellNavigatorFiltersActive(filters)) return planNavigatorItemsFor(store, { limit: 200, currentPlanId });
+  const items = store.listPlans({ includeArchived: true, includeDeferred: true });
+  const filtered = items.filter(item => planMatchesReviewShellNavigatorFilters(item, filters));
+  const current = items.find(item => item.plan.id === currentPlanId);
+  return current && !filtered.some(item => item.plan.id === currentPlanId) ? [current, ...filtered] : filtered;
+}
+
+function planNavigatorHtml(plans: ListedPlan[], currentPlanId: string, label = 'plans', filters = emptyReviewShellNavigatorFilters()): string {
+  const items = sortPlansForNavigator(plans).map(item => planNavigatorItemHtml(item, currentPlanId, filters)).join('');
   const title = label === 'documents' ? 'Active documents' : 'Active plans';
   const empty = label === 'documents' ? 'No active documents.' : 'No active plans.';
   return `<aside id="plan-list-nav" aria-label="${escapeHtml(title)}"><div class="plan-list-header"><h2>${escapeHtml(title)}</h2><button id="plan-list-retry" type="button" hidden>Retry</button></div><div class="plan-list-error" id="plan-list-error" hidden>Unable to load ${escapeHtml(label)}.</div><div id="plan-list-items">${items || `<p class="plan-list-empty">${escapeHtml(empty)}</p>`}</div></aside>`;
@@ -244,7 +303,7 @@ function planCardHtml(item: ListedPlan): string {
   const statusLabel = needsAttention ? 'Source missing' : complete ? 'Complete' : 'Incomplete';
   const cardClass = needsAttention ? 'needs-attention' : complete ? 'complete' : 'incomplete';
   const prStatus = item.plan.pullRequest?.status ?? item.plan.pullRequest?.state ?? 'unlinked';
-  return `<article class="plan-card ${cardClass}" data-plan-id="${escapeHtml(item.plan.id)}" data-repo="${escapeHtml(item.plan.repoName)}" data-pr-status="${escapeHtml(prStatus)}" data-search="${escapeHtml(planCardSearch(item))}" data-needs-attention="${needsAttention ? 'true' : 'false'}" aria-label="${escapeHtml(`${item.plan.repoName} / ${item.plan.slug}: ${statusLabel}`)}">
+  return `<article class="plan-card ${cardClass}" data-plan-id="${escapeHtml(item.plan.id)}" data-repo="${escapeHtml(item.plan.repoName)}" data-type="${item.plan.reviewMode === 'collaboration' ? 'collaborative' : 'plan'}" data-pr-status="${escapeHtml(prStatus)}" data-search="${escapeHtml(planCardSearch(item))}" data-needs-attention="${needsAttention ? 'true' : 'false'}" aria-label="${escapeHtml(`${item.plan.repoName} / ${item.plan.slug}: ${statusLabel}`)}">
       <div class="plan-card-header"><h2><a href="/p/${escapeHtml(item.plan.id)}">${escapeHtml(item.plan.repoName)} / ${escapeHtml(item.plan.slug)}</a></h2><div class="plan-actions"><span class="status-pill${needsAttention ? ' attention' : ''}">${escapeHtml(statusLabel)}</span><button class="archive-plan" type="button" data-archive-plan="${escapeHtml(item.plan.id)}">Archive</button></div></div>
       <p><code>${escapeHtml(fullyQualifiedPlanPath(item))}</code></p>
       ${publicationMetadataHtml(item)}
@@ -277,7 +336,57 @@ function repoGroupsHtml(plans: ListedPlan[]): string {
   return groups.join('\n');
 }
 
-function indexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCount: number, deferredCount: number): string {
+function organizationIndexStyles(): string {
+  return `.doc-kind-switcher{display:inline-flex;gap:2px;padding:3px;border:1px solid #334155;border-radius:999px;background:#08111f}.doc-kind-seg{border-radius:999px;padding:5px 10px;color:#a7b0c0;font-size:12px;font-weight:850;text-decoration:none;white-space:nowrap}.doc-kind-seg.active{background:#0ea5e9;color:#e0f2fe}.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px}.kanban-page,.documents-page{max-width:none;width:100%;box-sizing:border-box;padding:24px clamp(14px,2vw,32px)}.documents-page .toolbar{grid-template-columns:minmax(0,1fr) minmax(160px,220px) minmax(160px,220px)}@media(max-width:760px){.documents-page .toolbar{grid-template-columns:1fr}}.kanban-board{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:16px;align-items:start}.kanban-column{background:#0b1220;border:1px solid #334155;border-radius:12px;padding:12px;min-height:180px}.kanban-column h2{font-size:16px;margin:0 0 8px;display:flex;justify-content:space-between}.kanban-card{border:1px solid #253248;border-radius:10px;background:#111827;padding:12px;margin:8px 0}.kanban-card[draggable=true]{cursor:grab}.badge{display:inline-block;border:1px solid #475569;border-radius:999px;padding:1px 7px;background:#0b1220;color:#cbd5e1;font-size:12px;margin:2px}.badge.ready{border-color:#22c55e;color:#bbf7d0}.badge.not-ready{border-color:#f59e0b;color:#fde68a}.drop-target{outline:2px dashed #7dd3fc;outline-offset:-4px}.card-summary{color:#cbd5e1;font-size:13px}.card-detail-link{display:inline-block;margin-top:8px;font-weight:800}.collab-card{border-left-color:#a78bfa}.organizer-error{border:1px solid #fb7185;border-radius:8px;background:rgba(251,113,133,.12);color:#fecdd3;padding:10px;margin:12px 0}.columns-table{width:100%;border-collapse:collapse;margin:16px 0}.columns-table th,.columns-table td{border-bottom:1px solid #334155;padding:10px;text-align:left}.columns-table input[type=checkbox]{width:18px;height:18px}.columns-save{display:flex;gap:10px;align-items:center}.columns-message{color:#a7b0c0}.topbar-icon-action{display:inline-flex;align-items:center;justify-content:center;min-width:38px;min-height:34px;padding:8px 10px;box-sizing:border-box;font-size:16px;line-height:1}`;
+}
+
+function documentViewSwitcher(active?: 'kanban' | 'all'): string {
+  const link = (view: 'kanban' | 'all', label: string, href: string) => `<a class="doc-kind-seg${active === view ? ' active' : ''}" href="${href}">${label}</a>`;
+  return `<nav class="doc-kind-switcher" aria-label="Document view selector">${link('kanban', 'Kanban', '/')}${link('all', 'All documents', '/?view=all')}</nav>`;
+}
+
+function topbarIconAction(href: string, label: string, icon: string): string {
+  return `<a class="nav-link primary topbar-icon-action" href="${escapeHtml(href)}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">${escapeHtml(icon)}</a>`;
+}
+
+function boardColumnLabel(columns: BoardColumnRecord[], key: string | undefined): string {
+  return columns.find(column => column.key === key)?.label ?? key ?? 'Unassigned';
+}
+
+function summaryForItem(item: ListedPlan): string {
+  return item.latestNote?.body ?? `${displayTitle(item)} · ${fullyQualifiedPlanPath(item)}`;
+}
+
+function issueBadgeHtml(item: ListedPlan): string {
+  if (item.plan.linearIssueKey) return `<span class="badge">Linear: <a href="${escapeHtml(item.plan.linearIssueUrl)}" target="_blank" rel="noreferrer">${escapeHtml(item.plan.linearIssueKey)}</a></span>`;
+  return '<span class="badge">Linear: none</span>';
+}
+
+function planBadgesHtml(item: ListedPlan, columns: BoardColumnRecord[]): string {
+  const ready = item.plan.publicationMetadata?.executionReady;
+  const progress = item.progress.totalPhases ? `${item.progress.completedPhases} of ${item.progress.totalPhases} phases complete` : 'No phases';
+  const attentionBadge = planNeedsAttention(item) ? '<span class="badge not-ready">Needs attention</span><span class="badge not-ready">Source missing</span>' : '';
+  return `<div class="card-meta"><span class="badge">${item.plan.reviewMode === 'collaboration' ? 'Collaborative' : 'Plan'}</span><span class="badge">Project: ${escapeHtml(item.plan.projectName)}</span>${issueBadgeHtml(item)}<span class="badge">State: ${escapeHtml(item.plan.lifecycleState)}</span>${item.plan.reviewMode === 'planning' ? `<span class="badge">Status: ${escapeHtml(boardColumnLabel(columns, item.plan.boardColumnKey))}</span><span class="badge ${ready ? 'ready' : 'not-ready'}">${ready ? 'Execution ready' : 'Execution not ready'}</span><span class="badge">Progress: ${escapeHtml(progress)}</span>` : ''}<span class="badge">Pending: ${item.counts.pending}</span>${attentionBadge}</div>`;
+}
+
+function kanbanCardHtml(item: ListedPlan, columns: BoardColumnRecord[]): string {
+  return `<article class="kanban-card" draggable="true" data-plan-id="${escapeHtml(item.plan.id)}" data-column="${escapeHtml(item.plan.boardColumnKey ?? '')}"><div class="plan-card-header"><strong><a href="/p/${escapeHtml(item.plan.id)}">${escapeHtml(displayTitle(item))}</a></strong></div><p class="card-summary">${escapeHtml(summaryForItem(item))}</p>${planBadgesHtml(item, columns)}<a class="card-detail-link" href="/p/${escapeHtml(item.plan.id)}">Details / Open</a></article>`;
+}
+
+function kanbanIndexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCount: number, deferredCount: number, columns: BoardColumnRecord[], projectName?: string): string {
+  const planning = plans.filter(item => item.plan.reviewMode === 'planning');
+  const cardsFor = (column: BoardColumnRecord) => planning.filter(item => item.plan.boardColumnKey === column.key).sort((a, b) => String(b.activityAt).localeCompare(String(a.activityAt)) || displayTitle(a).localeCompare(displayTitle(b))).map(item => kanbanCardHtml(item, columns)).join('\n');
+  const board = columns.map(column => `<section class="kanban-column" data-column-key="${escapeHtml(column.key)}"><h2>${escapeHtml(column.label)} <span>${planning.filter(item => item.plan.boardColumnKey === column.key).length}</span></h2>${cardsFor(column) || '<p class="muted">No plans.</p>'}</section>`).join('\n');
+  const projectSummary = projectName ? `<p class="muted">Project: ${escapeHtml(projectName)} · <a href="/">Show all projects</a></p>` : '';
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Plans · Kanban</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"><style>${baseIndexStyles()}${organizationIndexStyles()}</style></head><body><main class="kanban-page"><div class="topbar">${documentViewSwitcher('kanban')}<div class="plan-actions">${topbarIconAction('/columns', 'Configure columns', '⚙')}</div></div><div class="page-header"><div><h1>Plans · Kanban</h1><p class="muted">Columns are workflow status for planning documents. Execution readiness is a separate badge.</p>${projectSummary}</div></div><div id="organizer-error" class="organizer-error" hidden></div><section class="kanban-board" aria-label="Plan board columns">${board}</section><script>${localTimestampScript()}\n${organizationScript()}</script></main></body></html>`;
+}
+
+function organizationScript(): string {
+  return `let draggedPlanId=null;document.addEventListener('dragstart',event=>{const card=event.target instanceof Element?event.target.closest('[data-plan-id]'):null;if(!card)return;draggedPlanId=card.dataset.planId;event.dataTransfer?.setData('text/plain',draggedPlanId||'');});document.addEventListener('dragover',event=>{const col=event.target instanceof Element?event.target.closest('[data-column-key]'):null;if(!col)return;event.preventDefault();col.classList.add('drop-target');});document.addEventListener('dragleave',event=>{const col=event.target instanceof Element?event.target.closest('[data-column-key]'):null;col?.classList.remove('drop-target');});document.addEventListener('drop',async event=>{const col=event.target instanceof Element?event.target.closest('[data-column-key]'):null;if(!col||!draggedPlanId)return;event.preventDefault();col.classList.remove('drop-target');const card=document.querySelector('[data-plan-id="'+CSS.escape(draggedPlanId)+'"]');const previous=card?.parentElement;col.appendChild(card);const res=await fetch('/api/plans/'+encodeURIComponent(draggedPlanId)+'/column',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({boardColumnKey:col.dataset.columnKey})}).catch(()=>null);if(!res?.ok){previous?.appendChild(card);const box=document.getElementById('organizer-error');if(box){box.hidden=false;box.textContent='Column update failed; the card was restored.';}}});`;
+}
+
+function indexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCount: number, deferredCount: number, columns: BoardColumnRecord[] = [], view: 'kanban' | 'all' = 'kanban', projectName?: string, typeFilter?: 'plan' | 'collaborative'): string {
+  if (view === 'kanban') return kanbanIndexHtml(plans, archivedCount, deferredCount, columns, projectName);
   const repos = [...new Set(plans.map(item => item.plan.repoName))].sort();
   const attentionCount = plans.filter(planNeedsAttention).length;
   const attentionSummary = attentionCount
@@ -286,21 +395,22 @@ function indexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCoun
   const startedPlans = plans.filter(hasStartedPlanProgress);
   const notStartedPlans = plans.filter(item => !hasStartedPlanProgress(item));
   const rows = [repoGroupsHtml(startedPlans), repoGroupsHtml(notStartedPlans)].filter(Boolean).join('\n');
+  const viewActions = view === 'all' ? `${topbarIconAction('/deferred', `Deferred (${deferredCount})`, '⏸')}${topbarIconAction('/archive', `Archived (${archivedCount})`, '🗄')}` : '';
   return `<!doctype html><html><head><meta charset="utf-8"><title>Plan Review Index</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <style>${baseIndexStyles()}</style>
-  </head><body><main><div class="page-header"><div><h1>Plan Review Index</h1><p class="muted">Active plans are shown by default.</p></div><div class="plan-actions"><a class="nav-link primary" href="/deferred">Deferred (${deferredCount}) →</a><a class="nav-link primary" href="/archive">Archived (${archivedCount}) →</a></div></div>${attentionSummary}<div class="toolbar"><input id="q" placeholder="Filter plans" aria-label="Filter plans"><select id="repo" aria-label="Filter by repo"><option value="">All repos</option>${repos.map(repo => `<option value="${escapeHtml(repo)}">${escapeHtml(repo)}</option>`).join('')}</select></div><div id="plans">${rows || '<p>No active plans registered.</p>'}</div><script>
-  const q=document.getElementById('q'), repo=document.getElementById('repo'), attentionFilter=document.querySelector('[data-attention-filter]'), cards=[...document.querySelectorAll('.plan-card')];
+    <style>${baseIndexStyles()}${organizationIndexStyles()}</style>
+  </head><body><main class="documents-page"><div class="topbar">${documentViewSwitcher(view)}<div class="plan-actions">${viewActions}</div></div><div class="page-header"><div><h1>Plan Review Index · All documents</h1><p class="muted">Planning and collaboration documents are shown together. Use Type to narrow the list.</p></div></div>${attentionSummary}<div class="toolbar"><input id="q" placeholder="Filter documents" aria-label="Filter documents"><select id="repo" aria-label="Filter by repo"><option value="">All repos</option>${repos.map(repo => `<option value="${escapeHtml(repo)}">${escapeHtml(repo)}</option>`).join('')}</select><select id="type" aria-label="Filter by type"><option value="">All types</option><option value="plan"${typeFilter === 'plan' ? ' selected' : ''}>Plan</option><option value="collaborative"${typeFilter === 'collaborative' ? ' selected' : ''}>Collaborative</option></select></div><div id="plans">${rows || '<p>No active documents registered.</p>'}</div><script>
+  const q=document.getElementById('q'), repo=document.getElementById('repo'), type=document.getElementById('type'), attentionFilter=document.querySelector('[data-attention-filter]'), cards=[...document.querySelectorAll('.plan-card')];
   let attentionOnly=false;
-  function matchesSearch(card,text){if(!text)return true; const status=card.dataset.prStatus; if(text==='merged')return status==='merged'; if(text==='unmerged')return !!status&&status!=='merged'&&status!=='unlinked'; return card.dataset.search.includes(text);}  function apply(){const text=q.value.toLowerCase().trim(), r=repo.value; cards.forEach(card=>{card.hidden=!!((r&&card.dataset.repo!==r)||(text&&!matchesSearch(card,text))||(attentionOnly&&card.dataset.needsAttention!=='true'));}); document.querySelectorAll('.repo-group').forEach(group=>{group.hidden=!group.querySelector('.plan-card:not([hidden])');});}
+  function matchesSearch(card,text){if(!text)return true; const status=card.dataset.prStatus; if(text==='merged')return status==='merged'; if(text==='unmerged')return !!status&&status!=='merged'&&status!=='unlinked'; return card.dataset.search.includes(text);}  function apply(){const text=q.value.toLowerCase().trim(), r=repo.value, t=type.value; cards.forEach(card=>{card.hidden=!!((r&&card.dataset.repo!==r)||(t&&card.dataset.type!==t)||(text&&!matchesSearch(card,text))||(attentionOnly&&card.dataset.needsAttention!=='true'));}); document.querySelectorAll('.repo-group').forEach(group=>{group.hidden=!group.querySelector('.plan-card:not([hidden])');});}
   ${localTimestampScript()}
   let archiveToast=null, archiveToastTimer=null, archiveToastDismissHandlers=[];
   function stopArchiveToastDismissal(){ if(archiveToastTimer) clearTimeout(archiveToastTimer); archiveToastTimer=null; archiveToastDismissHandlers.forEach(([target,type,handler,options])=>target.removeEventListener(type,handler,options)); archiveToastDismissHandlers=[]; }
   function dismissArchiveToast(){ stopArchiveToastDismissal(); archiveToast?.remove(); archiveToast=null; }
-  function addArchiveToastDismissListeners(){ const dismiss=event=>{ if(archiveToast?.contains(event.target)) return; dismissArchiveToast(); }; const dismissOnEscape=event=>{ if(event.key==='Escape') dismissArchiveToast(); }; [['click',document],['scroll',window],['touchstart',document],['pointerdown',document],['input',q],['change',repo]].forEach(([type,target])=>{ if(!target) return; const options=type==='scroll'?{passive:true}:true; target.addEventListener(type,dismiss,options); archiveToastDismissHandlers.push([target,type,dismiss,options]); }); document.addEventListener('keydown',dismissOnEscape,true); archiveToastDismissHandlers.push([document,'keydown',dismissOnEscape,true]); }
+  function addArchiveToastDismissListeners(){ const dismiss=event=>{ if(archiveToast?.contains(event.target)) return; dismissArchiveToast(); }; const dismissOnEscape=event=>{ if(event.key==='Escape') dismissArchiveToast(); }; [['click',document],['scroll',window],['touchstart',document],['pointerdown',document],['input',q],['change',repo],['change',type]].forEach(([type,target])=>{ if(!target) return; const options=type==='scroll'?{passive:true}:true; target.addEventListener(type,dismiss,options); archiveToastDismissHandlers.push([target,type,dismiss,options]); }); document.addEventListener('keydown',dismissOnEscape,true); archiveToastDismissHandlers.push([document,'keydown',dismissOnEscape,true]); }
   function restartArchiveToastDismissal(){ archiveToastTimer=setTimeout(dismissArchiveToast,10000); setTimeout(addArchiveToastDismissListeners,0); }
   function showArchiveToast(message, planId, options={}){ dismissArchiveToast(); archiveToast=document.createElement('div'); archiveToast.className='archive-toast'+(options.error?' error':''); archiveToast.setAttribute('role','status'); archiveToast.setAttribute('aria-label', options.error ? 'Archive error' : 'Archived plan undo toast'); const text=document.createElement('div'), title=document.createElement('strong'), detail=document.createElement('p'), undo=document.createElement('button'); title.textContent=message; detail.textContent=options.error?'Check the service and try Archive again.':'Undo is available for 10 seconds. It clears when you keep working.'; undo.type='button'; undo.textContent='Undo'; text.append(title,detail); archiveToast.append(text,undo); undo.addEventListener('click',async event=>{ event.stopPropagation(); stopArchiveToastDismissal(); undo.disabled=true; const res=await fetch('/api/plans/'+encodeURIComponent(planId)+'/unarchive',{method:'POST'}).catch(()=>null); if(!res?.ok){ undo.disabled=false; detail.textContent='Undo failed. The plan remains archived; use Archived plans to restore it.'; restartArchiveToastDismissal(); return; } window.location.reload(); }); document.body.appendChild(archiveToast); if(!options.error) undo.focus({preventScroll:true}); restartArchiveToastDismissal(); }
-  q.addEventListener('input',apply); repo.addEventListener('change',apply); attentionFilter?.addEventListener('click',()=>{attentionOnly=!attentionOnly; attentionFilter.setAttribute('aria-pressed', String(attentionOnly)); apply();});
+  q.addEventListener('input',apply); repo.addEventListener('change',apply); type.addEventListener('change',apply); attentionFilter?.addEventListener('click',()=>{attentionOnly=!attentionOnly; attentionFilter.setAttribute('aria-pressed', String(attentionOnly)); apply();}); apply();
   document.addEventListener('click',async event=>{const target=event.target; const button=target instanceof Element ? target.closest('[data-archive-plan]') : null; if(!button) return; button.disabled=true; const planId=button.dataset.archivePlan; const card=button.closest('.plan-card'); const title=card?.querySelector('h2')?.textContent?.trim()||'plan'; const res=await fetch('/api/plans/'+encodeURIComponent(planId)+'/archive',{method:'POST'}).catch(()=>null); if(!res?.ok){button.disabled=false; showArchiveToast('Unable to archive '+title+'.', planId, {error:true}); return;} card?.remove(); const index=cards.findIndex(card=>card.dataset.planId===planId); if(index>=0) cards.splice(index,1); apply(); showArchiveToast('Archived '+title+'.', planId);});
   </script></main></body></html>`;
 }
@@ -332,8 +442,8 @@ function archiveHtml(plans: ReturnType<PlanReviewStore['listPlans']>, deferredCo
   const filteredEmpty = '<p class="empty-state" id="archive-filter-empty" hidden>No archived plans match the current filters. <button type="button" id="clear-filters">Clear filters</button></p>';
   return `<!doctype html><html><head><meta charset="utf-8"><title>Archived Plans</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <style>${baseIndexStyles()}</style>
-  </head><body><main><div class="page-header"><div><h1>Archived Plans</h1><p class="muted">Archived plans stay out of the active index but remain inspectable and restorable.</p></div><div class="plan-actions"><a class="nav-link primary" href="/">← Active index</a><a class="nav-link primary" href="/deferred">Deferred (${deferredCount}) →</a></div></div><div class="toolbar"><input id="q" placeholder="Filter archived plans" aria-label="Filter archived plans"><select id="repo" aria-label="Filter by repo"><option value="">All repos</option>${repos.map(repo => `<option value="${escapeHtml(repo)}">${escapeHtml(repo)}</option>`).join('')}</select></div><p class="muted" id="archive-count">${archivedPlans.length} archived</p><div id="plans">${rows || empty}</div>${rows ? filteredEmpty : ''}<script>
+    <style>${baseIndexStyles()}${organizationIndexStyles()}</style>
+  </head><body><main><div class="topbar">${documentViewSwitcher('all')}<div class="plan-actions">${topbarIconAction('/deferred', `Deferred (${deferredCount})`, '⏸')}</div></div><div class="page-header"><div><h1>Archived Plans</h1><p class="muted">Archived plans stay out of the active index but remain inspectable and restorable.</p></div></div><div class="toolbar"><input id="q" placeholder="Filter archived plans" aria-label="Filter archived plans"><select id="repo" aria-label="Filter by repo"><option value="">All repos</option>${repos.map(repo => `<option value="${escapeHtml(repo)}">${escapeHtml(repo)}</option>`).join('')}</select></div><p class="muted" id="archive-count">${archivedPlans.length} archived</p><div id="plans">${rows || empty}</div>${rows ? filteredEmpty : ''}<script>
   const q=document.getElementById('q'), repo=document.getElementById('repo'), cards=[...document.querySelectorAll('.plan-card')], filteredEmpty=document.getElementById('archive-filter-empty'), count=document.getElementById('archive-count');
   function matchesSearch(card,text){if(!text)return true; const status=card.dataset.prStatus; if(text==='merged')return status==='merged'; if(text==='unmerged')return !!status&&status!=='merged'&&status!=='unlinked'; return card.dataset.search.includes(text);}  function apply(){const text=q.value.toLowerCase().trim(), r=repo.value; let visible=0; cards.forEach(card=>{card.hidden=!!((r&&card.dataset.repo!==r)||(text&&!matchesSearch(card,text))); if(!card.hidden) visible++;}); if(filteredEmpty) filteredEmpty.hidden=visible>0||cards.length===0; if(count) count.textContent=visible+' archived';}
   ${localTimestampScript()}
@@ -367,8 +477,8 @@ function deferredHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedC
   const filteredEmpty = '<p class="empty-state" id="deferred-filter-empty" hidden>No deferred plans match the current filters. <button type="button" id="clear-filters">Clear filters</button></p>';
   return `<!doctype html><html><head><meta charset="utf-8"><title>Deferred Plans</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <style>${baseIndexStyles()}</style>
-  </head><body><main><div class="page-header"><div><h1>Deferred Plans</h1><p class="muted">Deferred plans are paused for later pickup and keep their notes with the plan.</p></div><div class="plan-actions"><a class="nav-link primary" href="/">← Active index</a><a class="nav-link primary" href="/archive">Archived (${archivedCount}) →</a></div></div><div class="toolbar"><input id="q" placeholder="Filter deferred plans" aria-label="Filter deferred plans"><select id="repo" aria-label="Filter by repo"><option value="">All repos</option>${repos.map(repo => `<option value="${escapeHtml(repo)}">${escapeHtml(repo)}</option>`).join('')}</select></div><p class="muted" id="deferred-count">${deferredPlans.length} deferred</p><div id="plans">${rows || empty}</div>${rows ? filteredEmpty : ''}<script>
+    <style>${baseIndexStyles()}${organizationIndexStyles()}</style>
+  </head><body><main><div class="topbar">${documentViewSwitcher('all')}<div class="plan-actions">${topbarIconAction('/archive', `Archived (${archivedCount})`, '🗄')}</div></div><div class="page-header"><div><h1>Deferred Plans</h1><p class="muted">Deferred plans are paused for later pickup and keep their notes with the plan.</p></div></div><div class="toolbar"><input id="q" placeholder="Filter deferred plans" aria-label="Filter deferred plans"><select id="repo" aria-label="Filter by repo"><option value="">All repos</option>${repos.map(repo => `<option value="${escapeHtml(repo)}">${escapeHtml(repo)}</option>`).join('')}</select></div><p class="muted" id="deferred-count">${deferredPlans.length} deferred</p><div id="plans">${rows || empty}</div>${rows ? filteredEmpty : ''}<script>
   const q=document.getElementById('q'), repo=document.getElementById('repo'), cards=[...document.querySelectorAll('.plan-card')], filteredEmpty=document.getElementById('deferred-filter-empty'), count=document.getElementById('deferred-count');
   function apply(){const text=q.value.toLowerCase(), r=repo.value; let visible=0; cards.forEach(card=>{card.hidden=!!((r&&card.dataset.repo!==r)||(text&&!card.dataset.search.includes(text))); if(!card.hidden) visible++;}); if(filteredEmpty) filteredEmpty.hidden=visible>0||cards.length===0; if(count) count.textContent=visible+' deferred';}
   ${localTimestampScript()}
@@ -383,7 +493,7 @@ function deferredHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedC
   </script></main></body></html>`;
 }
 
-function filterPlans(plans: ReturnType<PlanReviewStore['listPlans']>, query: { q?: string; repoKey?: string; status?: string; limit?: string; cursor?: string; currentPlanId?: string }) {
+function filterPlans(plans: ReturnType<PlanReviewStore['listPlans']>, query: { q?: string; repoKey?: string; projectKey?: string; status?: string; reviewMode?: 'planning' | 'collaboration'; boardColumnKey?: string; limit?: string; cursor?: string; currentPlanId?: string }) {
   const parseInteger = (value: string | undefined, name: string, min: number, max?: number): number | undefined => {
     if (value === undefined) return undefined;
     if (!/^\d+$/.test(value)) {
@@ -398,13 +508,16 @@ function filterPlans(plans: ReturnType<PlanReviewStore['listPlans']>, query: { q
   const text = query.q?.toLowerCase();
   const filtered = plans.filter(item => {
     const matchesRepo = !query.repoKey || item.plan.repoKey === query.repoKey;
+    const matchesProject = !query.projectKey || item.plan.projectKey === query.projectKey;
+    const matchesMode = !query.reviewMode || item.plan.reviewMode === query.reviewMode;
+    const matchesColumn = !query.boardColumnKey || item.plan.boardColumnKey === query.boardColumnKey;
     const matchesStatus = !query.status || Number(item.counts[query.status as keyof typeof item.counts] ?? 0) > 0;
     const haystack = planCardSearch(item);
     const trimmedText = text?.trim();
     const prStatus = item.plan.pullRequest?.status ?? item.plan.pullRequest?.state;
     const matchesText = !trimmedText
       || (trimmedText === 'merged' ? prStatus === 'merged' : trimmedText === 'unmerged' ? Boolean(item.plan.pullRequest && prStatus !== 'merged') : haystack.includes(trimmedText));
-    return matchesRepo && matchesStatus && matchesText;
+    return matchesRepo && matchesProject && matchesMode && matchesColumn && matchesStatus && matchesText;
   });
   const offset = parseInteger(query.cursor, 'cursor', 0) ?? 0;
   const limit = parseInteger(query.limit, 'limit', 1, 200);
@@ -427,7 +540,7 @@ function buildPlanRequestBody(planPath: string): string {
   return `Use the plan-reviewer-build skill for this plan.\nPlan path: ${planPath}`;
 }
 
-function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], currentTitle: string, shellTitle: string, plans: ListedPlan[]): string {
+function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], currentTitle: string, shellTitle: string, plans: ListedPlan[], columns: BoardColumnRecord[], projectPlans: ListedPlan[], navigatorFilters = emptyReviewShellNavigatorFilters()): string {
   const escapedPlanId = escapeHtml(plan.id);
   const escapedShellTitle = escapeHtml(shellTitle);
   const escapedCurrentTitle = escapeHtml(currentTitle);
@@ -435,21 +548,29 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
   const documentKind = isCollaboration ? 'document' : 'plan';
   const readyLabel = isCollaboration ? 'Collaboration mode' : plan.publicationMetadata?.executionReady ? 'Execution ready' : 'Execution not ready';
   const encodedTitleFallback = escapeHtml(encodeClientData(reviewShellTitle(planTitleFallback(plan))));
-  const reviewButton = isCollaboration ? '' : '<button id="request-execution-review" type="button">Request execution-ready review</button>';
-  const buildButton = isCollaboration ? '' : '<button id="build-plan" type="button">Build Plan</button>';
+  const reviewButton = isCollaboration ? '' : '<button id="request-execution-review" class="tool-button" type="button" aria-label="Request execution-ready review" title="Request execution-ready review">✓</button>';
+  const buildButton = isCollaboration ? '' : '<button id="build-plan" class="tool-button" type="button" aria-label="Build Plan" title="Build Plan">⚒</button>';
   const planNavToggle = '<button id="desktop-plan-nav-toggle" class="tool-button" type="button" aria-controls="plan-list-nav" aria-expanded="true" aria-label="Plan Navigator" title="Plan Navigator">☰</button>';
   const downloadAction = `<a id="download-raw-plan" class="tool-button download-tool" href="/download/${escapedPlanId}" aria-label="Download raw plan" title="Download raw plan HTML; ZIP includes required assets." download>⬇</a>`;
-  const commentsButton = '<button id="desktop-comments-toggle" class="comments-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Open comments">Comments <span id="desktop-comments-count" class="comments-count" hidden></span></button>';
-  const indexLink = isCollaboration ? '<a class="nav-index" href="/">← Document index</a>' : '<a class="nav-index" href="/">← Plan index</a>';
+  const commentsButton = '<button id="desktop-comments-toggle" class="tool-button comments-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Open comments" title="Comments">💬 <span id="desktop-comments-count" class="comments-count" hidden></span></button>';
+  const indexLink = documentViewSwitcher();
+  const pinControl = isCollaboration ? '' : `<button id="pin-plan" class="pin-button" type="button" data-pin-plan="${escapedPlanId}" aria-pressed="${plan.pinnedAt ? 'true' : 'false'}" aria-label="${plan.pinnedAt ? 'Unpin plan' : 'Pin plan'}" title="${plan.pinnedAt ? 'Unpin plan' : 'Pin plan'}">${plan.pinnedAt ? '★' : '☆'}</button>`;
+  const projectOptions = [...new Map(projectPlans.map(item => [item.plan.projectKey, item.plan.projectName])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  if (!projectOptions.some(([key]) => key === plan.projectKey)) projectOptions.push([plan.projectKey, plan.projectName]);
+  const selected = (actual: string, expected: string) => actual === expected ? ' selected' : '';
+  const projectFilterControl = `<label class="filter-control">Filter: Project <select id="project-filter-control" aria-label="Filter by project"><option value="">All projects</option>${projectOptions.map(([key, name]) => `<option value="${escapeHtml(key)}"${selected(navigatorFilters.project, key)}>${escapeHtml(name)}</option>`).join('')}</select></label>`;
+  const stateFilterControl = `<label class="filter-control">Filter: State <select id="state-filter-control" aria-label="Filter by state"><option value="">All states</option><option value="active"${selected(navigatorFilters.state, 'active')}>Active</option><option value="deferred"${selected(navigatorFilters.state, 'deferred')}>Deferred</option><option value="archived"${selected(navigatorFilters.state, 'archived')}>Archived</option></select></label>`;
+  const statusFilterControl = isCollaboration ? '' : `<label class="filter-control">Filter: Status <select id="status-filter-control" aria-label="Filter by status"><option value="">All statuses</option>${columns.map(column => `<option value="${escapeHtml(column.key)}"${selected(navigatorFilters.status, column.key)}>${escapeHtml(column.label)}</option>`).join('')}</select></label>`;
+  const organizationControls = `${pinControl}${projectFilterControl}${stateFilterControl}${statusFilterControl}`;
   const archiveLabel = isCollaboration ? 'Archive document' : 'Archive plan';
   const restoreLabel = isCollaboration ? 'Restore document' : 'Restore plan';
   const resumeLabel = isCollaboration ? 'Resume document' : 'Resume plan';
-  const deferAction = isCollaboration ? '' : '<button id="defer-plan" type="button">Defer plan</button>';
+  const deferAction = isCollaboration ? '' : '<button id="defer-plan" class="tool-button" type="button" aria-label="Defer plan" title="Defer plan">⏸</button>';
   const navActions = plan.archivedAt
-    ? `${planNavToggle}<a class="nav-index" href="/archive">← Archive</a>${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="archive-status">Archived</span><button id="restore-plan" type="button">${restoreLabel}</button>${commentsButton}`
+    ? `${planNavToggle}${indexLink}${organizationControls}${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="archive-status">Archived</span><button id="restore-plan" class="tool-button" type="button" aria-label="${restoreLabel}" title="${restoreLabel}">↩</button>${commentsButton}`
     : plan.lifecycleState === 'deferred'
-      ? `${planNavToggle}<a class="nav-index" href="/deferred">← Deferred</a>${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="archive-status">Deferred</span><button id="resume-plan" type="button">${resumeLabel}</button><button id="archive-plan" type="button">${archiveLabel}</button><button id="restore-plan" type="button" hidden>${restoreLabel}</button>${commentsButton}`
-      : `${planNavToggle}${indexLink}${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="archive-status" hidden></span>${deferAction}<button id="archive-plan" type="button">${archiveLabel}</button><button id="restore-plan" type="button" hidden>${restoreLabel}</button>${commentsButton}`;
+      ? `${planNavToggle}${indexLink}${organizationControls}${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="archive-status">Deferred</span><button id="resume-plan" class="tool-button" type="button" aria-label="${resumeLabel}" title="${resumeLabel}">▶</button><button id="archive-plan" class="tool-button" type="button" aria-label="${archiveLabel}" title="${archiveLabel}">🗄</button><button id="restore-plan" class="tool-button" type="button" aria-label="${restoreLabel}" title="${restoreLabel}" hidden>↩</button>${commentsButton}`
+      : `${planNavToggle}${indexLink}${organizationControls}${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="archive-status" hidden></span>${deferAction}<button id="archive-plan" class="tool-button" type="button" aria-label="${archiveLabel}" title="${archiveLabel}">🗄</button><button id="restore-plan" class="tool-button" type="button" aria-label="${restoreLabel}" title="${restoreLabel}" hidden>↩</button>${commentsButton}`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapedShellTitle}</title>
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
@@ -457,17 +578,17 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
   </head><body data-plan-id="${escapedPlanId}" data-review-mode="${escapeHtml(plan.reviewMode)}" data-plan-title-fallback="${encodedTitleFallback}">
     <nav id="plan-navbar" aria-label="Plan actions"><div id="plan-navbar-actions">${navActions}</div><div id="current-plan-bar"><strong id="current-plan-title">${escapedCurrentTitle}</strong><span class="ready-pill ${isCollaboration || plan.publicationMetadata?.executionReady ? 'ready' : 'not-ready'}">${escapeHtml(readyLabel)}</span></div></nav>
     <div id="app">
-      ${planNavigatorHtml(plans, plan.id, isCollaboration ? 'documents' : 'plans')}
+      ${planNavigatorHtml(plans, plan.id, isCollaboration ? 'documents' : 'plans', navigatorFilters)}
       <main id="review"><iframe id="plan-frame" sandbox="allow-same-origin allow-popups" src="/render/${escapedPlanId}"></iframe><div id="plan-touch-layer" aria-hidden="true"></div><button id="mobile-comments-toggle" class="comments-toggle" type="button" aria-controls="sidebar" aria-expanded="false">Comments</button><div id="hover-selection-box" class="selection-box hover" hidden></div><div id="active-selection-box" class="selection-box active" hidden></div></main>
       <aside id="sidebar"><h1>Comments</h1><div id="sync-warning" hidden></div><section id="plan-notes-panel"><h2>${isCollaboration ? 'Document notes' : 'Plan notes'}</h2><div id="plan-notes"></div><textarea id="plan-note-body" placeholder="${isCollaboration ? 'Add context for agents' : 'Add a plan note for agents'}"></textarea><button id="add-plan-note" type="button">Add note</button></section><div id="deferred-refresh-notice" hidden>Document updated in the background. Finish or cancel this comment to refresh.</div><div id="comments"></div></aside>
     </div>
     <div id="archive-toast" role="status" aria-label="Archived plan undo toast" hidden><div><strong id="archive-toast-title"></strong><p id="archive-toast-message"></p></div><button id="archive-toast-undo" type="button">Undo</button></div>
     <div id="quick-open-backdrop" hidden>
       <section id="quick-open-dialog" role="dialog" aria-modal="true" aria-labelledby="quick-open-title" aria-describedby="quick-open-status">
-        <div class="quick-open-header"><div><h2 id="quick-open-title">Quick open ${escapeHtml(documentKind)}</h2><p id="quick-open-status">Search active ${escapeHtml(isCollaboration ? 'documents' : 'plans')}.</p></div><span class="quick-open-shortcut">⌘O</span></div>
-        <input id="quick-open-input" type="search" role="combobox" aria-controls="quick-open-results" aria-expanded="true" aria-autocomplete="list" autocomplete="off" spellcheck="false" placeholder="Search active ${escapeHtml(isCollaboration ? 'documents' : 'plans')}">
+        <div class="quick-open-header"><div><h2 id="quick-open-title">Quick open ${escapeHtml(documentKind)}</h2><p id="quick-open-status">Search all registered documents across lifecycle, columns, readiness, pins, and collaboration docs.</p></div><span class="quick-open-shortcut">⌘O</span></div>
+        <input id="quick-open-input" type="search" role="combobox" aria-controls="quick-open-results" aria-expanded="true" aria-autocomplete="list" autocomplete="off" spellcheck="false" placeholder="Search all documents">
         <div id="quick-open-error" hidden>Plans could not be loaded. <button id="quick-open-retry" type="button">Retry</button></div>
-        <div id="quick-open-empty" hidden>No matching active ${escapeHtml(isCollaboration ? 'documents' : 'plans')}.</div>
+        <div id="quick-open-empty" hidden>No matching documents.</div>
         <div id="quick-open-results" role="listbox" aria-label="Quick open results"><div id="quick-open-result-list"></div></div>
       </section>
     </div>
@@ -498,7 +619,7 @@ const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" 
 
 const clientCss = `
 body{--plan-nav-width:260px;--comments-width:48px;margin:0;background:#0b1020;color:#e5e7eb;font-family:system-ui,sans-serif}body.plan-nav-collapsed{--plan-nav-width:0}body.comments-open{--comments-width:320px}
-#plan-navbar{min-height:86px;box-sizing:border-box;display:grid;grid-template-rows:auto auto;gap:8px;padding:10px 16px;border-bottom:1px solid #2b364d;background:#0f172a}#plan-navbar-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}#plan-navbar a{color:#7dd3fc;text-decoration:none;font-weight:700}#plan-navbar a.nav-index{margin-right:auto}#plan-navbar button,#plan-navbar .tool-button{background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px 10px;cursor:pointer}#plan-navbar button:hover,#plan-navbar .tool-button:hover{border-color:#93c5fd}#plan-navbar .tool-button{display:inline-flex;align-items:center;justify-content:center;min-width:38px;min-height:34px;box-sizing:border-box;line-height:1}.download-tool{border-color:rgba(56,189,248,.72)!important;background:#075985!important;color:#ecfeff!important}#current-plan-bar{display:flex;align-items:center;gap:8px;min-width:0;border-top:1px solid rgba(71,85,105,.55);padding-top:8px;color:#cbd5e1}#current-plan-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f8fafc}.archive-status{color:#cbd5e1;border:1px solid #475569;background:#1e293b;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:800}#restore-plan{border-color:#22c55e;color:#bbf7d0}.comments-toggle{display:inline-flex;align-items:center;gap:6px}.comments-count{min-width:18px;height:18px;border-radius:999px;background:#7e22ce;color:white;display:inline-grid;place-items:center;padding:0 5px;font-size:11px;font-weight:900}
+#plan-navbar{min-height:86px;box-sizing:border-box;display:grid;grid-template-rows:auto auto;gap:8px;padding:10px 16px;border-bottom:1px solid #2b364d;background:#0f172a}#plan-navbar-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}#plan-navbar a{color:#7dd3fc;text-decoration:none;font-weight:700}#plan-navbar a.nav-index{margin-right:auto}#plan-navbar .doc-kind-switcher{display:inline-flex;gap:2px;padding:3px;border:1px solid #334155;border-radius:999px;background:#08111f;margin-right:auto}#plan-navbar .doc-kind-seg{border-radius:999px;padding:5px 10px;color:#a7b0c0;font-size:12px;font-weight:850;text-decoration:none;white-space:nowrap}#plan-navbar .doc-kind-seg.active{background:#0ea5e9;color:#e0f2fe}.filter-control{display:inline-flex;align-items:center;gap:5px;border:1px solid #334155;border-radius:8px;background:#111827;padding:3px 6px;color:#cbd5e1;font-size:12px;font-weight:800}.filter-control select{max-width:150px;background:#020617;color:#e5e7eb;border:1px solid #7dd3fc;border-radius:6px;padding:6px 8px}.pin-button{border-color:#facc15!important;color:#fef08a!important}#plan-navbar button,#plan-navbar .tool-button{background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px 10px;cursor:pointer}#plan-navbar button:hover,#plan-navbar .tool-button:hover{border-color:#93c5fd}#plan-navbar .tool-button{display:inline-flex;align-items:center;justify-content:center;min-width:38px;min-height:34px;box-sizing:border-box;line-height:1}.download-tool{border-color:rgba(56,189,248,.72)!important;background:#075985!important;color:#ecfeff!important}#current-plan-bar{display:flex;align-items:center;gap:8px;min-width:0;border-top:1px solid rgba(71,85,105,.55);padding-top:8px;color:#cbd5e1}#current-plan-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f8fafc}.archive-status{color:#cbd5e1;border:1px solid #475569;background:#1e293b;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:800}#restore-plan{border-color:#22c55e;color:#bbf7d0}.comments-toggle{display:inline-flex;align-items:center;gap:6px}.comments-count{min-width:18px;height:18px;border-radius:999px;background:#7e22ce;color:white;display:inline-grid;place-items:center;padding:0 5px;font-size:11px;font-weight:900}
 #app{display:grid;grid-template-columns:var(--plan-nav-width) minmax(0,1fr) var(--comments-width);min-height:calc(100vh - 86px);transition:grid-template-columns .18s ease}
 #plan-list-nav{grid-column:1;border-right:1px solid #2b364d;background:#0b1220;padding:14px;overflow:auto}body.plan-nav-collapsed #plan-list-nav{padding:0;border-right:0;overflow:hidden}body.plan-nav-collapsed #plan-list-nav>*{visibility:hidden}#plan-list-nav h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#a7b0c0;margin:0}.plan-list-header{display:flex;align-items:center;justify-content:space-between;gap:8px}.plan-list-error{border:1px solid #f59e0b;background:rgba(245,158,11,.12);color:#fde68a;border-radius:8px;padding:8px;margin:10px 0;font-size:13px}.plan-list-empty{color:#a7b0c0;font-size:13px}.plan-nav-item{display:grid;gap:5px;padding:10px;margin:8px 0;border:1px solid #253248;border-radius:10px;background:#101827;color:#cbd5e1;text-decoration:none}.plan-nav-item:hover{border-color:#64748b}.plan-nav-item.active{border-color:#38bdf8;background:linear-gradient(135deg,rgba(14,165,233,.18),rgba(16,24,39,.95))}.plan-nav-item.attention{border-color:#f59e0b}.plan-nav-title{font-size:13px;font-weight:850;color:#f8fafc;line-height:1.25}.plan-nav-meta{display:flex;gap:6px;align-items:center;flex-wrap:wrap;color:#a7b0c0;font-size:11px}.plan-nav-submeta{color:#8fa0b8;font-size:11px}.plan-nav-pill{border:1px solid #475569;border-radius:999px;padding:1px 6px;background:#0b1220}.plan-nav-pill.ready{border-color:#22c55e;color:#bbf7d0}.plan-nav-pill.not-ready{border-color:#f59e0b;color:#fde68a}
 #review{grid-column:2;position:relative;min-width:0}#sidebar{grid-column:3;grid-row:1;border-left:1px solid #2b364d;padding:0;background:#111827;overflow:hidden}#sidebar>h1,#sidebar>#sync-warning,#sidebar>#plan-notes-panel,#sidebar>#deferred-refresh-notice,#sidebar>#comments{display:none}body.comments-open #sidebar{padding:16px;overflow:auto}body.comments-open #sidebar>h1,body.comments-open #sidebar>#sync-warning,body.comments-open #sidebar>#plan-notes-panel,body.comments-open #sidebar>#deferred-refresh-notice,body.comments-open #sidebar>#comments{display:block}
@@ -532,6 +653,10 @@ const archivePlanButton = document.getElementById('archive-plan');
 const restorePlanButton = document.getElementById('restore-plan');
 const deferPlanButton = document.getElementById('defer-plan');
 const resumePlanButton = document.getElementById('resume-plan');
+const pinPlanButton = document.getElementById('pin-plan');
+const projectFilterControl = document.getElementById('project-filter-control');
+const stateFilterControl = document.getElementById('state-filter-control');
+const statusFilterControl = document.getElementById('status-filter-control');
 const executionReviewButton = document.getElementById('request-execution-review');
 const buildPlanButton = document.getElementById('build-plan');
 const planNotes = document.getElementById('plan-notes');
@@ -613,6 +738,10 @@ let mermaidInitialized = false;
 let mermaidRenderGeneration = 0;
 let navigatorItems = [];
 let navigatorLoadError = null;
+let quickOpenItems = [];
+let quickOpenLoadPromise = null;
+let quickOpenLoadError = null;
+let navigatorFilterLoadPromise = null;
 let quickOpenMatches = [];
 let quickOpenActiveIndex = 0;
 let quickOpenPreviousFocus = null;
@@ -770,10 +899,8 @@ function setArchivedShellState(archived){
   if (resumePlanButton) resumePlanButton.hidden = true;
   if (restorePlanButton) { restorePlanButton.hidden = !archived; restorePlanButton.disabled = false; }
 }
-function reconcileActiveNavigation(archived){
-  if (archived) navigatorItems = navigatorItems.filter(item => String(item?.plan?.id || '') !== String(planId));
-  renderPlanNavigatorItems(navigatorItems, document.querySelector('#plan-list-nav')?.getAttribute('aria-label') === 'Active documents' ? 'documents' : 'plans');
-  if (quickOpenVisible()) renderQuickOpenResults();
+async function reconcileActiveNavigation(){
+  await loadPlanNavigator();
 }
 function restartArchiveToastDismissal(delay = 10000){
   archiveToastTimer = setTimeout(dismissArchiveToast, delay);
@@ -813,7 +940,7 @@ archivePlanButton?.addEventListener('click', async () => {
     return;
   }
   setArchivedShellState(true);
-  reconcileActiveNavigation(true);
+  await reconcileActiveNavigation();
   showArchiveToast('Archived this '+documentKind+'.');
 });
 restorePlanButton?.addEventListener('click', async () => {
@@ -848,6 +975,105 @@ resumePlanButton?.addEventListener('click', async () => {
     return;
   }
   window.location.href = '/';
+});
+async function saveOrganizerField(path, body, control){
+  if (control) control.disabled = true;
+  const res = await fetch('/api/plans/'+encodeURIComponent(planId)+path, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).catch(() => null);
+  if (!res?.ok) {
+    if (control) control.disabled = false;
+    alert('Unable to update '+documentKind+' organization.');
+    return null;
+  }
+  const json = await res.json().catch(() => null);
+  if (control) control.disabled = false;
+  void loadPlanNavigator();
+  return json;
+}
+pinPlanButton?.addEventListener('click', async () => {
+  const pinned = pinPlanButton.getAttribute('aria-pressed') !== 'true';
+  const json = await saveOrganizerField('/pin', { pinned }, pinPlanButton);
+  if (!json?.ok) return;
+  pinPlanButton.setAttribute('aria-pressed', String(pinned));
+  pinPlanButton.setAttribute('aria-label', pinned ? 'Unpin plan' : 'Pin plan');
+  pinPlanButton.setAttribute('title', pinned ? 'Unpin plan' : 'Pin plan');
+  pinPlanButton.textContent = pinned ? '★' : '☆';
+});
+const navigatorFilterStorageKey = 'plan-reviewer.navigatorFilters.v1';
+function urlNavigatorFilters(){
+  const params = new URLSearchParams(window.location.search);
+  return { project: params.get('projectKey') || '', state: params.get('lifecycle') || '', status: params.get('boardColumnKey') || '' };
+}
+function navigatorFilterSearch(filters = currentNavigatorFilters()){
+  const params = new URLSearchParams();
+  if (filters.project) params.set('projectKey', filters.project);
+  if (filters.state) params.set('lifecycle', filters.state);
+  if (filters.status) params.set('boardColumnKey', filters.status);
+  const query = params.toString();
+  return query ? '?' + query : '';
+}
+function planNavigatorHref(id){ return '/p/' + encodeURIComponent(id) + navigatorFilterSearch(); }
+function syncNavigatorFilterUrl(){
+  const url = new URL(window.location.href);
+  url.search = navigatorFilterSearch().slice(1);
+  window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+}
+function readStoredNavigatorFilters(){
+  const urlFilters = urlNavigatorFilters();
+  if (urlFilters.project || urlFilters.state || urlFilters.status) return urlFilters;
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem(navigatorFilterStorageKey) || '{}');
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch { return {}; }
+}
+function selectHasValue(control, value){ return Boolean(control && [...control.options].some(option => option.value === value)); }
+function restoreNavigatorFilters(){
+  const stored = readStoredNavigatorFilters();
+  if (selectHasValue(projectFilterControl, stored.project)) projectFilterControl.value = stored.project;
+  if (selectHasValue(stateFilterControl, stored.state)) stateFilterControl.value = stored.state;
+  if (selectHasValue(statusFilterControl, stored.status)) statusFilterControl.value = stored.status;
+}
+function currentNavigatorFilters(){
+  const stored = readStoredNavigatorFilters();
+  return {
+    project: projectFilterControl ? projectFilterControl.value : String(stored.project || ''),
+    state: stateFilterControl ? stateFilterControl.value : String(stored.state || ''),
+    status: statusFilterControl ? statusFilterControl.value : String(stored.status || '')
+  };
+}
+function saveNavigatorFilters(){
+  const filters = currentNavigatorFilters();
+  try {
+    if (filters.project || filters.state || filters.status) sessionStorage.setItem(navigatorFilterStorageKey, JSON.stringify(filters));
+    else sessionStorage.removeItem(navigatorFilterStorageKey);
+  } catch {}
+}
+async function loadNavigatorFilterSource(){
+  if (!navigatorFiltersActive()) {
+    renderPlanNavigatorItems(navigatorItems, document.querySelector('#plan-list-nav')?.getAttribute('aria-label') === 'Active documents' ? 'documents' : 'plans');
+    return;
+  }
+  if (!navigatorFilterLoadPromise) navigatorFilterLoadPromise = loadQuickOpenItems({ force: true }).finally(() => { navigatorFilterLoadPromise = null; });
+  await navigatorFilterLoadPromise;
+  renderPlanNavigatorItems(quickOpenItems, 'documents');
+}
+function applyNavigatorFilters(){
+  saveNavigatorFilters();
+  syncNavigatorFilterUrl();
+  void loadNavigatorFilterSource().catch(error => {
+    navigatorLoadError = error;
+    if (planListError) { planListError.hidden = false; planListError.textContent = 'Unable to filter documents. The current plan remains reviewable.'; }
+  });
+}
+restoreNavigatorFilters();
+projectFilterControl?.addEventListener('change', applyNavigatorFilters);
+stateFilterControl?.addEventListener('change', applyNavigatorFilters);
+statusFilterControl?.addEventListener('change', applyNavigatorFilters);
+planListNav?.addEventListener('click', event => {
+  const link = event.target instanceof Element ? event.target.closest('[data-plan-nav-item]') : null;
+  if (!link) return;
+  saveNavigatorFilters();
+  const id = link.getAttribute('data-plan-id');
+  if (id) link.setAttribute('href', planNavigatorHref(id));
 });
 addPlanNoteButton?.addEventListener('click', async () => {
   const body = planNoteBody?.value.trim();
@@ -1089,6 +1315,7 @@ function handlePlanReviewEvent(event){
     return;
   }
   if (event.type === 'plan.sync.failed'
+    || event.type === 'plan.columns.changed'
     || event.type === 'plan.note.created'
     || event.type === 'plan.deferred'
     || event.type === 'plan.resumed'
@@ -1099,7 +1326,11 @@ function handlePlanReviewEvent(event){
     || event.type === 'comment.released'
     || event.type === 'comment.deleted'
     || event.type === 'comment.thread_entry.created'
-    || event.type === 'plan.mode.changed') {
+    || event.type === 'plan.mode.changed'
+    || event.type === 'plan.lifecycle.changed'
+    || event.type === 'plan.column.changed'
+    || event.type === 'plan.pin.changed'
+    || event.type === 'plan.project.changed') {
     scheduleMetaLoad();
   }
 }
@@ -1163,18 +1394,36 @@ function planItemAttention(item){ return item?.plan?.watchMode === 'filesystem' 
 function planItemRatio(item){ return item?.progress?.totalPhases > 0 ? item.progress.completedPhases / item.progress.totalPhases : 0; }
 function planItemRank(item){ if (planItemAttention(item)) return 3; if (planItemComplete(item)) return 0; if (item?.plan?.publicationMetadata?.executionReady) return 1; return 2; }
 function planItemTitle(item){ return String(item?.displayTitle || item?.plan?.repoName + ' / ' + item?.plan?.slug); }
-function sortPlanNavItems(items){ return [...items].sort((a,b)=>planItemRank(a)-planItemRank(b)||planItemRatio(b)-planItemRatio(a)||String(b.activityAt||'').localeCompare(String(a.activityAt||''))||planItemTitle(a).localeCompare(planItemTitle(b))||String(a?.plan?.id||'').localeCompare(String(b?.plan?.id||''))); }
-function planItemStatus(item){ if (planItemAttention(item)) return 'Needs attention'; if (planItemComplete(item)) return 'Complete'; if (item?.plan?.reviewMode === 'collaboration') return 'Collaboration'; if (item?.plan?.publicationMetadata?.executionReady) return 'Execution ready'; return 'Execution not ready'; }
+function sortPlanNavItems(items){ return [...items].sort((a,b)=>(Boolean(a?.plan?.pinnedAt)===Boolean(b?.plan?.pinnedAt)?0:a?.plan?.pinnedAt?-1:1)||planItemRank(a)-planItemRank(b)||planItemRatio(b)-planItemRatio(a)||String(b.activityAt||'').localeCompare(String(a.activityAt||''))||planItemTitle(a).localeCompare(planItemTitle(b))||String(a?.plan?.id||'').localeCompare(String(b?.plan?.id||''))); }
+function planItemStatus(item){ if (planItemAttention(item)) return 'Needs attention'; if (item?.plan?.reviewMode === 'collaboration') return 'Collaboration'; if (item?.plan?.lifecycleState === 'archived') return 'Archived · '+(item?.plan?.boardColumnKey || 'No column'); if (item?.plan?.lifecycleState === 'deferred') return 'Deferred · '+(item?.plan?.boardColumnKey || 'No column'); if (item?.plan?.boardColumnKey) return item.plan.boardColumnKey; if (planItemComplete(item)) return 'Complete'; if (item?.plan?.publicationMetadata?.executionReady) return 'Execution ready'; return 'Execution not ready'; }
 function planItemProgress(item){ return item?.progress?.totalPhases ? item.progress.completedPhases + '/' + item.progress.totalPhases : 'No phases'; }
+function navigatorFiltersActive(){ return Boolean(projectFilterControl?.value || stateFilterControl?.value || statusFilterControl?.value); }
+function itemMatchesNavigatorFilters(item){
+  const project = projectFilterControl?.value || '';
+  const state = stateFilterControl?.value || '';
+  const status = statusFilterControl?.value || '';
+  if (project && item?.plan?.projectKey !== project) return false;
+  if (state && item?.plan?.lifecycleState !== state) return false;
+  if (status && item?.plan?.boardColumnKey !== status) return false;
+  return true;
+}
+function filteredNavigatorItems(items){
+  if (!navigatorFiltersActive()) return items;
+  const filtered = items.filter(itemMatchesNavigatorFilters);
+  const current = items.find(item => String(item?.plan?.id || '') === planId);
+  return current && !filtered.some(item => String(item?.plan?.id || '') === planId) ? [current, ...filtered] : filtered;
+}
 function renderPlanNavigatorItems(items, label = 'plans'){
   if (!planListItems) return;
-  const html = sortPlanNavItems(items).map(item => {
+  const visibleItems = filteredNavigatorItems(items);
+  const html = sortPlanNavItems(visibleItems).map(item => {
     const id = String(item?.plan?.id || '');
     const active = id === planId;
     const status = planItemStatus(item);
-    return '<a class="plan-nav-item'+(active ? ' active' : '')+(planItemAttention(item) ? ' attention' : '')+'" href="/p/'+encodeURIComponent(id)+'" data-plan-nav-item data-plan-id="'+escapeHtml(id)+'" aria-current="'+(active ? 'page' : 'false')+'"><span class="plan-nav-title">'+escapeHtml(planItemTitle(item))+'</span><span class="plan-nav-meta"><span class="plan-nav-pill '+(item?.plan?.reviewMode === 'collaboration' || item?.plan?.publicationMetadata?.executionReady ? 'ready' : 'not-ready')+'">'+escapeHtml(status)+'</span><span>'+escapeHtml(planItemProgress(item))+'</span></span><span class="plan-nav-submeta">pending '+Number(item?.counts?.pending || 0)+' · updated '+escapeHtml(String(item?.modifiedAt || ''))+'</span></a>';
+    return '<a class="plan-nav-item'+(active ? ' active' : '')+(planItemAttention(item) ? ' attention' : '')+'" href="'+escapeHtml(planNavigatorHref(id))+'" data-plan-nav-item data-plan-id="'+escapeHtml(id)+'" aria-current="'+(active ? 'page' : 'false')+'"><span class="plan-nav-title">'+escapeHtml(planItemTitle(item))+'</span><span class="plan-nav-meta"><span class="plan-nav-pill '+(item?.plan?.reviewMode === 'collaboration' || item?.plan?.publicationMetadata?.executionReady ? 'ready' : 'not-ready')+'">'+escapeHtml(status)+'</span><span>'+escapeHtml(planItemProgress(item))+'</span></span><span class="plan-nav-submeta">pending '+Number(item?.counts?.pending || 0)+' · updated '+escapeHtml(String(item?.modifiedAt || ''))+'</span></a>';
   }).join('');
-  planListItems.innerHTML = html || '<p class="plan-list-empty">No active '+(label === 'documents' ? 'documents' : 'plans')+'.</p>';
+  const filtered = navigatorFiltersActive();
+  planListItems.innerHTML = html || '<p class="plan-list-empty">No '+(filtered ? 'matching ' : 'active ')+(label === 'documents' ? 'documents' : 'plans')+'.</p>';
 }
 function quickOpenVisible(){ return Boolean(quickOpenBackdrop && !quickOpenBackdrop.hidden); }
 function normalizeQuickOpenText(value){ return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
@@ -1210,19 +1459,20 @@ function quickOpenFuzzyScore(item, query){
   const status = planItemStatus(item);
   const progress = planItemProgress(item);
   const commentsText = 'pending '+Number(item?.counts?.pending || 0)+' claimed '+Number(item?.counts?.claimed || 0)+' acknowledged '+Number(item?.counts?.acknowledged || 0)+' resolved '+Number(item?.counts?.resolved || 0);
-  const metadataText = [item?.plan?.repoName, item?.plan?.slug, item?.plan?.repoKey, item?.plan?.reviewMode, metadata.linearIssue, item?.plan?.linearIssueKey, status, progress, commentsText, item?.latestNote?.body].join(' ');
+  const metadataText = [item?.plan?.repoName, item?.plan?.slug, item?.plan?.repoKey, item?.plan?.reviewMode, item?.plan?.projectKey, item?.plan?.projectName, item?.plan?.lifecycleState, item?.plan?.boardColumnKey, item?.plan?.pinnedAt ? 'pinned' : '', metadata.executionReady ? 'execution ready' : 'execution not ready', metadata.linearIssue, item?.plan?.linearIssueKey, status, progress, commentsText, item?.latestNote?.body].join(' ');
   const pathText = [item?.plan?.planPath, item?.plan?.sourcePath, item?.plan?.rootPath, metadata.worktreePath, metadata.branch].join(' ');
   const score = Math.max(quickOpenFieldScore(title, query, 3000), quickOpenFieldScore(metadataText, query, 1500), quickOpenFieldScore(pathText, query, 250));
   if (!score) return 0;
   return score + (item?.plan?.id === planId ? -10 : 0);
 }
 function quickOpenMeta(item){
-  return [item?.plan?.repoName, item?.plan?.slug, planItemStatus(item), planItemProgress(item), 'pending '+Number(item?.counts?.pending || 0), item?.modifiedAt ? 'updated '+new Date(item.modifiedAt).toLocaleDateString() : ''].filter(Boolean).join(' · ');
+  return [item?.plan?.reviewMode, item?.plan?.projectName, item?.plan?.lifecycleState, item?.plan?.boardColumnKey, item?.plan?.publicationMetadata?.executionReady ? 'execution ready' : '', item?.plan?.pinnedAt ? 'pinned' : '', planItemProgress(item), 'pending '+Number(item?.counts?.pending || 0), item?.modifiedAt ? 'updated '+new Date(item.modifiedAt).toLocaleDateString() : ''].filter(Boolean).join(' · ');
 }
 function quickOpenResultsFor(query){
+  const items = quickOpenItems.length ? quickOpenItems : navigatorItems;
   const sorted = query.trim()
-    ? navigatorItems.map(item => ({ item, score: quickOpenFuzzyScore(item, query) })).filter(match => match.score > 0).sort((a,b)=>b.score-a.score||planItemTitle(a.item).localeCompare(planItemTitle(b.item))||String(a.item?.plan?.id||'').localeCompare(String(b.item?.plan?.id||''))).map(match => match.item)
-    : sortPlanNavItems(navigatorItems);
+    ? items.map(item => ({ item, score: quickOpenFuzzyScore(item, query) })).filter(match => match.score > 0).sort((a,b)=>b.score-a.score||planItemTitle(a.item).localeCompare(planItemTitle(b.item))||String(a.item?.plan?.id||'').localeCompare(String(b.item?.plan?.id||''))).map(match => match.item)
+    : sortPlanNavItems(items);
   return sorted.slice(0, 15);
 }
 function setQuickOpenActiveIndex(index){
@@ -1244,14 +1494,14 @@ function setQuickOpenActiveIndex(index){
 function renderQuickOpenResults(){
   if (!quickOpenResultList) return;
   const query = quickOpenInput?.value || '';
-  quickOpenMatches = navigatorLoadError ? [] : quickOpenResultsFor(query);
-  const hasError = Boolean(navigatorLoadError);
+  quickOpenMatches = quickOpenLoadError ? [] : quickOpenResultsFor(query);
+  const hasError = Boolean(quickOpenLoadError);
   if (quickOpenError) { quickOpenError.hidden = !hasError; quickOpenError.firstChild.textContent = hasError ? 'Plans could not be loaded. ' : ''; }
   if (quickOpenEmpty) quickOpenEmpty.hidden = hasError || quickOpenMatches.length > 0;
   quickOpenResultList.innerHTML = quickOpenMatches.map((item, index) => '<div id="quick-open-result-'+index+'" class="quick-open-result" role="option" tabindex="-1" data-quick-open-result data-plan-id="'+escapeHtml(String(item?.plan?.id || ''))+'"><span class="quick-open-result-title">'+escapeHtml(planItemTitle(item))+'</span><span class="quick-open-result-meta">'+escapeHtml(quickOpenMeta(item))+'</span></div>').join('');
   if (quickOpenStatus) {
-    if (hasError) quickOpenStatus.textContent = 'Active '+documentKind+'s could not be loaded. Retry when the service is reachable.';
-    else quickOpenStatus.textContent = quickOpenMatches.length ? quickOpenMatches.length+' matching active '+documentKind+(quickOpenMatches.length === 1 ? '' : 's')+'.' : 'No matching active '+documentKind+'s.';
+    if (hasError) quickOpenStatus.textContent = 'Documents could not be loaded. Retry when the service is reachable.';
+    else quickOpenStatus.textContent = quickOpenMatches.length ? quickOpenMatches.length+' matching document'+(quickOpenMatches.length === 1 ? '' : 's')+'.' : 'No matching documents.';
   }
   setQuickOpenActiveIndex(0);
 }
@@ -1269,6 +1519,7 @@ function openQuickOpen(){
   quickOpenInput.value = '';
   renderQuickOpenResults();
   quickOpenInput.focus({ preventScroll: true });
+  void loadQuickOpenItems().then(() => { if (quickOpenVisible()) renderQuickOpenResults(); }).catch(error => { quickOpenLoadError = error; if (quickOpenVisible()) renderQuickOpenResults(); });
   if (!navigatorItems.length && !navigatorLoadError) void loadPlanNavigator().then(() => { if (quickOpenVisible()) renderQuickOpenResults(); });
 }
 function closeQuickOpen(){
@@ -1340,6 +1591,26 @@ function handleQuickOpenKeydown(event){
     selectQuickOpenResult();
   }
 }
+async function loadQuickOpenItems(options = {}){
+  if (quickOpenLoadPromise) return quickOpenLoadPromise;
+  if (!options.force && quickOpenItems.length) return Promise.resolve();
+  if (options.force) quickOpenItems = [];
+  quickOpenLoadPromise = (async () => {
+    const items = [];
+    let cursor = '';
+    do {
+      const url = '/api/plans?includeArchived=true&includeDeferred=true&limit=200' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : '');
+      const res = await fetch(url, { cache: 'no-store' });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error?.message || 'Unable to load quick-open documents');
+      items.push(...(Array.isArray(json.data.plans) ? json.data.plans : []));
+      cursor = json.data.nextCursor || '';
+    } while (cursor);
+    quickOpenItems = items;
+    quickOpenLoadError = null;
+  })().finally(() => { quickOpenLoadPromise = null; });
+  return quickOpenLoadPromise;
+}
 async function loadPlanNavigator(){
   if (!planListItems) return;
   try {
@@ -1348,7 +1619,8 @@ async function loadPlanNavigator(){
     if (!json.ok) throw new Error(json.error?.message || 'Unable to load plans');
     navigatorItems = Array.isArray(json.data.plans) ? json.data.plans : [];
     navigatorLoadError = null;
-    renderPlanNavigatorItems(navigatorItems, document.querySelector('#plan-list-nav')?.getAttribute('aria-label') === 'Active documents' ? 'documents' : 'plans');
+    if (navigatorFiltersActive()) await loadNavigatorFilterSource();
+    else renderPlanNavigatorItems(navigatorItems, document.querySelector('#plan-list-nav')?.getAttribute('aria-label') === 'Active documents' ? 'documents' : 'plans');
     if (planListError) planListError.hidden = true;
     if (planListRetry) planListRetry.hidden = true;
     if (quickOpenVisible()) renderQuickOpenResults();
@@ -1360,7 +1632,11 @@ async function loadPlanNavigator(){
   }
 }
 planListRetry?.addEventListener('click', () => { void loadPlanNavigator(); });
-quickOpenRetry?.addEventListener('click', () => { void loadPlanNavigator(); });
+quickOpenRetry?.addEventListener('click', () => {
+  quickOpenItems = [];
+  quickOpenLoadError = null;
+  void Promise.all([loadQuickOpenItems(), loadPlanNavigator()]).then(renderQuickOpenResults).catch(error => { quickOpenLoadError = error; renderQuickOpenResults(); void loadPlanNavigator(); });
+});
 quickOpenInput?.addEventListener('input', renderQuickOpenResults);
 quickOpenResultList?.addEventListener('mousemove', event => {
   const row = event.target instanceof Element ? event.target.closest('[data-quick-open-result]') : null;
@@ -2775,12 +3051,15 @@ export function createApp(options: AppOptions): FastifyInstance {
   });
 
   app.get('/', async (request, reply) => {
-    const query = request.query as { q?: string; repoKey?: string; status?: string };
+    const query = request.query as { q?: string; repoKey?: string; projectKey?: string; status?: string; view?: 'kanban' | 'all' | 'collab'; type?: 'plan' | 'collaborative' };
     const allPlans = store.listPlans({ includeArchived: true, includeDeferred: true });
     const activePlans = allPlans.filter(item => item.plan.lifecycleState === 'active');
     const archivedCount = allPlans.filter(item => item.plan.lifecycleState === 'archived').length;
     const deferredCount = allPlans.filter(item => item.plan.lifecycleState === 'deferred').length;
-    reply.type('text/html').send(indexHtml(filterPlans(activePlans, query).plans, archivedCount, deferredCount));
+    const view = query.view === 'all' || query.view === 'collab' ? 'all' : 'kanban';
+    const filtered = filterPlans(activePlans, query).plans;
+    const projectName = query.projectKey ? allPlans.find(item => item.plan.projectKey === query.projectKey)?.plan.projectName : undefined;
+    reply.type('text/html').send(indexHtml(filtered, archivedCount, deferredCount, store.listBoardColumns(), view, projectName, query.view === 'collab' ? 'collaborative' : query.type));
   });
 
   app.get('/deferred', async (_request, reply) => {
@@ -2793,9 +3072,42 @@ export function createApp(options: AppOptions): FastifyInstance {
     reply.type('text/html').send(archiveHtml(allPlans, allPlans.filter(item => item.plan.lifecycleState === 'deferred').length));
   });
 
+  app.get('/columns', async (_request, reply) => {
+    const columns = store.listBoardColumns({ includeHidden: true });
+    const planningPlans = store.listPlans().filter(item => item.plan.reviewMode === 'planning');
+    const planCounts = new Map<string, number>();
+    for (const item of planningPlans) planCounts.set(item.plan.boardColumnKey ?? '', (planCounts.get(item.plan.boardColumnKey ?? '') ?? 0) + 1);
+    const rows = columns.map(column => {
+      const count = planCounts.get(column.key) ?? 0;
+      const hideDisabled = !column.hiddenAt && count > 0;
+      const title = hideDisabled ? `Move ${count} plan${count === 1 ? '' : 's'} out before hiding this column.` : 'Hide this column from the Kanban board.';
+      return `<tr data-column-row data-key="${escapeHtml(column.key)}" data-position="${column.position}" data-is-done="${column.isDone ? 'true' : 'false'}"><td><code>${escapeHtml(column.key)}</code></td><td><input data-column-label aria-label="Label for ${escapeHtml(column.key)}" value="${escapeHtml(column.label)}"></td><td>${column.position}</td><td>${column.isDone ? 'Done' : 'Workflow'}</td><td>${count}</td><td><label title="${escapeHtml(title)}"><input type="checkbox" data-column-hidden ${column.hiddenAt ? 'checked' : ''} ${hideDisabled ? 'disabled' : ''}> Hide</label>${hideDisabled ? ` <span class="muted">Move ${count} plan${count === 1 ? '' : 's'} first</span>` : ''}</td></tr>`;
+    }).join('');
+    reply.type('text/html').send(`<!doctype html><html><head><meta charset="utf-8"><title>Board columns</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"><style>${baseIndexStyles()}${organizationIndexStyles()}</style></head><body><main><div class="topbar">${documentViewSwitcher('kanban')}<div class="plan-actions">${topbarIconAction('/', 'Back to Kanban', '←')}</div></div><h1>Board columns</h1><p class="muted">Column labels, order, done behavior, and visibility are persisted in the local database. Empty columns can be hidden from the Kanban board; occupied columns must be emptied before hiding so plans do not disappear.</p><div id="organizer-error" class="organizer-error" hidden></div><table class="columns-table"><thead><tr><th>Stable key</th><th>Label</th><th>Position</th><th>Behavior</th><th>Plans</th><th>Visibility</th></tr></thead><tbody>${rows}</tbody></table><div class="columns-save"><button id="save-columns" class="nav-link primary" type="button">Save visibility</button><span id="columns-message" class="columns-message"></span></div><script>
+      const message=document.getElementById('columns-message'), error=document.getElementById('organizer-error');
+      document.getElementById('save-columns')?.addEventListener('click', async event => {
+        const button=event.currentTarget;
+        button.disabled=true;
+        if(error) error.hidden=true;
+        if(message) message.textContent='Saving…';
+        const columns=[...document.querySelectorAll('[data-column-row]')].map(row=>({key:row.dataset.key,label:row.querySelector('[data-column-label]')?.value||row.dataset.key,position:Number(row.dataset.position),isDone:row.dataset.isDone==='true',hidden:Boolean(row.querySelector('[data-column-hidden]')?.checked)}));
+        const res=await fetch('/api/board-columns',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({columns})}).catch(()=>null);
+        if(!res?.ok){
+          button.disabled=false;
+          const json=await res?.json().catch(()=>null);
+          if(error){error.hidden=false;error.textContent=json?.error?.nextAction||json?.error?.message||'Column visibility could not be saved.';}
+          if(message) message.textContent='';
+          return;
+        }
+        if(message) message.textContent='Saved. Returning to Kanban…';
+        window.location.href='/';
+      });
+    </script></main></body></html>`);
+  });
+
   app.get('/api/plans', async (request, reply) => {
     try {
-      const query = request.query as { q?: string; repoKey?: string; status?: string; lifecycle?: 'active' | 'deferred' | 'archived'; limit?: string; cursor?: string; currentPlanId?: string; includeArchived?: string; includeDeferred?: string };
+      const query = request.query as { q?: string; repoKey?: string; projectKey?: string; status?: string; reviewMode?: 'planning' | 'collaboration'; boardColumnKey?: string; lifecycle?: 'active' | 'deferred' | 'archived'; limit?: string; cursor?: string; currentPlanId?: string; includeArchived?: string; includeDeferred?: string };
       const { plans, nextCursor } = filterPlans(store.listPlans({ includeArchived: query.includeArchived === 'true', includeDeferred: query.includeDeferred === 'true', lifecycleState: query.lifecycle }), query);
       return ok({ plans, nextCursor });
     } catch (error) {
@@ -2813,7 +3125,7 @@ export function createApp(options: AppOptions): FastifyInstance {
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) {
         throw new PlanReviewError('validation_failed', 'limit must be between 1 and 200', 400, { limit: query.limit });
       }
-      return ok({ plans: store.listPlans({ limit, currentPlanId: query.currentPlanId }) });
+      return ok({ plans: planNavigatorItemsFor(store, { limit, currentPlanId: query.currentPlanId }) });
     } catch (error) {
       sendError(reply, error);
     }
@@ -2861,7 +3173,10 @@ export function createApp(options: AppOptions): FastifyInstance {
       try {
         title = renderedHtmlTitle(store.getRenderedHtml(plan.id)) ?? title;
       } catch {}
-      reply.header('Cache-Control', 'no-store').type('text/html').send(reviewShell(plan, title, reviewShellTitle(title), store.listPlans({ limit: 200, currentPlanId: plan.id })));
+      const columns = store.listBoardColumns();
+      const projectPlans = store.listPlans({ includeArchived: true, includeDeferred: true });
+      const navigatorFilters = normalizeReviewShellNavigatorFilters(request.query as { projectKey?: string; lifecycle?: string; boardColumnKey?: string }, plan, columns, projectPlans);
+      reply.header('Cache-Control', 'no-store').type('text/html').send(reviewShell(plan, title, reviewShellTitle(title), filteredReviewShellNavigatorItems(store, plan.id, navigatorFilters), columns, projectPlans, navigatorFilters));
     } catch (error) {
       sendError(reply, error);
     }
@@ -2932,6 +3247,86 @@ export function createApp(options: AppOptions): FastifyInstance {
       const { plan } = store.getPlan(planId);
       const input = changePlanModeSchema.parse(request.body);
       const result = store.changePlanMode(plan.id, input.reviewMode);
+      bus.emitEvent(result.event);
+      return ok({ plan: result.plan, changed: result.changed });
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.get('/api/board-columns', async (_request, reply) => {
+    try {
+      return ok({ columns: store.listBoardColumns() });
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.put('/api/board-columns', async (request, reply) => {
+    try {
+      const result = store.saveBoardColumns(saveBoardColumnsSchema.parse(request.body));
+      for (const event of result.events) bus.emitEvent(event);
+      return ok(result);
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.put('/api/plans/:planId/lifecycle', async (request, reply) => {
+    try {
+      const { planId } = request.params as { planId: string };
+      const input = setPlanLifecycleSchema.parse(request.body);
+      if (input.lifecycleState === 'deferred') {
+        const result = store.deferPlan(planId, { note: input.note!, createdBy: input.createdBy, clientMutationId: input.clientMutationId });
+        for (const event of result.events) bus.emitEvent(event);
+        await sourceSync.unregister(result.plan.id);
+        return ok({ plan: result.plan, note: result.note, changed: true });
+      }
+      const result = store.setPlanLifecycleState(planId, input.lifecycleState);
+      bus.emitEvent(result.event);
+      if (result.changed) {
+        if (result.plan.lifecycleState === 'active') {
+          await sourceSync.register(result.plan.id);
+          await sourceSync.syncNow(result.plan.id, 'manual');
+        } else {
+          await sourceSync.unregister(result.plan.id);
+        }
+      }
+      return ok({ plan: result.plan, changed: result.changed });
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.put('/api/plans/:planId/column', async (request, reply) => {
+    try {
+      const { planId } = request.params as { planId: string };
+      const input = setPlanBoardColumnSchema.parse(request.body);
+      const result = store.setPlanBoardColumn(planId, input.boardColumnKey);
+      bus.emitEvent(result.event);
+      return ok({ plan: result.plan, column: result.column, changed: result.changed });
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.put('/api/plans/:planId/pin', async (request, reply) => {
+    try {
+      const { planId } = request.params as { planId: string };
+      const input = setPlanPinnedSchema.parse(request.body);
+      const result = store.setPlanPinned(planId, input.pinned);
+      bus.emitEvent(result.event);
+      return ok({ plan: result.plan, changed: result.changed });
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
+  app.put('/api/plans/:planId/project', async (request, reply) => {
+    try {
+      const { planId } = request.params as { planId: string };
+      const input = setPlanProjectSchema.parse(request.body);
+      const result = store.setPlanProject(planId, input);
       bus.emitEvent(result.event);
       return ok({ plan: result.plan, changed: result.changed });
     } catch (error) {

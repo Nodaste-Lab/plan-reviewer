@@ -5,6 +5,7 @@ export const anchorTypeSchema = z.enum(['dom', 'text_range', 'image']);
 export const anchorStateSchema = z.enum(['mapped', 'stale', 'unmapped']);
 export const claimModeSchema = z.enum(['one', 'selected', 'bulk']);
 export const planLifecycleStateSchema = z.enum(['active', 'deferred', 'archived']);
+export const boardColumnKeySchema = z.string().trim().min(1).regex(/^[a-z0-9][a-z0-9_-]*$/, 'board column keys must use lowercase letters, numbers, underscores, or dashes');
 export const noteAuthorSchema = z.object({ displayName: z.string().optional() }).optional();
 export const reviewModeSchema = z.enum(['planning', 'collaboration']);
 export const threadEntryRoleSchema = z.enum(['human', 'agent', 'system']);
@@ -44,6 +45,11 @@ export const eventTypeSchema = z.enum([
   'plan.resumed',
   'plan.note.created',
   'plan.mode.changed',
+  'plan.lifecycle.changed',
+  'plan.column.changed',
+  'plan.columns.changed',
+  'plan.pin.changed',
+  'plan.project.changed',
   'comment.thread_entry.created',
   'heartbeat'
 ]);
@@ -284,6 +290,40 @@ export const changePlanModeSchema = z.object({
   reviewMode: reviewModeSchema
 });
 
+export const setPlanLifecycleSchema = z.object({
+  lifecycleState: planLifecycleStateSchema,
+  note: z.string().trim().min(1).optional(),
+  createdBy: noteAuthorSchema,
+  clientMutationId: z.string().optional()
+}).superRefine((value, context) => {
+  if (value.lifecycleState === 'deferred' && !value.note) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['note'], message: 'note is required when deferring a plan' });
+  }
+});
+
+export const setPlanBoardColumnSchema = z.object({
+  boardColumnKey: boardColumnKeySchema
+});
+
+export const setPlanPinnedSchema = z.object({
+  pinned: z.boolean()
+});
+
+export const setPlanProjectSchema = z.object({
+  projectName: z.string().trim().min(1),
+  projectKey: z.string().trim().min(1).optional()
+});
+
+export const saveBoardColumnsSchema = z.object({
+  columns: z.array(z.object({
+    key: boardColumnKeySchema,
+    label: z.string().trim().min(1),
+    position: z.number().int().nonnegative().optional(),
+    isDone: z.boolean().optional(),
+    hidden: z.boolean().optional()
+  })).min(1)
+});
+
 export const appendThreadEntrySchema = z.object({
   role: threadEntryRoleSchema.default('agent'),
   body: z.string().trim().min(1),
@@ -339,3 +379,9 @@ export type CreatePlanNoteInput = z.infer<typeof createPlanNoteSchema>;
 export type DeferPlanInput = z.infer<typeof deferPlanSchema>;
 export type ResumePlanInput = z.infer<typeof resumePlanSchema>;
 export type PlanLifecycleState = z.infer<typeof planLifecycleStateSchema>;
+export type BoardColumnKey = z.infer<typeof boardColumnKeySchema>;
+export type SetPlanLifecycleInput = z.infer<typeof setPlanLifecycleSchema>;
+export type SetPlanBoardColumnInput = z.infer<typeof setPlanBoardColumnSchema>;
+export type SetPlanPinnedInput = z.infer<typeof setPlanPinnedSchema>;
+export type SetPlanProjectInput = z.infer<typeof setPlanProjectSchema>;
+export type SaveBoardColumnsInput = z.infer<typeof saveBoardColumnsSchema>;
