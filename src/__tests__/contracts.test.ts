@@ -1560,10 +1560,10 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     const items = Array.from({ length: total }, (_value, index) => `<li><input type="checkbox"${index < completed ? ' checked' : ''} /> P${index + 1}</li>`).join('\n');
     const html = `<!doctype html><html><head><title>${title}</title></head><body><section id="progress"><h2>Progress</h2><ul>${items}</ul></section></body></html>`;
     return sampleRegisterPayload({
-      repoKey: `git@example.com:demo/${slug}.git`,
-      repoName: slug,
-      remoteUrl: `git@example.com:demo/${slug}.git`,
-      rootPath: `/tmp/${slug}`,
+      repoKey: 'git@example.com:demo/navigator-project.git',
+      repoName: 'navigator-project',
+      remoteUrl: 'git@example.com:demo/navigator-project.git',
+      rootPath: '/tmp/navigator-project',
       slug,
       planPath: `thoughts/plans/${slug}.html`,
       html,
@@ -1615,8 +1615,10 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     assert.match(shell.body, /Filter: State <select id="state-filter-control"[^>]*aria-label="Filter by state"/);
     assert.match(shell.body, /Filter: Status <select id="status-filter-control"[^>]*aria-label="Filter by status"/);
     assert.match(shell.body, /<option value="">All projects<\/option>/);
+    assert.match(shell.body, /<option value="navigator-project" selected>navigator-project<\/option>/);
     assert.match(shell.body, /<option value="">All states<\/option>/);
-    assert.match(shell.body, /<option value="">All statuses<\/option>/);
+    assert.match(shell.body, /<option value="active" selected>Active<\/option>/);
+    assert.match(shell.body, /<option value=""(?: selected)?>All statuses<\/option>/);
     assert.match(shell.body, /<option value="backlog">Backlog<\/option>/);
     assert.doesNotMatch(shell.body, /id="project-control"/);
     assert.doesNotMatch(shell.body, /id="lifecycle-control"/);
@@ -1646,6 +1648,10 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     assert.match(shellClient.body, /statusFilterControl/);
     assert.match(shellClient.body, /itemMatchesNavigatorFilters/);
     assert.match(shellClient.body, /loadNavigatorFilterSource/);
+    assert.match(shellClient.body, /navigatorApiUrl/);
+    assert.match(shellClient.body, /navigatorLoadGeneration/);
+    assert.match(shellClient.body, /navigatorFilterLoadUrl/);
+    assert.doesNotMatch(shellClient.body, /loadQuickOpenItems\(\{ force: true \}\)/);
     assert.doesNotMatch(shellClient.body, /projectKey=\' \+ encodeURIComponent\(projectKey\)/);
     assert.doesNotMatch(shellClient.body, /saveOrganizerField\('\/project'/);
     assert.doesNotMatch(shellClient.body, /saveOrganizerField\('\/lifecycle'/);
@@ -1708,7 +1714,98 @@ test('navigator keeps lifecycle-hidden documents out except the current page', a
     assert.match(filteredNavHtml, /Active navigator plan/);
     assert.match(filteredNavHtml, /Archived navigator plan/);
     assert.doesNotMatch(filteredNavHtml, /Deferred navigator plan/);
-    assert.match(filteredNavHtml, new RegExp(`href="/p/${archivedId}\\?lifecycle=archived"`));
+    assert.match(filteredNavHtml, new RegExp(`href="/p/${archivedId}\\?projectKey=sample&amp;lifecycle=archived"`));
+  } finally {
+    await app.close();
+  }
+});
+
+test('review shell defaults navigator filters to active current project', async () => {
+  const app = createApp({ dbPath: tempDbPath('navigator-default-filters') });
+  const projectPayload = (slug: string, title: string, repoName: string) => {
+    const html = `<!doctype html><html><head><title>${title}</title></head><body><main><p>${title}</p></main></body></html>`;
+    return sampleRegisterPayload({
+      repoKey: `git@example.com:demo/${repoName}.git`,
+      repoName,
+      remoteUrl: `git@example.com:demo/${repoName}.git`,
+      rootPath: `/tmp/${repoName}`,
+      slug,
+      planPath: `thoughts/plans/${slug}.html`,
+      html,
+      fileHash: sha256(html)
+    });
+  };
+  try {
+    const current = await app.inject({ method: 'POST', url: '/api/plans/register', payload: projectPayload('alpha-current-default', 'Alpha current default', 'project-alpha') });
+    const peer = await app.inject({ method: 'POST', url: '/api/plans/register', payload: projectPayload('alpha-peer-default', 'Alpha peer default', 'project-alpha') });
+    const archived = await app.inject({ method: 'POST', url: '/api/plans/register', payload: projectPayload('alpha-archived-default', 'Alpha archived default', 'project-alpha') });
+    const deferred = await app.inject({ method: 'POST', url: '/api/plans/register', payload: projectPayload('alpha-deferred-default', 'Alpha deferred default', 'project-alpha') });
+    const otherProject = await app.inject({ method: 'POST', url: '/api/plans/register', payload: projectPayload('beta-active-default', 'Beta active default', 'project-beta') });
+    assert.equal(current.statusCode, 200);
+    assert.equal(peer.statusCode, 200);
+    assert.equal(archived.statusCode, 200);
+    assert.equal(deferred.statusCode, 200);
+    assert.equal(otherProject.statusCode, 200);
+    const currentId = current.json().data.planId;
+    const archivedId = archived.json().data.planId;
+    const deferredId = deferred.json().data.planId;
+    assert.equal((await app.inject({ method: 'POST', url: `/api/plans/${archivedId}/archive` })).statusCode, 200);
+    assert.equal((await app.inject({ method: 'POST', url: `/api/plans/${deferredId}/defer`, payload: { note: 'Pause default filter test.' } })).statusCode, 200);
+
+    const shell = await app.inject({ method: 'GET', url: `/p/${currentId}` });
+    assert.equal(shell.statusCode, 200, shell.body);
+    assert.match(shell.body, /<option value="project-alpha" selected>project-alpha<\/option>/);
+    assert.match(shell.body, /<option value="active" selected>Active<\/option>/);
+    const navHtml = shell.body.slice(shell.body.indexOf('id="plan-list-nav"'), shell.body.indexOf('<main id="review"'));
+    assert.match(navHtml, /Alpha current default/);
+    assert.match(navHtml, /Alpha peer default/);
+    assert.doesNotMatch(navHtml, /Alpha archived default/);
+    assert.doesNotMatch(navHtml, /Alpha deferred default/);
+    assert.doesNotMatch(navHtml, /Beta active default/);
+    assert.match(navHtml, /\?projectKey=project-alpha&amp;lifecycle=active/);
+
+    const projectOnlyShell = await app.inject({ method: 'GET', url: `/p/${currentId}?projectKey=project-alpha` });
+    assert.equal(projectOnlyShell.statusCode, 200, projectOnlyShell.body);
+    assert.match(projectOnlyShell.body, /<option value="project-alpha" selected>project-alpha<\/option>/);
+    assert.match(projectOnlyShell.body, /<option value="active" selected>Active<\/option>/);
+
+    const scopedNavigator = await app.inject({ method: 'GET', url: `/api/plans/navigator?limit=20&currentPlanId=${currentId}&projectKey=project-alpha&lifecycle=active` });
+    assert.equal(scopedNavigator.statusCode, 200, scopedNavigator.body);
+    const scopedNavigatorText = scopedNavigator.json().data.plans.map((item: { displayTitle: string }) => item.displayTitle).join('\n');
+    assert.match(scopedNavigatorText, /Alpha current default/);
+    assert.match(scopedNavigatorText, /Alpha peer default/);
+    assert.doesNotMatch(scopedNavigatorText, /Alpha archived default/);
+    assert.doesNotMatch(scopedNavigatorText, /Alpha deferred default/);
+    assert.doesNotMatch(scopedNavigatorText, /Beta active default/);
+
+    const explicitAllShell = await app.inject({ method: 'GET', url: `/p/${currentId}?projectKey=&lifecycle=` });
+    assert.equal(explicitAllShell.statusCode, 200, explicitAllShell.body);
+    assert.match(explicitAllShell.body, /<option value="" selected>All projects<\/option>/);
+    assert.match(explicitAllShell.body, /<option value="" selected>All states<\/option>/);
+    const explicitAllNavHtml = explicitAllShell.body.slice(explicitAllShell.body.indexOf('id="plan-list-nav"'), explicitAllShell.body.indexOf('<main id="review"'));
+    assert.match(explicitAllNavHtml, /Alpha current default/);
+    assert.match(explicitAllNavHtml, /Alpha archived default/);
+    assert.match(explicitAllNavHtml, /Alpha deferred default/);
+    assert.match(explicitAllNavHtml, /Beta active default/);
+    assert.match(explicitAllNavHtml, /\?projectKey=&amp;lifecycle=/);
+
+    const explicitAllNavigator = await app.inject({ method: 'GET', url: `/api/plans/navigator?limit=20&currentPlanId=${currentId}&projectKey=&lifecycle=` });
+    assert.equal(explicitAllNavigator.statusCode, 200, explicitAllNavigator.body);
+    const explicitAllNavigatorText = explicitAllNavigator.json().data.plans.map((item: { displayTitle: string }) => item.displayTitle).join('\n');
+    assert.match(explicitAllNavigatorText, /Alpha current default/);
+    assert.match(explicitAllNavigatorText, /Alpha archived default/);
+    assert.match(explicitAllNavigatorText, /Alpha deferred default/);
+    assert.match(explicitAllNavigatorText, /Beta active default/);
+
+    const archivedShell = await app.inject({ method: 'GET', url: `/p/${currentId}?lifecycle=archived` });
+    assert.equal(archivedShell.statusCode, 200, archivedShell.body);
+    assert.match(archivedShell.body, /<option value="project-alpha" selected>project-alpha<\/option>/);
+    assert.match(archivedShell.body, /<option value="archived" selected>Archived<\/option>/);
+    const archivedNavHtml = archivedShell.body.slice(archivedShell.body.indexOf('id="plan-list-nav"'), archivedShell.body.indexOf('<main id="review"'));
+    assert.match(archivedNavHtml, /Alpha current default/);
+    assert.match(archivedNavHtml, /Alpha archived default/);
+    assert.doesNotMatch(archivedNavHtml, /Alpha peer default/);
+    assert.doesNotMatch(archivedNavHtml, /Beta active default/);
   } finally {
     await app.close();
   }

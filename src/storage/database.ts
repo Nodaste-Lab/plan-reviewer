@@ -71,6 +71,22 @@ export interface BoardColumnRecord {
   hiddenAt?: string;
 }
 
+export interface PlanProjectRecord {
+  projectKey: string;
+  projectName: string;
+}
+
+interface ListPlansOptions {
+  includeArchived?: boolean;
+  includeDeferred?: boolean;
+  lifecycleState?: PlanLifecycleState;
+  limit?: number;
+  currentPlanId?: string;
+  projectKey?: string;
+  reviewMode?: ReviewMode;
+  boardColumnKey?: string;
+}
+
 export interface PlanProgress {
   totalPhases: number;
   completedPhases: number;
@@ -1361,8 +1377,9 @@ export class PlanReviewStore {
     return result;
   }
 
-  listPlans(options: { includeArchived?: boolean; includeDeferred?: boolean; lifecycleState?: PlanLifecycleState; limit?: number; currentPlanId?: string } = {}) {
+  private planListWhere(options: ListPlansOptions = {}): { where: string; args: unknown[] } {
     const filters: string[] = [];
+    const args: unknown[] = [];
     if (options.lifecycleState) {
       if (options.lifecycleState === 'archived') filters.push('p.archived_at IS NOT NULL');
       else if (options.lifecycleState === 'deferred') filters.push("p.archived_at IS NULL AND p.lifecycle_state = 'deferred'");
@@ -1371,7 +1388,51 @@ export class PlanReviewStore {
       if (!options.includeArchived) filters.push('p.archived_at IS NULL');
       if (!options.includeDeferred) filters.push("COALESCE(p.lifecycle_state, 'active') != 'deferred'");
     }
-    const baseWhere = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+    if (options.projectKey) {
+      filters.push('p.project_key = ?');
+      args.push(options.projectKey);
+    }
+    if (options.reviewMode) {
+      filters.push('p.review_mode = ?');
+      args.push(options.reviewMode);
+    }
+    if (options.boardColumnKey) {
+      filters.push('p.board_column_key = ?');
+      args.push(options.boardColumnKey);
+    }
+    return { where: filters.length ? `WHERE ${filters.join(' AND ')}` : '', args };
+  }
+
+  countPlansByLifecycle(): { active: number; deferred: number; archived: number } {
+    const row = this.db.prepare(`SELECT
+      SUM(CASE WHEN p.archived_at IS NOT NULL THEN 1 ELSE 0 END) AS archived,
+      SUM(CASE WHEN p.archived_at IS NULL AND p.lifecycle_state = 'deferred' THEN 1 ELSE 0 END) AS deferred,
+      SUM(CASE WHEN p.archived_at IS NULL AND COALESCE(p.lifecycle_state, 'active') != 'deferred' THEN 1 ELSE 0 END) AS active
+      FROM plans p`).get() as Record<string, unknown> | undefined;
+    return { active: Number(row?.active ?? 0), deferred: Number(row?.deferred ?? 0), archived: Number(row?.archived ?? 0) };
+  }
+
+  listPlanProjects(): PlanProjectRecord[] {
+    const rows = this.db.prepare(`SELECT p.project_key AS projectKey, p.project_name AS projectName
+      FROM plans p
+      GROUP BY p.project_key, p.project_name
+      ORDER BY LOWER(p.project_name) ASC, LOWER(p.project_key) ASC`).all() as Array<Record<string, unknown>>;
+    return rows.map(row => ({
+      projectKey: optionalString(row.projectKey) ?? normalizeProjectKey(String(row.projectName ?? 'Uncategorized')),
+      projectName: optionalString(row.projectName) ?? String(row.projectKey ?? 'Uncategorized')
+    }));
+  }
+
+  countActivePlanningPlansByColumn(): Map<string, number> {
+    const rows = this.db.prepare(`SELECT COALESCE(p.board_column_key, '') AS boardColumnKey, COUNT(*) AS count
+      FROM plans p
+      WHERE p.review_mode = 'planning' AND p.archived_at IS NULL AND COALESCE(p.lifecycle_state, 'active') != 'deferred'
+      GROUP BY COALESCE(p.board_column_key, '')`).all() as Array<Record<string, unknown>>;
+    return new Map(rows.map(row => [String(row.boardColumnKey ?? ''), Number(row.count ?? 0)]));
+  }
+
+  listPlans(options: ListPlansOptions = {}) {
+    const { where: baseWhere, args: baseArgs } = this.planListWhere(options);
     const boundedLimit = options.limit && options.limit > 0 ? Math.floor(options.limit) : undefined;
     const orderBy = `ORDER BY
       CASE WHEN p.pinned_at IS NULL THEN 1 ELSE 0 END ASC,
@@ -1415,10 +1476,9 @@ export class PlanReviewStore {
       ${orderBy}
       ${limit ? `LIMIT ${limit}` : ''}
     `).all(...args) as Array<Record<string, unknown>>;
-    let rows = selectRows(baseWhere, boundedLimit);
+    let rows = selectRows(baseWhere, boundedLimit, baseArgs);
     if (boundedLimit && options.currentPlanId && !rows.some(row => String(row.id) === options.currentPlanId)) {
-      const currentWhere = baseWhere ? `${baseWhere} AND p.id = ?` : 'WHERE p.id = ?';
-      rows = [...rows, ...selectRows(currentWhere, undefined, [options.currentPlanId])];
+      rows = [...rows, ...selectRows('WHERE p.id = ?', undefined, [options.currentPlanId])];
     }
     const plans = rows.map(row => {
       const planUpdatedAt = String(row.planUpdatedAt ?? '');

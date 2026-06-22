@@ -636,14 +636,17 @@ try {
     assert.equal(await page.locator('#desktop-comments-toggle').getAttribute('aria-expanded'), 'true');
     await page.click('#desktop-comments-toggle');
     await page.waitForFunction(() => !document.body.classList.contains('comments-open'));
-    await page.selectOption('#state-filter-control', 'active');
-    await page.waitForFunction(() => sessionStorage.getItem('plan-reviewer.navigatorFilters.v1')?.includes('"state":"active"'));
-    await page.waitForFunction(id => document.querySelector(`#plan-list-nav a[data-plan-id="${id}"]`)?.getAttribute('href')?.includes('lifecycle=active'), navSwitch.planId);
-    await page.click(`#plan-list-nav a[data-plan-id="${navSwitch.planId}"]`);
-    await page.waitForURL(`${baseUrl}/p/${navSwitch.planId}?lifecycle=active`);
     assert.equal(await page.locator('#state-filter-control').inputValue(), 'active');
+    assert.notEqual(await page.locator('#project-filter-control').inputValue(), '');
+    assert.equal(await page.locator(`#plan-list-nav a[data-plan-id="${navSwitch.planId}"]`).count(), 0);
+    await page.selectOption('#project-filter-control', '');
+    await page.waitForFunction(() => window.location.search.includes('projectKey=&lifecycle=active'));
+    await page.waitForFunction(id => document.querySelector(`#plan-list-nav a[data-plan-id="${id}"]`)?.getAttribute('href')?.includes('projectKey=&lifecycle=active'), navSwitch.planId);
+    await page.click(`#plan-list-nav a[data-plan-id="${navSwitch.planId}"]`);
+    await page.waitForURL(`${baseUrl}/p/${navSwitch.planId}?projectKey=&lifecycle=active`);
+    assert.equal(await page.locator('#state-filter-control').inputValue(), 'active');
+    assert.equal(await page.locator('#project-filter-control').inputValue(), '');
     assert.equal(await page.locator('#plan-list-nav [aria-current="page"]').getAttribute('data-plan-id'), navSwitch.planId);
-    await page.selectOption('#state-filter-control', '');
     await page.goto(`${baseUrl}/p/${linkedPlan.planId}`);
     await page.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#linked-plan-link'));
     const modifiedPlanLinkDefaultPrevented = await page.evaluate(() => {
@@ -656,9 +659,13 @@ try {
     });
     assert.equal(modifiedPlanLinkDefaultPrevented, false);
     assert.equal(page.url(), `${baseUrl}/p/${linkedPlan.planId}`);
+    assert.equal(await page.locator('#state-filter-control').inputValue(), 'active');
+    assert.equal(await page.locator('#project-filter-control').inputValue(), 'e2e-linked-plan');
     assert.equal(await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.getAttribute('src')), `/render/${linkedPlan.planId}`);
     await page.frameLocator('#plan-frame').locator('#linked-plan-link').click();
     await page.waitForURL(`${baseUrl}/p/${navSwitch.planId}`);
+    assert.equal(await page.locator('#state-filter-control').inputValue(), 'active');
+    assert.equal(await page.locator('#project-filter-control').inputValue(), 'e2e-nav-switch');
     assert.equal(await page.locator('#plan-navbar').count(), 1);
     assert.equal(await page.evaluate(() => Boolean(document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#plan-navbar'))), false);
     assert.equal(await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.getAttribute('src')), `/render/${navSwitch.planId}`);
@@ -667,7 +674,7 @@ try {
     assert.equal((await context.post(`/api/plans/${navSwitch.planId}/archive`)).ok(), true);
     let planListRequests = 0;
     let failNextPlanList = true;
-    await page.route('**/api/plans/navigator?limit=200&currentPlanId=*', async route => {
+    await page.route('**/api/plans/navigator?*', async route => {
       planListRequests += 1;
       if (failNextPlanList) {
         failNextPlanList = false;
@@ -692,7 +699,7 @@ try {
     assert.match(await page.locator('#plan-list-nav').innerText(), /E2E Plan/);
     await page.waitForTimeout(500);
     assert.equal(planListRequests <= 3, true, `navigator refresh made too many requests: ${planListRequests}`);
-    await page.unroute('**/api/plans/navigator?limit=200&currentPlanId=*');
+    await page.unroute('**/api/plans/navigator?*');
     await page.evaluate(() => {
       const globals = window as typeof window & { html2canvas?: unknown; __html2canvasCalls?: number; __html2canvasMode?: 'success' | 'fail' };
       globals.__html2canvasCalls = 0;
