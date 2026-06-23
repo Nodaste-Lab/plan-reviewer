@@ -2433,6 +2433,22 @@ test('board column rename migrates plans and hiding occupied columns removes the
     const visibleKanban = await app.inject({ method: 'GET', url: '/' });
     assert.match(visibleKanban.body, /data-column-key="triage"/);
     assert.match(visibleKanban.body, /Sample Plan/);
+
+    const chainedRename = await app.inject({
+      method: 'PUT',
+      url: '/api/board-columns',
+      payload: { columns: [
+        { originalKey: 'triage', key: 'ready_to_pull', label: 'Ready to Pull', position: 0, hidden: false },
+        { originalKey: 'ready_to_pull', key: 'ready', label: 'Ready', position: 1, hidden: false }
+      ] }
+    });
+    assert.equal(chainedRename.statusCode, 200, chainedRename.body);
+    assert.ok(chainedRename.json().data.columns.find((column: { key: string }) => column.key === 'ready_to_pull'));
+    assert.ok(chainedRename.json().data.columns.find((column: { key: string }) => column.key === 'ready'));
+    assert.equal(chainedRename.json().data.columns.find((column: { key: string }) => column.key === 'triage'), undefined);
+    const chainedDetail = await app.inject({ method: 'GET', url: `/api/plans/${planId}` });
+    assert.equal(chainedDetail.statusCode, 200, chainedDetail.body);
+    assert.equal(chainedDetail.json().data.plan.boardColumnKey, 'ready_to_pull');
   } finally {
     await app.close();
   }
