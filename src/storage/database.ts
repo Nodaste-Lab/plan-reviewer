@@ -652,6 +652,8 @@ export class PlanReviewStore {
   }
 
   private ensureDefaultBoardColumns(): void {
+    const existing = Number((this.db.prepare('SELECT COUNT(*) AS count FROM board_columns').get() as { count?: number } | undefined)?.count ?? 0);
+    if (existing > 0) return;
     const now = nowIso();
     const defaults: Array<{ key: string; label: string; position: number; isDone: boolean }> = [
       { key: 'backlog', label: 'Backlog', position: 0, isDone: false },
@@ -660,8 +662,7 @@ export class PlanReviewStore {
       { key: 'done', label: 'Done', position: 3, isDone: true }
     ];
     const insert = this.db.prepare(`INSERT INTO board_columns (key, label, position, is_done, is_default, hidden_at, created_at, updated_at)
-      VALUES (?, ?, ?, ?, 1, NULL, ?, ?)
-      ON CONFLICT(key) DO NOTHING`);
+      VALUES (?, ?, ?, ?, 1, NULL, ?, ?)`);
     const tx = this.db.transaction(() => {
       for (const column of defaults) insert.run(column.key, column.label, column.position, column.isDone ? 1 : 0, now, now);
     });
@@ -874,25 +875,51 @@ export class PlanReviewStore {
 
   private visibleBoardColumnKey(currentKey?: string): string | null {
     if (!currentKey) return null;
-    return this.listBoardColumns().some(column => column.key === currentKey) ? currentKey : this.defaultVisibleBoardColumnKey(currentKey);
+    return this.listBoardColumns({ includeHidden: true }).some(column => column.key === currentKey) ? currentKey : this.defaultVisibleBoardColumnKey(currentKey);
   }
 
   saveBoardColumns(input: SaveBoardColumnsInput): { columns: BoardColumnRecord[]; events: StoredEvent[] } {
     const now = nowIso();
     const seen = new Set<string>();
-    const occupiedPlanCount = this.db.prepare("SELECT COUNT(*) AS count FROM plans WHERE review_mode = 'planning' AND lifecycle_state = 'active' AND board_column_key = ?");
+    const seenOriginals = new Set<string>();
     const tx = this.db.transaction(() => {
-      const nextVisibility = new Map(this.listBoardColumns({ includeHidden: true }).map(column => [column.key, !column.hiddenAt]));
-      for (const column of input.columns) nextVisibility.set(column.key, !column.hidden);
+      const currentColumns = this.listBoardColumns({ includeHidden: true });
+      const currentKeys = new Set(currentColumns.map(column => column.key));
+      const renames = new Map(input.columns.map(column => [column.originalKey ?? column.key, column.key]));
+      const nextVisibility = new Map(currentColumns.map(column => [renames.get(column.key) ?? column.key, !column.hiddenAt]));
+      const renameSources = new Set<string>();
+      for (const column of input.columns) {
+        const originalKey = column.originalKey ?? column.key;
+        if (seen.has(column.key)) throw new PlanReviewError('validation_failed', `Duplicate board column key '${column.key}'`, 400, { key: column.key });
+        if (seenOriginals.has(originalKey)) throw new PlanReviewError('validation_failed', `Duplicate original board column key '${originalKey}'`, 400, { key: originalKey });
+        seen.add(column.key);
+        seenOriginals.add(originalKey);
+        if (currentKeys.has(originalKey) && originalKey !== column.key) renameSources.add(originalKey);
+        nextVisibility.set(column.key, !column.hidden);
+      }
       if (![...nextVisibility.values()].some(Boolean)) {
         throw new PlanReviewError('validation_failed', 'At least one board column must remain visible', 400, {}, 'Keep one visible column so new planning documents have a valid default destination.');
       }
+      for (const column of input.columns) {
+        const originalKey = column.originalKey ?? column.key;
+        const targetOccupiedByStableColumn = currentKeys.has(column.key) && column.key !== originalKey && !renameSources.has(column.key);
+        if (targetOccupiedByStableColumn) {
+          throw new PlanReviewError('validation_failed', `Board column key '${column.key}' already exists`, 400, { key: column.key }, 'Choose a unique column key before saving.');
+        }
+      }
+      const tempRenameKeys = new Map<string, string>();
+      for (const originalKey of renameSources) {
+        const tempKey = `__renaming_${originalKey}_${shortHash(`${now}:${originalKey}`)}`;
+        tempRenameKeys.set(originalKey, tempKey);
+        this.db.prepare('UPDATE board_columns SET key = ?, updated_at = ? WHERE key = ?').run(tempKey, now, originalKey);
+        this.db.prepare('UPDATE plans SET board_column_key = ?, updated_at = ? WHERE board_column_key = ?').run(tempKey, now, originalKey);
+      }
       for (const [index, column] of input.columns.entries()) {
-        if (seen.has(column.key)) throw new PlanReviewError('validation_failed', `Duplicate board column key '${column.key}'`, 400, { key: column.key });
-        seen.add(column.key);
-        const occupied = Number((occupiedPlanCount.get(column.key) as { count?: number } | undefined)?.count ?? 0);
-        if (column.hidden && occupied > 0) {
-          throw new PlanReviewError('invalid_state', `Board column '${column.key}' still has ${occupied} plan${occupied === 1 ? '' : 's'}`, 409, { key: column.key, occupied }, 'Move plans out of the column before hiding it, or save a replacement target in a follow-up migration.');
+        const originalKey = column.originalKey ?? column.key;
+        const tempKey = tempRenameKeys.get(originalKey);
+        if (tempKey) {
+          this.db.prepare('UPDATE board_columns SET key = ?, updated_at = ? WHERE key = ?').run(column.key, now, tempKey);
+          this.db.prepare('UPDATE plans SET board_column_key = ?, updated_at = ? WHERE board_column_key = ?').run(column.key, now, tempKey);
         }
         this.db.prepare(`INSERT INTO board_columns (key, label, position, is_done, is_default, hidden_at, created_at, updated_at)
           VALUES (?, ?, ?, ?, 0, ?, ?, ?)

@@ -960,18 +960,23 @@ async function saveColumnOrder(order: string, options: { url?: string; json?: bo
   else process.stdout.write(`Saved column order: ${ordered.map(column => column.key).join(', ')}\n`);
 }
 
+function boardColumnKeyFromLabel(label: string): string {
+  return label.trim().toLowerCase().replace(/['"]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'column';
+}
+
 async function renameColumn(key: string, label: string, options: { url?: string; json?: boolean }) {
   const serviceUrl = resolveServiceUrl(options.url);
   const current = await requestJson<{ columns: Array<{ key: string; label: string; position: number; isDone: boolean; hiddenAt?: string }> }>(`${serviceUrl}/api/board-columns`);
-  const columns = current.columns.map(column => column.key === key ? { ...column, label } : column);
-  if (!columns.some(column => column.key === key)) throw new PlanReviewError('validation_failed', `Unknown board column key: ${key}`, 1, { key }, 'Run plan-review columns list and retry with an existing key.');
+  const nextKey = boardColumnKeyFromLabel(label);
+  const columns = current.columns.map(column => column.key === key ? { ...column, originalKey: column.key, key: nextKey, label } : column);
+  if (!current.columns.some(column => column.key === key)) throw new PlanReviewError('validation_failed', `Unknown board column key: ${key}`, 1, { key }, 'Run plan-review columns list and retry with an existing key.');
   const data = await requestJson<unknown>(`${serviceUrl}/api/board-columns`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ columns })
   });
   if (options.json) printJson(data);
-  else process.stdout.write(`Renamed column ${key} to ${label}\n`);
+  else process.stdout.write(`Renamed column ${key} to ${nextKey} (${label})\n`);
 }
 
 async function releaseComment(commentId: string, options: { url?: string; claim?: string; reason?: string; json?: boolean }) {

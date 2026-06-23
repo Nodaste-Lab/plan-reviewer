@@ -317,6 +317,7 @@ export const setPlanProjectSchema = z.object({
 export const saveBoardColumnsSchema = z.object({
   columns: z.array(z.object({
     key: boardColumnKeySchema,
+    originalKey: boardColumnKeySchema.optional(),
     label: z.string().trim().min(1),
     position: z.number().int().nonnegative().optional(),
     isDone: z.boolean().optional(),
