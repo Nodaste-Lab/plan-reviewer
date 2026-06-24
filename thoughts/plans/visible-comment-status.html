@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Visible Comment Status Plan</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <style>
+    :root { color-scheme: dark; --bg:#0b1020; --panel:#111827; --panel-2:#0f172a; --text:#e5e7eb; --muted:#a7b0c0; --accent:#38bdf8; --accent-2:#a78bfa; --good:#22c55e; --warn:#f59e0b; --bad:#fb7185; --border:#2b364d; --pending:#a855f7; --pending-soft:rgba(168,85,247,.10); --claimed:#eab308; --claimed-soft:rgba(234,179,8,.10); --acknowledged:#22c55e; --acknowledged-soft:rgba(34,197,94,.10); --resolved:#3b82f6; --resolved-soft:rgba(59,130,246,.10); }
+    * { box-sizing: border-box; }
+    body { margin:0; background:linear-gradient(180deg,#070b16,var(--bg)); color:var(--text); font:16px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    .layout { display:grid; grid-template-columns:240px minmax(0,1fr); gap:0; max-width:1240px; margin:0 auto; }
+    main { min-width:0; padding:40px 26px 80px; }
+    nav.toc { position:sticky; top:0; align-self:start; max-height:calc(100vh - 0px); overflow-y:auto; padding:24px 16px; border-right:1px solid var(--border); background:rgba(11,18,32,.72); }
+    nav.toc h2 { font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin:0 0 10px; }
+    nav.toc ol { list-style:none; margin:0; padding:0; }
+    nav.toc li { margin:2px 0; }
+    nav.toc a { display:block; color:var(--muted); text-decoration:none; font-size:13px; line-height:1.35; padding:5px 8px; border-radius:6px; }
+    nav.toc a:hover { color:var(--text); background:rgba(56,189,248,.10); }
+    @media(max-width:860px){ .layout{grid-template-columns:1fr} nav.toc{position:static;max-height:none;border-right:0;border-bottom:1px solid var(--border)} }
+    header.hero { border:1px solid #1f3b57; background:radial-gradient(circle at top left,rgba(56,189,248,.18),transparent 34%),var(--panel); border-radius:18px; padding:30px; margin-bottom:22px; }
+    h1 { margin:0 0 10px; font-size:clamp(28px,4.6vw,44px); line-height:1.05; }
+    h2 { margin:34px 0 12px; font-size:24px; }
+    h3 { margin:22px 0 8px; font-size:19px; color:#dbeafe; }
+    h4 { margin:16px 0 6px; color:#c4b5fd; }
+    p, li { color:var(--text); }
+    .muted, small { color:var(--muted); }
+    a { color:#7dd3fc; }
+    section, article { border:1px solid var(--border); background:rgba(17,24,39,.86); border-radius:14px; padding:20px; margin:18px 0; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; }
+    .card { border:1px solid var(--border); background:var(--panel-2); border-radius:12px; padding:14px; }
+    .pill { display:inline-block; padding:3px 9px; border-radius:999px; font-size:12px; font-weight:800; letter-spacing:.02em; background:#164e63; color:#cffafe; }
+    .pill.warn { background:#78350f; color:#fde68a; }
+    .pill.good { background:#14532d; color:#bbf7d0; }
+    .pill.pending { background:rgba(168,85,247,.22); color:#e9d5ff; border:1px solid rgba(168,85,247,.6); }
+    .pill.claimed { background:rgba(234,179,8,.22); color:#fde68a; border:1px solid rgba(234,179,8,.6); }
+    .pill.acknowledged { background:rgba(34,197,94,.22); color:#bbf7d0; border:1px solid rgba(34,197,94,.6); }
+    .pill.resolved { background:rgba(59,130,246,.22); color:#bfdbfe; border:1px solid rgba(59,130,246,.6); }
+    code, pre { background:#020617; color:#dbeafe; border-radius:8px; }
+    code { padding:.12rem .3rem; }
+    pre { padding:12px; overflow:auto; border:1px solid var(--border); }
+    table { width:100%; border-collapse:collapse; margin:10px 0; }
+    th, td { border:1px solid var(--border); padding:10px; text-align:left; vertical-align:top; }
+    th { background:#172033; color:#dbeafe; }
+    .phase { border-left:4px solid var(--accent); }
+    .callout { border-color:rgba(245,158,11,.5); background:rgba(245,158,11,.08); }
+    .swatch-row { display:flex; gap:18px; flex-wrap:wrap; align-items:center; margin:14px 0; }
+    .swatch { display:grid; place-items:center; min-width:34px; height:34px; border-radius:999px; color:white; font-weight:800; font-size:14px; box-shadow:0 8px 18px rgba(0,0,0,.35); }
+    .swatch.pending { background:var(--pending); border:2px solid #e9d5ff; }
+    .swatch.claimed { background:var(--claimed); border:2px solid #fef08a; color:#1c1206; }
+    .swatch.acknowledged { background:var(--acknowledged); border:2px solid #bbf7d0; }
+    .swatch.resolved { background:var(--resolved); border:2px solid #bfdbfe; }
+    .dotbox { display:inline-block; width:54px; height:26px; border-radius:6px; margin-left:10px; vertical-align:middle; }
+    .dotbox.pending { border:2px dotted var(--pending); box-shadow:0 0 0 3px var(--pending-soft); }
+    .dotbox.claimed { border:2px dotted var(--claimed); box-shadow:0 0 0 3px var(--claimed-soft); }
+    .dotbox.acknowledged { border:2px dotted var(--acknowledged); box-shadow:0 0 0 3px var(--acknowledged-soft); }
+    .dotbox.resolved { border:2px dotted var(--resolved); box-shadow:none; }
+    .checklist { list-style:none; padding:0; }
+    .checklist li { margin:6px 0; padding-left:28px; position:relative; }
+    .checklist li::before { content:""; position:absolute; left:0; top:2px; width:18px; height:18px; border:2px solid var(--muted); border-radius:5px; }
+    .checklist li.done::before { background:var(--good); border-color:var(--good); }
+    .checklist li.done::after { content:"✓"; position:absolute; left:3px; top:0; color:#052e16; font-weight:900; font-size:13px; }
+    .lifecycle-figure { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px; margin:14px 0; }
+    .state-card { border:1px solid var(--border); border-radius:12px; padding:14px; background:var(--panel-2); }
+  </style>
+</head>
+<body>
+<div class="layout">
+<nav class="toc" aria-label="Plan sections">
+  <h2>Sections</h2>
+  <ol>
+    <li><a href="#title">Title</a></li>
+    <li><a href="#status">Status</a></li>
+    <li><a href="#decision-attention">Decision Attention</a></li>
+    <li><a href="#goal">Goal</a></li>
+    <li><a href="#why">Why this exists</a></li>
+    <li><a href="#authority">Authority &amp; inputs</a></li>
+    <li><a href="#current-reality">Current reality</a></li>
+    <li><a href="#progress">Progress</a></li>
+    <li><a href="#resume">Resume instructions</a></li>
+    <li><a href="#product-intent">Product intent</a></li>
+    <li><a href="#locked">Locked decisions</a></li>
+    <li><a href="#acceptance">Acceptance criteria</a></li>
+    <li><a href="#bdd">BDD scenarios</a></li>
+    <li><a href="#coverage">Test coverage matrix</a></li>
+    <li><a href="#phase-p1">Phase P1: status mapping &amp; CSS</a></li>
+    <li><a href="#phase-p2">Phase P2: anchor class wiring</a></li>
+    <li><a href="#phase-p3">Phase P3: e2e coverage</a></li>
+    <li><a href="#phase-p4">Phase P4: status banner</a></li>
+    <li><a href="#verification">Verification strategy</a></li>
+    <li><a href="#delivery">Delivery order</a></li>
+    <li><a href="#non-goals">Non-goals</a></li>
+    <li><a href="#deviations">Decisions / Deviations</a></li>
+    <li><a href="#review-record">Review record</a></li>
+  </ol>
+</nav>
+<main>
+
+<header class="hero" id="title">
+  <span class="pill good">plan status: execution-ready (P1–P4 gates cleared 2026-06-24)</span>
+  <h1>Visible Comment Status</h1>
+  <p class="muted">Color the comment marker circle and its dotted anchor outline by comment lifecycle state so reviewers can see at a glance which comments are pending, claimed, or resolved.</p>
+  <p class="muted">No Linear issue. This is a self-contained UI polish to the plan-review browser shell requested directly by the reviewer/operator. The plan-review index does not require an issue key for work that intentionally has no Linear issue.</p>
+</header>
+
+<section id="status">
+  <h2>Status</h2>
+  <p><strong>Plan status:</strong> <code>execution-ready</code> (P1–P4). PM, GPT, and GLM gates all clear by substance after the latest material edit. Both original Decision Attention product decisions remain confirmed (green for acknowledged; hex families accepted); exact rgba finalized at implementation time. No open product questions.</p>
+  <p><strong>Implementation status:</strong> not started. No product code changes have been made.</p>
+  <p><strong>UI impact:</strong> <span class="pill pending">yes</span> — changes the visible color of in-iframe comment anchors (the dotted outline box) and their numbered circle labels, plus the mobile-shell sizing variant. No layout, flow, or interaction changes.</p>
+</section>
+
+<section id="decision-attention" class="callout">
+  <h2>Decision Attention / Low-confidence Areas</h2>
+  <table>
+    <thead><tr><th>Item</th><th>Status</th><th>Evidence / Notes</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>How <code>acknowledged</code> maps to color.</strong> The schema has four lifecycle states (<code>pending</code>, <code>claimed</code>, <code>acknowledged</code>, <code>resolved</code>). The request names three colors (purple / yellow / blue → pending / claimed / resolved), leaving <code>acknowledged</code> unassigned. The existing <code>isCommentAddressed()</code> collapses <code>acknowledged</code>+<code>resolved</code> into one "addressed" treatment.</td>
+        <td><strong>Confirmed: fourth color — green <code>#22c55e</code> for <code>acknowledged</code></strong> (reviewer-approved 2026-06-24)</td>
+        <td><code>src/schemas.ts</code> <code>commentStatusSchema</code>; <code>src/server/app.ts</code> <code>isCommentAddressed()</code> line ~2062. Green is chosen over collapsing into resolved/blue because it gives the intermediate "agent accepted this" state its own legible signal without overloading the theme's amber (already warnings/attention) or blue (UI accent + resolved). Green is already in the dark theme vocabulary (<code>#22c55e</code> = success/done) and reads as "accepted, not yet closed". <strong>Confirmed by reviewer</strong> (cmt_6qa1UgHykeSu, 2026-06-24); no further confirmation required.</td>
+      </tr>
+      <tr>
+        <td><strong>Exact accent hex values (confirmed by reviewer).</strong> The request says purple / yellow / blue. The current pending purple is <code>#7e22ce</code> / <code>rgba(192,132,252,.95)</code>. Keep the proposed families (purple <code>#a855f7</code>, yellow <code>#eab308</code>, green <code>#22c55e</code>, blue <code>#3b82f6</code>), finalizing exact rgba at implementation time against the dark theme for contrast. Reviewer agreed (cmt_NcAGRfMWXWNY, 2026-06-24).</td>
+        <td>Confirmed — implementation-time finalize</td>
+        <td>Confirm against dark theme <code>#0b1020</code> background and existing accent tokens. Keep WCAG-readable text inside the circle.</td>
+      </tr>
+      <tr>
+        <td><strong>Whether the standalone draft <code>.marker</code> circle (blue, shown only during submit) is in scope.</strong></td>
+        <td>Out of scope (see Non-goals)</td>
+        <td>The drafting marker at <code>addMarker()</code> is a transient submit affordance, not a persisted lifecycle marker. It stays blue unless the user later asks to recolor it.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="goal">
+  <h2>Goal</h2>
+  <p>The numbered circle and the surrounding dotted outline that identify a comment on the rendered plan must change color as the comment moves through its lifecycle, so a reviewer scanning the plan sees status without opening the comments panel:</p>
+  <div class="swatch-row">
+    <span class="swatch pending">1</span><span class="muted">Purple — Pending</span>
+    <span class="swatch claimed">2</span><span class="muted">Yellow — Claimed</span>
+    <span class="swatch acknowledged">3</span><span class="muted">Green — Acknowledged</span>
+    <span class="swatch resolved">4</span><span class="muted">Blue — Resolved</span>
+  </div>
+  <p>Both the <strong>circle (label)</strong> and the <strong>dotted outline (anchor border)</strong> must share the status color for each comment. Recommended fourth color for <code>acknowledged</code> is green <code>#22c55e</code> — see <a href="#decision-attention">Decision Attention</a> and <a href="#locked">Locked decisions</a>.</p>
+</section>
+
+<section id="why">
+  <h2>Why this plan exists</h2>
+  <p>Today the plan-review shell renders every persisted comment anchor with the same purple dotted outline and a purple numbered circle, then collapses <code>acknowledged</code>/<code>resolved</code> into a single faded "addressed" style that hides the circle. A reviewer looking at the plan cannot tell which comments are merely pending, which an agent has claimed and is working, and which are resolved. Status is only visible inside the comments panel text. Coloring the marker by lifecycle state makes review progress legible directly on the plan surface, advancing the product-intent principle that the golden path should make status obvious without extra navigation.</p>
+</section>
+
+<section id="authority">
+  <h2>Authority and inputs</h2>
+  <ul>
+    <li>User request: color the comment circle + dotted outline by lifecycle (purple pending, yellow claimed, blue resolved).</li>
+    <li>Repo guidance: <code>AGENTS.md</code> — HTML plan artifacts, product-intent alignment, TDD/BDD phases, plan-review registration, e2e gate for UI/comment-shell work.</li>
+    <li>Product intent: <code>thoughts/specs/product_intent.md</code> — status surfaces should be truthful and legible; browser review interactions and rendered markers must be covered by e2e tests when changed.</li>
+    <li>Observed source: <code>src/server/app.ts</code> (anchor/marker rendering, <code>ensureFrameAnchorStyles</code>, <code>addCommentAnchor</code>, <code>isCommentAddressed</code>, <code>renderComments</code>, parent-shell CSS at the <code>.comment-anchor</code> rule), <code>src/schemas.ts</code> (<code>commentStatusSchema</code>), <code>src/test-fixtures/e2e-run.ts</code> (existing anchor class assertions).</li>
+  </ul>
+</section>
+
+<section id="current-reality">
+  <h2>Current implementation reality</h2>
+  <div class="grid">
+    <article class="card" id="reality-schema">
+      <h3>Lifecycle schema</h3>
+      <p><code>src/schemas.ts</code> <code>commentStatusSchema = z.enum(['pending','claimed','acknowledged','resolved'])</code>. Four states, persisted on each comment and returned by <code>GET /api/plans/:planId/comments</code> as <code>status</code>.</p>
+    </article>
+    <article class="card" id="reality-mapping">
+      <h3>Status → class mapping</h3>
+      <p><code>isCommentAddressed(comment)</code> in <code>src/server/app.ts</code> (~line 2062) returns true for <code>acknowledged</code> or <code>resolved</code>. <code>addCommentAnchor()</code> (~line 2064) sets the anchor class to <code>comment-anchor addressed</code> (addressed) or <code>comment-anchor pending</code> (everything else, including <code>claimed</code>). So <code>claimed</code> currently looks identical to <code>pending</code>.</p>
+    </article>
+    <article class="card" id="reality-css-iframe">
+      <h3>Anchor CSS — iframe-injected</h3>
+      <p><code>ensureFrameAnchorStyles()</code> (~line 1706) injects <code>#plan-review-comment-anchor-styles</code> into the iframe document. This is the copy actually applied to anchors because anchors live inside the iframe body. Rules: <code>.comment-anchor.pending{border:2px dotted rgba(192,132,252,.95);box-shadow:0 0 0 3px rgba(168,85,247,.08)}</code>, <code>.comment-anchor.addressed{border:2px dotted rgba(216,180,254,.9);box-shadow:none}</code>, and the label <code>.comment-anchor-label{background:#7e22ce;color:white;border:2px solid #f3e8ff}</code> with <code>.comment-anchor.addressed .comment-anchor-label{display:none}</code>.</p>
+    </article>
+    <article class="card" id="reality-css-parent">
+      <h3>Anchor CSS — parent shell</h3>
+      <p>The parent-shell stylesheet (app.ts ~line 625) contains a parallel <code>.comment-anchor{position:fixed;...}</code> block with <code>.comment-anchor.pending</code> / <code>.comment-anchor.addressed</code> and the same label rule. This block positions/sizes anchors but the iframe-injected block is the visually authoritative one for color. Both must stay aligned to avoid drift.</p>
+    </article>
+    <article class="card" id="reality-draft-marker">
+      <h3>Drafting marker (transient)</h3>
+      <p><code>addMarker(rect)</code> (~line 2048) creates a standalone blue <code>.marker</code> circle in the parent shell only during <code>submitPendingComment()</code> (~line 2692) for the screenshot capture. It is removed after submit and is <strong>not</strong> a persisted lifecycle marker. Out of scope for this plan.</p>
+    </article>
+    <article class="card" id="reality-e2e">
+      <h3>Existing e2e assertions</h3>
+      <p><code>src/test-fixtures/e2e-run.ts</code> asserts <code>.comment-anchor.pending</code> (background transparent, dotted, 2px) and <code>.comment-anchor.addressed[data-comment-id=...]</code> with <code>borderStyle:'dotted'</code> after claim/resolve (~lines 1207-1216, 1593-1631). The claim/resolve scenario currently relies on <code>acknowledged</code>/<code>resolved</code> collapsing to <code>addressed</code>. These tests must move to the new per-status class scheme.</p>
+    </article>
+    <article class="card" id="reality-sidebar">
+      <h3>Comments sidebar row</h3>
+      <p><code>renderComments()</code> (~line 1368) renders each row as <code>&lt;strong&gt;#seq &lt;status&gt;&lt;/strong&gt;</code> with the status as plain text. The sidebar is <strong>not</strong> in scope for color changes; the request is specifically about the on-plan marker. (See Non-goals.)</p>
+    </article>
+  </div>
+</section>
+
+<section id="progress">
+  <h2>Progress</h2>
+  <ul class="checklist">
+    <li id="p1" class="">P1 — Define status→class→color contract and author CSS for pending/claimed/acknowledged/resolved</li>
+    <li id="p2" class="">P2 — Wire <code>addCommentAnchor</code> to emit per-status class and keep iframe/parent CSS aligned</li>
+    <li id="p3" class="">P3 — Update e2e anchor-class assertions to the new four-state scheme and verify all suites</li>
+    <li id="p4" class="">P4 — Top-of-plan Red/Yellow/Green status banner driven by aggregate comment states</li>
+  </ul>
+</section>
+
+<section id="resume">
+  <h2>Resume instructions (agent)</h2>
+  <p>Read this plan fully. Resolve the <a href="#decision-attention">acknowledged mapping</a> decision with the user if not already resolved in <a href="#locked">Locked decisions</a>. Then find the first unchecked item in <a href="#progress">Progress</a>, execute its phase, run that phase's <code>### Verify</code> commands, and toggle the progress checkbox. Do not start the next phase until the current phase's verification passes and a scoped implementation review is clean. Keep <code>dist/</code> generated from <code>src/</code>.</p>
+</section>
+
+<section id="product-intent">
+  <h2>Product intent alignment</h2>
+  <p>Advances <code>thoughts/specs/product_intent.md</code>:</p>
+  <ul>
+    <li><strong>Desired outcome — plan index truthfully reports status:</strong> extends truthful status from the index/panel onto the plan surface itself, so status is legible where the reviewer is already looking.</li>
+    <li><strong>Experience principle — golden path unavoidable / status obvious without extra setup:</strong> reviewers see pending vs claimed vs resolved without opening the comments panel.</li>
+    <li><strong>Quality bar — browser comment interactions and rendered-plan markers must be covered by e2e tests when changed:</strong> Phase P3 adds/updates e2e assertions for the new per-status classes.</li>
+  </ul>
+  <p>No conflict with boundaries: the browser shell owns review interactivity; this only changes marker styling within that shell. No queue, source-sync, security, or data-integrity behavior changes.</p>
+</section>
+
+<section id="locked">
+  <h2>Locked decisions</h2>
+  <ol>
+    <li><strong>Marker = the on-plan anchor only.</strong> The numbered circle (<code>.comment-anchor-label</code>) and the dotted outline (<code>.comment-anchor</code> border) are the two surfaces that get lifecycle color. The transient draft <code>.marker</code> and the sidebar comment row are not recolored.</li>
+    <li><strong>Per-status class names.</strong> Anchors get one of: <code>comment-anchor pending</code>, <code>comment-anchor claimed</code>, <code>comment-anchor acknowledged</code>, <code>comment-anchor resolved</code>. The legacy <code>addressed</code> class is retired in favor of the explicit status class. <code>isCommentAddressed()</code> is replaced by an explicit <code>anchorStatusClass(comment)</code> helper.</li>
+    <li><strong>Color families</strong> (pending final contrast check): purple <code>~#a855f7</code>/<code>rgba(192,132,252,.95)</code> (pending), yellow <code>~#eab308</code> with dark circle text <code>#1c1206</code> (claimed), green <code>~#22c55e</code> (acknowledged), blue <code>~#3b82f6</code> (resolved). The circle label background, circle label border, and anchor dotted border all share the same status hue; the anchor halo <code>box-shadow</code> uses the same hue at low alpha (pending/claimed/acknowledged) and is removed for resolved.</li>
+    <li><strong>Acknowledged mapping (CONFIRMED 2026-06-24):</strong> <code>acknowledged</code> renders with its own fourth color — <strong>green <code>#22c55e</code></strong> — giving the intermediate "agent accepted this comment" state a distinct, legible signal. Green is chosen because it is already in the dark theme vocabulary (<code>#22c55e</code> = success/done) and reads as "accepted, not yet closed", while amber is already overloaded for warnings/attention and blue is overloaded for UI chrome + resolved. Reviewer confirmed via browser comment <code>cmt_6qa1UgHykeSu</code>.</li>
+    <li><strong>Circle label stays visible for resolved.</strong> The current rule hides the label when <code>addressed</code>. Under the new scheme the numbered circle remains visible for every status (including resolved) so reviewers can still map a resolved marker to its comment number. If the user prefers hiding resolved labels, that is a one-line override — call out as a follow-up, not a blocker.</li>
+  </ol>
+</section>
+
+<section id="acceptance">
+  <h2>Acceptance criteria</h2>
+  <ol>
+    <li id="ac-1">A comment in <code>pending</code> renders its on-plan dotted outline and numbered circle in purple.</li>
+    <li id="ac-2">A comment in <code>claimed</code> renders its outline and circle in yellow (distinct from pending), with legible contrast inside the circle.</li>
+    <li id="ac-3">A comment in <code>resolved</code> renders its outline and circle in blue, and the numbered circle remains visible.</li>
+    <li id="ac-4">A comment in <code>acknowledged</code> renders its outline and circle in green (per the recommended fourth color), visually distinct from pending/claimed/resolved.</li>
+    <li id="ac-5">The iframe-injected anchor styles (<code>#plan-review-comment-anchor-styles</code>) and the parent-shell <code>.comment-anchor</code> rules use the same per-status colors — no drift between the two copies.</li>
+    <li id="ac-6">Reflow, scroll, and source-sync refresh keep each anchor's status color after re-render (no regression to the existing reflow/scroll coverage).</li>
+    <li id="ac-7">e2e asserts all four per-status classes (<code>.comment-anchor.pending</code>, <code>.comment-anchor.claimed</code>, <code>.comment-anchor.acknowledged</code>, <code>.comment-anchor.resolved</code>) and the expected <code>borderStyle:dotted</code> for each, replacing the old <code>.addressed</code> assertions.</li>
+    <li id="ac-8"><code>bun run build</code>, <code>bun run test</code>, and <code>bun run test:e2e</code> all pass.</li>
+    <li id="ac-9">A status banner at the top of the plan review page shows Red when there are pending comments and none claimed/acknowledged.</li>
+    <li id="ac-10">The banner shows Yellow when at least one comment is claimed or acknowledged and not all comments are resolved.</li>
+    <li id="ac-11">The banner shows Green when all comments are resolved (or there are no comments).</li>
+    <li id="ac-12">The banner updates live as comments transition states, with no page reload, on both desktop and mobile.</li>
+  </ol>
+</section>
+
+<section id="bdd">
+  <h2>BDD scenarios</h2>
+
+  <h3 id="bdd-pending">Pending marker is purple</h3>
+  <p><strong>Given</strong> a plan with one comment in <code>pending</code> status anchored to a visible DOM node,<br>
+  <strong>When</strong> the review page renders markers,<br>
+  <strong>Then</strong> the iframe contains <code>.comment-anchor.pending</code> with a dotted purple border and a visible numbered label with a purple background.</p>
+
+  <h3 id="bdd-claimed">Claimed marker is yellow</h3>
+  <p><strong>Given</strong> a comment transitioned to <code>claimed</code> (claim exists),<br>
+  <strong>When</strong> markers render,<br>
+  <strong>Then</strong> the iframe contains <code>.comment-anchor.claimed</code> with a dotted yellow border and a numbered label with a yellow background and dark text, visually distinct from pending.</p>
+
+  <h3 id="bdd-resolved">Resolved marker is blue and labeled</h3>
+  <p><strong>Given</strong> a comment transitioned to <code>resolved</code>,<br>
+  <strong>When</strong> markers render,<br>
+  <strong>Then</strong> the iframe contains <code>.comment-anchor.resolved</code> with a dotted blue border and a numbered label with a blue background, and the label is <strong>not</strong> <code>display:none</code>.</p>
+
+  <h3 id="bdd-ack">Acknowledged marker is green (fourth color)</h3>
+  <p><strong>Given</strong> a comment in <code>acknowledged</code>,<br>
+  <strong>When</strong> markers render,<br>
+  <strong>Then</strong> the iframe contains <code>.comment-anchor.acknowledged</code> with a dotted green border and a numbered label with a green background, visually distinct from pending (purple), claimed (yellow), and resolved (blue).</p>
+
+  <h3 id="bdd-reflow">Status color survives reflow and sync</h3>
+  <p><strong>Given</strong> markers in pending, claimed, acknowledged, and resolved states,<br>
+  <strong>When</strong> the plan source syncs and the frame re-renders, then scroll/reflow fires,<br>
+  <strong>Then</strong> each anchor re-applies its status class and color, and no anchor reverts to a stale class.</p>
+
+  <h3 id="bdd-counterexample">Counterexample — claimed must not render as pending</h3>
+  <p><strong>Given</strong> a <code>claimed</code> comment,<br>
+  <strong>When</strong> markers render,<br>
+  <strong>Then</strong> the anchor does <strong>not</strong> match <code>.comment-anchor.pending</code> and the label background is not the pending purple.</p>
+
+  <h3 id="bdd-banner-red">Banner is Red when only pending comments exist</h3>
+  <p><strong>Given</strong> a plan whose comments are all <code>pending</code> (none claimed/acknowledged/resolved),<br>
+  <strong>When</strong> the review page loads/refreshes,<br>
+  <strong>Then</strong> the top-of-plan banner is Red and labeled to indicate pending comments awaiting agent pickup.</p>
+
+  <h3 id="bdd-banner-yellow">Banner is Yellow when an agent is working comments</h3>
+  <p><strong>Given</strong> at least one comment is <code>claimed</code> or <code>acknowledged</code> and not all comments are resolved,<br>
+  <strong>When</strong> the review page refreshes,<br>
+  <strong>Then</strong> the banner is Yellow and labeled to indicate an agent is working.</p>
+
+  <h3 id="bdd-banner-green">Banner is Green when all comments are resolved</h3>
+  <p><strong>Given</strong> every comment is <code>resolved</code> (or there are no comments),<br>
+  <strong>When</strong> the review page refreshes,<br>
+  <strong>Then</strong> the banner is Green and labeled “all resolved” (or equivalent).</p>
+
+  <h3 id="bdd-banner-live">Banner updates live across transitions</h3>
+  <p><strong>Given</strong> a plan with one pending comment (banner Red),<br>
+  <strong>When</strong> the comment is claimed then acknowledged then resolved via API,<br>
+  <strong>Then</strong> the banner transitions Red → Yellow → Yellow → Green on successive <code>loadMeta()</code> refreshes with no page reload.</p>
+</section>
+
+<section id="coverage">
+  <h2>Test coverage matrix</h2>
+  <table>
+    <thead><tr><th>AC / BDD</th><th>Layer</th><th>Suite / file</th><th>Verify command</th></tr></thead>
+    <tbody>
+      <tr><td>AC1, AC2, AC3, AC4 (per-status class + borderStyle)</td><td>e2e</td><td><code>src/test-fixtures/e2e-run.ts</code> (anchor-class assertions incl. <code>.acknowledged</code>)</td><td><code>bun run build &amp;&amp; bun run test:e2e</code></td></tr>
+      <tr><td>BDD-reflow (color survives sync/reflow)</td><td>e2e</td><td><code>src/test-fixtures/e2e-run.ts</code> (existing render-refresh + scroll scenario, extended)</td><td><code>bun run build &amp;&amp; bun run test:e2e</code></td></tr>
+      <tr><td>BDD-counterexample (claimed ≠ pending)</td><td>e2e</td><td><code>src/test-fixtures/e2e-run.ts</code></td><td><code>bun run build &amp;&amp; bun run test:e2e</code></td></tr>
+      <tr><td>AC9-12 / BDD-banner-red/yellow/green/live (top-of-plan status banner)</td><td>e2e</td><td><code>src/test-fixtures/e2e-run.ts</code> (banner-state assertions)</td><td><code>bun run build &amp;&amp; bun run test:e2e</code></td></tr>
+      <tr><td>No regression to contract/queue surfaces</td><td>unit</td><td><code>src/__tests__/contracts.test.ts</code></td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></td></tr>
+      <tr><td>Build stays green</td><td>build</td><td><code>tsc</code> via build</td><td><code>bun run build</code></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="phase-p1" class="phase">
+  <h2>Phase P1 — Status→class→color contract &amp; CSS</h2>
+  <h3>End State</h3>
+  <p>The visual contract is defined in one place: a status-keyed color map drives both the iframe-injected anchor stylesheet and the parent-shell anchor rules. No runtime behavior changes yet.</p>
+  <h3>Tests first</h3>
+  <p>No new test in P1 (pure CSS/contract). P3 asserts the resulting classes. Ensure <code>bun run build</code> still compiles after the stylesheet edits.</p>
+  <h3>Expected files</h3>
+  <ul>
+    <li><code>src/server/app.ts</code> — the iframe-injected <code>ensureFrameAnchorStyles()</code> stylesheet (~line 1706) and the parent-shell <code>.comment-anchor</code> block (~line 625).</li>
+  </ul>
+  <h3>Work</h3>
+  <ol>
+    <li>Replace the two-state <code>.comment-anchor.pending</code> / <code>.comment-anchor.addressed</code> rules with four per-status rules: <code>.comment-anchor.pending</code> (purple dotted + soft purple halo), <code>.comment-anchor.claimed</code> (yellow dotted + soft yellow halo), <code>.comment-anchor.acknowledged</code> (green dotted + soft green halo), <code>.comment-anchor.resolved</code> (blue dotted, no halo). Keep <code>.comment-anchor{position:absolute;pointer-events:none;border-radius:6px;box-sizing:border-box;z-index:2147483640}</code> base.</li>
+    <li>Replace the single <code>.comment-anchor-label</code> background with status-specific label backgrounds: purple (pending), yellow with dark text <code>#1c1206</code> (claimed), green (acknowledged), blue (resolved). Remove the <code>.comment-anchor.addressed .comment-anchor-label{display:none}</code> rule so resolved labels stay visible (per locked decision 5).</li>
+    <li>Apply the identical color rules to the parent-shell <code>.comment-anchor</code> block (~line 625) so the two copies do not drift.</li>
+    <li>Define the color values as a short comment block above both stylesheets documenting the pending/claimed/acknowledged/resolved hex families, so future edits have one reference.</li>
+  </ol>
+  <h3>Open questions / decision dependencies</h3>
+  <p>None. Both decisions are reviewer-confirmed (locked decisions 3–4); exact rgba is finalized at implementation time against the dark theme.</p>
+  <h3>Verify</h3>
+  <pre><code>bun run build</code></pre>
+  <p>Source inspection only: confirm both CSS copies (iframe <code>ensureFrameAnchorStyles</code> and parent-shell <code>.comment-anchor</code> block) now define all four per-status rules with the locked color families and that <code>.comment-anchor.addressed .comment-anchor-label{display:none}</code> is removed. Do not expect all four colors to render yet — anchors still emit only <code>pending</code>/<code>addressed</code> until P2 wiring lands. The all-four-state visual check runs after P2 (see P2 Verify and the final manual visual gate).</p>
+</section>
+
+<section id="phase-p2" class="phase">
+  <h2>Phase P2 — Anchor class wiring</h2>
+  <h3>End State</h3>
+  <p><code>addCommentAnchor()</code> emits the correct per-status class for every comment status; the legacy <code>addressed</code>/<code>isCommentAddressed</code> path is removed.</p>
+  <h3>Tests first</h3>
+  <p>No new automated test in P2. P3 owns all <code>src/test-fixtures/e2e-run.ts</code> edits (see P3 Tests first). For a local RED/GREEN signal during P2, confirm the build compiles and visually inspect a review page with comments in all four statuses after wiring lands — anchors must show <code>.comment-anchor.pending/claimed/acknowledged/resolved</code> respectively. Do not edit e2e assertions here; that belongs to P3 only.</p>
+  <h3>Expected files</h3>
+  <ul>
+    <li><code>src/server/app.ts</code> — <code>isCommentAddressed()</code> (~line 2062), <code>addCommentAnchor()</code> (~line 2064).</li>
+  </ul>
+  <h3>Work</h3>
+  <ol>
+    <li>Replace <code>isCommentAddressed(comment)</code> with <code>anchorStatusClass(comment)</code> returning one of <code>'pending'</code>, <code>'claimed'</code>, <code>'acknowledged'</code>, <code>'resolved'</code> — a 1:1 map from comment status to class (no collapse).</li>
+    <li>Update <code>addCommentAnchor()</code> to set <code>anchor.className = 'comment-anchor ' + anchorStatusClass(comment)</code>.</li>
+    <li>Search for any other reads of <code>.addressed</code> or <code>isCommentAddressed</code> across <code>src/</code> and update them (e.g., any selector or data attribute). Grep: <code>grep -rn "addressed\|isCommentAddressed" src/</code>.</li>
+    <li>Confirm the mobile-shell sizing override (~line 631 <code>@media … .marker{width:28px;height:28px}</code>) still applies to the transient draft marker only and does not need a per-status variant.</li>
+  </ol>
+  <h3>Open questions / decision dependencies</h3>
+  <p>None. Locked decision 4 is confirmed.</p>
+  <h3>Verify</h3>
+  <pre><code>bun run build</code></pre>
+  <p>All-four-state manual visual check (this is where classes are first emitted): load a plan with comments in all four states (pending, claimed, acknowledged, resolved — create via CLI claim/ack/resolve) and confirm the four colors render on both desktop and the mobile/touch shell. (Automated e2e assertions land in P3.)</p>
+</section>
+
+<section id="phase-p3" class="phase">
+  <h2>Phase P3 — e2e coverage alignment</h2>
+  <h3>End State</h3>
+  <p>The e2e suite asserts all four per-status classes and colors — pending (purple), claimed (yellow), acknowledged (green), resolved (blue) — and the old <code>.addressed</code> assertions are gone. All required repo gates pass.</p>
+  <h3>Tests first</h3>
+  <p>This phase is itself test-first: the assertions are the deliverable.</p>
+  <h3>Expected files</h3>
+  <ul>
+    <li><code>src/test-fixtures/e2e-run.ts</code> — anchor-class assertion blocks (~lines 1207-1216 pending, ~1277-1288 claimed, ~1593-1631 addressed→resolved), plus a new acknowledged fixture (create→claim→<code>/ack</code>) and its <code>.acknowledged</code> assertion.</li>
+  </ul>
+  <h3>Work</h3>
+  <ol>
+    <li>Update the existing <code>.comment-anchor.pending</code> assertion (~line 1207) to also assert the purple border color family (or at least that the class is present and <code>borderStyle==='dotted'</code>).</li>
+    <li><strong>Create an acknowledged comment fixture</strong> before asserting the green class. The existing scenario creates only pending, claimed (<code>claimedUi</code> ~lines 1277-1288: create + claim), and resolved (<code>resolvedFallback</code> ~lines 1359-1373: create pending then <code>POST /api/comments/:id/resolve</code>) comments — there is no acknowledged comment, and <code>resolveComment</code> throws on a <code>claimed</code> comment (“must be acknowledged before they can be resolved”). To reach <code>acknowledged</code>, add: create a comment → <code>POST /api/plans/:planId/comments/claim</code> (<code>mode:'selected'</code>) → <code>POST /api/comments/:commentId/ack</code> with the returned <code>claimId</code> (ack endpoint at <code>src/server/app.ts</code> ~line 3753; <code>ackCommentSchema</code> requires <code>claimId</code>). Mirror the <code>claimedUi</code> creation block for the API shape.</li>
+    <li>Replace the <code>.comment-anchor.addressed</code> assertions (~1593-1631) with <code>.comment-anchor.resolved</code> for the resolved comment, <code>.comment-anchor.acknowledged</code> for the new acknowledged comment (per locked decision 4), and <code>.comment-anchor.claimed</code> for the <code>claimedUi</code> comment. Keep the geometry assertions (y/width alignment) unchanged.</li>
+    <li>Add a focused assertion that a <code>claimed</code> comment anchor does <strong>not</strong> match <code>.comment-anchor.pending</code> (BDD-counterexample).</li>
+    <li>Run the full e2e gate and the contract gate to confirm no regressions.</li>
+  </ol>
+  <h3>Open questions / decision dependencies</h3>
+  <p>None.</p>
+  <h3>Verify</h3>
+  <pre><code>bun run build
+bun run test
+bun run test:e2e
+bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></pre>
+</section>
+
+<section id="phase-p4" class="phase">
+  <h2>Phase P4 — Top-of-plan Red/Yellow/Green status banner</h2>
+  <h3>End State</h3>
+  <p>A status banner at the top of the plan review page shows an at-a-glance Red/Yellow/Green indicator summarizing whether an agent is working comments, driven by aggregate comment lifecycle states. It updates live as comments transition states, with no extra navigation.</p>
+  <h3>Tests first</h3>
+  <p>Extend <code>src/test-fixtures/e2e-run.ts</code>: after creating comments in each state (pending, claimed, acknowledged, resolved — the fixtures already exist or are added in P3), assert the banner element is present and reports the expected color/label for each aggregate mix: (a) only pending → Red; (b) at least one claimed or acknowledged and not all resolved → Yellow; (c) all resolved (or no comments) → Green. These assertions fail until P4 wiring lands (RED), then pass after wiring (GREEN).</p>
+  <h3>Expected files</h3>
+  <ul>
+    <li><code>src/server/app.ts</code> — add the banner element to the plan page chrome (in or near <code>#plan-navbar</code> / <code>#current-plan-bar</code>, the sticky top bar), CSS for the three states, and a client-side <code>updateCommentStatusBanner(items)</code> helper called from <code>renderComments(items)</code> (~line 1368) so it re-derives on every <code>loadMeta()</code> refresh.</li>
+    <li><code>src/test-fixtures/e2e-run.ts</code> — banner-state assertions for Red/Yellow/Green.</li>
+  </ul>
+  <h3>Work</h3>
+  <ol>
+    <li>Add a banner element (e.g. <code>&lt;span id="comment-status-banner" class="comment-status-banner"...&gt;</code>) to the plan page top chrome, inside the sticky <code>#plan-navbar</code> so it stays visible while scrolling the plan.</li>
+    <li>Add CSS for three states reusing existing theme tokens: Red <code>#fb7185</code>/<code>#7f1d1d</code> (pending only), Yellow <code>#eab308</code>/<code>#78350f</code> (some claimed/acked, not all resolved), Green <code>#22c55e</code>/<code>#166534</code> (all resolved or no comments). These intentionally reuse the P1–P3 marker color families where they overlap (Yellow claimed, Green acknowledged/resolved) so the banner and markers read consistently.</li>
+    <li>Add <code>updateCommentStatusBanner(items)</code>: compute counts by <code>c.status</code> from the already-fetched comment list; set banner state: Red when <code>pending &gt; 0 &amp;&amp; claimed===0 &amp;&amp; acknowledged===0</code>; Green when <code>resolved === total</code> (incl. <code>total===0</code>); Yellow otherwise (some claimed or acknowledged, or a mix incl. pending + claimed). Set <code>textContent</code> to a short label (e.g. “N pending”, “Agent working N”, “All resolved”).</li>
+    <li>Call <code>updateCommentStatusBanner(items)</code> at the end of <code>renderComments(items)</code> so it re-derives on every <code>loadMeta()</code> refresh and on source-sync re-renders.</li>
+    <li>Mobile: confirm the banner remains visible and legible in the mobile/touch shell (<code>#plan-navbar</code> min-height 88px, horizontal scroll) — keep it compact (pill-shaped, short label).</li>
+  </ol>
+  <h3>Open questions / decision dependencies</h3>
+  <p>None. The aggregate-state mapping is specified by the reviewer (cmt_iDBKcT-3v8hX): Red = pending only, Yellow = some claimed/acked, Green = all resolved. Edge case: empty plan (no comments) → Green (matches “all resolved” = nothing outstanding).</p>
+  <h3>Verify</h3>
+  <pre><code>bun run build
+bun run test:e2e</code></pre>
+  <p>Manual visual check: on a review plan, create comments and transition them through pending → claimed → acknowledged → resolved via CLI/API and confirm the banner moves Red → Yellow → Green live (desktop and mobile).</p>
+</section>
+
+<section id="verification">
+  <h2>Verification strategy</h2>
+  <ul>
+    <li><strong>Targeted (per phase):</strong> <code>bun run build</code> after P1; <code>bun run build</code> after P2 (e2e assertions land in P3); <code>bun run build &amp;&amp; bun run test:e2e</code> after P3; <code>bun run build &amp;&amp; bun run test:e2e</code> after P4.</li>
+    <li><strong>Full gate (final handoff):</strong> <code>bun run build &amp;&amp; bun run test &amp;&amp; bun run test:e2e</code> per <code>AGENTS.md</code> UI/comment-shell guidance.</li>
+    <li><strong>Manual visual gate:</strong> open a review plan containing comments in all four states (pending, claimed, acknowledged, resolved — create via CLI claim/ack/resolve) and confirm the four marker colors render on both desktop and the mobile/touch shell; also confirm the top-of-plan banner moves Red → Yellow → Green as states transition.</li>
+    <li><strong>Scoped implementation review:</strong> run a scoped read-only review of the diff before advancing past P2 and again before final handoff.</li>
+  </ul>
+</section>
+
+<section id="delivery">
+  <h2>Delivery order</h2>
+  <p>P1 (CSS/contract) → P2 (wiring) → P3 (marker e2e) → P4 (top-of-plan status banner). P1 and P2 are small and could be one commit; P3 and P4 are separate so test changes are reviewable on their own. Run a scoped review after P2 (the behavior change) and the full gate after P4.</p>
+</section>
+
+<section id="non-goals">
+  <h2>Non-goals</h2>
+  <ul>
+    <li>Recoloring the transient draft <code>.marker</code> circle shown only during comment submission. It stays blue.</li>
+    <li>Recoloring the comments-sidebar <code>.comment-row</code> status text or adding colored pills to the sidebar. The request is specifically about the on-plan marker.</li>
+    <li>Adding further colors beyond the four lifecycle states (pending/claimed/acknowledged/resolved). Delivery-status sub-states and externally_* states are out of scope for marker coloring.</li>
+    <li>Changing comment lifecycle semantics, queue behavior, source sync, or any API/CLI surface.</li>
+    <li>Touching the index/kanban card status pills — those are plan-level, not comment-level.</li>
+  </ul>
+</section>
+
+<section id="deviations">
+  <h2>Decisions / Deviations log</h2>
+  <table>
+    <thead><tr><th>Date</th><th>Decision / Deviation</th><th>Evidence</th></tr></thead>
+    <tbody>
+      <tr><td>2026-06-24</td><td>Scoped to on-plan marker only; sidebar and draft marker excluded.</td><td>User request names "the circle with the number and the surrounding dotted line"; that pair is exactly <code>.comment-anchor</code> + <code>.comment-anchor-label</code>.</td></tr>
+      <tr><td>2026-06-24</td><td>Recommend a fourth color — green <code>#22c55e</code> — for <code>acknowledged</code> instead of collapsing into resolved/blue. <strong>Confirmed by reviewer</strong> (cmt_6qa1UgHykeSu).</td><td>User asked for a fourth-color recommendation. Green is already in the dark theme (<code>#22c55e</code> = success/done), reads as "accepted, not closed", and avoids overloading amber (warnings) and blue (UI accent + resolved).</td></tr>
+      <tr><td>2026-06-24</td><td>Retire <code>.addressed</code> class in favor of explicit per-status classes.</td><td>Four-state schema collapsed to two visual classes hides <code>claimed</code> and <code>acknowledged</code>; explicit classes make all states legible.</td></tr>
+      <tr><td>2026-06-24</td><td>Resolved numbered label stays visible (was hidden under <code>addressed</code>).</td><td>Reviewer needs to map a resolved marker to its comment number; hiding loses that mapping.</td></tr>
+      <tr><td>2026-06-24</td><td>GPT plan-review <code>PLAN_NEEDS_REVISION</code> — integrated four readiness blockers: (1) stale <code>discovery</code> status/"confirm with user" text updated to reviewer-confirmed; (2) Progress P1 unchecked (it is implementation work, not completed planning); (3) four-state coverage made consistent everywhere (AC7, P1/P3 End State, manual gates, P3 expected files all now name pending/claimed/acknowledged/resolved); (4) test ownership de-conflicted — P2 owns wiring only (build verify), P3 owns all <code>src/test-fixtures/e2e-run.ts</code> edits.</td><td>GPT quality-reviewer subagent verdict 2026-06-24. Re-review required after these edits.</td></tr>
+      <tr><td>2026-06-24</td><td>GLM plan-review <code>PLAN_NEEDS_REVISION</code> — added an explicit acknowledged-comment fixture step to P3 (create→claim→<code>/ack</code>) because the existing e2e scenario has no acknowledged comment and <code>resolveComment</code> throws on a claimed comment, so the green-class assertion was non-executable as written. (GLM finding 2, P1 unchecked, was already fixed via GPT integration.)</td><td>GLM quality-reviewer-glm subagent verdict 2026-06-24. Re-review required after this edit.</td></tr>
+      <tr><td>2026-06-24</td><td>Scope expanded: added P4 (top-of-plan Red/Yellow/Green status banner driven by aggregate comment states) per reviewer comment cmt_iDBKcT-3v8hX. Plan reopens to not-execution-ready; P1–P3 remain gate-cleared. Banner reuses P1–P3 color families (Red pending, Yellow claimed, Green acknowledged/resolved) for visual consistency. Empty plan → Green.</td><td>Reviewer requested an at-a-glance top-of-plan indicator of whether an agent is working comments. Aggregate-state mapping specified by reviewer: Red=pending only, Yellow=some claimed/acked, Green=all resolved.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="review-record">
+  <h2>Review record</h2>
+  <table>
+    <thead><tr><th>Reviewer</th><th>Verdict</th><th>Date</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>PM (inline, product-principles)</td><td>READY</td><td>2026-06-24</td><td>No product-intent dissonance; golden-path aligned; UI impact triaged; e2e coverage planned.</td></tr>
+      <tr><td>GPT (quality-reviewer subagent)</td><td>PLAN_NEEDS_REVISION</td><td>2026-06-24</td><td>4 readiness blockers (stale status, untruthful P1 progress, inconsistent four-state coverage, contradictory test ownership) — all integrated; re-review pending.</td></tr>
+      <tr><td>GLM (quality-reviewer-glm subagent)</td><td>PLAN_NEEDS_REVISION</td><td>2026-06-24</td><td>2 readiness blockers: P1 progress untruthful (already fixed via GPT integration) and e2e has no acknowledged fixture so the <code>.acknowledged</code> assertion was non-executable as written — integrated by adding an explicit create→claim→<code>/ack</code> fixture step to P3.</td></tr>
+      <tr><td>GPT (quality-reviewer, re-review)</td><td>PLAN_NEEDS_REVISION</td><td>2026-06-24</td><td>2 blockers: stale “confirm with user”/collapse-flip text in Decision Attention notes column, and P1 Verify all-four-state manual check not executable after P1 (CSS only; classes emit in P2). Integrated: removed stale text; moved all-four-state visual check from P1 Verify to P2 Verify (where classes are first emitted); P1 Verify reduced to source inspection + build.</td></tr>
+      <tr><td>GLM (quality-reviewer-glm, re-review)</td><td>PLAN_EXECUTION_READY</td><td>2026-06-24</td><td>Verified the full create→claim→<code>/ack</code> chain against actual code; all 9 rubric points pass. Noted the same stale Decision Attention text as OPTIONAL_CLARITY (non-blocking). Pre-dates the GPT re-review edits; final re-review after those edits is required for the independent ready gate.</td></tr>
+      <tr><td>GPT (quality-reviewer, final re-review)</td><td>PLAN_NEEDS_REVISION</td><td>2026-06-24</td><td>1 blocker: residual collapse-flip sentence in BDD-ack made the BDD non-concrete. Integrated: deleted that sentence so BDD-ack unconditionally asserts <code>.comment-anchor.acknowledged</code> with green styling. Re-review pending.</td></tr>
+      <tr><td>GPT (quality-reviewer, sign-off)</td><td>PLAN_EXECUTION_READY</td><td>2026-06-24</td><td>P1–P3 cleared for the per-marker coloring scope.</td></tr>
+      <tr><td>Scope expansion (cmt_iDBKcT-3v8hX)</td><td>PLAN_EXECUTION_READY</td><td>2026-06-24</td><td>P4 (top-of-plan Red/Yellow/Green status banner) added; GPT + GLM both cleared P4 by substance. Full plan P1–P4 execution-ready.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+</main>
+</div>
+</body>
+</html>
