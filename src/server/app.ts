@@ -742,6 +742,7 @@ let quickOpenLoadPromise = null;
 let quickOpenLoadError = null;
 let navigatorFilterLoadPromise = null;
 let navigatorFilterLoadUrl = '';
+let localPlanArchived = false;
 let quickOpenMatches = [];
 let quickOpenActiveIndex = 0;
 let quickOpenPreviousFocus = null;
@@ -901,8 +902,19 @@ function setArchivedShellState(archived){
   if (resumePlanButton) resumePlanButton.hidden = true;
   if (restorePlanButton) { restorePlanButton.hidden = !archived; restorePlanButton.disabled = false; }
 }
-async function reconcileActiveNavigation(){
-  await loadPlanNavigator();
+function activeNavigatorItems(items){
+  return localPlanArchived ? items.filter(item => String(item?.plan?.id || '') !== String(planId)) : items;
+}
+function removeCurrentPlanFromRenderedNavigator(){
+  planListItems?.querySelector('[data-plan-id="'+CSS.escape(String(planId))+'"]')?.remove();
+}
+function reconcileActiveNavigation(archived){
+  localPlanArchived = archived;
+  navigatorItems = activeNavigatorItems(navigatorItems);
+  quickOpenItems = activeNavigatorItems(quickOpenItems);
+  if (archived) removeCurrentPlanFromRenderedNavigator();
+  else renderPlanNavigatorItems(navigatorItems, document.querySelector('#plan-list-nav')?.getAttribute('aria-label') === 'Active documents' ? 'documents' : 'plans');
+  if (quickOpenVisible()) renderQuickOpenResults();
 }
 function restartArchiveToastDismissal(delay = 10000){
   archiveToastTimer = setTimeout(dismissArchiveToast, delay);
@@ -942,7 +954,7 @@ archivePlanButton?.addEventListener('click', async () => {
     return;
   }
   setArchivedShellState(true);
-  await reconcileActiveNavigation();
+  reconcileActiveNavigation(true);
   showArchiveToast('Archived this '+documentKind+'.');
 });
 restorePlanButton?.addEventListener('click', async () => {
@@ -1072,7 +1084,7 @@ async function loadNavigatorFilterSource(){
   }
   const result = await navigatorFilterLoadPromise;
   if (result.url !== navigatorApiUrl() || result.generation !== navigatorLoadGeneration) return;
-  navigatorItems = result.plans;
+  navigatorItems = activeNavigatorItems(result.plans);
   renderPlanNavigatorItems(navigatorItems, 'documents');
 }
 function applyNavigatorFilters(){
@@ -1635,7 +1647,7 @@ async function loadQuickOpenItems(options = {}){
       items.push(...(Array.isArray(json.data.plans) ? json.data.plans : []));
       cursor = json.data.nextCursor || '';
     } while (cursor);
-    quickOpenItems = items;
+    quickOpenItems = activeNavigatorItems(items);
     quickOpenLoadError = null;
   })().finally(() => { quickOpenLoadPromise = null; });
   return quickOpenLoadPromise;
@@ -1649,7 +1661,7 @@ async function loadPlanNavigator(){
     const json = await res.json();
     if (!json.ok) throw new Error(json.error?.message || 'Unable to load plans');
     if (url !== navigatorApiUrl() || generation !== navigatorLoadGeneration) return;
-    navigatorItems = Array.isArray(json.data.plans) ? json.data.plans : [];
+    navigatorItems = activeNavigatorItems(Array.isArray(json.data.plans) ? json.data.plans : []);
     navigatorLoadError = null;
     renderPlanNavigatorItems(navigatorItems, document.querySelector('#plan-list-nav')?.getAttribute('aria-label') === 'Active documents' ? 'documents' : 'plans');
     if (planListError) planListError.hidden = true;
