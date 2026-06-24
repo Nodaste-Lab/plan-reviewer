@@ -4,8 +4,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { nanoid } from 'nanoid';
+import { appConfigurationSchema, defaultAppConfiguration } from '../schemas.js';
 import type {
   AckCommentInput,
+  AppConfiguration,
   AppendThreadEntryInput,
   ClaimCommentsInput,
   ClaimQueueInput,
@@ -472,6 +474,11 @@ export class PlanReviewStore {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS app_configuration (
+        key TEXT PRIMARY KEY,
+        value_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS plan_versions (
         id TEXT PRIMARY KEY,
         plan_id TEXT NOT NULL REFERENCES plans(id),
@@ -859,6 +866,32 @@ export class PlanReviewStore {
     const file = path.join(dir, name);
     fs.writeFileSync(file, content);
     return file;
+  }
+
+  getConfiguration(): AppConfiguration {
+    const rows = this.db.prepare('SELECT key, value_json AS valueJson FROM app_configuration').all() as Array<{ key: string; valueJson: string }>;
+    const candidate: Record<string, unknown> = { ...defaultAppConfiguration };
+    for (const row of rows) {
+      if (!Object.prototype.hasOwnProperty.call(defaultAppConfiguration, row.key)) continue;
+      candidate[row.key] = parseJson(row.valueJson, candidate[row.key]);
+    }
+    const parsed = appConfigurationSchema.safeParse(candidate);
+    return parsed.success ? parsed.data : defaultAppConfiguration;
+  }
+
+  saveConfiguration(input: AppConfiguration): AppConfiguration {
+    const configuration = appConfigurationSchema.parse(input);
+    const now = nowIso();
+    const upsert = this.db.prepare(`INSERT INTO app_configuration (key, value_json, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at`);
+    const tx = this.db.transaction(() => {
+      for (const [key, value] of Object.entries(configuration)) {
+        upsert.run(key, JSON.stringify(value), now);
+      }
+    });
+    tx();
+    return this.getConfiguration();
   }
 
   listBoardColumns(options: { includeHidden?: boolean } = {}): BoardColumnRecord[] {

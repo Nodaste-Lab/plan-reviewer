@@ -1,0 +1,713 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Configuration panel and review defaults</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #070b16;
+      --panel: #0f172a;
+      --panel-2: #111827;
+      --panel-3: #172033;
+      --text: #e5e7eb;
+      --muted: #a7b0c0;
+      --soft: #cbd5e1;
+      --accent: #7dd3fc;
+      --accent-2: #a78bfa;
+      --ok: #86efac;
+      --warn: #fde68a;
+      --danger: #fecaca;
+      --border: #334155;
+      --border-2: #475569;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at 18% 0%, rgba(125, 211, 252, .12), transparent 34%), linear-gradient(135deg, #070b16 0%, #111827 58%, #1e1b4b 100%);
+      color: var(--text);
+      font: 16px/1.6 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    a { color: var(--accent); }
+    code { background: #020617; border: 1px solid #1e293b; border-radius: 6px; padding: 1px 5px; color: #bae6fd; }
+    pre { overflow: auto; background: #020617; border: 1px solid #1e293b; border-radius: 12px; padding: 14px; white-space: pre-wrap; }
+    h1, h2, h3, h4 { line-height: 1.2; margin: 0 0 12px; }
+    h1 { font-size: clamp(2rem, 4vw, 3.25rem); }
+    h2 { color: #f8fafc; }
+    h3 { color: #dbeafe; }
+    h4 { color: #bae6fd; margin-top: 18px; }
+    p { margin: 8px 0 0; }
+    ul, ol { margin: 8px 0 0; padding-left: 22px; }
+    li { margin: 6px 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { border: 1px solid var(--border); padding: 10px; vertical-align: top; }
+    th { background: #0b1220; text-align: left; }
+    figcaption, .muted { color: var(--muted); }
+    .layout { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); gap: 22px; max-width: 1420px; margin: 0 auto; padding: 28px 22px 80px; }
+    .toc { position: sticky; top: 18px; max-height: calc(100vh - 36px); overflow: auto; align-self: start; border: 1px solid var(--border); border-radius: 18px; background: rgba(15, 23, 42, .88); padding: 16px; box-shadow: 0 18px 50px rgba(0, 0, 0, .28); }
+    .toc h2 { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+    .toc a { display: block; color: #cbd5e1; text-decoration: none; padding: 7px 8px; border-radius: 9px; font-size: 14px; }
+    .toc a:hover { background: rgba(56, 189, 248, .12); color: #e0f2fe; }
+    main { min-width: 0; }
+    header, section, article, figure { background: rgba(15, 23, 42, .92); border: 1px solid var(--border); border-radius: 18px; padding: 24px; margin: 18px 0; box-shadow: 0 18px 50px rgba(0, 0, 0, .24); }
+    header { margin-top: 0; background: linear-gradient(135deg, rgba(14, 165, 233, .18), rgba(167, 139, 250, .16)); }
+    .pill { display: inline-block; border: 1px solid var(--border-2); border-radius: 999px; padding: 4px 10px; margin: 4px 6px 0 0; color: #dbeafe; background: rgba(15, 23, 42, .8); font-size: 14px; }
+    .status { color: var(--warn); font-weight: 850; }
+    .ok { color: var(--ok); }
+    .warn { color: var(--warn); }
+    .phase { border-color: #475569; }
+    .callout { border: 1px solid rgba(125, 211, 252, .42); background: rgba(14, 165, 233, .08); border-radius: 12px; padding: 14px; margin-top: 12px; }
+    .decision { border-color: rgba(245, 158, 11, .48); background: rgba(245, 158, 11, .09); }
+    .mockup { background: #050816; border: 1px solid #273449; border-radius: 16px; padding: 14px; overflow: auto; }
+    .screen { min-width: 980px; border: 1px solid #334155; border-radius: 14px; overflow: hidden; background: #0b1020; box-shadow: 0 22px 48px rgba(0,0,0,.35); }
+    .topbar { padding: 14px; background: #0f172a; border-bottom: 1px solid #2b364d; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+    .switcher { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid #334155; border-radius: 999px; background: #08111f; }
+    .seg { border-radius: 999px; padding: 5px 10px; color: #a7b0c0; font-size: 12px; font-weight: 850; white-space: nowrap; }
+    .seg.active { background: #0ea5e9; color: #e0f2fe; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: flex-end; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #475569; border-radius: 8px; padding: 7px 10px; background: #172033; color: #e5e7eb; font-size: 12px; font-weight: 800; white-space: nowrap; }
+    .btn.primary { border-color: #38bdf8; color: #bae6fd; }
+    .btn.icon { width: 36px; height: 36px; justify-content: center; padding: 0; border-radius: 10px; font-size: 17px; flex: 0 0 auto; }
+    .btn.config { border-color: #a78bfa; color: #ddd6fe; background: #20173a; position: relative; }
+    .btn.config .tooltip { display: none; position: absolute; top: calc(100% + 7px); right: 0; z-index: 3; border: 1px solid #475569; border-radius: 8px; background: #020617; color: #e5e7eb; padding: 5px 8px; font-size: 11px; font-weight: 850; box-shadow: 0 10px 24px rgba(0,0,0,.35); }
+    .btn.config.show-tooltip .tooltip { display: block; }
+    .screen-stack { display: grid; gap: 14px; }
+    .review-toolbar-mock { display: flex; align-items: center; gap: 8px; width: 100%; }
+    .review-toolbar-mock .doc-kind-switcher { margin-right: auto; }
+    .review-toolbar-mock .right-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+    .mini-list { display: grid; gap: 8px; margin-top: 14px; }
+    .mini-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #253248; border-radius: 10px; background: #101827; padding: 10px; }
+    .current-plan { flex: 1 1 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-top: 8px; border-top: 1px solid rgba(71,85,105,.55); color: #cbd5e1; }
+    .shell { display: grid; grid-template-columns: 0 minmax(0, 1fr) 0; min-height: 430px; transition: grid-template-columns .18s ease; }
+    .shell.left-open { grid-template-columns: 260px minmax(0, 1fr) 0; }
+    .shell.comments-open { grid-template-columns: 0 minmax(0, 1fr) 320px; }
+    .leftnav { background: #0b1220; border-right: 1px solid #2b364d; padding: 14px; overflow: hidden; }
+    .leftnav h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: #a7b0c0; }
+    .plan-item { display: grid; gap: 5px; padding: 10px; margin: 8px 0; border: 1px solid #253248; border-radius: 10px; background: #101827; }
+    .plan-item.active { border-color: #38bdf8; background: linear-gradient(135deg, rgba(14,165,233,.18), rgba(16,24,39,.95)); }
+    .plan-title { font-size: 13px; font-weight: 850; color: #f8fafc; line-height: 1.25; }
+    .plan-meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; color: #a7b0c0; font-size: 11px; }
+    .badge { border: 1px solid #475569; border-radius: 999px; padding: 1px 6px; background: #0b1220; color: #cbd5e1; }
+    .badge.ready { border-color: #22c55e; color: #bbf7d0; }
+    .badge.not-ready { border-color: #f59e0b; color: #fde68a; }
+    .review-pane { background: #eef2f7; color: #0f172a; overflow: hidden; position: relative; padding: 24px; }
+    .page { max-width: 760px; margin: 0 auto 60px; background: white; border-radius: 12px; box-shadow: 0 14px 32px rgba(15,23,42,.18); padding: 28px; }
+    .page h3, .page h4 { color: #0f172a; }
+    .comments-panel { background: #111827; border-left: 1px solid #2b364d; padding: 16px; color: #e5e7eb; overflow: hidden; }
+    .comment-card { border: 1px solid #334155; border-radius: 10px; padding: 10px; margin-top: 10px; background: #0f172a; font-size: 12px; }
+    .config-page { min-height: 620px; background: #0b1020; padding: 24px; }
+    .config-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+    .config-header h3 { color: #f8fafc; font-size: 28px; }
+    .config-grid { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 16px; }
+    .config-nav { border: 1px solid #334155; border-radius: 14px; background: #0f172a; padding: 12px; align-self: start; }
+    .config-nav div { padding: 9px 10px; border-radius: 10px; color: #cbd5e1; font-size: 13px; font-weight: 800; }
+    .config-nav .active { background: rgba(56,189,248,.16); color: #e0f2fe; outline: 1px solid rgba(56,189,248,.42); }
+    .config-card { border: 1px solid #334155; border-radius: 16px; background: #0f172a; padding: 16px; margin-bottom: 14px; }
+    .config-card h4 { margin: 0 0 8px; color: #dbeafe; }
+    .field-grid { display: grid; grid-template-columns: minmax(180px, 260px) minmax(0, 1fr); gap: 10px 14px; align-items: center; margin-top: 12px; }
+    .label { color: #cbd5e1; font-size: 13px; font-weight: 850; }
+    .control { min-height: 38px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid #475569; border-radius: 10px; background: #020617; color: #e5e7eb; padding: 8px 10px; font-size: 13px; }
+    .toggle { display: inline-flex; align-items: center; gap: 8px; }
+    .track { width: 44px; height: 24px; border-radius: 999px; background: #1e293b; border: 1px solid #475569; position: relative; flex: 0 0 auto; }
+    .track::after { content: ""; width: 18px; height: 18px; border-radius: 999px; background: #94a3b8; position: absolute; left: 2px; top: 2px; }
+    .track.on { background: #075985; border-color: #38bdf8; }
+    .track.on::after { left: 22px; background: #e0f2fe; }
+    .input-mock { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #bae6fd; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .preview { background: #020617; border: 1px solid #1e293b; border-radius: 12px; color: #cbd5e1; padding: 12px; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
+    .columns { display: grid; grid-template-columns: 1fr 130px 100px 120px; gap: 8px; margin-top: 10px; }
+    .columns span { background: #0b1220; border: 1px solid #334155; border-radius: 8px; padding: 8px; color: #cbd5e1; font-size: 12px; }
+    .columns .head { color: #a7b0c0; font-weight: 900; text-transform: uppercase; letter-spacing: .04em; }
+    .disabled-note { border: 1px solid rgba(245,158,11,.48); border-radius: 12px; background: rgba(245,158,11,.1); color: #fde68a; padding: 12px; margin-top: 10px; }
+    .save-row { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+    .matrix td:first-child, .matrix th:first-child { width: 20%; }
+    @media (max-width: 900px) {
+      .layout { display: block; padding: 18px 14px 60px; }
+      .toc { position: static; max-height: none; margin-bottom: 18px; }
+      .screen { min-width: 780px; }
+    }
+  </style>
+</head>
+<body>
+<div class="layout">
+  <aside class="toc" aria-label="Plan sections">
+    <h2>Sections</h2>
+    <a href="#title">Title</a>
+    <a href="#status">Status</a>
+    <a href="#goal">Goal</a>
+    <a href="#decision-attention">Decision status</a>
+    <a href="#solution-narrative">Solution narrative</a>
+    <a href="#authority-inputs">Authority &amp; inputs</a>
+    <a href="#current-reality">Current reality</a>
+    <a href="#ui-impact-mocks">UI mocks</a>
+    <a href="#progress">Progress</a>
+    <a href="#resume-instructions">Resume instructions</a>
+    <a href="#product-intent-alignment">Product intent</a>
+    <a href="#locked-decisions">Locked decisions</a>
+    <a href="#acceptance-criteria">Acceptance criteria</a>
+    <a href="#bdd-scenarios">BDD scenarios</a>
+    <a href="#coverage-matrix">Coverage matrix</a>
+    <a href="#phases">Phases</a>
+    <a href="#verification-strategy">Verification</a>
+    <a href="#delivery-order">Delivery order</a>
+    <a href="#non-goals">Non-goals</a>
+    <a href="#decisions-log">Decisions log</a>
+  </aside>
+
+  <main id="plan-root">
+    <header id="title">
+      <div class="muted">Implementation plan</div>
+      <h1>Configuration panel and review defaults</h1>
+      <p>Add a local browser configuration panel for plan-reviewer, move board-column configuration into it, and make review-shell side panels, action skill names, and Kanban availability configurable with safe defaults.</p>
+      <p>
+        <span class="pill">Repo: plan-reviewer</span>
+        <span class="pill">Surface: browser shell, index, local service config</span>
+        <span class="pill">Linear issue: none supplied; direct user request</span>
+        <span class="pill">Status: execution-ready</span>
+        <span class="pill">Execution ready: true</span>
+      </p>
+    </header>
+
+    <section id="status">
+      <h2>Status</h2>
+      <p><strong class="ok">Execution-ready.</strong> Browser feedback is resolved, product-intent alignment has been checked, and independent GPT/GLM readiness reviewers cleared the plan after revisions. Product code changes can begin through the scoped execution workflow.</p>
+    </section>
+
+    <section id="goal">
+      <h2>Goal</h2>
+      <p>Operators should have one obvious configuration surface for local plan-reviewer behavior:</p>
+      <ul>
+        <li>Choose whether the left plan navigator and right comments panel open by default when entering a plan. The new default is hidden/collapsed for both.</li>
+        <li>Configure the skill names used by <strong>Request execution-ready review</strong> and <strong>Build Plan</strong>, while keeping generated comments injection-safe.</li>
+        <li>Enable or disable the Kanban organizer without deleting board-column definitions or plan assignments.</li>
+        <li>Manage the existing Kanban column labels/visibility in the same configuration panel instead of a separate <code>/columns</code> page.</li>
+      </ul>
+    </section>
+
+    <section id="decision-attention" class="decision">
+      <h2>Decision Status</h2>
+      <ul>
+        <li id="attention-mocks"><strong>Resolved through browser feedback:</strong> configuration is an icon-only gear with tooltip/accessible text, visible on all topbar screens; in plan view it remains right-anchored after Archive/Restore and before Comments.</li>
+        <li id="attention-config-panel"><strong>Resolved panel direction:</strong> Configuration is a full-page settings surface with sections for review-shell defaults, action skill routing, Kanban enablement, and board columns.</li>
+        <li id="attention-no-implementation"><strong>Implementation gate:</strong> product code changes should proceed only through the scoped execution workflow for this execution-ready plan.</li>
+        <li id="attention-resolved-defaults"><strong>Resolved from request:</strong> the side-panel defaults are hidden/collapsed for new plan entries. Kanban remains enabled by default to preserve existing installs, with an explicit opt-out toggle.</li>
+      </ul>
+    </section>
+
+    <section id="solution-narrative">
+      <h2>Solution narrative</h2>
+      <p>Create a service-owned UI configuration model stored in the plan-reviewer SQLite database, exposed through <code>GET/PUT /api/configuration</code>, and edited at a new <code>/configuration</code> page. The stored values include review-shell defaults, action skill-routing names, and Kanban enablement. This keeps runtime UI preferences live without writing <code>~/.config/plan-reviewer/config.json</code> or requiring service restarts.</p>
+      <p>The configuration page becomes the single local settings panel. The existing Kanban column editor moves into a <strong>Kanban</strong> section on that page. The old <code>/columns</code> route remains as a compatibility redirect or thin alias to <code>/configuration#kanban-columns</code>.</p>
+      <p>Review-shell rendering reads the saved defaults before emitting the page. If <code>showPlanNavigatorByDefault</code> is false, the body starts with the left navigator collapsed. If <code>showCommentsByDefault</code> is false, the comments column starts at zero width; the toolbar comments button still shows the pending count. The reviewer can open either panel at any time, and the two toggles remain independent.</p>
+      <p>Action buttons continue creating queue-backed comments, but their body template uses validated skill-name tokens from the SQLite-backed configuration record and a single-line inert registered plan path. Operators maintain skill names through the Configuration panel/API, not by editing prompt templates, environment variables, or the user config file:</p>
+      <pre id="skill-body-preview"><code>Use the &lt;configured-skill-name&gt; skill for this plan.
+Plan path: thoughts/plans/example.html</code></pre>
+    </section>
+
+    <section id="authority-inputs">
+      <h2>Authority and inputs</h2>
+      <ul>
+        <li id="input-user-request">User request: add a configuration panel, move Kanban column config there, default plan/comment navbars to hidden when entering a plan, make both action-button skill names configurable, and allow Kanban to be enabled or disabled.</li>
+        <li id="input-product-intent"><code>thoughts/specs/product_intent.md</code>: plan-reviewer should make the simplest browser review and agent workflow obvious, keep status truthful, and avoid hidden tribal knowledge.</li>
+        <li id="input-repo-guidance"><code>AGENTS.md</code> and <code>thoughts/plans/AGENTS.md</code>: non-trivial work requires a semantic reviewed HTML plan, stable IDs, product-intent alignment, registration, and queue-backed comment processing.</li>
+        <li id="input-app-shell"><code>src/server/app.ts</code>: <code>reviewShell()</code> renders the review toolbar, left navigator, rendered-plan iframe, comments sidebar, action buttons, and current client-side toggle logic.</li>
+        <li id="input-kanban"><code>src/server/app.ts</code>, <code>src/storage/database.ts</code>, and <code>src/schemas.ts</code>: Kanban columns are persisted in <code>board_columns</code>, edited via <code>/columns</code> and <code>/api/board-columns</code>, and applied through <code>PUT /api/plans/:planId/column</code>.</li>
+        <li id="input-skills"><code>src/server/app.ts</code> currently hardcodes <code>plan-reviewer-execution-ready</code> and <code>plan-reviewer-build</code> into the request body builders.</li>
+        <li id="input-tests"><code>src/__tests__/contracts.test.ts</code> already covers column editing, action-button comment bodies, review-shell markup, and config-file parsing for delivery settings.</li>
+      </ul>
+    </section>
+
+    <section id="current-reality">
+      <h2>Current implementation reality</h2>
+      <table>
+        <thead><tr><th>Area</th><th>Current behavior</th><th>Planning implication</th></tr></thead>
+        <tbody>
+          <tr><td>Review shell side panels</td><td>Desktop left navigator is visible by default; right comments panel defaults to a narrow 48px rail unless opened. Mobile hides the left navigator and uses a bottom comments sheet.</td><td>Add persisted desktop defaults and render initial body/classes from config. Keep mobile hidden unless separately designed later.</td></tr>
+          <tr><td>Action buttons</td><td><code>executionReviewRequestBody()</code> and <code>buildPlanRequestBody()</code> return fixed skill-request strings. Endpoint tests assert exact bodies and queue semantics.</td><td>Move skill names into configuration but keep the body template fixed, token-validate skill names, and require single-line-safe plan paths to prevent prompt/comment injection.</td></tr>
+          <tr><td>Kanban</td><td><code>/</code> defaults to Kanban; <code>/?view=all</code> shows all documents. <code>/columns</code> is the separate column editor. Drag/drop calls <code>PUT /api/plans/:planId/column</code>.</td><td>Add a global <code>kanbanEnabled</code> setting. When disabled, default <code>/</code> to All documents, hide board links/drag-drop, preserve stored columns, and return actionable feature-disabled errors for column assignment attempts.</td></tr>
+          <tr><td>Configuration persistence</td><td><code>src/config.ts</code> reads user JSON for service URL and Codex delivery at startup. There is no browser-editable application settings table.</td><td>Use SQLite-backed runtime configuration for browser settings; do not couple live UI preferences to restart-only user config in this slice.</td></tr>
+          <tr><td>Public docs</td><td>README documents Kanban as the default organizer and documents <code>/columns</code> plus column CLI commands.</td><td>Update docs to reflect the Configuration panel, Kanban disabled behavior, and where column controls moved.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="ui-impact-mocks">
+      <h2>UI impact and mocks</h2>
+      <p><strong>UI impact: yes.</strong> This work changes the index header, review shell toolbar, configuration screens, and default side-panel layout. The mocks below use the existing dark shell language, icon-button style, and document switcher patterns from <code>src/server/app.ts</code>.</p>
+
+      <figure id="mock-index-entry">
+        <h3>Mock A — index and list entry points</h3>
+        <p class="muted">Configuration is an icon-only gear with <code>title</code>/<code>aria-label</code> text of “Configuration”. It appears in the top-right action group on every list screen; the first mock shows the hover tooltip.</p>
+        <div class="mockup" role="img" aria-label="Index and list screens with an icon-only Configuration gear in the top right">
+          <div class="screen-stack">
+            <div class="screen">
+              <div class="topbar">
+                <div class="switcher"><span class="seg active">Kanban</span><span class="seg">All documents</span></div>
+                <div class="actions"><span class="btn icon config show-tooltip" title="Configuration" aria-label="Configuration">⚙<span class="tooltip">Configuration</span></span></div>
+              </div>
+              <div style="padding:24px">
+                <h3 style="color:#f8fafc;margin:0">Plans · Kanban</h3>
+                <p class="muted">Columns are workflow status for planning documents. Execution readiness is a separate badge.</p>
+                <div style="display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:12px;margin-top:16px">
+                  <div class="config-card"><h4>Backlog <span class="muted">2</span></h4><div class="comment-card">Plan card · not ready</div></div>
+                  <div class="config-card"><h4>Ready to Pull <span class="muted">4</span></h4><div class="comment-card">Plan card · ready badge</div></div>
+                  <div class="config-card"><h4>In Progress <span class="muted">1</span></h4><div class="comment-card">Plan card · PR open</div></div>
+                  <div class="config-card"><h4>Done <span class="muted">7</span></h4><div class="comment-card">Plan card · complete</div></div>
+                </div>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="topbar">
+                <div class="switcher"><span class="seg">Kanban</span><span class="seg active">All documents</span></div>
+                <div class="actions"><span class="btn icon" title="Deferred">⏸</span><span class="btn icon" title="Archived">🗄</span><span class="btn icon config" title="Configuration" aria-label="Configuration">⚙<span class="tooltip">Configuration</span></span></div>
+              </div>
+              <div style="padding:24px">
+                <h3 style="color:#f8fafc;margin:0">Plan Review Index · All documents</h3>
+                <p class="muted">Configuration sits beside existing lifecycle shortcuts instead of becoming a text button.</p>
+                <div class="mini-list">
+                  <div class="mini-row"><strong>Configuration panel and review defaults</strong><span class="badge not-ready">Execution not ready</span></div>
+                  <div class="mini-row"><strong>Skill routed plan reviewer actions</strong><span class="badge ready">Execution ready</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="topbar">
+                <div class="switcher"><span class="seg">Kanban</span><span class="seg active">All documents</span></div>
+                <div class="actions"><span class="btn icon" title="Back to active documents">↩</span><span class="btn icon config" title="Configuration" aria-label="Configuration">⚙<span class="tooltip">Configuration</span></span></div>
+              </div>
+              <div style="padding:24px">
+                <h3 style="color:#f8fafc;margin:0">Archived / Deferred list screens</h3>
+                <p class="muted">Lifecycle list pages keep the same gear in the same action cluster so configuration is reachable from every document-list screen.</p>
+                <div class="mini-list"><div class="mini-row"><strong>Deferred plan card</strong><span class="badge">Paused</span></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <figcaption>Primary entry point: one icon-only gear leads to all local settings, including board columns. This avoids competing <code>/columns</code> and configuration destinations while preserving compact toolbars.</figcaption>
+      </figure>
+
+      <figure id="mock-review-entry">
+        <h3>Mock B — viewing a plan with hidden side panels</h3>
+        <p class="muted">This is the plan-view screen at <code>/p/:planId</code>. Entering a plan starts with both side panels collapsed by default. The toolbar matches the current UI: the row spans the window, the document switcher pushes plan action buttons to the right edge, and the icon-only Configuration gear sits immediately to the right of Archive and immediately to the left of the comments collapse button.</p>
+        <div class="mockup" role="img" aria-label="Plan view with right-anchored action buttons and a configuration gear between archive and comments buttons">
+          <div class="screen">
+            <div class="topbar">
+              <div class="review-toolbar-mock">
+                <span class="btn icon" title="Show plan navigator">☰</span>
+                <span class="switcher doc-kind-switcher"><span class="seg active">Kanban</span><span class="seg">All documents</span></span>
+                <span class="right-actions">
+                  <span class="btn" title="Download raw plan">⬇</span>
+                  <span class="btn primary" title="Request execution-ready review">✓</span>
+                  <span class="btn" title="Build Plan">⚒</span>
+                  <span class="btn" title="Defer plan">⏸</span>
+                  <span class="btn" title="Archive plan">🗄</span>
+                  <span class="btn icon config" title="Configuration" aria-label="Configuration">⚙<span class="tooltip">Configuration</span></span>
+                  <span class="btn icon" title="Open comments">💬 2</span>
+                </span>
+              </div>
+              <div class="current-plan"><strong>Configuration panel and review defaults</strong> <span class="badge not-ready">Execution not ready</span></div>
+            </div>
+            <div class="shell">
+              <aside class="leftnav" aria-hidden="true"></aside>
+              <main class="review-pane">
+                <div class="page">
+                  <h3>Rendered plan</h3>
+                  <h4>Configuration panel and review defaults</h4>
+                  <p>The plan canvas receives the horizontal space because both side panels start hidden.</p>
+                  <p style="height:170px;background:#eef2ff;border-radius:10px;padding:18px">Wide plan content, tables, and mockups remain reviewable.</p>
+                </div>
+              </main>
+              <aside class="comments-panel" aria-hidden="true"></aside>
+            </div>
+          </div>
+        </div>
+        <figcaption>Plan-view entry point: the action buttons are right-anchored like the current <code>#plan-navbar-actions</code> UI. The gear is visible while reading a plan and sits after the Archive button, directly before the comments collapse/open button. The default matches the request: plan and comment navbars are not shown on entry, while counts and toggles still make comments discoverable.</figcaption>
+      </figure>
+
+      <figure id="mock-config-panel-main">
+        <h3>Mock C — configuration panel</h3>
+        <p class="muted">A full-page panel is easier to deep-link, test, and keep accessible than a modal. It uses a local section nav, a single Save action, and keeps the gear visible as the active settings destination.</p>
+        <div class="mockup" role="img" aria-label="Configuration page with review defaults, skill routing, and Kanban settings">
+          <div class="screen">
+            <div class="config-page">
+              <div class="config-header">
+                <div><h3>Configuration</h3><p class="muted">Local service settings for review shell behavior, agent action routing, and plan organization.</p></div>
+                <div class="actions"><span class="btn icon config" title="Configuration" aria-label="Configuration">⚙<span class="tooltip">Configuration</span></span><span class="btn">← Back to documents</span><span class="btn primary">Save changes</span></div>
+              </div>
+              <div class="config-grid">
+                <aside class="config-nav">
+                  <div class="active">Review shell defaults</div>
+                  <div>Action skill routing</div>
+                  <div>Kanban</div>
+                  <div>Board columns</div>
+                </aside>
+                <section style="padding:0;margin:0;background:transparent;border:0;box-shadow:none">
+                  <div class="config-card">
+                    <h4>Review shell defaults</h4>
+                    <p class="muted">Controls the initial desktop layout when opening <code>/p/:planId</code>. Reviewers can still toggle panels per page.</p>
+                    <div class="field-grid">
+                      <div class="label">Show plan navigator by default</div><div class="control"><span class="toggle"><span class="track"></span> Hidden on entry</span><span class="muted">Default</span></div>
+                      <div class="label">Show comments panel by default</div><div class="control"><span class="toggle"><span class="track"></span> Hidden on entry</span><span class="muted">Default</span></div>
+                    </div>
+                  </div>
+                  <div class="config-card">
+                    <h4>Action skill routing</h4>
+                    <p class="muted">Skill names are stored in the local SQLite configuration table and maintained here or through <code>PUT /api/configuration</code>. Values are validated as tokens; the generated comment template is fixed.</p>
+                    <div class="field-grid">
+                      <div class="label">Execution-ready review skill</div><div class="control input-mock">plan-reviewer-execution-ready</div>
+                      <div class="label">Build Plan skill</div><div class="control input-mock">plan-reviewer-build</div>
+                    </div>
+                    <p class="muted">Preview</p>
+                    <div class="preview">Use the plan-reviewer-execution-ready skill for this plan.
+Plan path: thoughts/plans/configuration-panel-and-review-defaults.html</div>
+                  </div>
+                  <div class="config-card" id="mock-kanban-settings">
+                    <h4>Kanban</h4>
+                    <div class="field-grid">
+                      <div class="label">Enable Kanban board</div><div class="control"><span class="toggle"><span class="track on"></span> Enabled</span><span class="muted">Current behavior preserved</span></div>
+                    </div>
+                    <p class="muted">When disabled, the index opens All documents and board drag/drop is unavailable. Existing columns and assignments are preserved.</p>
+                  </div>
+                  <div class="config-card" id="mock-kanban-columns">
+                    <h4>Board columns</h4>
+                    <p class="muted">Moved from <code>/columns</code>. Renames and visibility keep existing migration behavior.</p>
+                    <div class="columns">
+                      <span class="head">Label</span><span class="head">Key</span><span class="head">Behavior</span><span class="head">Visibility</span>
+                      <span>Backlog</span><span>backlog</span><span>Workflow</span><span>Visible</span>
+                      <span>Ready to Pull</span><span>ready_to_pull</span><span>Workflow</span><span>Visible</span>
+                      <span>In Progress</span><span>in_progress</span><span>Workflow</span><span>Visible</span>
+                      <span>Done</span><span>done</span><span>Done</span><span>Visible</span>
+                    </div>
+                  </div>
+                  <div class="save-row"><span class="muted">Unsaved changes are local to this service.</span><span class="btn primary">Save changes</span></div>
+                </section>
+              </div>
+            </div>
+          </div>
+        </div>
+        <figcaption>The panel groups settings by user intent. Board-column controls stay available inside Configuration rather than as a separate page.</figcaption>
+      </figure>
+
+      <figure id="mock-kanban-disabled">
+        <h3>Mock D — Kanban disabled state</h3>
+        <p class="muted">Disabling Kanban removes the board from normal navigation but preserves settings for later re-enable.</p>
+        <div class="mockup" role="img" aria-label="Configuration page showing Kanban disabled with preserved board columns">
+          <div class="screen">
+            <div class="config-page">
+              <div class="config-header"><div><h3>Configuration</h3><p class="muted">Kanban disabled preview</p></div><div class="actions"><span class="btn icon config" title="Configuration" aria-label="Configuration">⚙<span class="tooltip">Configuration</span></span><span class="btn primary">Save changes</span></div></div>
+              <div class="config-card">
+                <h4>Kanban</h4>
+                <div class="field-grid">
+                  <div class="label">Enable Kanban board</div><div class="control"><span class="toggle"><span class="track"></span> Disabled</span><span class="muted">All documents becomes default</span></div>
+                </div>
+                <div class="disabled-note">Kanban board, drag/drop movement, and Status filter controls are hidden while disabled. Column definitions and assigned plan status are retained and restored when re-enabled.</div>
+              </div>
+              <div class="config-card">
+                <h4>Board columns</h4>
+                <p class="muted">Read/write column configuration remains available so users can prepare the board before re-enabling it.</p>
+                <div class="columns"><span class="head">Label</span><span class="head">Key</span><span class="head">Behavior</span><span class="head">Visibility</span><span>Backlog</span><span>backlog</span><span>Workflow</span><span>Visible</span><span>Done</span><span>done</span><span>Done</span><span>Visible</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <figcaption>Disable is reversible and non-destructive; it changes visible workflow, not stored plan data.</figcaption>
+      </figure>
+    </section>
+
+    <section id="progress">
+      <h2>Progress</h2>
+      <ul>
+        <li><label><input type="checkbox" checked disabled> P1 — Persist configuration contracts</label></li>
+        <li><label><input type="checkbox" checked disabled> P2 — Build configuration panel UI</label></li>
+        <li><label><input type="checkbox" checked disabled> P3 — Apply settings to shell and actions</label></li>
+        <li><label><input type="checkbox" checked disabled> P4 — Document and verify end-to-end</label></li>
+      </ul>
+    </section>
+
+    <section id="resume-instructions">
+      <h2>Resume instructions</h2>
+      <p>Implementation phases P1–P4 are complete. Final verification passed with <code>bun run build &amp;&amp; bun run test &amp;&amp; bun run test:e2e</code>; scoped GPT and GLM implementation reviews returned <code>PASS_SCOPED</code>; the pre-PR GPT/GLM gate returned <code>CLEAN_FOR_PR</code>. Continue with commit, push, PR creation, and post-PR monitoring. Validation artifact: <code>thoughts/validation/pre-pr-reviews/2026-06-24-collapse-doc-nav-default.md</code>.</p>
+    </section>
+
+    <section id="product-intent-alignment">
+      <h2>Product intent alignment</h2>
+      <p>This plan cites and advances <code>thoughts/specs/product_intent.md</code>.</p>
+      <ul>
+        <li><strong>Golden path:</strong> one visible icon-only Configuration gear replaces hidden knowledge of <code>/columns</code> and makes local defaults discoverable without widening toolbars.</li>
+        <li><strong>Safe defaults:</strong> side panels are hidden by default per request but remain obvious through toolbar controls; Kanban stays enabled by default to avoid surprising existing users.</li>
+        <li><strong>Truthful status:</strong> Kanban disabled state is shown in navigation, API errors, and docs rather than silently hiding data.</li>
+        <li><strong>Agent safety:</strong> configurable skill names are validated tokens and action-comment plan paths are single-line/inert before insertion into a fixed body template, so browser configuration or malformed registration metadata cannot inject arbitrary agent instructions.</li>
+        <li><strong>Recovery:</strong> disabling Kanban is reversible and preserves stored columns and assignments; failed saves show actionable UI/API errors.</li>
+      </ul>
+    </section>
+
+    <section id="locked-decisions">
+      <h2>Locked decisions</h2>
+      <ol>
+        <li id="decision-sqlite-config"><strong>SQLite-backed browser configuration.</strong> Store live UI settings in the service database, not restart-only user JSON.</li>
+        <li id="decision-default-hidden"><strong>Side-panel defaults hidden.</strong> New defaults are <code>showPlanNavigatorByDefault: false</code> and <code>showCommentsByDefault: false</code> for desktop review pages.</li>
+        <li id="decision-mobile"><strong>Mobile unchanged.</strong> Mobile/coarse-pointer layouts keep the current hidden left nav and bottom comments sheet behavior; desktop defaults are the first slice.</li>
+        <li id="decision-safe-skill-names"><strong>Skill names are tokens.</strong> Values must match a strict skill-name regex and are rendered only inside <code>Use the ... skill for this plan</code>.</li>
+        <li id="decision-safe-action-plan-paths"><strong>Action-comment plan paths are single-line and inert.</strong> Registered plan paths used by Request execution-ready review and Build Plan must reject newline/control characters at registration or fail closed before action-comment creation; legacy unsafe rows must not produce queue comments with extra agent-visible lines.</li>
+        <li id="decision-skill-storage"><strong>Skill routing is database-maintained.</strong> <code>executionReadySkillName</code> and <code>buildPlanSkillName</code> are stored with the rest of browser UI configuration in SQLite and maintained through the Configuration panel/API.</li>
+        <li id="decision-unknown-keys"><strong>Unknown configuration keys fail closed.</strong> <code>PUT /api/configuration</code> rejects unknown keys with an actionable validation error and preserves the previously saved configuration.</li>
+        <li id="decision-default-skills"><strong>Default skills preserve current behavior.</strong> Defaults are <code>plan-reviewer-execution-ready</code> and <code>plan-reviewer-build</code>.</li>
+        <li id="decision-kanban-default"><strong>Kanban remains enabled by default.</strong> Existing installs continue opening the board unless the operator disables it.</li>
+        <li id="decision-kanban-disable"><strong>Disable is reversible.</strong> Disabling Kanban hides board UI and movement controls, rejects plan movement via <code>PUT /api/plans/:planId/column</code> and the CLI <code>column set</code> command, but preserves columns and plan assignments. Board-column configuration endpoints and CLI commands remain available so operators can prepare or repair columns before re-enabling Kanban.</li>
+        <li id="decision-columns-move"><strong>Columns move into Configuration.</strong> <code>/columns</code> remains as an alias/redirect to avoid breaking existing links during the transition.</li>
+        <li id="decision-icon-only-gear"><strong>Configuration entry is icon-only.</strong> Every topbar surface uses a compact gear button with <code>title</code>/<code>aria-label</code> “Configuration”; no text label is shown in the toolbar. In the plan-view toolbar specifically, preserve the current right-anchored <code>#plan-navbar-actions</code> layout and place the gear to the right of Archive/Restore and to the left of the comments collapse/open button.</li>
+      </ol>
+    </section>
+
+    <section id="acceptance-criteria">
+      <h2>Acceptance criteria</h2>
+      <ol>
+        <li id="ac-config-api">The service exposes <code>GET /api/configuration</code> with defaults for side-panel visibility, action skill names, and Kanban enablement, plus <code>PUT /api/configuration</code> for validated updates.</li>
+        <li id="ac-config-page">A <code>/configuration</code> page is reachable from every topbar surface via an icon-only gear with <code>title</code>/<code>aria-label</code> text of “Configuration”, and contains Review shell defaults, Action skill routing, Kanban, and Board columns sections.</li>
+        <li id="ac-columns-moved">Existing board-column editing behavior is available from the Configuration panel; <code>/columns</code> remains compatible by redirecting or rendering the same panel section.</li>
+        <li id="ac-default-hidden">With default configuration, desktop plan pages start with left plan navigator hidden and comments panel hidden, while toolbar buttons can open each panel independently.</li>
+        <li id="ac-opt-in-show">When configuration sets either side panel to show by default, newly loaded plan pages start with that specific panel open without forcing the other panel open.</li>
+        <li id="ac-skill-routing">Action-button request comments use configured skill names and exact single-line-safe plan paths in the fixed template.</li>
+        <li id="ac-skill-validation">Invalid skill names and unsafe action-comment plan paths are rejected with actionable validation errors and cannot inject extra lines or arbitrary agent instructions.</li>
+        <li id="ac-kanban-enabled">When Kanban is enabled, the index, board columns, drag/drop, Status filters, and column APIs preserve existing behavior.</li>
+        <li id="ac-kanban-disabled">When Kanban is disabled, the index defaults to All documents, Kanban navigation/drag-drop/status filters are hidden, browser/API/CLI column assignment attempts fail with <code>feature_disabled</code>, board-column configuration remains available, and existing column data remains intact.</li>
+        <li id="ac-docs-tests">README, API/CLI docs where applicable, contract tests, and e2e tests describe and verify the same configuration behavior.</li>
+      </ol>
+    </section>
+
+    <section id="bdd-scenarios">
+      <h2>BDD scenarios</h2>
+      <article id="bdd-config-gear-everywhere">
+        <h3>Configuration gear is available everywhere</h3>
+        <p><strong>Given</strong> a reviewer is on Kanban, All documents, Archived, Deferred, Configuration, or a plan review page, <strong>when</strong> they inspect the top action row, <strong>then</strong> an icon-only gear with accessible text and tooltip “Configuration” is present alongside the other screen-specific action buttons; on plan-view pages the action buttons remain anchored to the right edge of the window and the gear sits to the right of Archive/Restore and to the left of the comments collapse/open button.</p>
+      </article>
+      <article id="bdd-default-hidden">
+        <h3>Default plan entry hides side panels</h3>
+        <p><strong>Given</strong> a fresh service database with default configuration, <strong>when</strong> a reviewer opens <code>/p/:planId</code> on desktop, <strong>then</strong> the rendered plan occupies the side-panel space, the left navigator and comments panel are not shown, and the toolbar has controls to open each panel.</p>
+      </article>
+      <article id="bdd-configured-open">
+        <h3>Configured side panel opens by default</h3>
+        <p><strong>Given</strong> <code>showPlanNavigatorByDefault</code> is true and <code>showCommentsByDefault</code> is false, <strong>when</strong> the reviewer opens a plan, <strong>then</strong> the left navigator starts open and the comments panel remains hidden.</p>
+      </article>
+      <article id="bdd-skill-routing">
+        <h3>Configured skills route action comments</h3>
+        <p><strong>Given</strong> the execution-ready skill is configured as <code>custom-readiness-skill</code> and the registered plan path is single-line-safe, <strong>when</strong> the reviewer clicks Request execution-ready review, <strong>then</strong> the pending queue comment body is <code>Use the custom-readiness-skill skill for this plan.</code> followed by the exact registered plan path.</p>
+      </article>
+      <article id="bdd-skill-injection">
+        <h3>Invalid action routing inputs fail closed</h3>
+        <p><strong>Given</strong> a user tries to save a skill name containing a newline or spaces, <strong>when</strong> they submit the configuration, <strong>then</strong> the save is rejected, current settings remain unchanged, and the UI/API explains the accepted skill-name format.</p>
+        <p><strong>Given</strong> a registered plan row has a plan path containing a newline or other control character, <strong>when</strong> a reviewer requests execution-ready review or Build Plan, <strong>then</strong> the action fails with an actionable validation error and no queue comment is created from the unsafe path.</p>
+      </article>
+      <article id="bdd-kanban-disable">
+        <h3>Kanban disable is reversible</h3>
+        <p><strong>Given</strong> plans have assigned board columns, <strong>when</strong> Kanban is disabled, <strong>then</strong> the board and drag/drop are unavailable, All documents is the default index view, and re-enabling Kanban restores the prior columns and assignments.</p>
+      </article>
+      <article id="bdd-column-config-moved">
+        <h3>Column configuration lives in Configuration</h3>
+        <p><strong>Given</strong> a user wants to rename or hide a board column, <strong>when</strong> they open Configuration and save the Board columns section, <strong>then</strong> the same migration, visibility, and plan-count warnings from the existing column editor apply.</p>
+      </article>
+    </section>
+
+    <section id="coverage-matrix">
+      <h2>Test coverage matrix</h2>
+      <table class="matrix">
+        <thead><tr><th>Acceptance</th><th>BDD</th><th>Test layer / files</th><th>Command</th></tr></thead>
+        <tbody>
+          <tr><td>AC1, AC7</td><td>Action routing injection</td><td>Contract tests for <code>/api/configuration</code> defaults, valid updates, invalid skill-name rejection, unchanged settings on failure, and unsafe newline/control-character plan paths failing before action-comment creation.</td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></td></tr>
+          <tr><td>AC2, AC3</td><td>Configuration gear everywhere; column config moved</td><td>Contract tests for <code>/configuration</code> markup, icon-only gear links on every topbar surface, tooltip/accessible text, and <code>/columns</code> compatibility behavior.</td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></td></tr>
+          <tr><td>AC4, AC5</td><td>Default hidden, configured open</td><td>Contract plus browser e2e assertions for initial shell classes/ARIA, left nav toggle, comments toggle, and independent panel behavior.</td><td><code>bun run test:e2e</code></td></tr>
+          <tr><td>AC6</td><td>Skill routing</td><td>Update existing action-button endpoint tests to configure custom skill names and assert exact pending comment bodies and queue event semantics.</td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></td></tr>
+          <tr><td>AC8, AC9</td><td>Kanban disable</td><td>Contract tests for index view selection, hidden board UI, disabled plan movement mutations, CLI <code>column set</code> error parity, board-column configuration staying available, and preserved assignments after re-enable.</td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></td></tr>
+          <tr><td>AC10</td><td>All</td><td>Full repo gates after implementation.</td><td><code>bun run build &amp;&amp; bun run test &amp;&amp; bun run test:e2e</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="phases">
+      <h2>Phase-by-phase execution plan</h2>
+
+      <article id="phase-p1-config-contracts" class="phase">
+        <h3>P1 — Persist configuration contracts</h3>
+        <h4>End State</h4>
+        <p>The service has validated, persisted UI configuration with safe defaults and API coverage, but no browser UI consumes it yet.</p>
+        <h4>Tests first</h4>
+        <ul>
+          <li>Add failing contract tests for <code>GET /api/configuration</code> defaults.</li>
+          <li>Add failing contract tests for <code>PUT /api/configuration</code> valid updates, invalid skill-name rejection, unknown-key rejection with previous settings preserved, and persistence across store/app instances.</li>
+          <li>Add tests that invalid saves preserve the previous good configuration.</li>
+          <li>Add failing registration/schema or action-route tests proving newline/control-character plan paths cannot produce multi-line injected action comments.</li>
+        </ul>
+        <h4>Expected files</h4>
+        <ul>
+          <li><code>src/schemas.ts</code></li>
+          <li><code>src/storage/database.ts</code></li>
+          <li><code>src/server/app.ts</code></li>
+          <li><code>src/__tests__/contracts.test.ts</code></li>
+        </ul>
+        <h4>Work</h4>
+        <ul>
+          <li>Add a small configuration table, such as <code>app_configuration(key TEXT PRIMARY KEY, value_json TEXT, updated_at TEXT)</code>, with store methods to read defaults and save supported keys atomically.</li>
+          <li>Define a schema with <code>showPlanNavigatorByDefault</code>, <code>showCommentsByDefault</code>, <code>executionReadySkillName</code>, <code>buildPlanSkillName</code>, and <code>kanbanEnabled</code>; the two skill-name fields are the persisted source of truth for action routing.</li>
+          <li>Validate skill names as inert tokens, for example lowercase letters, digits, underscores, and hyphens with a sane max length.</li>
+          <li>Validate action-comment plan paths as single-line values with no ASCII control characters at registration and/or fail closed in the action routes before creating queue comments for any legacy unsafe rows.</li>
+          <li>Add <code>GET /api/configuration</code> and <code>PUT /api/configuration</code> routes with actionable error messages; reject unknown keys rather than silently ignoring them.</li>
+        </ul>
+        <h4>Open questions / decision dependencies</h4>
+        <p>None. The configuration is service-local and stored in SQLite for this slice.</p>
+        <h4>Verify</h4>
+        <pre><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></pre>
+      </article>
+
+      <article id="phase-p2-config-panel-ui" class="phase">
+        <h3>P2 — Build configuration panel UI</h3>
+        <h4>End State</h4>
+        <p>The browser exposes a Configuration page reachable from every document-list topbar and the review shell; existing column editing is available inside the panel, and <code>/columns</code> remains compatible.</p>
+        <h4>Tests first</h4>
+        <ul>
+          <li>Add contract tests that <code>/</code>, <code>/?view=all</code>, <code>/archive</code>, <code>/deferred</code>, and <code>/configuration</code> render an icon-only Configuration gear with tooltip/accessible text.</li>
+          <li>Add contract tests that <code>/p/:planId</code> renders the icon-only Configuration gear in the review-shell toolbar after Archive/Restore and before the comments collapse/open button, while retaining the right-anchored <code>#plan-navbar-actions</code> layout.</li>
+          <li>Add contract tests that <code>/configuration</code> contains the four settings sections and existing board-column controls.</li>
+          <li>Add compatibility coverage for <code>/columns</code> redirecting or rendering the configuration panel section.</li>
+        </ul>
+        <h4>Expected files</h4>
+        <ul>
+          <li><code>src/server/app.ts</code></li>
+          <li><code>src/__tests__/contracts.test.ts</code></li>
+          <li><code>src/test-fixtures/e2e-run.ts</code></li>
+        </ul>
+        <h4>Work</h4>
+        <ul>
+          <li>Refactor the existing columns-page renderer into reusable configuration-section markup.</li>
+          <li>Add a <code>/configuration</code> route styled with the existing index/review-shell dark visual system.</li>
+          <li>Add a configuration save script that sends the full validated settings payload and reports save/errors inline.</li>
+          <li>Replace the top-right columns gear with an icon-only Configuration gear across all topbar surfaces, including index, lifecycle list pages, the configuration page, and the review shell toolbar; in the review shell, preserve the current right-anchored action row and insert the gear after Archive/Restore and before the comments collapse/open control.</li>
+        </ul>
+        <h4>Open questions / decision dependencies</h4>
+        <p>None. Browser feedback resolved the placement and panel-shape decisions: use a full-page Configuration surface, icon-only gear entry, all-topbar visibility, and right-anchored plan-view placement after Archive/Restore and before Comments.</p>
+        <h4>Verify</h4>
+        <pre><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></pre>
+      </article>
+
+      <article id="phase-p3-apply-settings" class="phase">
+        <h3>P3 — Apply settings to shell and actions</h3>
+        <h4>End State</h4>
+        <p>Saved configuration controls review-shell defaults, action-button skill request bodies, and Kanban availability across browser/API surfaces.</p>
+        <h4>Tests first</h4>
+        <ul>
+          <li>Update existing action-button tests to set custom skill names and assert exact queue comment bodies.</li>
+          <li>Add action-button tests for an unsafe stored plan path that assert a validation error and no pending comment creation.</li>
+          <li>Add shell-rendering tests for default hidden side panels and configured open states.</li>
+          <li>Add Kanban-enabled and Kanban-disabled contract tests for index routing, navigation visibility, drag/drop script absence, plan movement mutation failures, CLI <code>column set</code> parity, and board-column configuration remaining available.</li>
+          <li>Add e2e assertions for opening panels from the hidden default state.</li>
+        </ul>
+        <h4>Expected files</h4>
+        <ul>
+          <li><code>src/server/app.ts</code></li>
+          <li><code>src/storage/database.ts</code></li>
+          <li><code>src/__tests__/contracts.test.ts</code></li>
+          <li><code>src/test-fixtures/e2e-run.ts</code></li>
+        </ul>
+        <h4>Work</h4>
+        <ul>
+          <li>Pass configuration into <code>indexHtml()</code>, <code>kanbanIndexHtml()</code>, <code>documentViewSwitcher()</code>, and <code>reviewShell()</code> as needed.</li>
+          <li>Initialize review-shell body classes and CSS variables from the side-panel defaults; set comments hidden width to zero until opened.</li>
+          <li>Keep left-nav and comments toggle state independent and keep overlay reflow behavior after layout transitions.</li>
+          <li>Change request body builders to read configured skill names while preserving fixed body shape and exact, single-line-safe plan path.</li>
+          <li>When <code>kanbanEnabled</code> is false, default <code>/</code> to All documents, hide Kanban switcher/Status controls/drag-drop scripts, fail browser/API/CLI plan movement attempts with actionable <code>feature_disabled</code> guidance, and keep board-column configuration available.</li>
+          <li>Ensure re-enabling Kanban restores the same columns and assignments.</li>
+        </ul>
+        <h4>Open questions / decision dependencies</h4>
+        <p>None. Mock placement is accepted through browser feedback and captured in Locked decisions, BDD scenarios, and P2 tests.</p>
+        <h4>Verify</h4>
+        <pre><code>bun run test:e2e</code></pre>
+      </article>
+
+      <article id="phase-p4-docs-verification" class="phase">
+        <h3>P4 — Document and verify end-to-end</h3>
+        <h4>End State</h4>
+        <p>Docs, public behavior, and tests agree on the configuration model, and the branch has passed the relevant full gates plus scoped review.</p>
+        <h4>Tests first</h4>
+        <ul>
+          <li>Search README/docs/CLI help for stale <code>/columns</code> and default Kanban language before editing.</li>
+          <li>Add or update assertions for API and CLI <code>column set</code> <code>feature_disabled</code> errors when Kanban is disabled, while proving <code>columns list</code>, <code>columns save-order</code>, and <code>columns rename</code> still work.</li>
+        </ul>
+        <h4>Expected files</h4>
+        <ul>
+          <li><code>README.md</code></li>
+          <li><code>docs/review-modes.md</code> if configuration affects documented workflows</li>
+          <li><code>src/cli.ts</code> only if CLI config show/set commands or gated column-command messages are added</li>
+          <li><code>src/__tests__/contracts.test.ts</code></li>
+        </ul>
+        <h4>Work</h4>
+        <ul>
+          <li>Document the Configuration panel, side-panel defaults, skill-name validation, Kanban disable behavior, and the <code>/columns</code> compatibility path.</li>
+          <li>Update CLI help/docs only for behavior that actually changes in implementation.</li>
+          <li>Run a scoped implementation review focused on config persistence, injection safety, Kanban disabled edge cases, and browser layout regressions.</li>
+          <li>Update this plan's Progress, Decisions / Deviations Log, and resume instructions with verification evidence.</li>
+        </ul>
+        <h4>Open questions / decision dependencies</h4>
+        <p>None.</p>
+        <h4>Verify</h4>
+        <pre><code>bun run build
+bun run test
+bun run test:e2e</code></pre>
+      </article>
+    </section>
+
+    <section id="verification-strategy">
+      <h2>Verification strategy</h2>
+      <ul>
+        <li><strong>Contract gate:</strong> <code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code> for settings API, rendering contracts, action-comment bodies, and Kanban-disabled semantics.</li>
+        <li><strong>Browser gate:</strong> <code>bun run test:e2e</code> for the shipped review shell and configuration-page interactions.</li>
+        <li><strong>Full repo gate:</strong> <code>bun run build &amp;&amp; bun run test</code> before final handoff.</li>
+        <li><strong>Review gate:</strong> run a scoped implementation review after each phase and the repo's GPT/GLM pre-PR review loop before final PR handoff.</li>
+      </ul>
+    </section>
+
+    <section id="delivery-order">
+      <h2>Delivery order</h2>
+      <ol>
+        <li>P1 locks the data contract and validation first so UI and behavior phases depend on a tested source of truth.</li>
+        <li>P2 adds the visible configuration panel and moves the columns editor while preserving existing behavior.</li>
+        <li>P3 applies configuration to the review shell, action comments, and Kanban behavior.</li>
+        <li>P4 aligns docs and runs full verification/review.</li>
+      </ol>
+    </section>
+
+    <section id="non-goals">
+      <h2>Non-goals</h2>
+      <ul>
+        <li>Authentication or role-based access for the configuration panel. The MVP service remains trusted-network local-only.</li>
+        <li>Per-user, per-browser, per-repo, or per-plan configuration scopes.</li>
+        <li>A mobile-specific plan navigator drawer.</li>
+        <li>Editing arbitrary prompt bodies for action buttons; only safe skill-name tokens are configurable.</li>
+        <li>Deleting Kanban columns or clearing plan assignments when Kanban is disabled.</li>
+        <li>Replacing the existing queue/comment lifecycle or delivery worker behavior.</li>
+      </ul>
+    </section>
+
+    <section id="decisions-log">
+      <h2>Decisions / Deviations Log</h2>
+      <ul>
+        <li id="log-2026-06-24-created">2026-06-24: Created draft HTML plan from user request. Initial decisions: SQLite-backed local configuration, side panels hidden by default, skill-name token validation, Kanban enabled by default but reversible, and board-column config moved into a full-page Configuration panel.</li>
+        <li id="log-2026-06-24-browser-comment-gear">2026-06-24: Integrated browser feedback cmt_bZIiAS384rMi: configuration entry is now an icon-only gear with tooltip/accessible text, shown in mocks for Kanban, All documents, lifecycle list pages, review shell, and the configuration panel.</li>
+        <li id="log-2026-06-24-browser-comment-plan-view">2026-06-24: Integrated browser feedback cmt_o6z50yDENXmg: Mock B now explicitly shows the plan-view screen at <code>/p/:planId</code> with the gear alongside Download, Request execution-ready review, Build Plan, Defer, Archive, and Comments controls.</li>
+        <li id="log-2026-06-24-browser-comment-review-gear-position">2026-06-24: Integrated browser feedback cmt_ECpxOO8aft48: moved the plan-view Configuration gear in Mock B to the right of Archive and left of the comments collapse/open button, and made that placement an implementation requirement.</li>
+        <li id="log-2026-06-24-browser-comment-right-anchor">2026-06-24: Integrated browser feedback cmt_kNfjz7rflyYH: updated Mock B and requirements so the plan-view action buttons remain anchored to the right side of the window, matching the current <code>#plan-navbar-actions</code> behavior.</li>
+        <li id="log-2026-06-24-browser-comment-skill-storage">2026-06-24: Integrated browser feedback cmt_F51I5P12YwO3: clarified that action skill-routing names are stored in SQLite with the rest of browser UI configuration and maintained through the Configuration panel/API.</li>
+        <li id="log-2026-06-24-browser-comment-decision-status">2026-06-24: Integrated browser feedback cmt__82iZ9D54WCI: updated status and Decision Status to mark mock-placement and configuration-panel decisions resolved based on current feedback while keeping execution-ready false pending plan-review gates.</li>
+        <li id="log-2026-06-24-readiness-self-check">2026-06-24: Execution-ready self-check removed stale mock-feedback dependencies from P2 and P3; no unresolved open questions remain before independent readiness review.</li>
+        <li id="log-2026-06-24-readiness-clarity">2026-06-24: Execution-ready review integration locked unknown configuration key rejection, clarified Kanban-disabled CLI/API plan movement behavior, kept board-column configuration available while Kanban is disabled, and expanded the no-Linear-issue reason.</li>
+        <li id="log-2026-06-24-readiness-action-path-safety">2026-06-24: Execution-ready review integration added action-comment plan-path safety: newline/control-character plan paths must be rejected at registration or fail closed before queue comment creation, so fixed action templates cannot inject extra agent-visible lines.</li>
+        <li id="log-2026-06-24-readiness-cleared">2026-06-24: Execution-ready gates cleared after revisions. GPT reviewer verdict: <code>PLAN_EXECUTION_READY</code>. GLM reviewer verdict: <code>PLAN_EXECUTION_READY</code>. Plan status updated to execution-ready for registration.</li>
+        <li id="log-2026-06-24-p1-p3-verified">2026-06-24: P1–P3 implemented and verified. Contract gate passed with <code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code> after configuration/API/action/Kanban coverage; browser gate passed with <code>bun run build &amp;&amp; bun run test:e2e</code> after updating default-collapsed shell assertions.</li>
+        <li id="log-2026-06-24-p4-docs-aligned">2026-06-24: P4 documentation alignment updated <code>README.md</code> for the Configuration panel, default hidden side panels, skill-name validation, Kanban disable behavior, and <code>/columns</code> compatibility. Added disabled-Kanban contract coverage proving board-column configuration can still save while column movement is blocked.</li>
+        <li id="log-2026-06-24-review-fixes">2026-06-24: Scoped implementation review found and fixed in-scope gaps for Unicode action-plan-path separators, README hidden-column wording, mobile comments default opt-in, and stale <code>boardColumnKey</code> filters while Kanban is disabled. Targeted contract and e2e gates passed after fixes.</li>
+        <li id="log-2026-06-24-final-verification">2026-06-24: Final full verification passed with <code>bun run build &amp;&amp; bun run test &amp;&amp; bun run test:e2e</code>. Scoped GPT reviewer verdict: <code>PASS_SCOPED</code>. Scoped GLM reviewer verdict: <code>PASS_SCOPED</code>. Pre-PR GPT and GLM reviewers both returned <code>CLEAN_FOR_PR</code>; validation artifact recorded at <code>thoughts/validation/pre-pr-reviews/2026-06-24-collapse-doc-nav-default.md</code>.</li>
+      </ul>
+    </section>
+  </main>
+</div>
+</body>
+</html>
