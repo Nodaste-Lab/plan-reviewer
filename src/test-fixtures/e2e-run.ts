@@ -1445,6 +1445,27 @@ try {
     assert.equal(resolvedResponse.ok(), true);
     await page.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('Resolved DOM annotation maps by selector fallback'));
 
+    // Acknowledged fixture: create → claim → ack. resolveComment throws on a claimed
+    // comment, so acknowledged status requires the explicit claim→ack chain.
+    const acknowledgedComment = await context.post(`/api/plans/${registered.planId}/comments`, {
+      data: {
+        versionId: registered.versionId,
+        body: 'Acknowledged DOM annotation green marker',
+        anchorType: 'dom',
+        anchor: { planNodeId: 'link-annotation', cssSelector: '#link-comment-target', textPreview: 'Commentable text before', rect: { x: 0, y: 0, width: 20, height: 20 } }
+      }
+    });
+    assert.equal(acknowledgedComment.ok(), true);
+    const acknowledged = (await acknowledgedComment.json()).data.comment as { id: string };
+    const acknowledgedClaim = await context.post(`/api/plans/${registered.planId}/comments/claim`, { data: { mode: 'selected', commentIds: [acknowledged.id] } });
+    assert.equal(acknowledgedClaim.ok(), true);
+    const acknowledgedClaimId = (await acknowledgedClaim.json()).data.claimed[0].claim.id;
+    const acknowledgedAck = await context.post(`/api/comments/${acknowledged.id}/ack`, {
+      data: { claimId: acknowledgedClaimId }
+    });
+    assert.equal(acknowledgedAck.ok(), true);
+    await page.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('Acknowledged DOM annotation green marker'));
+
     let delayNextRender = false;
     let resumeDelayedRender: (() => void) | null = null;
     const delayedRenderSeen = new Promise<void>(resolve => {
@@ -1663,12 +1684,12 @@ try {
     assert.equal(await page.evaluate(() => window.scrollY), 120);
     assert.equal(await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollY), 0);
     await page.waitForFunction(
-      commentId => Boolean(document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector(`.comment-anchor.addressed[data-comment-id="${commentId}"]`)),
+      commentId => Boolean(document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector(`.comment-anchor.resolved[data-comment-id="${commentId}"]`)),
       resolvedFallback.comment.id
     );
     await page.waitForFunction(commentId => {
       const doc = document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument;
-      const anchor = doc?.querySelector<HTMLElement>(`.comment-anchor.addressed[data-comment-id="${commentId}"]`);
+      const anchor = doc?.querySelector<HTMLElement>(`.comment-anchor.resolved[data-comment-id="${commentId}"]`);
       const target = doc?.querySelector<HTMLElement>('#text-target');
       if (!anchor || !target) return false;
       const anchorRect = anchor.getBoundingClientRect();
@@ -1686,7 +1707,7 @@ try {
     }, staleDom.comment.id), false);
     const resolvedAnchor = await page.evaluate(commentId => {
       const doc = document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument;
-      const anchor = doc?.querySelector<HTMLElement>(`.comment-anchor.addressed[data-comment-id="${commentId}"]`);
+      const anchor = doc?.querySelector<HTMLElement>(`.comment-anchor.resolved[data-comment-id="${commentId}"]`);
       const target = doc?.querySelector<HTMLElement>('#text-target');
       if (!anchor || !target) return null;
       const anchorRect = anchor.getBoundingClientRect();
@@ -1703,6 +1724,122 @@ try {
     assert.equal(resolvedAnchor.borderStyle, 'dotted');
     assert.equal(Math.abs(resolvedAnchor.anchorY - resolvedAnchor.targetY) <= 1, true);
     assert.equal(Math.abs(resolvedAnchor.anchorWidth - resolvedAnchor.targetWidth) <= 1, true);
+
+    // Acknowledged marker renders the green class (BDD-ack).
+    // The anchor can be cleared during marker reflow; retry until it is present.
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const found = await page.evaluate(commentId => {
+        const doc = document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument;
+        const anchor = doc?.querySelector(`.comment-anchor.acknowledged[data-comment-id="${commentId}"]`);
+        return anchor ? getComputedStyle(anchor).borderStyle : null;
+      }, acknowledged.id);
+      if (found) { assert.equal(found, 'dotted'); break; }
+      if (attempt === 29) assert.fail('acknowledged anchor never appeared');
+      await page.waitForTimeout(500);
+    }
+
+    // Counterexample: a claimed comment must not render as pending (BDD-counterexample).
+    // Create a fresh claimed comment here (claims can expire mid-test and revert older
+    // claimed comments to pending) so the counterexample sees a guaranteed claimed state.
+    const counterClaimedComment = await context.post(`/api/plans/${registered.planId}/comments`, {
+      data: {
+        versionId: registered.versionId,
+        body: 'Counterexample claimed marker not pending',
+        anchorType: 'dom',
+        anchor: { planNodeId: 'link-comment-target', cssSelector: '#link-comment-target', textPreview: 'Commentable text before', rect: { x: 0, y: 0, width: 20, height: 20 } }
+      }
+    });
+    assert.equal(counterClaimedComment.ok(), true);
+    const counterClaimed = (await counterClaimedComment.json()).data.comment as { id: string };
+    const counterClaim = await context.post(`/api/plans/${registered.planId}/comments/claim`, { data: { mode: 'selected', commentIds: [counterClaimed.id] } });
+    assert.equal(counterClaim.ok(), true);
+    await page.waitForTimeout(100);
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const isClaimed = await page.evaluate(commentId => {
+        const doc = document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument;
+        return Boolean(doc?.querySelector(`.comment-anchor.claimed[data-comment-id="${commentId}"]`));
+      }, counterClaimed.id);
+      if (isClaimed) break;
+      if (attempt === 29) assert.fail('claimed anchor never appeared');
+      await page.waitForTimeout(500);
+    }
+    assert.equal(await page.evaluate(commentId => {
+      const doc = document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument;
+      return Boolean(doc?.querySelector(`.comment-anchor.pending[data-comment-id="${commentId}"]`));
+    }, counterClaimed.id), false);
+    assert.equal(await page.evaluate(commentId => {
+      const doc = document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument;
+      return Boolean(doc?.querySelector(`.comment-anchor.claimed[data-comment-id="${commentId}"]`));
+    }, counterClaimed.id), true);
+
+    // Top-of-plan status banner: with pending + claimed + acknowledged + resolved comments
+    // present, an agent is working comments, so the banner is Yellow (BDD-banner-yellow).
+    let yellowBanner: { cls: string; text: string | null } | null = null;
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      yellowBanner = await page.evaluate(() => {
+        const banner = document.querySelector<HTMLElement>('#comment-status-banner');
+        return banner && !banner.hidden && banner.classList.contains('yellow')
+          ? { cls: banner.className, text: banner.textContent }
+          : null;
+      });
+      if (yellowBanner) break;
+      if (attempt === 29) assert.fail('yellow banner never appeared');
+      await page.waitForTimeout(500);
+    }
+    assert.ok(yellowBanner);
+    assert.match(yellowBanner!.cls, /yellow/);
+    assert.match(yellowBanner!.text!, /Agent working/);
+
+    // Banner Red/Green/live-transition coverage (AC9, AC11, AC12) on an isolated plan
+    // so the main scenario's comment state is not disturbed.
+    const bannerHtml = '<!doctype html><html><head><title>Banner Plan</title></head><body><main><section id="banner-target"><h1>Banner target</h1><p id="banner-text">Banner scenario text.</p></section></main></body></html>';
+    const bannerRegister = await context.post('/api/plans/register', {
+      data: {
+        repoName: 'e2e-repo', branch: 'banner-branch', commitSha: 'banner-commit',
+        planPath: 'thoughts/plans/banner-plan.html', html: bannerHtml, fileHash: sha256(bannerHtml),
+        publicationMetadata: { worktreePath: process.cwd(), branch: 'banner-branch', executionReady: false, executionReadyBasis: 'agent-review-results' }
+      }
+    });
+    const bannerPlan = (await bannerRegister.json()).data as { planId: string; versionId: string };
+    const bannerPage = await browser.newPage();
+    await bannerPage.goto(`${baseUrl}/p/${bannerPlan.planId}`);
+    await bannerPage.waitForFunction(() => Boolean(document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#banner-target')));
+    const waitForBannerState = async (pg: typeof page, state: string, timeoutMs = 10000) => {
+      for (let attempt = 0; attempt < Math.ceil(timeoutMs / 500); attempt += 1) {
+        const ok = await pg.evaluate(st => {
+          const b = document.querySelector<HTMLElement>('#comment-status-banner');
+          return Boolean(b && !b.hidden && b.classList.contains(st));
+        }, state);
+        if (ok) return true;
+        await pg.waitForTimeout(500);
+      }
+      return false;
+    };
+
+    // Green: no comments yet (empty plan).
+    assert.ok(await waitForBannerState(bannerPage, 'green'));
+    assert.match(String(await bannerPage.evaluate(() => document.querySelector<HTMLElement>('#comment-status-banner')!.textContent)), /No comments/);
+
+    // Red: a single pending comment, none claimed/acknowledged.
+    const bannerPending = await context.post(`/api/plans/${bannerPlan.planId}/comments`, {
+      data: { versionId: bannerPlan.versionId, body: 'Banner pending only', anchorType: 'dom', anchor: { planNodeId: 'banner-target', cssSelector: '#banner-target', textPreview: 'Banner target', rect: { x: 0, y: 0, width: 20, height: 20 } } }
+    });
+    const bannerPendingComment = (await bannerPending.json()).data.comment as { id: string };
+    assert.ok(await waitForBannerState(bannerPage, 'red'));
+    assert.match(String(await bannerPage.evaluate(() => document.querySelector<HTMLElement>('#comment-status-banner')!.textContent)), /1 pending/);
+
+    // Live transition Red -> Yellow: claim the pending comment.
+    const bannerClaim = await context.post(`/api/plans/${bannerPlan.planId}/comments/claim`, { data: { mode: 'selected', commentIds: [bannerPendingComment.id] } });
+    assert.equal(bannerClaim.ok(), true);
+    assert.ok(await waitForBannerState(bannerPage, 'yellow'));
+
+    // Live transition Yellow -> Green: ack then resolve the comment.
+    const bannerClaimId = (await bannerClaim.json()).data.claimed[0].claim.id;
+    await context.post(`/api/comments/${bannerPendingComment.id}/ack`, { data: { claimId: bannerClaimId } });
+    await context.post(`/api/comments/${bannerPendingComment.id}/resolve`, { data: { resolutionNote: 'Banner resolved' } });
+    assert.ok(await waitForBannerState(bannerPage, 'green'));
+    assert.match(String(await bannerPage.evaluate(() => document.querySelector<HTMLElement>('#comment-status-banner')!.textContent)), /All resolved/);
+    await bannerPage.close();
     await page.evaluate(() => {
       const textarea = document.querySelector<HTMLTextAreaElement>('#comment-body')!;
       const originalFocus = textarea.focus.bind(textarea);
