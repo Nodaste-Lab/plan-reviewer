@@ -532,10 +532,30 @@ try {
     await page.waitForSelector('#desktop-plan-nav-toggle[aria-expanded="true"]');
     await page.waitForSelector('#desktop-comments-toggle[aria-expanded="false"]');
     await page.waitForSelector('#download-raw-plan[aria-label="Download raw plan"]');
+    await page.waitForSelector('#plan-list-nav .plan-nav-filters #project-filter-control');
+    await page.waitForSelector('#plan-list-nav .plan-nav-filters #state-filter-control');
+    await page.waitForSelector('#plan-list-nav .plan-nav-filters #status-filter-control');
+    await page.waitForSelector('#current-plan-bar #current-plan-status-control');
+    assert.equal(await page.locator('#plan-navbar-actions #project-filter-control').count(), 0);
+    assert.equal(await page.locator('#plan-navbar-actions #state-filter-control').count(), 0);
+    assert.equal(await page.locator('#plan-navbar-actions #status-filter-control').count(), 0);
     assert.equal(await page.locator('#desktop-plan-nav-toggle').getAttribute('aria-label'), 'Plan Navigator');
     assert.equal(await page.locator('#desktop-plan-nav-toggle').getAttribute('title'), 'Plan Navigator');
     assert.equal(await page.locator('#download-raw-plan').getAttribute('title'), 'Download raw plan HTML; ZIP includes required assets.');
     assert.equal(await page.locator('#download-raw-plan').getAttribute('href'), `/download/${registered.planId}?versionId=${registered.versionId}`);
+    assert.equal(await page.locator('#current-plan-status-control').inputValue(), 'backlog');
+    await page.selectOption('#current-plan-status-control', 'in_progress');
+    await page.waitForFunction(() => document.querySelector<HTMLSelectElement>('#current-plan-status-control')?.value === 'in_progress');
+    const statusDetail = await context.get(`/api/plans/${registered.planId}`);
+    assert.equal(statusDetail.ok(), true);
+    assert.equal(((await statusDetail.json()).data as { plan: { boardColumnKey: string } }).plan.boardColumnKey, 'in_progress');
+    await page.route(`**/api/plans/${registered.planId}/column`, async route => {
+      await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ ok: false, error: { code: 'unavailable', message: 'forced status failure' } }) });
+    }, { times: 1 });
+    await page.selectOption('#current-plan-status-control', 'ready_to_pull');
+    await page.waitForFunction(() => document.querySelector<HTMLSelectElement>('#current-plan-status-control')?.value === 'in_progress');
+    await page.waitForSelector('#current-plan-status-error:not([hidden])');
+    assert.match(await page.locator('#current-plan-status-error').innerText(), /Status was not changed|retry/i);
     await page.waitForFunction(() => {
       const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame');
       if (!iframe?.contentDocument) return false;

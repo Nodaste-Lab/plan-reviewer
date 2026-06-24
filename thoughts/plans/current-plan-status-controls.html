@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Current Plan Status Controls Plan</title>
+  <style>
+    :root { color-scheme: dark; --bg:#070b16; --panel:#0f172a; --panel-2:#111827; --text:#e5e7eb; --muted:#a7b0c0; --accent:#7dd3fc; --border:#2b364d; --ok:#22c55e; --warn:#f59e0b; --bad:#fb7185; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font:16px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    a { color:var(--accent); }
+    code { background:#020617; color:#bfdbfe; padding:.12rem .3rem; border-radius:5px; }
+    .layout { display:grid; grid-template-columns:280px minmax(0,1fr); gap:24px; max-width:1360px; margin:0 auto; padding:24px; }
+    nav.toc { position:sticky; top:18px; max-height:calc(100vh - 36px); overflow:auto; border:1px solid var(--border); border-radius:16px; background:rgba(15,23,42,.92); padding:16px; }
+    nav.toc h2 { margin:0 0 10px; font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; }
+    nav.toc a { display:block; padding:7px 0; color:#cbd5e1; text-decoration:none; font-size:14px; }
+    nav.toc a:hover { color:var(--accent); }
+    main { min-width:0; }
+    header.hero, section { border:1px solid var(--border); border-radius:18px; background:rgba(15,23,42,.84); padding:22px; margin:0 0 18px; }
+    header.hero { background:linear-gradient(135deg,rgba(14,165,233,.18),rgba(15,23,42,.92)); }
+    h1 { margin:0 0 8px; font-size:34px; line-height:1.1; }
+    h2 { margin:0 0 12px; font-size:22px; }
+    h3 { margin:18px 0 8px; font-size:17px; }
+    p { margin:8px 0; }
+    ul, ol { padding-left:22px; }
+    .meta { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
+    .pill { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--border); border-radius:999px; padding:4px 10px; background:#0b1220; color:#cbd5e1; font-size:13px; font-weight:750; }
+    .pill.warn { border-color:rgba(245,158,11,.65); color:#fde68a; }
+    .pill.ok { border-color:rgba(34,197,94,.65); color:#bbf7d0; }
+    .callout { border:1px solid rgba(245,158,11,.55); border-radius:12px; background:rgba(245,158,11,.10); padding:12px 14px; color:#fde68a; }
+    .grid { display:grid; grid-template-columns:1fr; gap:14px; }
+    .mock { border:1px solid #334155; border-radius:16px; overflow:hidden; background:#020617; box-shadow:0 20px 60px rgba(0,0,0,.32); }
+    .mock-title { padding:10px 12px; border-bottom:1px solid #334155; background:#0b1220; color:#cbd5e1; font-size:13px; font-weight:800; }
+    .mock-shell { min-height:330px; display:grid; grid-template-rows:auto 1fr; }
+    .mock-top { display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:10px; border-bottom:1px solid #253248; background:#0f172a; }
+    .mock-button, .mock-select, .mock-badge { border:1px solid #475569; border-radius:8px; background:#1e293b; color:#e5e7eb; padding:7px 9px; font-size:12px; font-weight:800; }
+    .mock-select { background:#020617; border-color:#7dd3fc; }
+    .mock-badge.ready { border-color:#22c55e; color:#bbf7d0; }
+    .mock-body { display:grid; grid-template-columns:190px minmax(0,1fr) 32px; min-height:280px; }
+    .mock-left { padding:12px; border-right:1px solid #253248; background:#0b1220; }
+    .mock-left h4 { margin:0 0 8px; font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:#a7b0c0; }
+    .mock-filter { display:grid; gap:4px; margin-bottom:10px; color:#cbd5e1; font-size:12px; font-weight:800; }
+    .mock-filter .mock-select { width:100%; }
+    .mock-card { display:block; margin:8px 0; padding:9px; border:1px solid #253248; border-radius:10px; background:#101827; color:#cbd5e1; text-decoration:none; font-size:12px; }
+    .mock-card.active { border-color:#38bdf8; background:rgba(14,165,233,.15); }
+    .mock-content { padding:18px; background:#f8fafc; color:#0f172a; }
+    .mock-content .line { height:12px; border-radius:999px; background:#cbd5e1; margin:12px 0; }
+    .mock-side { border-left:1px solid #253248; background:#111827; }
+    .phase { border:1px solid #334155; border-radius:14px; background:#0b1220; padding:16px; margin:14px 0; }
+    .phase h3 { margin-top:0; }
+    table { width:100%; border-collapse:collapse; margin:12px 0; }
+    th, td { border-bottom:1px solid #334155; padding:10px; text-align:left; vertical-align:top; }
+    th { color:#cbd5e1; font-size:13px; }
+    .progress-list { list-style:none; padding:0; }
+    .progress-list li { margin:8px 0; }
+    @media (max-width: 900px) { .layout { grid-template-columns:1fr; padding:14px; } nav.toc { position:relative; top:auto; max-height:none; } .grid { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <nav class="toc" aria-label="Plan sections">
+      <h2>Sections</h2>
+      <a href="#status">Status</a>
+      <a href="#goal">Goal</a>
+      <a href="#decision-attention">Decision Attention</a>
+      <a href="#solution">Solution narrative</a>
+      <a href="#inputs">Authority and inputs</a>
+      <a href="#current-reality">Current implementation reality</a>
+      <a href="#ui-mocks">UI mocks</a>
+      <a href="#progress">Progress</a>
+      <a href="#resume">Resume instructions</a>
+      <a href="#product-intent">Product intent alignment</a>
+      <a href="#locked-decisions">Locked decisions</a>
+      <a href="#acceptance">Acceptance criteria</a>
+      <a href="#bdd">BDD scenarios</a>
+      <a href="#coverage">Test coverage matrix</a>
+      <a href="#phases">Phases</a>
+      <a href="#phase-p1-contracts">P1 Contracts</a>
+      <a href="#phase-p2-shell-layout">P2 Shell layout</a>
+      <a href="#phase-p3-status-control">P3 Status control</a>
+      <a href="#phase-p4-e2e-polish">P4 E2E polish</a>
+      <a href="#verification">Verification strategy</a>
+      <a href="#delivery">Delivery order</a>
+      <a href="#review-record">Review record</a>
+      <a href="#non-goals">Non-goals</a>
+      <a href="#decisions-log">Decisions / Deviations log</a>
+    </nav>
+
+    <main>
+      <header class="hero" id="title">
+        <h1>Plan viewer controls for navigator filters and current-plan status</h1>
+        <p>Move plan-list filter selectors into the left navigator, stacked vertically, and reserve the top plan bar for controls that mutate the current plan. Add a current-plan status selector there while keeping state and project changes out of top-level selectors.</p>
+        <div class="meta">
+          <span class="pill ok">Status: execution-ready</span>
+          <span class="pill">Linear: none — user-requested local plan</span>
+          <span class="pill">UI impact: yes</span>
+          <span class="pill">Artifact: thoughts/plans/current-plan-status-controls.html</span>
+        </div>
+      </header>
+
+      <section id="status">
+        <h2>Status</h2>
+        <p>This plan is execution-ready. Browser feedback has been integrated, independent GPT and GLM readiness reviews cleared the latest material edit, and the plan has been re-registered with truthful execution-ready metadata.</p>
+      </section>
+
+      <section id="goal">
+        <h2>Goal</h2>
+        <p>When viewing a registered plan at <code>/p/:planId</code>, the UI should clearly separate two jobs:</p>
+        <ul>
+          <li>Left navigator filters choose which plans appear in the left navigation list.</li>
+          <li>Top current-plan controls change settings for the open plan.</li>
+        </ul>
+        <p>The current-plan controls include a status selector for the plan board column. They do not include state or project selectors because state remains covered by Defer / Resume / Archive / Restore buttons and project assignment is intentionally not introduced in this slice.</p>
+      </section>
+
+      <section id="decision-attention">
+        <h2>Decision Attention / Low-confidence Areas</h2>
+        <div class="callout">
+          <strong>No product decision required before browser review.</strong>
+          <p>Reviewer feedback resolved the implementation detail: split navigator filters and current-plan settings into explicit components/helpers instead of stretching the existing inline <code>.filter-control</code> markup. This keeps the DOM semantics and client wiring simpler while preserving the same product scope.</p>
+        </div>
+      </section>
+
+      <section id="solution">
+        <h2>Solution narrative</h2>
+        <p>The plan viewer currently places project, state, and status filter selectors in the sticky top bar alongside plan actions. This makes filter selectors look like current-plan settings. The target design makes the top bar action-oriented and moves filter criteria into the left navigator where their effect is visible.</p>
+        <p>The left navigator gets a compact filter stack above the plan list: Project, State, and Status. The current plan bar gets a status selector labeled as a current-plan setting, backed by the existing board-column API. Existing state buttons remain in place and continue to reflect archived/deferred/active lifecycle behavior.</p>
+      </section>
+
+      <section id="inputs">
+        <h2>Authority and inputs</h2>
+        <ul>
+          <li>User request in this session: move filter selectors to left nav, stacked vertically; add top selectors for current-plan settings; no state/project selector; include status selector.</li>
+          <li>Repo guidance: <code>AGENTS.md</code> and <code>thoughts/plans/AGENTS.md</code> require reviewed HTML plans and plan registration.</li>
+          <li>Product intent: <code>thoughts/specs/product_intent.md</code> emphasizes truthful plan status, obvious workflows, and aligned browser/CLI/API/test surfaces.</li>
+          <li>Current code evidence: <code>src/server/app.ts</code> renders <code>project-filter-control</code>, <code>state-filter-control</code>, and <code>status-filter-control</code> in <code>plan-navbar-actions</code>; <code>PUT /api/plans/:id/column</code> already changes planning status.</li>
+          <li>Current test evidence: <code>src/__tests__/contracts.test.ts</code> and <code>src/test-fixtures/e2e-run.ts</code> assert current selector placement and navigator filter URL behavior.</li>
+        </ul>
+      </section>
+
+      <section id="current-reality">
+        <h2>Current implementation reality</h2>
+        <ul>
+          <li><code>reviewShell()</code> builds <code>organizationControls</code> from pin, project filter, state filter, and status filter, then injects them into <code>#plan-navbar-actions</code>.</li>
+          <li><code>planNavigatorHtml()</code> renders only the navigator header, retry/error area, and plan list items; it has no filter-control slot today.</li>
+          <li>Client code already reads <code>projectFilterControl</code>, <code>stateFilterControl</code>, and <code>statusFilterControl</code>, updates URL query parameters, reloads navigator items, and preserves filters while switching plans.</li>
+          <li>The API already supports plan status mutation through <code>PUT /api/plans/:id/column</code> and the store validates visible board columns.</li>
+          <li>E2E coverage already exercises filter persistence and archive/defer lifecycle behavior, so this work should adjust coverage rather than invent a parallel workflow.</li>
+        </ul>
+      </section>
+
+      <section id="ui-mocks">
+        <h2>UI mocks</h2>
+        <div class="grid">
+          <figure class="mock" id="mock-before">
+            <figcaption class="mock-title">Current: filters mixed into top plan actions</figcaption>
+            <div class="mock-shell" aria-label="Current layout mock">
+              <div class="mock-top">
+                <span class="mock-button">☰</span><span class="mock-button">Kanban</span><span class="mock-button">All</span>
+                <span class="mock-button">☆</span><span class="mock-select">Filter: Project ▾</span><span class="mock-select">Filter: State ▾</span><span class="mock-select">Filter: Status ▾</span>
+                <span class="mock-button">⬇</span><span class="mock-button">✓</span><span class="mock-button">⚒</span><span class="mock-button">⏸</span><span class="mock-button">🗄</span><span class="mock-button">💬</span>
+              </div>
+              <div class="mock-body">
+                <div class="mock-left"><h4>Active plans</h4><a class="mock-card active">Current plan<br><small>Execution not ready</small></a><a class="mock-card">Other plan</a></div>
+                <div class="mock-content"><strong>Rendered plan</strong><div class="line" style="width:80%"></div><div class="line" style="width:65%"></div><div class="line" style="width:72%"></div></div>
+                <div class="mock-side"></div>
+              </div>
+            </div>
+          </figure>
+
+          <figure class="mock" id="mock-target-desktop">
+            <figcaption class="mock-title">Target desktop: navigator filters left, current-plan status top</figcaption>
+            <div class="mock-shell" aria-label="Target desktop layout mock">
+              <div class="mock-top">
+                <span class="mock-button">☰</span><span class="mock-button">Kanban</span><span class="mock-button">All</span>
+                <span class="mock-button">☆</span><span class="mock-select">Plan status: In progress ▾</span>
+                <span class="mock-button">⬇</span><span class="mock-button">✓</span><span class="mock-button">⚒</span><span class="mock-button">⏸</span><span class="mock-button">🗄</span><span class="mock-button">💬</span>
+              </div>
+              <div class="mock-body">
+                <div class="mock-left"><h4>Filter plans</h4><label class="mock-filter">Project <span class="mock-select">All projects ▾</span></label><label class="mock-filter">State <span class="mock-select">Active ▾</span></label><label class="mock-filter">Status <span class="mock-select">All statuses ▾</span></label><h4>Active plans</h4><a class="mock-card active">Current plan<br><small>In progress · active</small></a><a class="mock-card">Other plan</a></div>
+                <div class="mock-content"><strong>Rendered plan</strong><div class="line" style="width:80%"></div><div class="line" style="width:65%"></div><div class="line" style="width:72%"></div></div>
+                <div class="mock-side"></div>
+              </div>
+            </div>
+          </figure>
+        </div>
+        <figure class="mock" id="mock-target-mobile">
+          <figcaption class="mock-title">Target mobile / coarse pointer: keep existing no-left-nav behavior</figcaption>
+          <div class="mock-shell" aria-label="Target mobile layout mock">
+            <div class="mock-top"><span class="mock-button">Kanban</span><span class="mock-button">All</span><span class="mock-select">Plan status: In progress ▾</span><span class="mock-button">⬇</span><span class="mock-button">✓</span><span class="mock-button">⚒</span><span class="mock-button">⏸</span><span class="mock-button">🗄</span></div>
+            <div class="mock-content" style="min-height:250px"><strong>Rendered plan fills the screen.</strong><p>Navigator remains hidden under the existing mobile/coarse-pointer rules; no unreachable filter-only UI is introduced.</p><div class="line" style="width:78%"></div><div class="line" style="width:62%"></div></div>
+          </div>
+        </figure>
+      </section>
+
+      <section id="progress">
+        <h2>Progress</h2>
+        <ul class="progress-list">
+          <li><label><input type="checkbox" checked disabled> P1 — Lock contracts and RED tests</label></li>
+          <li><label><input type="checkbox" checked disabled> P2 — Move navigator filter layout</label></li>
+          <li><label><input type="checkbox" checked disabled> P3 — Add current-plan status selector</label></li>
+          <li><label><input type="checkbox" checked disabled> P4 — E2E polish and verification</label></li>
+        </ul>
+      </section>
+
+      <section id="resume">
+        <h2>Resume instructions</h2>
+        <p>Read this plan fully, then execute the first unchecked progress item. Keep product code changes scoped to that phase, update this progress section only after phase verification passes, and record any material deviation in the Decisions / Deviations log. Ask the user only if implementation reveals a product behavior conflict not resolved by this plan or repo evidence.</p>
+      </section>
+
+      <section id="product-intent">
+        <h2>Product intent alignment</h2>
+        <p>This plan advances <code>thoughts/specs/product_intent.md</code> by making browser plan status and controls more truthful and obvious. It keeps the plan file authoritative, avoids introducing a document editor, and maintains parity across UI/API/tests for plan lifecycle and board-column status.</p>
+        <ul>
+          <li><strong>Obvious workflow:</strong> filter criteria live where filtered plans are shown; current-plan status lives with current-plan actions.</li>
+          <li><strong>Truthful status:</strong> status selector changes the existing board-column status and updates visible metadata without implying execution readiness changes, including when the current saved column is hidden from normal board choices.</li>
+          <li><strong>Safe failure:</strong> failed status updates restore the previous selector value and show actionable inline/toast guidance rather than leaving stale UI.</li>
+          <li><strong>Boundary:</strong> no authentication, queue, source-sync, or rendered-plan safety behavior changes.</li>
+        </ul>
+      </section>
+
+      <section id="locked-decisions">
+        <h2>Locked decisions</h2>
+        <ul>
+          <li>Navigator filter controls move into <code>#plan-list-nav</code> above <code>#plan-list-items</code> and stack vertically.</li>
+          <li>Navigator filters and current-plan settings use separate rendering helpers/components rather than one overloaded inline control helper.</li>
+          <li>The filter controls retain their current IDs unless tests prove a compatibility-safe replacement is needed: <code>project-filter-control</code>, <code>state-filter-control</code>, and <code>status-filter-control</code>.</li>
+          <li>The top bar current-plan status selector uses a distinct label/ID from the navigator status filter, such as <code>current-plan-status-control</code>, and maps to <code>PUT /api/plans/:id/column</code>.</li>
+          <li>If the current plan is assigned to a hidden board column, the selector must truthfully show that current saved status as a disabled or otherwise non-selectable current option, while update choices remain limited to visible board columns accepted by <code>PUT /api/plans/:id/column</code>.</li>
+          <li>No top-bar selector is added for lifecycle state or project. State remains button-driven; project assignment remains out of scope for this slice.</li>
+          <li>Collaboration documents do not receive planning status controls; planning-only status remains board-column based.</li>
+          <li>Mobile/coarse-pointer behavior stays conservative: do not expose left-nav-only filters in an unreachable hidden navigator.</li>
+        </ul>
+      </section>
+
+      <section id="acceptance">
+        <h2>Acceptance criteria</h2>
+        <ol>
+          <li id="ac-1">On desktop plan pages, Project / State / Status navigator filters appear at the top of the left plan navigator, stacked vertically, and no longer appear in <code>#plan-navbar-actions</code>.</li>
+          <li id="ac-2">Changing any navigator filter preserves existing URL query semantics, reloads navigator items, and keeps filtered plan navigation links carrying the filter query.</li>
+          <li id="ac-3">On planning-mode plan pages, the top bar includes a current-plan status selector populated from visible board columns, plus the open plan's saved current board column when that current value is hidden.</li>
+          <li id="ac-4">Changing the current-plan status selector calls the existing board-column update API, updates the visible selector and navigator item metadata on success, and restores the previous value with actionable error text on failure.</li>
+          <li id="ac-5">When a plan's saved board column is hidden, the selector truthfully displays that hidden current status but does not offer it as an update target; visible update choices still use the API-accepted visible columns.</li>
+          <li id="ac-6">No current-plan state or project selector is added to the top bar; existing Defer / Resume / Archive / Restore buttons continue to own lifecycle state changes.</li>
+          <li id="ac-7">Collaboration-mode documents omit planning-only current-plan status controls while keeping document navigation and comments usable.</li>
+          <li id="ac-8">Keyboard labels, ARIA names, and focus order distinguish navigator filters from current-plan settings.</li>
+          <li id="ac-9">Existing archive/defer, quick-open, comments, source-sync, and plan frame behaviors do not regress.</li>
+
+        </ol>
+      </section>
+
+      <section id="bdd">
+        <h2>BDD scenarios</h2>
+        <article id="bdd-navigator-filters">
+          <h3>Navigator filters are visually and semantically scoped to the left nav</h3>
+          <p><strong>Given</strong> a user opens a planning plan on desktop, <strong>when</strong> the shell renders, <strong>then</strong> Project, State, and Status filter selectors are stacked above the left navigator list and the top bar contains no filter-labeled controls.</p>
+        </article>
+        <article id="bdd-filter-routing">
+          <h3>Filters still drive navigator list membership</h3>
+          <p><strong>Given</strong> a project filter excludes a plan, <strong>when</strong> the user changes Project to All projects, <strong>then</strong> the navigator reloads with matching plans and links preserve the filter query while switching plans.</p>
+        </article>
+        <article id="bdd-status-update-success">
+          <h3>Current-plan status update succeeds</h3>
+          <p><strong>Given</strong> the current plan is in Backlog, <strong>when</strong> the user selects In progress from the top status selector, <strong>then</strong> the app sends <code>PUT /api/plans/:id/column</code>, keeps the selector on In progress, and updates navigator metadata for the current plan.</p>
+        </article>
+        <article id="bdd-status-update-failure">
+          <h3>Current-plan status update fails safely</h3>
+          <p><strong>Given</strong> the status update API returns an error, <strong>when</strong> the user selects a new status, <strong>then</strong> the selector returns to its previous value and displays guidance that the status was not changed and the user can retry.</p>
+        </article>
+        <article id="bdd-hidden-column-status">
+          <h3>Hidden current status remains truthful</h3>
+          <p><strong>Given</strong> the current plan is assigned to a hidden board column, <strong>when</strong> the plan page renders, <strong>then</strong> the top status selector displays the hidden saved status as the current value while offering only visible board columns as selectable update targets.</p>
+        </article>
+        <article id="bdd-no-state-project-selector">
+          <h3>Lifecycle and project controls do not expand scope</h3>
+          <p><strong>Given</strong> a user views an active plan, <strong>when</strong> they inspect the top bar, <strong>then</strong> they can use Defer and Archive buttons for state but cannot change lifecycle state or project through selectors.</p>
+        </article>
+        <article id="bdd-collaboration-doc">
+          <h3>Collaboration documents avoid planning status controls</h3>
+          <p><strong>Given</strong> a collaboration document is open, <strong>when</strong> the shell renders, <strong>then</strong> no current-plan status selector is present and existing document actions remain usable.</p>
+        </article>
+        <article id="bdd-mobile-hidden-nav">
+          <h3>Mobile does not depend on hidden navigator filters</h3>
+          <p><strong>Given</strong> a coarse-pointer/mobile viewport hides the left navigator, <strong>when</strong> the plan page loads, <strong>then</strong> the rendered plan and comments remain usable and no required current-plan action is hidden only inside the navigator.</p>
+        </article>
+      </section>
+
+      <section id="coverage">
+        <h2>Test coverage matrix</h2>
+        <table>
+          <thead><tr><th>Acceptance / scenario</th><th>Test layer</th><th>Expected files</th><th>Verification</th></tr></thead>
+          <tbody>
+            <tr><td><a href="#ac-1">AC1</a>, <a href="#bdd-navigator-filters">navigator filters</a></td><td>Contract + E2E DOM assertions</td><td><code>src/__tests__/contracts.test.ts</code>, <code>src/test-fixtures/e2e-run.ts</code></td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></td></tr>
+            <tr><td><a href="#ac-2">AC2</a>, <a href="#bdd-filter-routing">filter routing</a></td><td>E2E behavior</td><td><code>src/test-fixtures/e2e-run.ts</code></td><td><code>bun run test:e2e</code></td></tr>
+            <tr><td><a href="#ac-3">AC3</a>, <a href="#ac-4">AC4</a>, status success/failure</td><td>Contract + E2E API interception</td><td><code>src/__tests__/contracts.test.ts</code>, <code>src/test-fixtures/e2e-run.ts</code></td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code>; <code>bun run test:e2e</code></td></tr>
+            <tr><td><a href="#ac-5">AC5</a>, <a href="#bdd-hidden-column-status">hidden current status</a></td><td>Contract regression using existing hidden-column setup</td><td><code>src/__tests__/contracts.test.ts</code></td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></td></tr>
+            <tr><td><a href="#ac-6">AC6</a>, <a href="#ac-7">AC7</a>, no extra selectors</td><td>Contract negative assertions</td><td><code>src/__tests__/contracts.test.ts</code></td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></td></tr>
+            <tr><td><a href="#ac-8">AC8</a>, <a href="#ac-9">AC9</a>, mobile and regression coverage</td><td>E2E shell tests</td><td><code>src/test-fixtures/e2e-run.ts</code></td><td><code>bun run test:e2e</code></td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="phases">
+        <h2>Phase-by-phase execution plan</h2>
+        <article class="phase" id="phase-p1-contracts">
+          <h3>P1 — Lock contracts and RED tests</h3>
+          <h4>End State</h4>
+          <p>Tests fail for the current UI because navigator filters are still in the top bar and the current-plan status selector does not exist.</p>
+          <h4>Tests first</h4>
+          <p>Update contract tests for expected HTML/CSS/JS hooks and add/adjust E2E assertions around filter placement, current status selector presence, and collaboration omission.</p>
+          <h4>Expected files</h4>
+          <p><code>src/__tests__/contracts.test.ts</code>, <code>src/test-fixtures/e2e-run.ts</code></p>
+          <h4>Work</h4>
+          <ul>
+            <li>Replace top-bar filter placement assertions with left-nav filter stack assertions.</li>
+            <li>Add assertions that <code>#current-plan-status-control</code> appears only for planning-mode documents.</li>
+            <li>Add failure-path expectations for status selector rollback or visible error guidance.</li>
+            <li>Add a hidden-board-column regression that proves the current saved status is displayed truthfully but hidden columns are not selectable update targets.</li>
+          </ul>
+          <h4>Open questions / decision dependencies</h4>
+          <p>None.</p>
+          <h4>Verify</h4>
+          <p><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code> should fail on the new expectations before implementation.</p>
+        </article>
+
+        <article class="phase" id="phase-p2-shell-layout">
+          <h3>P2 — Move navigator filter layout</h3>
+          <h4>End State</h4>
+          <p>Project, State, and Status filter selectors render inside <code>#plan-list-nav</code> above the plan list, stacked vertically, and continue driving navigator filters.</p>
+          <h4>Tests first</h4>
+          <p>Use P1 tests as the RED contract.</p>
+          <h4>Expected files</h4>
+          <p><code>src/server/app.ts</code>, possibly <code>src/__tests__/contracts.test.ts</code> only if selectors require test fixture adjustment.</p>
+          <h4>Work</h4>
+          <ul>
+            <li>Add an explicit navigator-filter rendering helper/component for Project, State, and Status controls before <code>#plan-list-items</code>.</li>
+            <li>Remove filter controls from <code>organizationControls</code> in <code>#plan-navbar-actions</code>.</li>
+            <li>Update CSS so <code>#plan-list-nav</code> has a visually grouped <code>.plan-nav-filters</code> stack, with controls full width and scroll behavior preserved.</li>
+            <li>Keep existing selector IDs for filter controls so client query/filter code stays minimally changed.</li>
+          </ul>
+          <h4>Open questions / decision dependencies</h4>
+          <p>None.</p>
+          <h4>Verify</h4>
+          <p><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></p>
+        </article>
+
+        <article class="phase" id="phase-p3-status-control">
+          <h3>P3 — Add current-plan status selector</h3>
+          <h4>End State</h4>
+          <p>Planning-mode plan pages expose a top-bar selector for the current plan's board-column status and persist changes through the existing API.</p>
+          <h4>Tests first</h4>
+          <p>Use P1 status selector and failure-path tests as the RED contract.</p>
+          <h4>Expected files</h4>
+          <p><code>src/server/app.ts</code>, <code>src/__tests__/contracts.test.ts</code>, <code>src/test-fixtures/e2e-run.ts</code></p>
+          <h4>Work</h4>
+          <ul>
+            <li>Add an explicit current-plan settings rendering helper/component for top-bar controls, starting with the board-column status selector.</li>
+            <li>Add a top-bar current-plan status selector using visible board columns and the open plan's current <code>boardColumnKey</code>, including a disabled/non-selectable current option when that saved column is hidden.</li>
+            <li>Wire client JS to call <code>PUT /api/plans/:id/column</code> with <code>{ boardColumnKey }</code> only for visible selectable columns.</li>
+            <li>On success, refresh the current plan metadata/navigator items without losing filter query state.</li>
+            <li>On failure, restore the previous selector value and show actionable inline or toast guidance.</li>
+            <li>Do not add current-plan state/project selectors.</li>
+          </ul>
+          <h4>Open questions / decision dependencies</h4>
+          <p>None.</p>
+          <h4>Verify</h4>
+          <p><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></p>
+        </article>
+
+        <article class="phase" id="phase-p4-e2e-polish">
+          <h3>P4 — E2E polish and verification</h3>
+          <h4>End State</h4>
+          <p>The shipped browser shell behavior matches the target mocks across desktop, collaboration documents, and mobile/coarse-pointer layouts without regressing existing review flows.</p>
+          <h4>Tests first</h4>
+          <p>Use the adjusted E2E assertions from P1 and add targeted selectors for status mutation success/failure if not already covered by contracts.</p>
+          <h4>Expected files</h4>
+          <p><code>src/test-fixtures/e2e-run.ts</code>, <code>src/server/app.ts</code>, <code>src/__tests__/contracts.test.ts</code></p>
+          <h4>Work</h4>
+          <ul>
+            <li>Run and fix the full E2E shell flow for filter preservation, archive/defer, quick-open, comments, and source sync.</li>
+            <li>Inspect keyboard/focus labels for the left-nav filter stack and top current-plan status selector.</li>
+            <li>Update this plan's Progress and Decisions / Deviations log after verification if executing this phase.</li>
+          </ul>
+          <h4>Open questions / decision dependencies</h4>
+          <p>None.</p>
+          <h4>Verify</h4>
+          <p><code>bun run build</code>, <code>bun run test</code>, and <code>bun run test:e2e</code></p>
+        </article>
+      </section>
+
+      <section id="verification">
+        <h2>Verification strategy</h2>
+        <ul>
+          <li>Targeted contract gate: <code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></li>
+          <li>Browser shell gate: <code>bun run test:e2e</code></li>
+          <li>Final repo gate for non-doc changes: <code>bun run build</code> and <code>bun run test</code></li>
+          <li>Manual review checkpoint: open a registered plan and compare desktop layout against <a href="#mock-target-desktop">target desktop mock</a>.</li>
+        </ul>
+      </section>
+
+      <section id="delivery">
+        <h2>Delivery order</h2>
+        <ol>
+          <li>Land RED tests for DOM placement and behavior contracts.</li>
+          <li>Move filter controls into the left navigator with minimal client changes.</li>
+          <li>Add the current-plan status selector and status update failure handling.</li>
+          <li>Run e2e and full repo gates, then run scoped implementation review before advancing to PR.</li>
+        </ol>
+      </section>
+
+      <section id="review-record">
+        <h2>Review record</h2>
+        <ul>
+          <li>2026-06-24: Browser review comment integrated — split navigator filters and current-plan settings into separate helpers/components.</li>
+          <li>2026-06-24: Browser review comment integrated — UI mocks made full width and <code>thoughts/plans/AGENTS.md</code> updated to require full-width UI mocks for UI-impacting plans.</li>
+          <li>2026-06-24: GPT readiness review returned <code>PLAN_NEEDS_REVISION</code> for missing hidden-board-column behavior. Integrated locked behavior, acceptance criteria, BDD, coverage, and phase guidance.</li>
+          <li>2026-06-24: GLM readiness review returned <code>PLAN_EXECUTION_READY</code> after hidden-column edits; optional clarity notes were non-blocking.</li>
+          <li>2026-06-24: GPT rereview returned <code>PLAN_EXECUTION_READY</code> with no findings after the latest material edit.</li>
+        </ul>
+      </section>
+
+      <section id="non-goals">
+        <h2>Non-goals</h2>
+        <ul>
+          <li>No new project assignment selector or project management workflow.</li>
+          <li>No lifecycle state selector; state remains button-driven.</li>
+          <li>No changes to queue-backed comment semantics, source sync, rendered-plan sanitization, registration metadata, or execution-readiness rules.</li>
+          <li>No redesign of Kanban, archive, deferred, or all-documents index pages outside links/metadata needed for parity.</li>
+          <li>No new dependency or frontend framework.</li>
+        </ul>
+      </section>
+
+      <section id="decisions-log">
+        <h2>Decisions / Deviations log</h2>
+        <ul>
+          <li>2026-06-24: Created plan from user request. Chose <code>browser-review</code> status and <code>--execution-ready false</code> registration because browser feedback and independent review gates have not run yet.</li>
+          <li>2026-06-24: Scoped top current-plan settings to board-column status only; lifecycle state remains button-driven and project assignment is explicitly out of scope.</li>
+          <li>2026-06-24: Browser reviewer suggested splitting navigator filters from current-plan settings for simplicity. Integrated as a locked implementation decision and phase guidance.</li>
+          <li>2026-06-24: Browser reviewer requested full-width UI mocks. Updated this plan so each mock spans the content column and updated repo plan guidance accordingly.</li>
+          <li>2026-06-24: GPT readiness review found hidden board columns were valid existing state but not specified for the status selector. Added locked behavior, AC/BDD/test coverage, and phase guidance for truthful hidden-current-status display with visible-only update targets.</li>
+          <li>2026-06-24: GPT rereview and GLM review both cleared the updated plan as <code>PLAN_EXECUTION_READY</code>; status updated to execution-ready and service metadata re-registration requested.</li>
+          <li>2026-06-24: Implemented all phases. Verification passed: <code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code>, <code>bun run test:e2e</code>, and <code>bun run test</code>.</li>
+        </ul>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

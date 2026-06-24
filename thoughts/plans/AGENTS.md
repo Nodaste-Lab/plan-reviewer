@@ -15,6 +15,7 @@ This directory contains browser-reviewable HTML plans. New plans in this repo mu
 - Add stable `id` attributes to major sections, phase wrappers, acceptance criteria, BDD scenarios, diagrams, figures, mockups, and other likely comment targets.
 - Include a `Progress` section with the only checkboxes.
 - Include status, goal, a near-top Solution narrative, authority/inputs, current implementation reality, product intent alignment, locked decisions, acceptance criteria, BDD scenarios, test coverage matrix, phases, verification strategy, non-goals, resume instructions, and an append-only Decisions / Deviations Log.
+- For UI-impacting work, include reviewer-friendly UI mocks or screenshots and make each mock full width in the plan content column so browser annotations have enough visual detail.
 - Include a Linear issue reference using canonical `NOD-NNN` form near the top of the plan, or explicitly state why no Linear issue exists. The plan-review index detects and links `NOD-NNN` keys to Linear; do not invent an issue key when the work intentionally has no issue.
 - Each phase must include End State, Tests first, Expected files, Work, and Verify.
 - `execution-ready` plans must not contain unresolved open questions.
