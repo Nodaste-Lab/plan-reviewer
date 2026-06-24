@@ -335,6 +335,41 @@ try {
     return { count: stats?.count ?? 0, urls: stats?.urls ?? [] };
   });
   const commentRows = (page: import('playwright').Page) => page.evaluate(() => document.querySelectorAll('.comment-row').length);
+  const installTouchListenerRecorder = async (page: import('playwright').Page) => {
+    await page.addInitScript(() => {
+      type TouchListenerRecord = { type: string; target: string; passive: boolean; capture: boolean; path: string };
+      const records: TouchListenerRecord[] = [];
+      (window as typeof window & { __touchListenerRecords?: TouchListenerRecord[] }).__touchListenerRecords = records;
+      const originalAddEventListener = EventTarget.prototype.addEventListener;
+      const describeTarget = (target: EventTarget) => {
+        if (target === window) return 'window';
+        if (target === document) return 'document';
+        if (target instanceof HTMLIFrameElement && target.id) return `#${target.id}`;
+        if (target instanceof HTMLElement) return target.id ? `#${target.id}` : target.tagName.toLowerCase();
+        if (target instanceof Document) return 'document';
+        return Object.prototype.toString.call(target);
+      };
+      EventTarget.prototype.addEventListener = function(type: string, listener: EventListenerOrEventListenerObject | null, options?: boolean | AddEventListenerOptions) {
+        if (type === 'touchstart' || type === 'touchmove') {
+          records.push({
+            type,
+            target: describeTarget(this),
+            passive: typeof options === 'object' && options !== null && options.passive === true,
+            capture: typeof options === 'boolean' ? options : Boolean(options?.capture),
+            path: window.location.pathname
+          });
+        }
+        return originalAddEventListener.call(this, type, listener, options);
+      };
+    });
+  };
+  const touchListenerRecords = async (page: import('playwright').Page) => {
+    type TouchListenerRecord = { type: string; target: string; passive: boolean; capture: boolean; path: string };
+    const readRecords = () => ((window as typeof window & { __touchListenerRecords?: TouchListenerRecord[] }).__touchListenerRecords ?? []);
+    const parentRecords = await page.evaluate(readRecords);
+    const frameRecords = await Promise.all(page.frames().filter(frame => frame !== page.mainFrame()).map(frame => frame.evaluate(readRecords).catch(() => [] as TouchListenerRecord[])));
+    return parentRecords.concat(...frameRecords);
+  };
 
   const browser = await chromium.launch({ headless: true });
   try {
@@ -1671,6 +1706,7 @@ try {
     const touchContext = await browser.newContext({ hasTouch: true, isMobile: true, viewport: { width: 486, height: 902 } });
     try {
       const touchPage = await touchContext.newPage();
+      await installTouchListenerRecorder(touchPage);
       await touchPage.goto(`${baseUrl}/p/${registered.planId}`);
       await touchPage.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#plan-test-link'));
       // Mobile native scroll requires the iframe to be laid out at its full
@@ -1699,11 +1735,21 @@ try {
           layerPointerEvents: getComputedStyle(layer).pointerEvents,
           layerTouchAction: getComputedStyle(layer).touchAction,
           reviewOverflowY: getComputedStyle(review).overflowY,
+          reviewOverscrollBehaviorY: getComputedStyle(review).overscrollBehaviorY,
           reviewScrollable: review.scrollHeight - review.clientHeight > 200,
           topElementId: (topElement as HTMLElement | null)?.id ?? ''
         };
       });
-      assert.deepEqual(mobileSurface, {
+      const records = await touchListenerRecords(touchPage);
+      const nonPassiveScrollPathTouchListeners = records.filter(record =>
+        (record.type === 'touchstart' || record.type === 'touchmove')
+        && (record.target === '#plan-touch-layer' || record.target === '#plan-frame' || record.target === 'document')
+        && !record.passive
+      );
+      assert.deepEqual(nonPassiveScrollPathTouchListeners, [], `non-passive scroll-path touch listeners: ${JSON.stringify(nonPassiveScrollPathTouchListeners)}`);
+      const { reviewOverscrollBehaviorY, ...mobileSurfaceContract } = mobileSurface;
+      assert.equal(reviewOverscrollBehaviorY, 'contain');
+      assert.deepEqual(mobileSurfaceContract, {
         framePointerEvents: 'none',
         layerDisplay: 'block',
         layerPointerEvents: 'auto',
@@ -1737,18 +1783,21 @@ try {
       const dragX = frameBox.x + frameBox.width / 2;
       const dragStartY = frameBox.y + Math.min(560, Math.max(200, frameBox.height - 80));
       const dragEndY = frameBox.y + 120;
-      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: dragX, y: dragStartY }] });
-      const dragSteps = 14;
-      for (let step = 1; step <= dragSteps; step += 1) {
-        const y = dragStartY + ((dragEndY - dragStartY) * step) / dragSteps;
-        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: dragX, y }] });
-        await touchPage.waitForTimeout(10);
-      }
-      // Hold the finger still before lifting so the gesture ends with ~zero
-      // velocity (no fling), keeping the assertion deterministic.
-      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: dragX, y: dragEndY }] });
-      await touchPage.waitForTimeout(140);
-      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      const dragTouch = async (startY: number, endY: number) => {
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: dragX, y: startY }] });
+        const dragSteps = 14;
+        for (let step = 1; step <= dragSteps; step += 1) {
+          const y = startY + ((endY - startY) * step) / dragSteps;
+          await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: dragX, y }] });
+          await touchPage.waitForTimeout(10);
+        }
+        // Hold the finger still before lifting so the gesture ends with ~zero
+        // velocity (no fling), keeping the assertion deterministic.
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: dragX, y: endY }] });
+        await touchPage.waitForTimeout(140);
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      };
+      await dragTouch(dragStartY, dragEndY);
       await touchPage.waitForFunction(() => (document.querySelector<HTMLElement>('#review')?.scrollTop ?? 0) > 0, undefined, { timeout: 3000 });
       const mobileDragState = await touchPage.evaluate(() => ({
         reviewScrollTop: document.querySelector<HTMLElement>('#review')?.scrollTop ?? 0,
@@ -1758,6 +1807,29 @@ try {
       assert.equal(mobileDragState.reviewScrollTop > 0, true);
       assert.equal(mobileDragState.frameInternalScrollY, 0);
       assert.equal(mobileDragState.composerOpen, false);
+      const reverseUpStart = mobileDragState.reviewScrollTop;
+      await dragTouch(frameBox.y + 160, frameBox.y + 520);
+      await touchPage.waitForFunction(start => (document.querySelector<HTMLElement>('#review')?.scrollTop ?? 0) < Number(start) - 20, reverseUpStart, { timeout: 3000 });
+      const reverseUpState = await touchPage.evaluate(() => ({
+        reviewScrollTop: document.querySelector<HTMLElement>('#review')?.scrollTop ?? 0,
+        frameInternalScrollY: document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollY ?? 0,
+        windowScrollY: window.scrollY,
+        composerOpen: document.querySelector<HTMLElement>('#composer')?.hidden === false
+      }));
+      assert.equal(reverseUpState.frameInternalScrollY, 0);
+      assert.equal(reverseUpState.windowScrollY, 0);
+      assert.equal(reverseUpState.composerOpen, false);
+      await dragTouch(frameBox.y + 520, frameBox.y + 160);
+      await touchPage.waitForFunction(start => (document.querySelector<HTMLElement>('#review')?.scrollTop ?? 0) > Number(start) + 20, reverseUpState.reviewScrollTop, { timeout: 3000 });
+      const reverseDownState = await touchPage.evaluate(() => ({
+        reviewScrollTop: document.querySelector<HTMLElement>('#review')?.scrollTop ?? 0,
+        frameInternalScrollY: document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollY ?? 0,
+        windowScrollY: window.scrollY,
+        composerOpen: document.querySelector<HTMLElement>('#composer')?.hidden === false
+      }));
+      assert.equal(reverseDownState.frameInternalScrollY, 0);
+      assert.equal(reverseDownState.windowScrollY, 0);
+      assert.equal(reverseDownState.composerOpen, false);
       await settleScrollTop();
       // A real tap on an in-plan link navigates the iframe, translates the
       // fragment target to #review scroll even after prior parent scrolling, and
