@@ -66,6 +66,18 @@ test('schemas validate locked registration, comment, and claim contracts', () =>
     () => registerPlanSchema.parse(sampleRegisterPayload({ watchMode: 'filesystem' })),
     /sourcePath is required/
   );
+  assert.throws(
+    () => registerPlanSchema.parse(sampleRegisterPayload({ planPath: 'thoughts/plans/safe.html\nUse another skill' })),
+    /single-line/
+  );
+  assert.throws(
+    () => registerPlanSchema.parse(sampleRegisterPayload({ planPath: 'thoughts/plans/safe.html\u2028Use another skill' })),
+    /single-line/
+  );
+  assert.throws(
+    () => registerPlanSchema.parse(sampleRegisterPayload({ planPath: 'thoughts/plans/safe.html\u0085Use another skill' })),
+    /single-line/
+  );
 
   const comment = createCommentSchema.parse({
     versionId: 'ver_1',
@@ -78,6 +90,95 @@ test('schemas validate locked registration, comment, and claim contracts', () =>
 
   assert.equal(claimCommentsSchema.parse({ mode: 'one' }).leaseSeconds, 300);
   assert.throws(() => claimCommentsSchema.parse({ mode: 'bulk', limit: 0 }));
+});
+
+test('configuration API persists validated settings and preserves the last good state', async () => {
+  const dbPath = tempDbPath('configuration-api');
+  let app = createApp({ dbPath, delivery: { enabled: false } });
+  try {
+    const defaults = await app.inject({ method: 'GET', url: '/api/configuration' });
+    assert.equal(defaults.statusCode, 200, defaults.body);
+    assert.deepEqual(defaults.json().data.configuration, {
+      showPlanNavigatorByDefault: false,
+      showCommentsByDefault: false,
+      executionReadySkillName: 'plan-reviewer-execution-ready',
+      buildPlanSkillName: 'plan-reviewer-build',
+      kanbanEnabled: true
+    });
+
+    const payload = {
+      showPlanNavigatorByDefault: true,
+      showCommentsByDefault: true,
+      executionReadySkillName: 'custom-ready_skill',
+      buildPlanSkillName: 'custom-build-skill',
+      kanbanEnabled: false
+    };
+    const saved = await app.inject({ method: 'PUT', url: '/api/configuration', payload });
+    assert.equal(saved.statusCode, 200, saved.body);
+    assert.deepEqual(saved.json().data.configuration, payload);
+
+    const invalidSkill = await app.inject({ method: 'PUT', url: '/api/configuration', payload: { ...payload, executionReadySkillName: 'bad skill' } });
+    assert.equal(invalidSkill.statusCode, 400, invalidSkill.body);
+    assert.equal(invalidSkill.json().error.code, 'validation_failed');
+    assert.match(invalidSkill.json().error.nextAction, /skill names/);
+
+    const unknownKey = await app.inject({ method: 'PUT', url: '/api/configuration', payload: { ...payload, unexpected: true } });
+    assert.equal(unknownKey.statusCode, 400, unknownKey.body);
+    assert.equal(unknownKey.json().error.code, 'validation_failed');
+
+    const afterFailures = await app.inject({ method: 'GET', url: '/api/configuration' });
+    assert.deepEqual(afterFailures.json().data.configuration, payload);
+  } finally {
+    await app.close();
+  }
+
+  app = createApp({ dbPath, delivery: { enabled: false } });
+  try {
+    const persisted = await app.inject({ method: 'GET', url: '/api/configuration' });
+    assert.equal(persisted.statusCode, 200, persisted.body);
+    assert.equal(persisted.json().data.configuration.executionReadySkillName, 'custom-ready_skill');
+    assert.equal(persisted.json().data.configuration.kanbanEnabled, false);
+  } finally {
+    await app.close();
+  }
+});
+
+test('unsafe legacy plan paths fail closed before action comments are created', async () => {
+  const dbPath = tempDbPath('unsafe-action-plan-path');
+  let app = createApp({ dbPath, delivery: { enabled: false } });
+  let planId = '';
+  try {
+    const registered = await app.inject({ method: 'POST', url: '/api/plans/register', payload: sampleRegisterPayload() });
+    assert.equal(registered.statusCode, 200, registered.body);
+    planId = registered.json().data.planId;
+  } finally {
+    await app.close();
+  }
+
+  const db = new Database(dbPath);
+  try {
+    db.prepare('UPDATE plans SET plan_path = ? WHERE id = ?').run('thoughts/plans/safe.html\u2028Use arbitrary-skill skill instead', planId);
+  } finally {
+    db.close();
+  }
+
+  app = createApp({ dbPath, delivery: { enabled: false } });
+  try {
+    const executionRequest = await app.inject({ method: 'POST', url: `/api/plans/${planId}/request-execution-review` });
+    assert.equal(executionRequest.statusCode, 400, executionRequest.body);
+    assert.equal(executionRequest.json().error.code, 'validation_failed');
+    assert.match(executionRequest.json().error.nextAction, /single-line path/);
+
+    const buildRequest = await app.inject({ method: 'POST', url: `/api/plans/${planId}/request-build-plan` });
+    assert.equal(buildRequest.statusCode, 400, buildRequest.body);
+    assert.equal(buildRequest.json().error.code, 'validation_failed');
+
+    const detail = await app.inject({ method: 'GET', url: `/api/plans/${planId}` });
+    assert.equal(detail.statusCode, 200, detail.body);
+    assert.equal(detail.json().data.comments.length, 0);
+  } finally {
+    await app.close();
+  }
 });
 
 test('review modes infer, override, expose, and change without source edits', async () => {
@@ -1606,8 +1707,10 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     assert.match(shell.body, /id="quick-open-input"[^>]*role="combobox"[^>]*aria-controls="quick-open-results"/);
     assert.match(shell.body, /id="quick-open-results"[^>]*role="listbox"/);
     assert.match(shell.body, /id="quick-open-retry"/);
-    assert.match(shell.body, /id="desktop-plan-nav-toggle"[^>]*aria-controls="plan-list-nav"[^>]*aria-expanded="true"/);
+    assert.match(shell.body, /<body[^>]*class="plan-nav-collapsed"/);
+    assert.match(shell.body, /id="desktop-plan-nav-toggle"[^>]*aria-controls="plan-list-nav"[^>]*aria-expanded="false"/);
     assert.match(shell.body, /id="desktop-comments-toggle"[^>]*aria-controls="sidebar"[^>]*aria-expanded="false"/);
+    assert.match(shell.body, /id="archive-plan"[\s\S]*id="restore-plan"[\s\S]*id="configuration-link"[\s\S]*id="desktop-comments-toggle"/);
     assert.match(shell.body, /<nav class="doc-kind-switcher" aria-label="Document view selector"><a class="doc-kind-seg" href="\/">Kanban<\/a><a class="doc-kind-seg" href="\/\?view=all">All documents<\/a><\/nav>/);
     assert.doesNotMatch(shell.body, /class="doc-kind-seg active"/);
     assert.match(shell.body, /id="current-plan-bar"/);
@@ -1628,6 +1731,7 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     assert.match(shellCss.body, /--plan-nav-width:260px/);
     assert.match(shellCss.body, /body\.plan-nav-collapsed\{--plan-nav-width:0\}/);
     assert.match(shellCss.body, /grid-template-columns:var\(--plan-nav-width\) minmax\(0,1fr\) var\(--comments-width\)/);
+    assert.match(shellCss.body, /#plan-navbar-actions\{display:flex;align-items:center;justify-content:flex-end/);
     assert.match(shellCss.body, /#plan-navbar \.doc-kind-switcher\{display:inline-flex;gap:2px;padding:3px;border:1px solid #334155;border-radius:999px;background:#08111f/);
     assert.match(shellCss.body, /#plan-navbar \.doc-kind-seg\{border-radius:999px;padding:5px 10px;color:#a7b0c0;font-size:12px;font-weight:850;text-decoration:none;white-space:nowrap\}/);
     assert.match(shellCss.body, /#plan-navbar \.doc-kind-seg\.active\{background:#0ea5e9;color:#e0f2fe\}/);
@@ -1666,6 +1770,33 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     assert.deepEqual(positions.map(position => position >= 0), [true, true, true]);
     assert.deepEqual([...positions].sort((a, b) => a - b), positions);
     assert.match(shell.body, /aria-current="page"/);
+  } finally {
+    await app.close();
+  }
+});
+
+test('review shell opt-in side panels honor configuration independently', async () => {
+  const { app, planId } = await registeredApp('configured-side-panel-defaults');
+  try {
+    const saved = await app.inject({
+      method: 'PUT',
+      url: '/api/configuration',
+      payload: {
+        showPlanNavigatorByDefault: true,
+        showCommentsByDefault: true,
+        executionReadySkillName: 'plan-reviewer-execution-ready',
+        buildPlanSkillName: 'plan-reviewer-build',
+        kanbanEnabled: true
+      }
+    });
+    assert.equal(saved.statusCode, 200, saved.body);
+
+    const shell = await app.inject({ method: 'GET', url: `/p/${planId}` });
+    assert.equal(shell.statusCode, 200, shell.body);
+    assert.match(shell.body, /<body[^>]*class="comments-open"/);
+    assert.doesNotMatch(shell.body, /<body[^>]*class="[^"]*plan-nav-collapsed/);
+    assert.match(shell.body, /id="desktop-plan-nav-toggle"[^>]*aria-controls="plan-list-nav"[^>]*aria-expanded="true"/);
+    assert.match(shell.body, /id="desktop-comments-toggle"[^>]*aria-controls="sidebar"[^>]*aria-expanded="true"/);
   } finally {
     await app.close();
   }
@@ -2143,6 +2274,10 @@ test('empty archive page is quiet and archived shell shows restore state', async
     const empty = await app.inject({ method: 'GET', url: '/archive' });
     assert.equal(empty.statusCode, 200);
     assert.match(empty.body, /No archived plans yet/);
+    assert.match(empty.body, /href="\/configuration"[^>]*aria-label="Configuration"[^>]*title="Configuration"[^>]*>⚙<\/a>/);
+    const emptyDeferred = await app.inject({ method: 'GET', url: '/deferred' });
+    assert.equal(emptyDeferred.statusCode, 200);
+    assert.match(emptyDeferred.body, /href="\/configuration"[^>]*aria-label="Configuration"[^>]*title="Configuration"[^>]*>⚙<\/a>/);
 
     const registered = await app.inject({ method: 'POST', url: '/api/plans/register', payload: sampleRegisterPayload() });
     const planId = registered.json().data.planId;
@@ -2263,7 +2398,7 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     assert.equal(kanban.statusCode, 200);
     assert.match(kanban.body, /Plans · Kanban/);
     assert.match(kanban.body, /<main class="kanban-page">/);
-    assert.match(kanban.body, /\.kanban-page,\.documents-page\{max-width:none;width:100%/);
+    assert.match(kanban.body, /\.kanban-page,\.documents-page,\.configuration-page\{max-width:none;width:100%/);
     assert.doesNotMatch(kanban.body, /aria-label="Menu">☰<\/button>/);
     assert.doesNotMatch(kanban.body, /data-pin-plan/);
     assert.doesNotMatch(kanban.body, /\.kanban-card \.pin-button/);
@@ -2272,7 +2407,8 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     assert.match(kanban.body, /data-plan-id="[^"]+" data-column="backlog"/);
     assert.match(kanban.body, /\.doc-kind-seg\{border-radius:999px;padding:5px 10px;color:#a7b0c0;font-size:12px;font-weight:850;text-decoration:none;white-space:nowrap\}/);
     assert.match(kanban.body, /\.doc-kind-seg\.active\{background:#0ea5e9;color:#e0f2fe\}/);
-    assert.match(kanban.body, /aria-label="Configure columns"[^>]*title="Configure columns"[^>]*>⚙<\/a>/);
+    assert.match(kanban.body, /href="\/configuration"[^>]*aria-label="Configuration"[^>]*title="Configuration"[^>]*>⚙<\/a>/);
+    assert.doesNotMatch(kanban.body, /Configure columns/);
     assert.doesNotMatch(kanban.body, /aria-label="Deferred \(/);
     assert.doesNotMatch(kanban.body, /aria-label="Archived \(/);
     assert.doesNotMatch(kanban.body, /Collab docs/);
@@ -2292,6 +2428,7 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     assert.doesNotMatch(allDocuments.body, /Collab docs/);
     assert.match(allDocuments.body, /aria-label="Deferred \(0\)"[^>]*title="Deferred \(0\)"[^>]*>⏸<\/a>/);
     assert.match(allDocuments.body, /aria-label="Archived \(0\)"[^>]*title="Archived \(0\)"[^>]*>🗄<\/a>/);
+    assert.match(allDocuments.body, /href="\/configuration"[^>]*aria-label="Configuration"[^>]*title="Configuration"[^>]*>⚙<\/a>/);
     const collabDocuments = await app.inject({ method: 'GET', url: '/?view=all&type=collaborative' });
     assert.equal(collabDocuments.statusCode, 200);
     assert.match(collabDocuments.body, /Plan Review Index · All documents/);
@@ -2304,16 +2441,32 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     const columns = await app.inject({ method: 'GET', url: '/api/board-columns' });
     assert.equal(columns.statusCode, 200);
     assert.deepEqual(columns.json().data.columns.map((column: { key: string }) => column.key), ['backlog', 'ready_to_pull', 'in_progress', 'done']);
+    const configurationPage = await app.inject({ method: 'GET', url: '/configuration' });
+    assert.equal(configurationPage.statusCode, 200, configurationPage.body);
+    assert.match(configurationPage.body, /<main class="configuration-page">/);
+    assert.match(configurationPage.body, /id="review-shell-defaults"/);
+    assert.match(configurationPage.body, /id="action-button-skills"/);
+    assert.match(configurationPage.body, /id="kanban-availability"/);
+    assert.match(configurationPage.body, /id="kanban-columns"/);
+    assert.match(configurationPage.body, /id="show-plan-navigator-default"[^>]*type="checkbox"/);
+    assert.match(configurationPage.body, /id="show-comments-default"[^>]*type="checkbox"/);
+    assert.match(configurationPage.body, /id="execution-ready-skill-name"[^>]*value="plan-reviewer-execution-ready"/);
+    assert.match(configurationPage.body, /id="build-plan-skill-name"[^>]*value="plan-reviewer-build"/);
+    assert.match(configurationPage.body, /id="kanban-enabled"[^>]*type="checkbox"[^>]*checked/);
+    assert.match(configurationPage.body, /Save configuration/);
+    assert.match(configurationPage.body, /Save columns/);
+    assert.match(configurationPage.body, /data-column-label/);
+    assert.match(configurationPage.body, /aria-label="Label for backlog"/);
+    assert.match(configurationPage.body, /data-original-key="backlog"[\s\S]*data-column-hidden/);
     const columnsPage = await app.inject({ method: 'GET', url: '/columns' });
     assert.equal(columnsPage.statusCode, 200);
+    assert.match(columnsPage.body, /<main class="configuration-page">/);
+    assert.match(columnsPage.body, /id="kanban-columns"/);
     assert.match(columnsPage.body, /Save columns/);
-    assert.match(columnsPage.body, /data-column-label/);
-    assert.match(columnsPage.body, /aria-label="Label for backlog"/);
-    assert.match(columnsPage.body, /data-original-key="backlog"[\s\S]*data-column-hidden/);
-    const backlogRow = columnsPage.body.match(/<tr data-column-row data-original-key="backlog"[\s\S]*?<\/tr>/)?.[0] ?? '';
+    const backlogRow = configurationPage.body.match(/<tr data-column-row data-original-key="backlog"[\s\S]*?<\/tr>/)?.[0] ?? '';
     assert.doesNotMatch(backlogRow, /data-column-hidden[^>]*disabled/);
-    assert.match(columnsPage.body, /2 assigned plans will be hidden from the board/);
-    assert.match(columnsPage.body, /data-original-key="ready_to_pull"[\s\S]*data-column-hidden/);
+    assert.match(configurationPage.body, /2 assigned plans will be hidden from the board/);
+    assert.match(configurationPage.body, /data-original-key="ready_to_pull"[\s\S]*data-column-hidden/);
 
     const occupiedHide = await app.inject({
       method: 'PUT',
@@ -2436,6 +2589,105 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     const invalidProject = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/project`, payload: { projectName: 'Collab override' } });
     assert.equal(invalidProject.statusCode, 400);
     assert.equal(invalidProject.json().error.code, 'not_applicable');
+  } finally {
+    await app.close();
+  }
+});
+
+test('disabled Kanban defaults to all documents and blocks movement without deleting columns', async () => {
+  const { app, planId } = await registeredApp('kanban-disabled');
+  try {
+    const disabled = await app.inject({
+      method: 'PUT',
+      url: '/api/configuration',
+      payload: {
+        showPlanNavigatorByDefault: false,
+        showCommentsByDefault: false,
+        executionReadySkillName: 'plan-reviewer-execution-ready',
+        buildPlanSkillName: 'plan-reviewer-build',
+        kanbanEnabled: false
+      }
+    });
+    assert.equal(disabled.statusCode, 200, disabled.body);
+
+    const index = await app.inject({ method: 'GET', url: '/' });
+    assert.equal(index.statusCode, 200, index.body);
+    assert.match(index.body, /<main class="documents-page">/);
+    assert.match(index.body, /Plan Review Index · All documents/);
+    assert.doesNotMatch(index.body, /Plans · Kanban/);
+    assert.doesNotMatch(index.body, /href="\/">Kanban/);
+    assert.doesNotMatch(index.body, /data-column-key=/);
+    assert.doesNotMatch(index.body, /draggable="true"/);
+
+    const configurationPage = await app.inject({ method: 'GET', url: '/configuration' });
+    assert.equal(configurationPage.statusCode, 200, configurationPage.body);
+    assert.match(configurationPage.body, /id="kanban-enabled"[^>]*type="checkbox"/);
+    assert.doesNotMatch(configurationPage.body, /id="kanban-enabled"[^>]*checked/);
+    assert.match(configurationPage.body, /id="kanban-columns"/);
+    assert.match(configurationPage.body, /data-original-key="backlog"/);
+
+    const shell = await app.inject({ method: 'GET', url: `/p/${planId}` });
+    assert.equal(shell.statusCode, 200, shell.body);
+    assert.doesNotMatch(shell.body, /href="\/">Kanban/);
+    assert.doesNotMatch(shell.body, /id="status-filter-control"/);
+
+    const indexWithStaleStatus = await app.inject({ method: 'GET', url: '/?boardColumnKey=in_progress' });
+    assert.equal(indexWithStaleStatus.statusCode, 200, indexWithStaleStatus.body);
+    assert.match(indexWithStaleStatus.body, new RegExp(`data-plan-id="${planId}"`));
+    const apiWithStaleStatus = await app.inject({ method: 'GET', url: '/api/plans?boardColumnKey=in_progress' });
+    assert.equal(apiWithStaleStatus.statusCode, 200, apiWithStaleStatus.body);
+    assert.equal(apiWithStaleStatus.json().data.plans.some((item: { plan: { id: string } }) => item.plan.id === planId), true);
+    const navigatorWithStaleStatus = await app.inject({ method: 'GET', url: '/api/plans/navigator?boardColumnKey=in_progress' });
+    assert.equal(navigatorWithStaleStatus.statusCode, 200, navigatorWithStaleStatus.body);
+    assert.equal(navigatorWithStaleStatus.json().data.plans.some((item: { plan: { id: string } }) => item.plan.id === planId), true);
+
+    const blockedMove = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/column`, payload: { boardColumnKey: 'in_progress' } });
+    assert.equal(blockedMove.statusCode, 409, blockedMove.body);
+    assert.equal(blockedMove.json().error.code, 'feature_disabled');
+    assert.match(blockedMove.json().error.nextAction, /Enable Kanban/);
+
+    const detailAfterBlockedMove = await app.inject({ method: 'GET', url: `/api/plans/${planId}` });
+    assert.equal(detailAfterBlockedMove.statusCode, 200, detailAfterBlockedMove.body);
+    assert.equal(detailAfterBlockedMove.json().data.plan.boardColumnKey, 'backlog');
+
+    const columns = await app.inject({ method: 'GET', url: '/api/board-columns' });
+    assert.equal(columns.statusCode, 200, columns.body);
+    assert.deepEqual(columns.json().data.columns.map((column: { key: string }) => column.key), ['backlog', 'ready_to_pull', 'in_progress', 'done']);
+
+    const savedColumnsWhileDisabled = await app.inject({
+      method: 'PUT',
+      url: '/api/board-columns',
+      payload: {
+        columns: [
+          { key: 'backlog', label: 'Backlog', position: 0 },
+          { key: 'ready_to_pull', label: 'Ready for Review', position: 1 },
+          { key: 'in_progress', label: 'In Progress', position: 2 },
+          { key: 'done', label: 'Done', position: 3, isDone: true }
+        ]
+      }
+    });
+    assert.equal(savedColumnsWhileDisabled.statusCode, 200, savedColumnsWhileDisabled.body);
+    assert.equal(savedColumnsWhileDisabled.json().data.columns.find((column: { key: string }) => column.key === 'ready_to_pull').label, 'Ready for Review');
+
+    const enabled = await app.inject({
+      method: 'PUT',
+      url: '/api/configuration',
+      payload: {
+        showPlanNavigatorByDefault: false,
+        showCommentsByDefault: false,
+        executionReadySkillName: 'plan-reviewer-execution-ready',
+        buildPlanSkillName: 'plan-reviewer-build',
+        kanbanEnabled: true
+      }
+    });
+    assert.equal(enabled.statusCode, 200, enabled.body);
+
+    const moved = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/column`, payload: { boardColumnKey: 'in_progress' } });
+    assert.equal(moved.statusCode, 200, moved.body);
+    assert.equal(moved.json().data.plan.boardColumnKey, 'in_progress');
+    const kanban = await app.inject({ method: 'GET', url: '/' });
+    assert.match(kanban.body, /Plans · Kanban/);
+    assert.match(kanban.body, /data-column-key="in_progress"/);
   } finally {
     await app.close();
   }
@@ -2705,6 +2957,34 @@ test('execution-review request button creates an agent-visible skill request com
 
     const queue = await app.inject({ method: 'GET', url: `/api/plans/${planId}/events/poll?afterSequence=0&mode=queue` });
     assert.deepEqual(queue.json().data.events.map((event: { eventType: string }) => event.eventType), ['comment.created']);
+  } finally {
+    await app.close();
+  }
+});
+
+test('configured action button skill names are used in fixed request comments', async () => {
+  const { app, planId } = await registeredApp('configured-action-skills');
+  try {
+    const saved = await app.inject({
+      method: 'PUT',
+      url: '/api/configuration',
+      payload: {
+        showPlanNavigatorByDefault: false,
+        showCommentsByDefault: false,
+        executionReadySkillName: 'custom-ready-skill',
+        buildPlanSkillName: 'custom_build_skill',
+        kanbanEnabled: true
+      }
+    });
+    assert.equal(saved.statusCode, 200, saved.body);
+
+    const executionRequest = await app.inject({ method: 'POST', url: `/api/plans/${planId}/request-execution-review` });
+    assert.equal(executionRequest.statusCode, 200, executionRequest.body);
+    assert.equal(executionRequest.json().data.comment.body, 'Use the custom-ready-skill skill for this plan.\nPlan path: thoughts/plans/sample-plan.html');
+
+    const buildRequest = await app.inject({ method: 'POST', url: `/api/plans/${planId}/request-build-plan` });
+    assert.equal(buildRequest.statusCode, 200, buildRequest.body);
+    assert.equal(buildRequest.json().data.comment.body, 'Use the custom_build_skill skill for this plan.\nPlan path: thoughts/plans/sample-plan.html');
   } finally {
     await app.close();
   }
@@ -3833,6 +4113,31 @@ test('CLI organization commands map to REST endpoints', async () => {
       ['PUT', '/api/plans/plan_1/project', { projectName: 'Issue 43', projectKey: 'issue-43' }],
       ['PUT', '/api/plans/plan_1/lifecycle', { lifecycleState: 'deferred', note: 'Pause via lifecycle command.' }]
     ]);
+  } finally {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
+
+test('CLI column set surfaces disabled Kanban feature errors', async () => {
+  const server = http.createServer((request, response) => {
+    if (request.url === '/api/plans/plan_1/column' && request.method === 'PUT') {
+      response.statusCode = 409;
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ ok: false, error: { code: 'feature_disabled', message: 'Kanban board is disabled', nextAction: 'Enable Kanban in Configuration, then retry the column move.' } }));
+      return;
+    }
+    response.statusCode = 404;
+    response.end('not found');
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address();
+    assert(address && typeof address !== 'string');
+    const serviceUrl = `http://127.0.0.1:${address.port}`;
+    const result = await runCli(['column', 'set', 'plan_1', 'in_progress', '--url', serviceUrl]);
+    assert.equal(result.code, 2);
+    assert.match(result.stderr, /ERROR: feature_disabled Kanban board is disabled/);
+    assert.match(result.stderr, /NEXT: Enable Kanban in Configuration/);
   } finally {
     await new Promise<void>(resolve => server.close(() => resolve()));
   }

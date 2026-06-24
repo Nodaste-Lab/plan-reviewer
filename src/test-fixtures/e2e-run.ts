@@ -528,8 +528,9 @@ try {
     const linkedPlan = (await linkedPlanResponse.json()).data as { planId: string; versionId: string };
     await page.goto(`${baseUrl}/p/${registered.planId}`);
     assert.equal(await page.title(), 'E2E Plan · Plan Review');
-    await page.waitForSelector('#plan-list-nav');
-    await page.waitForSelector('#desktop-plan-nav-toggle[aria-expanded="true"]');
+    await page.waitForSelector('#plan-list-nav', { state: 'attached' });
+    await page.waitForSelector('#desktop-plan-nav-toggle[aria-expanded="false"]');
+    await page.waitForFunction(() => document.body.classList.contains('plan-nav-collapsed'));
     await page.waitForSelector('#desktop-comments-toggle[aria-expanded="false"]');
     await page.waitForSelector('#download-raw-plan[aria-label="Download raw plan"]');
     assert.equal(await page.locator('#desktop-plan-nav-toggle').getAttribute('aria-label'), 'Plan Navigator');
@@ -603,7 +604,7 @@ try {
     assert.match(exportedHtml, /assets\/diagram-[a-f0-9]{8}\.png/);
     assert.doesNotMatch(exportedHtml, /plan-navbar|id="comments"|plan-frame/);
     assert.equal(await page.locator('#composer').isHidden(), true);
-    assert.match(await page.locator('#plan-list-nav').innerText(), /E2E Plan/);
+    assert.match(await page.locator('#plan-list-nav').textContent() ?? '', /E2E Plan/);
     await page.keyboard.press('Control+O');
     await page.waitForSelector('#quick-open-dialog:not([hidden])');
     assert.equal(await page.evaluate(() => document.activeElement?.id), 'quick-open-input');
@@ -655,10 +656,28 @@ try {
     assert.equal(await page.evaluate(() => document.activeElement?.id), 'comment-body');
     await page.click('#cancel-comment');
     assert.equal(await page.evaluate(() => document.body.classList.contains('comments-open')), false);
-    assert.equal(await page.evaluate(() => document.body.classList.contains('plan-nav-collapsed')), false);
+    assert.equal(await page.evaluate(() => document.body.classList.contains('plan-nav-collapsed')), true);
     assert.equal(await page.evaluate(() => document.querySelector('#plan-navbar-actions')?.firstElementChild?.id), 'desktop-plan-nav-toggle');
     assert.equal(await page.evaluate(() => Math.round(document.querySelector<HTMLElement>('#sidebar')!.getBoundingClientRect().width) <= 60), true);
-    const frameWidthWithNavOpen = await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')!.getBoundingClientRect().width);
+    assert.equal(await page.evaluate(() => Math.round(document.querySelector<HTMLElement>('#plan-list-nav')!.getBoundingClientRect().width) <= 1), true);
+    assert.equal(await page.locator('#plan-list-nav').getAttribute('aria-hidden'), 'true');
+    assert.equal(await page.evaluate(() => document.querySelector<HTMLElement>('#plan-list-nav')!.inert), true);
+    const frameWidthWithNavCollapsed = await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')!.getBoundingClientRect().width);
+    await page.click('#desktop-plan-nav-toggle');
+    await page.waitForFunction(() => !document.body.classList.contains('plan-nav-collapsed'));
+    await page.waitForFunction(() => Math.round(document.querySelector<HTMLElement>('#plan-list-nav')!.getBoundingClientRect().width) >= 250);
+    assert.equal(await page.locator('#desktop-plan-nav-toggle').getAttribute('aria-expanded'), 'true');
+    assert.equal(await page.locator('#plan-list-nav').getAttribute('aria-hidden'), 'false');
+    assert.equal(await page.evaluate(() => document.querySelector<HTMLElement>('#plan-list-nav')!.inert), false);
+    assert.equal(await page.evaluate(widthBefore => document.querySelector<HTMLIFrameElement>('#plan-frame')!.getBoundingClientRect().width < widthBefore - 200, frameWidthWithNavCollapsed), true);
+    assert.match(await page.locator('#plan-list-nav [aria-current="page"]').innerText(), /E2E Plan/);
+    await page.click('#desktop-comments-toggle');
+    await page.waitForFunction(() => document.body.classList.contains('comments-open'));
+    await page.waitForFunction(() => Math.round(document.querySelector<HTMLElement>('#sidebar')!.getBoundingClientRect().width) >= 300);
+    assert.equal(await page.evaluate(() => document.body.classList.contains('plan-nav-collapsed')), false);
+    await page.click('#desktop-comments-toggle');
+    await page.waitForFunction(() => !document.body.classList.contains('comments-open'));
+    assert.equal(await page.evaluate(() => document.body.classList.contains('plan-nav-collapsed')), false);
     await page.click('#desktop-plan-nav-toggle');
     await page.waitForFunction(() => document.body.classList.contains('plan-nav-collapsed'));
     await page.waitForFunction(() => Math.round(document.querySelector<HTMLElement>('#plan-list-nav')!.getBoundingClientRect().width) <= 1);
@@ -670,21 +689,9 @@ try {
       navLink?.focus();
       return document.activeElement === navLink;
     }), false);
-    assert.equal(await page.evaluate(widthBefore => document.querySelector<HTMLIFrameElement>('#plan-frame')!.getBoundingClientRect().width > widthBefore + 200, frameWidthWithNavOpen), true);
-    await page.click('#desktop-comments-toggle');
-    await page.waitForFunction(() => document.body.classList.contains('comments-open'));
-    await page.waitForFunction(() => Math.round(document.querySelector<HTMLElement>('#sidebar')!.getBoundingClientRect().width) >= 300);
-    assert.equal(await page.evaluate(() => document.body.classList.contains('plan-nav-collapsed')), true);
-    await page.click('#desktop-comments-toggle');
-    await page.waitForFunction(() => !document.body.classList.contains('comments-open'));
-    assert.equal(await page.evaluate(() => document.body.classList.contains('plan-nav-collapsed')), true);
     await page.click('#desktop-plan-nav-toggle');
     await page.waitForFunction(() => !document.body.classList.contains('plan-nav-collapsed'));
     await page.waitForFunction(() => Math.round(document.querySelector<HTMLElement>('#plan-list-nav')!.getBoundingClientRect().width) >= 250);
-    assert.equal(await page.locator('#desktop-plan-nav-toggle').getAttribute('aria-expanded'), 'true');
-    assert.equal(await page.locator('#plan-list-nav').getAttribute('aria-hidden'), 'false');
-    assert.equal(await page.evaluate(() => document.querySelector<HTMLElement>('#plan-list-nav')!.inert), false);
-    assert.match(await page.locator('#plan-list-nav [aria-current="page"]').innerText(), /E2E Plan/);
     await page.click('#desktop-comments-toggle');
     await page.waitForFunction(() => document.body.classList.contains('comments-open'));
     await page.waitForFunction(() => Math.round(document.querySelector<HTMLElement>('#sidebar')!.getBoundingClientRect().width) >= 300);
@@ -739,8 +746,8 @@ try {
       await route.continue();
     });
     await page.goto(`${baseUrl}/p/${registered.planId}`);
-    await page.waitForSelector('#plan-list-error:not([hidden])');
-    assert.match(await page.locator('#plan-list-error').innerText(), /current plan remains reviewable/i);
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#plan-list-error')?.hidden === false);
+    assert.match(await page.locator('#plan-list-error').textContent() ?? '', /current plan remains reviewable/i);
     assert.equal(await page.locator('#plan-frame').count(), 1);
     await page.keyboard.press('Control+O');
     await page.waitForSelector('#quick-open-dialog:not([hidden])');
@@ -749,9 +756,13 @@ try {
     await page.waitForFunction(() => document.querySelector('#quick-open-results')?.textContent?.includes('E2E Plan'));
     await page.keyboard.press('Escape');
     await page.waitForSelector('#quick-open-dialog', { state: 'hidden' });
+    if (await page.evaluate(() => document.body.classList.contains('plan-nav-collapsed'))) {
+      await page.click('#desktop-plan-nav-toggle');
+      await page.waitForFunction(() => !document.body.classList.contains('plan-nav-collapsed'));
+    }
     await page.click('#plan-list-retry');
     await page.waitForSelector('#plan-list-error', { state: 'hidden' });
-    assert.match(await page.locator('#plan-list-nav').innerText(), /E2E Plan/);
+    assert.match(await page.locator('#plan-list-nav').textContent() ?? '', /E2E Plan/);
     await page.waitForTimeout(500);
     assert.equal(planListRequests <= 3, true, `navigator refresh made too many requests: ${planListRequests}`);
     await page.unroute('**/api/plans/navigator?*');
@@ -1041,6 +1052,10 @@ try {
     assert.equal(activeBox.widthDelta <= 1, true);
     assert.equal(activeBox.heightDelta <= 1, true);
     assert.equal(activeBox.text, '');
+    if (await page.evaluate(() => document.body.classList.contains('plan-nav-collapsed'))) {
+      await page.click('#desktop-plan-nav-toggle');
+      await page.waitForFunction(() => !document.body.classList.contains('plan-nav-collapsed'));
+    }
     const frameWidthBeforePlanNavCollapse = await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')!.getBoundingClientRect().width);
     await page.click('#desktop-plan-nav-toggle');
     await page.waitForFunction(() => document.body.classList.contains('plan-nav-collapsed'));
@@ -1648,11 +1663,27 @@ try {
     await page.click('#cancel-comment');
     await page.waitForFunction(() => document.querySelector<HTMLElement>('#composer')?.hidden === true);
 
+    const configuredMobileDefault = await context.put('/api/configuration', {
+      data: {
+        showPlanNavigatorByDefault: false,
+        showCommentsByDefault: true,
+        executionReadySkillName: 'plan-reviewer-execution-ready',
+        buildPlanSkillName: 'plan-reviewer-build',
+        kanbanEnabled: true
+      }
+    });
+    assert.equal(configuredMobileDefault.ok(), true);
     const touchContext = await browser.newContext({ hasTouch: true, isMobile: true, viewport: { width: 486, height: 902 } });
     try {
       const touchPage = await touchContext.newPage();
       await touchPage.goto(`${baseUrl}/p/${registered.planId}`);
       await touchPage.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#plan-test-link'));
+      await touchPage.waitForFunction(() => !document.body.classList.contains('comments-open'));
+      assert.equal(await touchPage.locator('#mobile-comments-toggle').getAttribute('aria-expanded'), 'false');
+      await touchPage.waitForFunction(() => {
+        const sidebar = document.querySelector<HTMLElement>('#sidebar');
+        return Boolean(sidebar && sidebar.getBoundingClientRect().top >= window.innerHeight - 1);
+      });
       // Mobile native scroll requires the iframe to be laid out at its full
       // content height inside the scrollable #review container.
       await touchPage.waitForFunction(() => {
@@ -1814,6 +1845,16 @@ try {
       assert.equal(mobileTapState.heightDelta <= 1, true);
     } finally {
       await touchContext.close();
+      const resetMobileDefault = await context.put('/api/configuration', {
+        data: {
+          showPlanNavigatorByDefault: false,
+          showCommentsByDefault: false,
+          executionReadySkillName: 'plan-reviewer-execution-ready',
+          buildPlanSkillName: 'plan-reviewer-build',
+          kanbanEnabled: true
+        }
+      });
+      assert.equal(resetMobileDefault.ok(), true);
     }
 
     // iPad / phone landscape regression: the viewport is wider than 760px but the
@@ -2175,7 +2216,7 @@ try {
     await page.waitForSelector('#archive-toast:not([hidden])');
     await page.click('#archive-toast-undo');
     await page.waitForFunction(() => document.querySelector<HTMLElement>('#archive-status')?.hidden === true);
-    await page.waitForSelector(`[data-plan-nav-item][data-plan-id="${registered.planId}"]`);
+    await page.waitForFunction(planId => Boolean(document.querySelector(`[data-plan-nav-item][data-plan-id="${planId}"]`)), registered.planId);
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+O' : 'Control+O');
     await page.waitForSelector('#quick-open-backdrop:not([hidden])');
     assert.equal(await page.locator(`[data-quick-open-result][data-plan-id="${registered.planId}"]`).count(), 1);
