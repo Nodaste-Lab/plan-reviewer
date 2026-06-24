@@ -19,7 +19,7 @@ try {
   const slowImageBytes = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="120" height="180"><rect width="120" height="180" fill="#38bdf8"/></svg>');
   const slowImageBytesBase64 = slowImageBytes.toString('base64');
   const slowImageAssetPath = `/assets/${sha256(slowImageBytes)}`;
-  const html = `<!doctype html><html><head><title>E2E Plan</title></head><body><main><div style="height:240px"></div><section id="dom-annotation"><h1>DOM annotation</h1><p>Plan index target.</p></section><section id="link-annotation"><h2>Link annotation</h2><p id="link-comment-target"><span id="link-adjacent-text">Commentable text before</span> <a id="plan-test-link" href="#link-target">fragment link</a> <span>after link.</span></p><p><a id="blank-plan-link" href="${baseUrl}/favicon.svg" target="_blank">Open asset in new tab</a></p><p><label id="wrapping-control-label"><input id="wrapped-control" type="checkbox"> <span id="wrapped-control-label-text">Toggle wrapped control</span></label></p><div id="link-target" style="margin-top:20px">Link target</div></section><section id="text-annotation"><h2>Text annotation</h2><p id="text-target">Text range context target for reviewer selection.</p></section><figure><img src="./diagram.png" alt="image annotation" width="120" height="90"></figure><div style="height:1200px"></div></main></body></html>`;
+  const html = `<!doctype html><html><head><title>E2E Plan</title></head><body><main><div style="height:240px"></div><section id="dom-annotation"><h1>DOM annotation</h1><p>Plan index target.</p></section><section id="link-annotation"><h2>Link annotation</h2><p id="link-comment-target"><span id="link-adjacent-text">Commentable text before</span> <a id="plan-test-link" href="#link-target">fragment link</a> <span>after link.</span></p><p><a id="blank-plan-link" href="${baseUrl}/favicon.svg" target="_blank">Open asset in new tab</a></p><p><label id="wrapping-control-label"><input id="wrapped-control" type="checkbox"> <span id="wrapped-control-label-text">Toggle wrapped control</span></label></p><div id="link-target" style="margin-top:20px">Link target</div></section><section id="text-annotation"><h2>Text annotation</h2><p id="text-target">Text range context target for reviewer selection.</p></section><figure><img src="./diagram.png" alt="image annotation" width="120" height="90"></figure><p id="width-sensitive-reflow">${'Width-sensitive desktop shell transition content wraps across many lines. '.repeat(80)}</p><p><a id="empty-fragment-link" href="#">Back to top</a></p><div style="height:1200px"></div></main></body></html>`;
   const register = await context.post('/api/plans/register', {
     data: {
       repoKey: 'e2e-repo',
@@ -136,6 +136,8 @@ try {
   assert.match(clientCssText, /\.selection-box\.hover\{[^}]*border:2px dotted/);
   assert.match(clientCssText, /\.selection-box\.active\{[^}]*border:2px dotted/);
   assert.match(clientCssText, /@media\(prefers-reduced-motion:reduce\)\{\.selection-box\{transition:none\}\}/);
+  assert.doesNotMatch(clientCssText, /#plan-frame\{[^}]*;height:calc\(100vh - 86px\)/);
+  assert.match(clientCssText, /#plan-frame\{[^}]*min-height:calc\(100vh - 86px\)[^}]*display:block/);
   // Mobile review surface contract: the parent #review is the native scroll
   // container, the iframe is laid out at full content height (so #review can
   // scroll it natively), and #plan-touch-layer sits on top as the tap surface.
@@ -534,6 +536,59 @@ try {
     assert.equal(await page.locator('#desktop-plan-nav-toggle').getAttribute('title'), 'Plan Navigator');
     assert.equal(await page.locator('#download-raw-plan').getAttribute('title'), 'Download raw plan HTML; ZIP includes required assets.');
     assert.equal(await page.locator('#download-raw-plan').getAttribute('href'), `/download/${registered.planId}?versionId=${registered.versionId}`);
+    await page.waitForFunction(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame');
+      if (!iframe?.contentDocument) return false;
+      const contentHeight = iframe.contentDocument.documentElement.scrollHeight;
+      return contentHeight > 0 && Math.abs(iframe.offsetHeight - contentHeight) <= 2;
+    });
+    const desktopScrollSurfaceBefore = await page.evaluate(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      return {
+        outerScrollable: document.documentElement.scrollHeight - document.documentElement.clientHeight > 200,
+        frameSizedToContent: Math.abs(iframe.offsetHeight - iframe.contentDocument!.documentElement.scrollHeight) <= 2,
+        frameInternalScrollY: iframe.contentWindow?.scrollY ?? 0
+      };
+    });
+    assert.deepEqual(desktopScrollSurfaceBefore, { outerScrollable: true, frameSizedToContent: true, frameInternalScrollY: 0 });
+    const desktopStickyColumnHeights = await page.evaluate(() => {
+      const expected = window.innerHeight - 86;
+      return {
+        expected,
+        planNavHeight: Math.round(document.querySelector<HTMLElement>('#plan-list-nav')!.getBoundingClientRect().height),
+        sidebarHeight: Math.round(document.querySelector<HTMLElement>('#sidebar')!.getBoundingClientRect().height)
+      };
+    });
+    assert.equal(Math.abs(desktopStickyColumnHeights.planNavHeight - desktopStickyColumnHeights.expected) <= 2, true);
+    assert.equal(Math.abs(desktopStickyColumnHeights.sidebarHeight - desktopStickyColumnHeights.expected) <= 2, true);
+    const desktopFrameBox = await page.locator('#plan-frame').boundingBox();
+    assert.ok(desktopFrameBox);
+    await page.mouse.move(desktopFrameBox.x + desktopFrameBox.width / 2, desktopFrameBox.y + 220);
+    await page.mouse.wheel(0, 420);
+    await page.waitForFunction(() => window.scrollY > 0);
+    assert.equal(await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollY), 0);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForFunction(() => window.scrollY === 0);
+    const beforeNoOverlaySidebarToggle = await page.evaluate(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      return iframe.contentDocument!.documentElement.scrollHeight;
+    });
+    await page.click('#desktop-comments-toggle');
+    await page.waitForFunction(() => document.body.classList.contains('comments-open'));
+    await page.waitForFunction(previousHeight => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame');
+      if (!iframe?.contentDocument) return false;
+      const contentHeight = iframe.contentDocument.documentElement.scrollHeight;
+      return contentHeight > previousHeight && Math.abs(iframe.offsetHeight - contentHeight) <= 2;
+    }, beforeNoOverlaySidebarToggle);
+    assert.equal(await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollY), 0);
+    await page.click('#desktop-comments-toggle');
+    await page.waitForFunction(() => !document.body.classList.contains('comments-open'));
+    await page.waitForFunction(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame');
+      if (!iframe?.contentDocument) return false;
+      return Math.abs(iframe.offsetHeight - iframe.contentDocument.documentElement.scrollHeight) <= 2;
+    });
     const [rawPlanDownload] = await Promise.all([
       page.waitForEvent('download'),
       page.locator('#download-raw-plan').click()
@@ -914,8 +969,21 @@ try {
     await page.frameLocator('#plan-frame').locator('#plan-test-link').hover();
     await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())));
     assert.equal(await page.evaluate(() => document.querySelector<HTMLElement>('#hover-selection-box')?.hidden), true);
+    await page.evaluate(() => {
+      window.scrollTo(0, 0);
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      iframe.contentWindow?.history.replaceState(null, '', iframe.contentWindow.location.pathname);
+    });
     await page.frameLocator('#plan-frame').locator('#plan-test-link').click();
     await page.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.location.hash === '#link-target');
+    await page.waitForFunction(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const target = iframe.contentDocument!.querySelector<HTMLElement>('#link-target')!;
+      const navbarHeight = document.querySelector<HTMLElement>('#plan-navbar')!.getBoundingClientRect().height;
+      return window.scrollY > 0
+        && iframe.contentWindow?.scrollY === 0
+        && Math.abs(target.getBoundingClientRect().top + iframe.getBoundingClientRect().top - navbarHeight) <= 2;
+    });
     assert.equal(await page.evaluate(() => document.querySelector<HTMLElement>('#composer')?.hidden), true);
     const popupPromise = page.waitForEvent('popup', { timeout: 3000 });
     await page.frameLocator('#plan-frame').locator('#blank-plan-link').click();
@@ -1022,7 +1090,7 @@ try {
         && Math.abs(boxRect.width - targetRect.width) <= 1
         && Math.abs(boxRect.height - targetRect.height) <= 1;
     });
-    await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollTo(0, 120));
+    await page.evaluate(() => window.scrollTo(0, 120));
     await page.waitForFunction(() => {
       const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
       const box = document.querySelector<HTMLElement>('#active-selection-box')!;
@@ -1040,7 +1108,8 @@ try {
     assert.equal(activeBoxAfterScroll.topDelta <= 1, true);
     assert.equal(activeBoxAfterScroll.widthDelta <= 1, true);
     assert.equal(activeBoxAfterScroll.heightDelta <= 1, true);
-    await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollTo(0, 0));
+    assert.equal(await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollY), 0);
+    await page.evaluate(() => window.scrollTo(0, 0));
     await page.focus('#comment-body');
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => document.querySelector<HTMLElement>('#composer')?.hidden === true);
@@ -1146,13 +1215,22 @@ try {
     assert.equal(pendingAnchorStyle.borderStyle, 'dotted');
     assert.equal(pendingAnchorStyle.borderWidth, '2px');
     assert.equal(await page.evaluate(() => (window as typeof window & { __html2canvasCalls?: number }).__html2canvasCalls), 1);
-    const markerTopBeforeScroll = await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('.comment-anchor')?.getBoundingClientRect().top ?? 0);
-    await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollTo(0, 120));
+    const markerTopBeforeScroll = await page.evaluate(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const anchor = iframe.contentDocument?.querySelector('.comment-anchor');
+      return iframe.getBoundingClientRect().top + (anchor?.getBoundingClientRect().top ?? 0);
+    });
+    await page.evaluate(() => window.scrollTo(0, 120));
     await page.waitForFunction(
-      before => Math.abs((document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('.comment-anchor')?.getBoundingClientRect().top ?? before) - before) > 20,
+      before => {
+        const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+        const anchor = iframe.contentDocument?.querySelector('.comment-anchor');
+        return Math.abs((iframe.getBoundingClientRect().top + (anchor?.getBoundingClientRect().top ?? 0)) - before) > 20;
+      },
       markerTopBeforeScroll
     );
-    await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollTo(0, 0));
+    assert.equal(await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollY), 0);
+    await page.evaluate(() => window.scrollTo(0, 0));
 
     await page.evaluate(() => { (window as typeof window & { __html2canvasMode?: 'success' | 'fail' }).__html2canvasMode = 'fail'; });
     await page.evaluate(() => {
@@ -1410,7 +1488,7 @@ try {
         (window as typeof window & { __planFrameLoadCount?: number }).__planFrameLoadCount =
           ((window as typeof window & { __planFrameLoadCount?: number }).__planFrameLoadCount ?? 0) + 1;
       });
-      iframe.contentWindow?.scrollTo(0, 120);
+      window.scrollTo(0, 120);
     });
     const frameSrcBeforePlanUpdate = await page.getAttribute('#plan-frame', 'src');
 
@@ -1509,7 +1587,8 @@ try {
     await page.unroute(`**${slowImageAssetPath}`);
     assert.equal(await page.getAttribute('#plan-frame', 'src'), frameSrcBeforePlanUpdate);
     assert.equal(await page.evaluate(() => (window as typeof window & { __planFrameLoadCount?: number }).__planFrameLoadCount), 0);
-    assert.equal(await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollY), 120);
+    assert.equal(await page.evaluate(() => window.scrollY), 120);
+    assert.equal(await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollY), 0);
     await page.waitForFunction(
       commentId => Boolean(document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector(`.comment-anchor.addressed[data-comment-id="${commentId}"]`)),
       resolvedFallback.comment.id
@@ -1660,12 +1739,47 @@ try {
       assert.equal(mobileDragState.frameInternalScrollY, 0);
       assert.equal(mobileDragState.composerOpen, false);
       await settleScrollTop();
-      // A real tap on an in-plan link navigates the iframe and does NOT comment.
+      // A real tap on an in-plan link navigates the iframe, translates the
+      // fragment target to #review scroll even after prior parent scrolling, and
+      // does NOT comment.
+      await touchPage.evaluate(() => document.querySelector<HTMLElement>('#review')!.scrollTo(0, 80));
+      await touchPage.waitForFunction(() => document.querySelector<HTMLElement>('#review')!.scrollTop >= 80, undefined, { timeout: 3000 });
       const linkBox = await touchPage.frameLocator('#plan-frame').locator('#plan-test-link').boundingBox();
       assert.ok(linkBox);
       await trustedTap(linkBox.x + linkBox.width / 2, linkBox.y + linkBox.height / 2);
       await touchPage.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.location.hash === '#link-target', undefined, { timeout: 3000 });
+      await touchPage.waitForFunction(() => {
+        const review = document.querySelector<HTMLElement>('#review')!;
+        const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+        const target = iframe.contentDocument!.querySelector<HTMLElement>('#link-target')!;
+        return review.scrollTop > 80
+          && iframe.contentWindow?.scrollY === 0
+          && Math.abs(iframe.getBoundingClientRect().top + target.getBoundingClientRect().top - review.getBoundingClientRect().top) <= 2;
+      }, undefined, { timeout: 3000 });
       await touchPage.waitForTimeout(180);
+      assert.equal(await touchPage.evaluate(() => document.querySelector<HTMLElement>('#composer')?.hidden), true);
+      await touchPage.evaluate(() => {
+        const review = document.querySelector<HTMLElement>('#review')!;
+        const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+        const link = iframe.contentDocument!.querySelector<HTMLElement>('#empty-fragment-link')!;
+        review.scrollTo(0, review.scrollTop + iframe.getBoundingClientRect().top - review.getBoundingClientRect().top + link.getBoundingClientRect().top - 120);
+      });
+      await touchPage.waitForFunction(() => {
+        const review = document.querySelector<HTMLElement>('#review')!;
+        const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+        const link = iframe.contentDocument!.querySelector<HTMLElement>('#empty-fragment-link')!;
+        const top = iframe.getBoundingClientRect().top + link.getBoundingClientRect().top;
+        const reviewRect = review.getBoundingClientRect();
+        return top > reviewRect.top + 40 && top < reviewRect.bottom - 40;
+      }, undefined, { timeout: 3000 });
+      const emptyFragmentBox = await touchPage.frameLocator('#plan-frame').locator('#empty-fragment-link').boundingBox();
+      assert.ok(emptyFragmentBox);
+      await trustedTap(emptyFragmentBox.x + emptyFragmentBox.width / 2, emptyFragmentBox.y + emptyFragmentBox.height / 2);
+      await touchPage.waitForFunction(() => {
+        const review = document.querySelector<HTMLElement>('#review')!;
+        const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+        return review.scrollTop === 0 && iframe.contentWindow?.scrollY === 0 && iframe.contentWindow.location.hash === '';
+      }, undefined, { timeout: 3000 });
       assert.equal(await touchPage.evaluate(() => document.querySelector<HTMLElement>('#composer')?.hidden), true);
       await touchPage.evaluate(() => {
         const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
