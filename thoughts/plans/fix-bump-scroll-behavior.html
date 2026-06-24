@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fix bump scroll behavior plan</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #070b14;
+      --panel: #0f172a;
+      --panel-2: #111827;
+      --text: #e5e7eb;
+      --muted: #a7b0c0;
+      --border: #2b364d;
+      --accent: #38bdf8;
+      --accent-2: #7dd3fc;
+      --warn: #f59e0b;
+      --good: #22c55e;
+      --code: #020617;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top left, rgba(56, 189, 248, .13), transparent 32rem), var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.6;
+    }
+    a { color: var(--accent-2); }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    pre { overflow-x: auto; background: var(--code); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+    .layout { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); gap: 24px; max-width: 1280px; margin: 0 auto; padding: 24px; }
+    .toc { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; align-self: start; border: 1px solid var(--border); border-radius: 18px; background: rgba(15, 23, 42, .92); padding: 16px; }
+    .toc h2 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+    .toc a { display: block; padding: 7px 8px; border-radius: 8px; color: #cbd5e1; text-decoration: none; font-size: 14px; }
+    .toc a:hover { background: rgba(56, 189, 248, .12); color: #e0f2fe; }
+    main { min-width: 0; }
+    header, section, article { border: 1px solid var(--border); border-radius: 18px; background: rgba(15, 23, 42, .86); padding: 22px; margin-bottom: 18px; box-shadow: 0 18px 48px rgba(2, 6, 23, .24); }
+    header { background: linear-gradient(135deg, rgba(14, 165, 233, .18), rgba(15, 23, 42, .9)); }
+    h1, h2, h3, h4 { line-height: 1.2; color: #f8fafc; }
+    h1 { margin: 0 0 10px; font-size: clamp(2rem, 5vw, 3.2rem); }
+    h2 { margin-top: 0; font-size: 1.45rem; }
+    h3 { margin-bottom: .3rem; font-size: 1.05rem; }
+    p { margin: .6rem 0; }
+    ul, ol { padding-left: 1.35rem; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+    th, td { border: 1px solid var(--border); padding: 10px; vertical-align: top; text-align: left; }
+    th { background: #111827; color: #f8fafc; }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .pill { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #334155; border-radius: 999px; background: #0b1220; color: #dbeafe; padding: 5px 10px; font-size: 13px; font-weight: 800; }
+    .status { border-color: var(--warn); color: #fde68a; }
+    .good { border-color: rgba(34, 197, 94, .5); }
+    .warn { border-color: rgba(245, 158, 11, .6); background: rgba(245, 158, 11, .08); }
+    .muted { color: var(--muted); }
+    .phase { border-color: #334155; }
+    .progress-list { list-style: none; padding: 0; }
+    .progress-list li { margin: 8px 0; padding: 10px; border: 1px solid #263246; border-radius: 10px; background: #0b1220; }
+    .progress-list input { transform: translateY(1px); margin-right: 8px; }
+    .callout { border-left: 4px solid var(--accent); padding: 12px 14px; background: rgba(56, 189, 248, .08); border-radius: 10px; }
+    @media (max-width: 860px) {
+      .layout { grid-template-columns: 1fr; padding: 14px; }
+      .toc { position: static; max-height: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <nav class="toc" aria-label="Plan sections">
+      <h2>Sections</h2>
+      <a href="#status">Status</a>
+      <a href="#goal">Goal</a>
+      <a href="#decision-attention">Decision attention</a>
+      <a href="#solution-narrative">Solution narrative</a>
+      <a href="#why">Why this exists</a>
+      <a href="#authority-inputs">Authority &amp; inputs</a>
+      <a href="#current-reality">Current implementation reality</a>
+      <a href="#progress">Progress</a>
+      <a href="#resume">Resume instructions</a>
+      <a href="#product-intent">Product intent alignment</a>
+      <a href="#locked-decisions">Locked decisions</a>
+      <a href="#acceptance-criteria">Acceptance criteria</a>
+      <a href="#bdd-scenarios">BDD scenarios</a>
+      <a href="#test-matrix">Test coverage matrix</a>
+      <a href="#phases">Phases</a>
+      <a href="#phase-p1-regression">P1 Regression tests</a>
+      <a href="#phase-p2-fix">P2 Fix scroll handoff</a>
+      <a href="#phase-p3-verify">P3 Verify and review</a>
+      <a href="#verification">Verification strategy</a>
+      <a href="#delivery-order">Delivery order</a>
+      <a href="#non-goals">Non-goals</a>
+      <a href="#decisions-log">Decisions / Deviations</a>
+    </nav>
+
+    <main>
+      <header id="title">
+        <h1>Fix bump scroll behavior</h1>
+        <p class="muted">Plan for the regression where changing plan scroll direction first feels like a pull/bump and only a later gesture scrolls normally.</p>
+        <div class="meta" aria-label="Plan metadata">
+          <span class="pill status good">Status: execution-ready</span>
+          <span class="pill good">Execution ready: true</span>
+          <span class="pill">Linear issue: none; direct user report</span>
+          <span class="pill">Surface: review shell mobile/coarse-pointer scrolling</span>
+          <span class="pill">Created: 2026-06-24</span>
+        </div>
+      </header>
+
+      <section id="status">
+        <h2>Status</h2>
+        <p>This plan has cleared product-intent, GPT, and GLM execution-readiness gates and is ready for implementation. It should be registered with <code>--execution-ready true</code> before phase execution starts.</p>
+      </section>
+
+      <section id="goal">
+        <h2>Goal</h2>
+        <p>Make the rendered plan area scroll immediately on the first input after a direction change, while preserving the recent navbar isolation model: the navbar stays isolated, <code>#review</code> remains the native mobile/coarse-pointer scroll container, the iframe does not own scroll, and the transparent touch layer still supports taps for comments and in-plan links.</p>
+      </section>
+
+      <section id="decision-attention" class="warn">
+        <h2>Decision Attention / Low-confidence Areas</h2>
+        <p><strong>No product decision is required.</strong> The intended behavior is unambiguous: the plan should scroll on the first gesture in either direction.</p>
+        <p><strong>Evidence limitation:</strong> headless Chromium wheel and synthetic scroll gestures move the correct scroll owner, but the raw trusted CDP touch sequence against the live service did not scroll the touch layer at all. That makes the automated regression a root-cause guard for scroll-blocking touch listeners plus a direction-change gesture check, not a perfect simulation of every trackpad/iOS rubber-band physics path.</p>
+      </section>
+
+      <section id="solution-narrative">
+        <h2>Solution narrative</h2>
+        <p>Keep the native-scroll architecture from the navbar isolation change, but remove the browser's reasons to treat the plan touch surface as scroll-blocking. The implementation should make touch observation listeners on the plan scroll path passive, add vertical overscroll containment to the mobile <code>#review</code> scroller, and add regression coverage that proves a first reverse-direction gesture changes <code>#review.scrollTop</code> without moving the iframe or opening the composer.</p>
+        <p>The fix must not reintroduce JavaScript scroll emulation. Prior tests already protect against manual <code>scrollBy</code> behavior because it broke momentum scrolling.</p>
+      </section>
+
+      <section id="why">
+        <h2>Why this plan exists</h2>
+        <p>Recent scroll ownership work isolated the sticky navbar and moved mobile/coarse-pointer plan scrolling to <code>#review</code>, with a transparent <code>#plan-touch-layer</code> on top of the iframe for taps. The user now observes that changing scroll direction can feel like a pull/bump before scrolling works. This is a high-friction review-shell regression: reviewers spend most of their time reading and scrolling plans, and the scroll surface must feel native and predictable.</p>
+      </section>
+
+      <section id="authority-inputs">
+        <h2>Authority and inputs</h2>
+        <ul>
+          <li>User report: changing plan scroll direction does not scroll at first, acts like a pull, then a second scroll works.</li>
+          <li><code>AGENTS.md</code>: non-trivial repo work must be planned as HTML and registered in the plan reviewer.</li>
+          <li><code>thoughts/specs/product_intent.md</code>: simplest browser review workflow must work without extra setup; browser interactions need e2e coverage when changed.</li>
+          <li><code>src/server/app.ts</code>: review shell CSS/JS owns navbar, iframe, touch layer, scroll, and comment interactions.</li>
+          <li><code>src/test-fixtures/e2e-run.ts</code>: existing e2e already covers mobile scroll ownership, touch taps, fragment links, and wheel non-cancellation.</li>
+          <li>Git history: commit <code>115fc8d</code> (“Fix plan review scroll ownership”) introduced the current native <code>#review</code> mobile scroll ownership and related tests.</li>
+        </ul>
+      </section>
+
+      <section id="current-reality">
+        <h2>Current implementation reality</h2>
+        <ul>
+          <li><code>src/server/app.ts</code> renders <code>#plan-navbar</code> sticky above <code>#app</code>. On mobile/coarse pointers, <code>body</code> is overflow-hidden, <code>#review</code> has <code>overflow-y:auto</code> and <code>-webkit-overflow-scrolling:touch</code>, the iframe is full content height with <code>pointer-events:none</code>, and <code>#plan-touch-layer</code> is the top touch target with <code>touch-action:pan-y</code>.</li>
+          <li>The touch-layer, frame, and iframe-document touch listeners are registered as capture listeners without explicit <code>passive:true</code>. They do not intentionally call <code>preventDefault()</code> for scrolling, but their non-passive registration can still put the browser on the scroll-blocking path.</li>
+          <li>The mobile <code>#review</code> scroller does not currently set vertical <code>overscroll-behavior</code>, so boundary gestures can escape to the page/viewport instead of staying contained to the plan scroll surface.</li>
+          <li>Existing tests assert the broad architecture: <code>#review</code> is scrollable, the iframe internal scroll stays at <code>0</code>, the touch layer is on top, wheel events are not canceled, and old manual scroll emulation stays absent. They do not assert listener passivity or the first reverse-direction scroll behavior.</li>
+        </ul>
+        <div class="callout" id="reproduction-evidence">
+          <h3>Reproduction evidence gathered before writing this plan</h3>
+          <ul>
+            <li>A live-service diagnostic plan with long content showed the page is scrollable and that Chromium wheel input over the plan moves the correct owner (<code>#review</code> on mobile/coarse layout, <code>window</code> on desktop) while keeping iframe <code>scrollY</code> at <code>0</code>.</li>
+            <li><code>Input.synthesizeScrollGesture</code> over the touch layer moved <code>#review</code> in both directions, confirming layout and sizing are not the blocker.</li>
+            <li>A raw trusted CDP touch drag over the live <code>#plan-touch-layer</code> left <code>#review.scrollTop</code> at <code>0</code> after the first drag and after repeated reverse drags, which points at input handoff/scroll-blocking listener behavior rather than missing content height.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="progress">
+        <h2>Progress</h2>
+        <ul class="progress-list">
+          <li id="progress-p1"><label><input type="checkbox" checked disabled> P1 — Add focused scroll regression tests</label></li>
+          <li id="progress-p2"><label><input type="checkbox" checked disabled> P2 — Fix touch scroll handoff and containment</label></li>
+          <li id="progress-p3"><label><input type="checkbox" checked disabled> P3 — Verify, review, and update plan evidence</label></li>
+        </ul>
+      </section>
+
+      <section id="resume">
+        <h2>Resume instructions (agent)</h2>
+        <p>Implementation phases are complete. Continue scoped-plan-run handoff from PR creation and post-PR monitoring if a PR is not yet open. Stay within the stated review-shell scroll scope and preserve native scrolling if any PR feedback requires follow-up fixes.</p>
+      </section>
+
+      <section id="product-intent">
+        <h2>Product intent alignment</h2>
+        <p>This plan cites <code>thoughts/specs/product_intent.md</code> and advances these desired outcomes and principles:</p>
+        <ul>
+          <li><strong>Simplest reviewer workflow:</strong> reviewers can open a plan, read it, scroll it, and comment without fighting the shell.</li>
+          <li><strong>Browser comment interactions covered by e2e:</strong> the fix adds targeted coverage around the same rendered-plan/touch layer used for commenting.</li>
+          <li><strong>Safe rendered output and source of truth:</strong> no plan-authored scripts or iframe behavior changes are introduced; the browser shell remains the owner of review interactivity.</li>
+          <li><strong>Minimal hidden state:</strong> scroll behavior remains native browser state, not a custom JS emulation layer that agents/operators must understand.</li>
+        </ul>
+        <p><strong>UI impact:</strong> yes — this changes interaction behavior of the review shell's rendered plan area. Existing evidence is the current mobile/coarse-pointer e2e scroll block and live diagnostic reproduction. Target evidence is first-gesture direction-change scrolling with preserved comment/link tap behavior.</p>
+      </section>
+
+      <section id="locked-decisions">
+        <h2>Locked decisions</h2>
+        <ul>
+          <li id="decision-native-scroll"><strong>Keep native scrolling.</strong> Do not restore manual touch or wheel <code>scrollBy</code> emulation.</li>
+          <li id="decision-scroll-owner"><strong>Keep current scroll owners.</strong> Desktop scroll remains document/window based; mobile/coarse-pointer scroll remains <code>#review</code>; iframe internal scroll must stay at <code>0</code>.</li>
+          <li id="decision-overlay"><strong>Keep the overlay tap surface.</strong> <code>#plan-touch-layer</code> remains the top mobile/coarse touch target so iOS Safari can tap/comment reliably.</li>
+          <li id="decision-passive"><strong>Touch observers on the scroll path are passive.</strong> Touch handlers that only observe movement/taps must not block browser scroll negotiation.</li>
+          <li id="decision-scope"><strong>Scope is review-shell scrolling only.</strong> No navigator redesign, comment queue changes, storage changes, or source-sync changes are included.</li>
+        </ul>
+      </section>
+
+      <section id="acceptance-criteria">
+        <h2>Acceptance criteria</h2>
+        <ol>
+          <li id="ac-1"><strong>First reverse scroll works:</strong> on mobile/coarse-pointer review shell, after the plan has scrolled in one direction, the first gesture in the opposite direction changes <code>#review.scrollTop</code> immediately; a second gesture is not required.</li>
+          <li id="ac-2"><strong>Correct scroll owner:</strong> direction-change gestures over rendered plan content move <code>#review</code> on mobile/coarse pointers and do not move <code>iframe.contentWindow.scrollY</code> or the outer page.</li>
+          <li id="ac-3"><strong>No scroll-blocking touch observers:</strong> <code>touchstart</code> and <code>touchmove</code> listeners on the plan touch path are explicitly passive where they do not need to cancel browser defaults.</li>
+          <li id="ac-4"><strong>Boundary pull is contained:</strong> vertical overscroll from the plan reading surface is contained to the plan scroller instead of escaping into a misleading page/viewport pull where supported by the browser.</li>
+          <li id="ac-5"><strong>Comment and link taps still work:</strong> mobile/coarse taps on plain plan content still open the composer, in-plan fragment links still navigate without opening the composer, and adjacent non-link taps remain commentable.</li>
+          <li id="ac-6"><strong>Desktop and iPad-style wheel behavior preserved:</strong> wheel/trackpad input remains native, uncanceled, and routed to the existing correct scroll owner.</li>
+        </ol>
+      </section>
+
+      <section id="bdd-scenarios">
+        <h2>BDD scenarios</h2>
+        <article id="bdd-first-reverse-up">
+          <h3>BDD-1 — First upward reversal scrolls</h3>
+          <p><strong>Given</strong> a mobile/coarse-pointer review shell with a long rendered plan and <code>#review.scrollTop</code> greater than zero, <strong>when</strong> the reviewer performs the first upward/reverse gesture over the plan touch layer, <strong>then</strong> <code>#review.scrollTop</code> decreases during that gesture, <code>iframe.contentWindow.scrollY</code> remains <code>0</code>, the outer page does not scroll, and the comment composer stays hidden.</p>
+        </article>
+        <article id="bdd-first-reverse-down">
+          <h3>BDD-2 — First downward reversal scrolls</h3>
+          <p><strong>Given</strong> a mobile/coarse-pointer review shell after an upward scroll, <strong>when</strong> the reviewer performs the first downward/reverse gesture over the plan touch layer, <strong>then</strong> <code>#review.scrollTop</code> increases immediately without needing a second gesture and without moving iframe internal scroll.</p>
+        </article>
+        <article id="bdd-passive-listeners">
+          <h3>BDD-3 — Touch listeners are non-blocking</h3>
+          <p><strong>Given</strong> the review shell loads on a mobile/coarse-pointer context, <strong>when</strong> the client registers touch listeners on the touch layer/frame/document scroll path, <strong>then</strong> touchstart and touchmove listeners that only observe scroll/tap state are registered with <code>passive:true</code>.</p>
+        </article>
+        <article id="bdd-link-and-comment-taps">
+          <h3>BDD-4 — Taps remain reviewer actions</h3>
+          <p><strong>Given</strong> the rendered plan contains a fragment link and adjacent plain text, <strong>when</strong> the reviewer taps the link, <strong>then</strong> the fragment navigation scrolls <code>#review</code> to the target and the composer stays hidden; <strong>when</strong> the reviewer taps adjacent non-link text, <strong>then</strong> the composer opens on that element.</p>
+        </article>
+        <article id="bdd-wheel-native">
+          <h3>BDD-5 — Wheel remains native</h3>
+          <p><strong>Given</strong> a wide coarse-pointer/tablet context, <strong>when</strong> wheel input occurs over the rendered plan, <strong>then</strong> the wheel event is not canceled, <code>#review</code> scrolls, and the iframe internal scroll remains <code>0</code>.</p>
+        </article>
+      </section>
+
+      <section id="test-matrix">
+        <h2>Test coverage matrix</h2>
+        <table>
+          <thead><tr><th>Acceptance</th><th>Test layer</th><th>Planned coverage</th><th>Command</th></tr></thead>
+          <tbody>
+            <tr id="matrix-direction"><td>AC-1, AC-2</td><td>E2E fixture</td><td>Extend the existing mobile/coarse scroll block in <code>src/test-fixtures/e2e-run.ts</code> to perform first reverse-direction gestures over <code>#plan-touch-layer</code> and assert immediate <code>#review.scrollTop</code> movement in both directions with iframe/window scroll unchanged.</td><td><code>bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js</code></td></tr>
+            <tr id="matrix-passive"><td>AC-3</td><td>E2E instrumentation plus contract text guard</td><td>Use a pre-navigation init script or targeted client contract assertion to prove scroll-path <code>touchstart</code>/<code>touchmove</code> registrations are passive. This should fail on the current client because those registrations use capture-only options.</td><td><code>bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js</code>; optionally targeted <code>node --test dist/__tests__/contracts.test.js --test-name-pattern 'mobile review surface'</code></td></tr>
+            <tr id="matrix-overscroll"><td>AC-4</td><td>Contract/e2e CSS assertion</td><td>Assert mobile <code>#review</code> CSS includes vertical overscroll containment alongside <code>overflow-y:auto</code> and <code>-webkit-overflow-scrolling:touch</code>.</td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></td></tr>
+            <tr id="matrix-taps"><td>AC-5</td><td>Existing e2e fixture</td><td>Keep and rerun existing mobile link tap, empty-fragment, adjacent-text composer, text, and image touch coverage after listener option changes.</td><td><code>bun run test:e2e</code></td></tr>
+            <tr id="matrix-wheel"><td>AC-6</td><td>Existing e2e fixture</td><td>Keep and rerun existing tablet wheel non-cancellation checks; add a reverse-direction wheel assertion only if the functional bug is reproducible with wheel in Chromium.</td><td><code>bun run test:e2e</code></td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="phases">
+        <h2>Phase-by-phase execution plan</h2>
+
+        <article id="phase-p1-regression" class="phase">
+          <h3>Phase P1 — Add focused scroll regression tests</h3>
+          <h4>End State</h4>
+          <p>The test suite has a failing, scoped regression for scroll handoff: current code fails because scroll-path touch listeners are not passive and/or the first reverse-direction gesture is not guaranteed by tests.</p>
+          <h4>Tests first</h4>
+          <ul>
+            <li>Extend <code>src/test-fixtures/e2e-run.ts</code> in the existing mobile/coarse-pointer section around the current touch and wheel assertions.</li>
+            <li>Before opening the shell in a mobile context, register an init script that records <code>addEventListener</code> registrations for <code>touchstart</code> and <code>touchmove</code> on relevant scroll-path targets. Assert <code>#plan-touch-layer</code> has no non-passive <code>touchstart</code>/<code>touchmove</code> listener. Include frame/document listeners if the instrumentation reliably sees them in Playwright frames.</li>
+            <li>Add a direction-change gesture assertion: start at a known mid-scroll <code>#review.scrollTop</code>, perform one reverse gesture over the plan surface, and assert the first gesture changes <code>#review.scrollTop</code> by a meaningful threshold while iframe/window scroll stay unchanged and composer remains hidden. Then reverse direction once more and assert the first gesture in that direction also moves.</li>
+            <li>Add or update a contract assertion in <code>src/__tests__/contracts.test.ts</code> for mobile <code>#review</code> overscroll containment if that is easier to keep deterministic than CSS inspection inside the large e2e fixture.</li>
+          </ul>
+          <h4>Expected files</h4>
+          <ul>
+            <li><code>src/test-fixtures/e2e-run.ts</code></li>
+            <li><code>src/__tests__/contracts.test.ts</code> only if adding the CSS/passive text guard there is cleaner than e2e-only coverage</li>
+          </ul>
+          <h4>Work</h4>
+          <p>Keep this phase test-only. Do not change <code>src/server/app.ts</code> until the regression is demonstrated. The preferred red signal is a failed passive-listener assertion, because current listener registrations are visibly capture-only; the direction-change functional check may already pass under synthetic Chromium gestures but should remain as end-to-end protection for the user-observed behavior.</p>
+          <h4>Open questions / decision dependencies</h4>
+          <p>None.</p>
+          <h4>Verify</h4>
+          <pre><code>bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js</code></pre>
+          <p>Expected before P2: the new regression fails on current code. Existing unrelated tests should not be weakened to get RED.</p>
+        </article>
+
+        <article id="phase-p2-fix" class="phase">
+          <h3>Phase P2 — Fix touch scroll handoff and containment</h3>
+          <h4>End State</h4>
+          <p>The plan touch layer remains commentable and link-aware, but it no longer makes the browser treat the plan reading surface as scroll-blocking. First reverse-direction gestures scroll immediately, and boundary pull behavior is contained where the browser supports it.</p>
+          <h4>Tests first</h4>
+          <p>Use the failing P1 tests as the RED contract. Do not alter them except to correct test bugs discovered from product evidence.</p>
+          <h4>Expected files</h4>
+          <ul>
+            <li><code>src/server/app.ts</code></li>
+          </ul>
+          <h4>Work</h4>
+          <ul>
+            <li>Add a small shared listener options constant inside the review-shell client script, such as <code>const passiveTouchCapture = { capture: true, passive: true };</code>, and use it for touchstart/touchmove observers on the scroll path that never need <code>preventDefault()</code>.</li>
+            <li>Update <code>planTouchLayer</code>, <code>frame</code>, and iframe-document touchstart/touchmove listener registrations as appropriate. Also passivate any scroll-path touchstart observers that only dismiss transient UI, such as archive-toast dismiss handlers, when the P1 instrumentation flags them. Keep click and pointer handlers unchanged unless evidence shows they are part of the scroll-blocking path.</li>
+            <li>Do not rely on <code>preventDefault()</code> in passive handlers. Link taps from the overlay already use manual navigation because the overlay, not the anchor, is the native event target; composer click suppression should continue to use <code>suppressSyntheticClickUntil</code>.</li>
+            <li>Add <code>overscroll-behavior-y: contain</code> to the mobile/coarse-pointer <code>#review</code> rule so plan-boundary gestures do not escape into a page-level pull where supported.</li>
+            <li>Preserve the existing CSS contract: <code>#review</code> remains <code>overflow-y:auto</code>, iframe remains <code>pointer-events:none</code> in mobile/coarse layout, and <code>#plan-touch-layer</code> remains <code>touch-action:pan-y</code>.</li>
+          </ul>
+          <h4>Open questions / decision dependencies</h4>
+          <p>None.</p>
+          <h4>Verify</h4>
+          <pre><code>bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js</code></pre>
+          <p>Expected after P2: P1 regressions are green, existing mobile tap/link/comment assertions remain green, and old manual scroll-emulation absence checks still pass.</p>
+        </article>
+
+        <article id="phase-p3-verify" class="phase">
+          <h3>Phase P3 — Verify, review, and update plan evidence</h3>
+          <h4>End State</h4>
+          <p>The fix is validated by targeted and full repo gates, reviewed for scroll/comment regressions, and the plan records the actual RED/GREEN evidence.</p>
+          <h4>Tests first</h4>
+          <p>No new product tests are expected unless P2 reveals a missed path such as link taps regressing under passive touch options.</p>
+          <h4>Expected files</h4>
+          <ul>
+            <li><code>thoughts/plans/fix-bump-scroll-behavior.html</code> for progress/evidence updates only</li>
+          </ul>
+          <h4>Work</h4>
+          <ul>
+            <li>Run the targeted fixture gate, then the full repo gates required for UI/comment-shell work.</li>
+            <li>Run a scoped implementation review focused on scroll ownership, passive listener safety, and mobile tap/link behavior.</li>
+            <li>Update this plan's Progress and Decisions / Deviations Log with exact commands and outcomes.</li>
+            <li>If a browser/manual check is available, open a registered plan in the reviewer and confirm direction changes feel immediate with a trackpad/touch device. Record that as supplemental evidence, not as a substitute for tests.</li>
+          </ul>
+          <h4>Open questions / decision dependencies</h4>
+          <p>None.</p>
+          <h4>Verify</h4>
+          <pre><code>bun run build
+bun run test
+bun run test:e2e</code></pre>
+        </article>
+      </section>
+
+      <section id="verification">
+        <h2>Verification strategy</h2>
+        <ul>
+          <li>Primary targeted gate: <code>bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js</code>.</li>
+          <li>Contract gate if CSS/client contract assertions are touched: <code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code>.</li>
+          <li>Final UI/comment-shell gates: <code>bun run test</code> and <code>bun run test:e2e</code>.</li>
+          <li>Supplemental manual/browser check: use a registered plan on <code>http://mbp.braid-python.ts.net:4317/</code> and verify first scroll after direction changes does not bump/pull before moving.</li>
+        </ul>
+      </section>
+
+      <section id="delivery-order">
+        <h2>Delivery order</h2>
+        <ol>
+          <li>Land RED regression coverage for passive touch listeners and first reverse-direction scroll behavior.</li>
+          <li>Make scroll-path touch observers passive and contain vertical overscroll on <code>#review</code>.</li>
+          <li>Run targeted/full gates and scoped review; update this plan with evidence before handoff.</li>
+        </ol>
+      </section>
+
+      <section id="non-goals">
+        <h2>Non-goals</h2>
+        <ul>
+          <li>No redesign of the sticky navbar, left navigator, comments drawer, or plan action controls.</li>
+          <li>No queue/comment lifecycle, registration, source-sync, or storage behavior changes.</li>
+          <li>No manual touch or wheel scroll emulation and no dependency changes.</li>
+          <li>No attempt to support plan-authored scripts or make the iframe itself the mobile touch target.</li>
+        </ul>
+      </section>
+
+      <section id="decisions-log">
+        <h2>Decisions / Deviations Log</h2>
+        <ul>
+          <li id="log-2026-06-24-created"><strong>2026-06-24:</strong> Created plan from direct user report. No Linear issue exists for this work.</li>
+          <li id="log-2026-06-24-repro"><strong>2026-06-24:</strong> Reproduction diagnostics against the live service found scrollable layout and correct wheel/synthetic scroll ownership, but raw touch drags over <code>#plan-touch-layer</code> did not move <code>#review</code>. Existing repo code shows non-passive touch listeners on the touch path, so the planned regression test targets listener passivity plus first reverse-direction gestures.</li>
+          <li id="log-2026-06-24-scope"><strong>2026-06-24:</strong> Scope locked to review-shell scroll handoff; no manual scroll emulation or navbar redesign.</li>
+          <li id="log-2026-06-24-execution-ready"><strong>2026-06-24:</strong> Execution-readiness gates cleared: product-intent review returned <code>PRODUCT_INTENT_READY</code>; GPT and GLM read-only plan reviews both returned <code>PLAN_EXECUTION_READY</code>. GLM noted the P1 passive-listener instrumentation may also catch archive-toast touchstart dismiss handlers on the scroll path; this is now called out in P2.</li>
+          <li id="log-2026-06-24-p1-red"><strong>2026-06-24:</strong> P1 RED: after adding e2e instrumentation and first reverse-direction gesture checks, <code>bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js</code> failed on non-passive scroll-path <code>touchstart</code>/<code>touchmove</code> listeners for <code>#plan-frame</code>, <code>#plan-touch-layer</code>, and the rendered document.</li>
+          <li id="log-2026-06-24-p2-green"><strong>2026-06-24:</strong> P2 GREEN: after making scroll-path touch observers passive and adding <code>overscroll-behavior-y:contain</code> to mobile/coarse <code>#review</code>, <code>bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js</code> passed.</li>
+          <li id="log-2026-06-24-scoped-review"><strong>2026-06-24:</strong> Scoped implementation reviews: GPT returned <code>PASS_SCOPED</code>; GLM returned <code>PASS_WITH_DOCUMENTED_OUT_OF_SCOPE_FOLLOW_UPS</code>. The documented follow-up is non-passive archive-toast <code>touchstart</code> listeners on organizer/deferred index surfaces, outside this review-shell plan; recorded in <code>thoughts/discoveries/fix-bump-scroll-behavior.md</code> for future follow-up.</li>
+          <li id="log-2026-06-24-pre-pr"><strong>2026-06-24:</strong> Pre-PR implementation review gate cleared: GPT and GLM both returned <code>CLEAN_FOR_PR</code>; the only remaining item is the documented <code>OUT_OF_SCOPE_FOLLOW_UP</code> for organizer/deferred archive-toast touch listeners. Review artifact: <code>thoughts/validation/pre-pr-reviews/2026-06-24-fix-bump-scroll-behavior.md</code>.</li>
+          <li id="log-2026-06-24-final-verification"><strong>2026-06-24:</strong> Final verification passed after the pre-PR gate: <code>bun run build</code>, <code>bun run test</code> (121 tests), and <code>bun run test:e2e</code>.</li>
+        </ul>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
