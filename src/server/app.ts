@@ -288,11 +288,11 @@ function filteredReviewShellNavigatorItems(store: PlanReviewStore, currentPlanId
   });
 }
 
-function planNavigatorHtml(plans: ListedPlan[], currentPlanId: string, label = 'plans', filters = emptyReviewShellNavigatorFilters()): string {
+function planNavigatorHtml(plans: ListedPlan[], currentPlanId: string, label = 'plans', filters = emptyReviewShellNavigatorFilters(), filterControls = ''): string {
   const items = sortPlansForNavigator(plans).map(item => planNavigatorItemHtml(item, currentPlanId, filters)).join('');
   const title = label === 'documents' ? 'Active documents' : 'Active plans';
   const empty = label === 'documents' ? 'No active documents.' : 'No active plans.';
-  return `<aside id="plan-list-nav" aria-label="${escapeHtml(title)}"><div class="plan-list-header"><h2>${escapeHtml(title)}</h2><button id="plan-list-retry" type="button" hidden>Retry</button></div><div class="plan-list-error" id="plan-list-error" hidden>Unable to load ${escapeHtml(label)}.</div><div id="plan-list-items">${items || `<p class="plan-list-empty">${escapeHtml(empty)}</p>`}</div></aside>`;
+  return `<aside id="plan-list-nav" aria-label="${escapeHtml(title)}"><div class="plan-list-header"><h2>${escapeHtml(title)}</h2><button id="plan-list-retry" type="button" hidden>Retry</button></div>${filterControls}<div class="plan-list-error" id="plan-list-error" hidden>Unable to load ${escapeHtml(label)}.</div><div id="plan-list-items">${items || `<p class="plan-list-empty">${escapeHtml(empty)}</p>`}</div></aside>`;
 }
 
 function planCardHtml(item: ListedPlan): string {
@@ -538,7 +538,31 @@ function buildPlanRequestBody(planPath: string): string {
   return `Use the plan-reviewer-build skill for this plan.\nPlan path: ${planPath}`;
 }
 
-function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], currentTitle: string, shellTitle: string, plans: ListedPlan[], columns: BoardColumnRecord[], projects: PlanProjectRecord[], navigatorFilters = emptyReviewShellNavigatorFilters()): string {
+function selectedOption(actual: string | undefined, expected: string): string {
+  return actual === expected ? ' selected' : '';
+}
+
+function navigatorFilterControls(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], columns: BoardColumnRecord[], projects: PlanProjectRecord[], navigatorFilters: ReviewShellNavigatorFilters): string {
+  const projectOptions = [...new Map(projects.map(project => [project.projectKey, project.projectName])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  if (!projectOptions.some(([key]) => key === plan.projectKey)) projectOptions.push([plan.projectKey, plan.projectName]);
+  const projectFilterControl = `<label class="filter-control">Filter: Project <select id="project-filter-control" aria-label="Filter navigator by project"><option value=""${selectedOption(navigatorFilters.project, '')}>All projects</option>${projectOptions.map(([key, name]) => `<option value="${escapeHtml(key)}"${selectedOption(navigatorFilters.project, key)}>${escapeHtml(name)}</option>`).join('')}</select></label>`;
+  const stateFilterControl = `<label class="filter-control">Filter: State <select id="state-filter-control" aria-label="Filter navigator by state"><option value=""${selectedOption(navigatorFilters.state, '')}>All states</option><option value="active"${selectedOption(navigatorFilters.state, 'active')}>Active</option><option value="deferred"${selectedOption(navigatorFilters.state, 'deferred')}>Deferred</option><option value="archived"${selectedOption(navigatorFilters.state, 'archived')}>Archived</option></select></label>`;
+  const statusFilterControl = plan.reviewMode === 'collaboration' ? '' : `<label class="filter-control">Filter: Status <select id="status-filter-control" aria-label="Filter navigator by status"><option value=""${selectedOption(navigatorFilters.status, '')}>All statuses</option>${columns.map(column => `<option value="${escapeHtml(column.key)}"${selectedOption(navigatorFilters.status, column.key)}>${escapeHtml(column.label)}</option>`).join('')}</select></label>`;
+  return `<section class="plan-nav-filters" aria-label="Filter navigator plans">${projectFilterControl}${stateFilterControl}${statusFilterControl}</section>`;
+}
+
+function currentPlanStatusControl(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], visibleColumns: BoardColumnRecord[], allColumns: BoardColumnRecord[]): string {
+  if (plan.reviewMode === 'collaboration') return '';
+  const currentKey = plan.boardColumnKey ?? '';
+  const currentColumn = allColumns.find(column => column.key === currentKey);
+  const visibleOptions = visibleColumns.map(column => `<option value="${escapeHtml(column.key)}"${selectedOption(currentKey, column.key)}>${escapeHtml(column.label)}</option>`).join('');
+  const hiddenCurrentOption = currentKey && currentColumn?.hiddenAt && !visibleColumns.some(column => column.key === currentKey)
+    ? `<option value="${escapeHtml(currentKey)}" selected disabled>${escapeHtml(currentColumn.label)} (hidden)</option>`
+    : '';
+  return `<label class="current-plan-status-control">Current plan status <select id="current-plan-status-control" aria-label="Current plan status" data-current-value="${escapeHtml(currentKey)}">${hiddenCurrentOption}${visibleOptions}</select><span id="current-plan-status-error" class="current-plan-status-error" role="status" hidden></span></label>`;
+}
+
+function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], currentTitle: string, shellTitle: string, plans: ListedPlan[], columns: BoardColumnRecord[], projects: PlanProjectRecord[], navigatorFilters = emptyReviewShellNavigatorFilters(), allColumns = columns): string {
   const escapedPlanId = escapeHtml(plan.id);
   const escapedShellTitle = escapeHtml(shellTitle);
   const escapedCurrentTitle = escapeHtml(currentTitle);
@@ -553,13 +577,9 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
   const commentsButton = '<button id="desktop-comments-toggle" class="tool-button comments-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Open comments" title="Comments">💬 <span id="desktop-comments-count" class="comments-count" hidden></span></button>';
   const indexLink = documentViewSwitcher();
   const pinControl = isCollaboration ? '' : `<button id="pin-plan" class="pin-button" type="button" data-pin-plan="${escapedPlanId}" aria-pressed="${plan.pinnedAt ? 'true' : 'false'}" aria-label="${plan.pinnedAt ? 'Unpin plan' : 'Pin plan'}" title="${plan.pinnedAt ? 'Unpin plan' : 'Pin plan'}">${plan.pinnedAt ? '★' : '☆'}</button>`;
-  const projectOptions = [...new Map(projects.map(project => [project.projectKey, project.projectName])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
-  if (!projectOptions.some(([key]) => key === plan.projectKey)) projectOptions.push([plan.projectKey, plan.projectName]);
-  const selected = (actual: string, expected: string) => actual === expected ? ' selected' : '';
-  const projectFilterControl = `<label class="filter-control">Filter: Project <select id="project-filter-control" aria-label="Filter by project"><option value=""${selected(navigatorFilters.project, '')}>All projects</option>${projectOptions.map(([key, name]) => `<option value="${escapeHtml(key)}"${selected(navigatorFilters.project, key)}>${escapeHtml(name)}</option>`).join('')}</select></label>`;
-  const stateFilterControl = `<label class="filter-control">Filter: State <select id="state-filter-control" aria-label="Filter by state"><option value=""${selected(navigatorFilters.state, '')}>All states</option><option value="active"${selected(navigatorFilters.state, 'active')}>Active</option><option value="deferred"${selected(navigatorFilters.state, 'deferred')}>Deferred</option><option value="archived"${selected(navigatorFilters.state, 'archived')}>Archived</option></select></label>`;
-  const statusFilterControl = isCollaboration ? '' : `<label class="filter-control">Filter: Status <select id="status-filter-control" aria-label="Filter by status"><option value=""${selected(navigatorFilters.status, '')}>All statuses</option>${columns.map(column => `<option value="${escapeHtml(column.key)}"${selected(navigatorFilters.status, column.key)}>${escapeHtml(column.label)}</option>`).join('')}</select></label>`;
-  const organizationControls = `${pinControl}${projectFilterControl}${stateFilterControl}${statusFilterControl}`;
+  const organizationControls = pinControl;
+  const navFilterControls = navigatorFilterControls(plan, columns, projects, navigatorFilters);
+  const currentStatusControl = currentPlanStatusControl(plan, columns, allColumns);
   const archiveLabel = isCollaboration ? 'Archive document' : 'Archive plan';
   const restoreLabel = isCollaboration ? 'Restore document' : 'Restore plan';
   const resumeLabel = isCollaboration ? 'Resume document' : 'Resume plan';
@@ -574,9 +594,9 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="stylesheet" href="/client.css?v=${clientAssetVersion}">
   </head><body data-plan-id="${escapedPlanId}" data-review-mode="${escapeHtml(plan.reviewMode)}" data-plan-title-fallback="${encodedTitleFallback}">
-    <nav id="plan-navbar" aria-label="Plan actions"><div id="plan-navbar-actions">${navActions}</div><div id="current-plan-bar"><strong id="current-plan-title">${escapedCurrentTitle}</strong><span class="ready-pill ${isCollaboration || plan.publicationMetadata?.executionReady ? 'ready' : 'not-ready'}">${escapeHtml(readyLabel)}</span></div></nav>
+    <nav id="plan-navbar" aria-label="Plan actions"><div id="plan-navbar-actions">${navActions}</div><div id="current-plan-bar"><strong id="current-plan-title">${escapedCurrentTitle}</strong><span class="ready-pill ${isCollaboration || plan.publicationMetadata?.executionReady ? 'ready' : 'not-ready'}">${escapeHtml(readyLabel)}</span>${currentStatusControl}</div></nav>
     <div id="app">
-      ${planNavigatorHtml(plans, plan.id, isCollaboration ? 'documents' : 'plans', navigatorFilters)}
+      ${planNavigatorHtml(plans, plan.id, isCollaboration ? 'documents' : 'plans', navigatorFilters, navFilterControls)}
       <main id="review"><iframe id="plan-frame" sandbox="allow-same-origin allow-popups" src="/render/${escapedPlanId}"></iframe><div id="plan-touch-layer" aria-hidden="true"></div><button id="mobile-comments-toggle" class="comments-toggle" type="button" aria-controls="sidebar" aria-expanded="false">Comments</button><div id="hover-selection-box" class="selection-box hover" hidden></div><div id="active-selection-box" class="selection-box active" hidden></div></main>
       <aside id="sidebar"><h1>Comments</h1><div id="sync-warning" hidden></div><section id="plan-notes-panel"><h2>${isCollaboration ? 'Document notes' : 'Plan notes'}</h2><div id="plan-notes"></div><textarea id="plan-note-body" placeholder="${isCollaboration ? 'Add context for agents' : 'Add a plan note for agents'}"></textarea><button id="add-plan-note" type="button">Add note</button></section><div id="deferred-refresh-notice" hidden>Document updated in the background. Finish or cancel this comment to refresh.</div><div id="comments"></div></aside>
     </div>
@@ -619,7 +639,8 @@ const clientCss = `
 body{--plan-nav-width:260px;--comments-width:48px;margin:0;background:#0b1020;color:#e5e7eb;font-family:system-ui,sans-serif}body.plan-nav-collapsed{--plan-nav-width:0}body.comments-open{--comments-width:320px}
 #plan-navbar{position:sticky;top:0;z-index:30;min-height:86px;box-sizing:border-box;display:grid;grid-template-rows:auto auto;gap:8px;padding:10px 16px;border-bottom:1px solid #2b364d;background:#0f172a}#plan-navbar-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}#plan-navbar a{color:#7dd3fc;text-decoration:none;font-weight:700}#plan-navbar a.nav-index{margin-right:auto}#plan-navbar .doc-kind-switcher{display:inline-flex;gap:2px;padding:3px;border:1px solid #334155;border-radius:999px;background:#08111f;margin-right:auto}#plan-navbar .doc-kind-seg{border-radius:999px;padding:5px 10px;color:#a7b0c0;font-size:12px;font-weight:850;text-decoration:none;white-space:nowrap}#plan-navbar .doc-kind-seg.active{background:#0ea5e9;color:#e0f2fe}.filter-control{display:inline-flex;align-items:center;gap:5px;border:1px solid #334155;border-radius:8px;background:#111827;padding:3px 6px;color:#cbd5e1;font-size:12px;font-weight:800}.filter-control select{max-width:150px;background:#020617;color:#e5e7eb;border:1px solid #7dd3fc;border-radius:6px;padding:6px 8px}.pin-button{border-color:#facc15!important;color:#fef08a!important}#plan-navbar button,#plan-navbar .tool-button{background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px 10px;cursor:pointer}#plan-navbar button:hover,#plan-navbar .tool-button:hover{border-color:#93c5fd}#plan-navbar .tool-button{display:inline-flex;align-items:center;justify-content:center;min-width:38px;min-height:34px;box-sizing:border-box;line-height:1}.download-tool{border-color:rgba(56,189,248,.72)!important;background:#075985!important;color:#ecfeff!important}#current-plan-bar{display:flex;align-items:center;gap:8px;min-width:0;border-top:1px solid rgba(71,85,105,.55);padding-top:8px;color:#cbd5e1}#current-plan-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f8fafc}.archive-status{color:#cbd5e1;border:1px solid #475569;background:#1e293b;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:800}#restore-plan{border-color:#22c55e;color:#bbf7d0}.comments-toggle{display:inline-flex;align-items:center;gap:6px}.comments-count{min-width:18px;height:18px;border-radius:999px;background:#7e22ce;color:white;display:inline-grid;place-items:center;padding:0 5px;font-size:11px;font-weight:900}
 #app{display:grid;grid-template-columns:var(--plan-nav-width) minmax(0,1fr) var(--comments-width);min-height:calc(100vh - 86px);transition:grid-template-columns .18s ease}
-#plan-list-nav{grid-column:1;align-self:start;position:sticky;top:86px;height:calc(100vh - 86px);box-sizing:border-box;border-right:1px solid #2b364d;background:#0b1220;padding:14px;overflow:auto}body.plan-nav-collapsed #plan-list-nav{padding:0;border-right:0;overflow:hidden}body.plan-nav-collapsed #plan-list-nav>*{visibility:hidden}#plan-list-nav h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#a7b0c0;margin:0}.plan-list-header{display:flex;align-items:center;justify-content:space-between;gap:8px}.plan-list-error{border:1px solid #f59e0b;background:rgba(245,158,11,.12);color:#fde68a;border-radius:8px;padding:8px;margin:10px 0;font-size:13px}.plan-list-empty{color:#a7b0c0;font-size:13px}.plan-nav-item{display:grid;gap:5px;padding:10px;margin:8px 0;border:1px solid #253248;border-radius:10px;background:#101827;color:#cbd5e1;text-decoration:none}.plan-nav-item:hover{border-color:#64748b}.plan-nav-item.active{border-color:#38bdf8;background:linear-gradient(135deg,rgba(14,165,233,.18),rgba(16,24,39,.95))}.plan-nav-item.attention{border-color:#f59e0b}.plan-nav-title{font-size:13px;font-weight:850;color:#f8fafc;line-height:1.25}.plan-nav-meta{display:flex;gap:6px;align-items:center;flex-wrap:wrap;color:#a7b0c0;font-size:11px}.plan-nav-submeta{color:#8fa0b8;font-size:11px}.plan-nav-pill{border:1px solid #475569;border-radius:999px;padding:1px 6px;background:#0b1220}.plan-nav-pill.ready{border-color:#22c55e;color:#bbf7d0}.plan-nav-pill.not-ready{border-color:#f59e0b;color:#fde68a}
+.current-plan-status-control{display:inline-flex;align-items:center;gap:6px;margin-left:auto;color:#cbd5e1;font-size:12px;font-weight:850}.current-plan-status-control select{background:#020617;color:#e5e7eb;border:1px solid #7dd3fc;border-radius:6px;padding:6px 8px}.current-plan-status-error{color:#fecaca;font-size:12px;font-weight:800}
+#plan-list-nav{grid-column:1;align-self:start;position:sticky;top:86px;height:calc(100vh - 86px);box-sizing:border-box;border-right:1px solid #2b364d;background:#0b1220;padding:14px;overflow:auto}body.plan-nav-collapsed #plan-list-nav{padding:0;border-right:0;overflow:hidden}body.plan-nav-collapsed #plan-list-nav>*{visibility:hidden}#plan-list-nav h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#a7b0c0;margin:0}.plan-list-header{display:flex;align-items:center;justify-content:space-between;gap:8px}.plan-nav-filters{display:grid;gap:8px;margin:12px 0 14px;padding:10px;border:1px solid #253248;border-radius:12px;background:#08111f}.plan-nav-filters .filter-control{display:grid;gap:5px;align-items:stretch}.plan-nav-filters .filter-control select{width:100%;max-width:none}.plan-list-error{border:1px solid #f59e0b;background:rgba(245,158,11,.12);color:#fde68a;border-radius:8px;padding:8px;margin:10px 0;font-size:13px}.plan-list-empty{color:#a7b0c0;font-size:13px}.plan-nav-item{display:grid;gap:5px;padding:10px;margin:8px 0;border:1px solid #253248;border-radius:10px;background:#101827;color:#cbd5e1;text-decoration:none}.plan-nav-item:hover{border-color:#64748b}.plan-nav-item.active{border-color:#38bdf8;background:linear-gradient(135deg,rgba(14,165,233,.18),rgba(16,24,39,.95))}.plan-nav-item.attention{border-color:#f59e0b}.plan-nav-title{font-size:13px;font-weight:850;color:#f8fafc;line-height:1.25}.plan-nav-meta{display:flex;gap:6px;align-items:center;flex-wrap:wrap;color:#a7b0c0;font-size:11px}.plan-nav-submeta{color:#8fa0b8;font-size:11px}.plan-nav-pill{border:1px solid #475569;border-radius:999px;padding:1px 6px;background:#0b1220}.plan-nav-pill.ready{border-color:#22c55e;color:#bbf7d0}.plan-nav-pill.not-ready{border-color:#f59e0b;color:#fde68a}
 #review{grid-column:2;position:relative;min-width:0}#sidebar{grid-column:3;grid-row:1;align-self:start;position:sticky;top:86px;height:calc(100vh - 86px);box-sizing:border-box;border-left:1px solid #2b364d;padding:0;background:#111827;overflow:hidden}#sidebar>h1,#sidebar>#sync-warning,#sidebar>#plan-notes-panel,#sidebar>#deferred-refresh-notice,#sidebar>#comments{display:none}body.comments-open #sidebar{padding:16px;overflow:auto}body.comments-open #sidebar>h1,body.comments-open #sidebar>#sync-warning,body.comments-open #sidebar>#plan-notes-panel,body.comments-open #sidebar>#deferred-refresh-notice,body.comments-open #sidebar>#comments{display:block}
 #plan-touch-layer{display:none}
 #plan-frame{width:100%;min-height:calc(100vh - 86px);border:0;background:white;display:block}.selection-box,.comment-anchor{position:fixed;pointer-events:none;border-radius:6px;transition:left .22s cubic-bezier(.2,0,.2,1),top .22s cubic-bezier(.2,0,.2,1),width .22s cubic-bezier(.2,0,.2,1),height .22s cubic-bezier(.2,0,.2,1),opacity .14s ease}.selection-box{z-index:8;box-sizing:border-box;background:transparent;box-shadow:none}.selection-box.hover{border:2px dotted rgba(56,189,248,.82)}.selection-box.active{z-index:9;border:2px dotted #38bdf8;box-shadow:0 0 0 1px rgba(255,255,255,.72)}.comment-anchor{z-index:7}.comment-anchor.pending{border:2px dotted rgba(192,132,252,.95);background:transparent;box-shadow:0 0 0 3px rgba(168,85,247,.08)}.comment-anchor.addressed{border:2px dotted rgba(216,180,254,.9);background:transparent;box-shadow:none}.comment-anchor-label{position:absolute;right:-10px;top:-12px;min-width:24px;height:24px;border-radius:999px;display:grid;place-items:center;padding:0 6px;background:#7e22ce;color:white;border:2px solid #f3e8ff;font-weight:800;font-size:12px;box-shadow:0 8px 18px rgba(0,0,0,.35)}.comment-anchor.addressed .comment-anchor-label{display:none}.comment-row{border:1px solid #2b364d;padding:10px;margin:8px 0;border-radius:8px;background:#0f172a}.comment-row small{color:#a7b0c0}.marker{position:absolute;z-index:9;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#0ea5e9;color:white;border:2px solid #dbeafe;font-weight:700;box-shadow:0 8px 18px rgba(0,0,0,.35);pointer-events:none}
@@ -655,6 +676,8 @@ const pinPlanButton = document.getElementById('pin-plan');
 const projectFilterControl = document.getElementById('project-filter-control');
 const stateFilterControl = document.getElementById('state-filter-control');
 const statusFilterControl = document.getElementById('status-filter-control');
+const currentPlanStatusControl = document.getElementById('current-plan-status-control');
+const currentPlanStatusError = document.getElementById('current-plan-status-error');
 const executionReviewButton = document.getElementById('request-execution-review');
 const buildPlanButton = document.getElementById('build-plan');
 const planNotes = document.getElementById('plan-notes');
@@ -1000,6 +1023,29 @@ pinPlanButton?.addEventListener('click', async () => {
   pinPlanButton.setAttribute('title', pinned ? 'Unpin plan' : 'Pin plan');
   pinPlanButton.textContent = pinned ? '★' : '☆';
 });
+async function saveCurrentPlanStatus(){
+  if (!currentPlanStatusControl) return;
+  const previous = currentPlanStatusControl.dataset.currentValue || currentPlanStatusControl.value;
+  const next = currentPlanStatusControl.value;
+  if (!next || next === previous) return;
+  if (currentPlanStatusError) { currentPlanStatusError.hidden = true; currentPlanStatusError.textContent = ''; }
+  currentPlanStatusControl.disabled = true;
+  let res;
+  let json;
+  try {
+    res = await fetch('/api/plans/'+encodeURIComponent(planId)+'/column', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ boardColumnKey: next }) });
+    json = await res.json();
+  } catch {}
+  currentPlanStatusControl.disabled = false;
+  if (!res?.ok || !json?.ok) {
+    currentPlanStatusControl.value = previous;
+    if (currentPlanStatusError) { currentPlanStatusError.textContent = 'Status was not changed. Check the service and retry.'; currentPlanStatusError.hidden = false; }
+    return;
+  }
+  currentPlanStatusControl.dataset.currentValue = next;
+  void loadPlanNavigator();
+}
+currentPlanStatusControl?.addEventListener('change', saveCurrentPlanStatus);
 function urlNavigatorFilters(){
   const params = new URLSearchParams(window.location.search);
   const filters = {};
@@ -3258,9 +3304,10 @@ export function createApp(options: AppOptions): FastifyInstance {
         title = renderedHtmlTitle(store.getRenderedHtml(plan.id)) ?? title;
       } catch {}
       const columns = store.listBoardColumns();
+      const allColumns = store.listBoardColumns({ includeHidden: true });
       const projects = store.listPlanProjects();
       const navigatorFilters = normalizeReviewShellNavigatorFilters(request.query as { projectKey?: string; lifecycle?: string; boardColumnKey?: string }, plan, columns, projects);
-      reply.header('Cache-Control', 'no-store').type('text/html').send(reviewShell(plan, title, reviewShellTitle(title), filteredReviewShellNavigatorItems(store, plan.id, navigatorFilters), columns, projects, navigatorFilters));
+      reply.header('Cache-Control', 'no-store').type('text/html').send(reviewShell(plan, title, reviewShellTitle(title), filteredReviewShellNavigatorItems(store, plan.id, navigatorFilters), columns, projects, navigatorFilters, allColumns));
     } catch (error) {
       sendError(reply, error);
     }

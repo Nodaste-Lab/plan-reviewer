@@ -105,6 +105,7 @@ test('review modes infer, override, expose, and change without source edits', as
     assert.match(shell.body, /Active documents/);
     assert.match(shell.body, /Archive document/);
     assert.doesNotMatch(shell.body, /Defer plan/);
+    assert.doesNotMatch(shell.body, /current-plan-status-control|status-filter-control/);
     const client = await app.inject({ method: 'GET', url: '/client.js' });
     assert.match(client.body, /No '\+documentKind\+' notes yet/);
     assert.match(client.body, /Tap a '\+documentKind\+' section to start one/);
@@ -1611,9 +1612,13 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     assert.match(shell.body, /<nav class="doc-kind-switcher" aria-label="Document view selector"><a class="doc-kind-seg" href="\/">Kanban<\/a><a class="doc-kind-seg" href="\/\?view=all">All documents<\/a><\/nav>/);
     assert.doesNotMatch(shell.body, /class="doc-kind-seg active"/);
     assert.match(shell.body, /id="current-plan-bar"/);
-    assert.match(shell.body, /Filter: Project <select id="project-filter-control"[^>]*aria-label="Filter by project"/);
-    assert.match(shell.body, /Filter: State <select id="state-filter-control"[^>]*aria-label="Filter by state"/);
-    assert.match(shell.body, /Filter: Status <select id="status-filter-control"[^>]*aria-label="Filter by status"/);
+    assert.match(shell.body, /Current plan status <select id="current-plan-status-control"[^>]*aria-label="Current plan status"/);
+    assert.match(shell.body, /<option value="backlog" selected>Backlog<\/option>/);
+    assert.match(shell.body, /<section class="plan-nav-filters" aria-label="Filter navigator plans">[\s\S]*Filter: Project <select id="project-filter-control"[^>]*aria-label="Filter navigator by project"/);
+    assert.match(shell.body, /<section class="plan-nav-filters" aria-label="Filter navigator plans">[\s\S]*Filter: State <select id="state-filter-control"[^>]*aria-label="Filter navigator by state"/);
+    assert.match(shell.body, /<section class="plan-nav-filters" aria-label="Filter navigator plans">[\s\S]*Filter: Status <select id="status-filter-control"[^>]*aria-label="Filter navigator by status"/);
+    const topActionsHtml = shell.body.slice(shell.body.indexOf('id="plan-navbar-actions"'), shell.body.indexOf('<div id="current-plan-bar"'));
+    assert.doesNotMatch(topActionsHtml, /project-filter-control|state-filter-control|status-filter-control/);
     assert.match(shell.body, /<option value="">All projects<\/option>/);
     assert.match(shell.body, /<option value="navigator-project" selected>navigator-project<\/option>/);
     assert.match(shell.body, /<option value="">All states<\/option>/);
@@ -1623,6 +1628,8 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     assert.doesNotMatch(shell.body, /id="project-control"/);
     assert.doesNotMatch(shell.body, /id="lifecycle-control"/);
     assert.doesNotMatch(shell.body, /id="column-control"/);
+    assert.doesNotMatch(shell.body, /id="current-plan-project-control"/);
+    assert.doesNotMatch(shell.body, /id="current-plan-state-control"/);
     const shellCss = await app.inject({ method: 'GET', url: '/client.css' });
     assert.equal(shellCss.statusCode, 200);
     assert.match(shellCss.body, /--plan-nav-width:260px/);
@@ -1631,6 +1638,9 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     assert.match(shellCss.body, /#plan-navbar \.doc-kind-switcher\{display:inline-flex;gap:2px;padding:3px;border:1px solid #334155;border-radius:999px;background:#08111f/);
     assert.match(shellCss.body, /#plan-navbar \.doc-kind-seg\{border-radius:999px;padding:5px 10px;color:#a7b0c0;font-size:12px;font-weight:850;text-decoration:none;white-space:nowrap\}/);
     assert.match(shellCss.body, /#plan-navbar \.doc-kind-seg\.active\{background:#0ea5e9;color:#e0f2fe\}/);
+    assert.match(shellCss.body, /\.plan-nav-filters\{display:grid;gap:8px;margin:12px 0 14px;padding:10px;border:1px solid #253248;border-radius:12px;background:#08111f\}/);
+    assert.match(shellCss.body, /\.plan-nav-filters \.filter-control\{display:grid;gap:5px;align-items:stretch\}/);
+    assert.match(shellCss.body, /\.current-plan-status-control/);
     assert.match(shellCss.body, /#quick-open-backdrop/);
     assert.match(shellCss.body, /#quick-open-result-list/);
     assert.match(shellCss.body, /\.quick-open-result\.active/);
@@ -1646,6 +1656,8 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     assert.match(shellClient.body, /projectFilterControl/);
     assert.match(shellClient.body, /stateFilterControl/);
     assert.match(shellClient.body, /statusFilterControl/);
+    assert.match(shellClient.body, /currentPlanStatusControl/);
+    assert.match(shellClient.body, /saveCurrentPlanStatus/);
     assert.match(shellClient.body, /itemMatchesNavigatorFilters/);
     assert.match(shellClient.body, /loadNavigatorFilterSource/);
     assert.match(shellClient.body, /navigatorApiUrl/);
@@ -2436,6 +2448,33 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     const invalidProject = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/project`, payload: { projectName: 'Collab override' } });
     assert.equal(invalidProject.statusCode, 400);
     assert.equal(invalidProject.json().error.code, 'not_applicable');
+  } finally {
+    await app.close();
+  }
+});
+
+test('review shell shows hidden current plan status without making it selectable', async () => {
+  const { app, planId } = await registeredApp('hidden-current-status-shell');
+  try {
+    const hideBacklog = await app.inject({
+      method: 'PUT',
+      url: '/api/board-columns',
+      payload: { columns: [{ key: 'backlog', label: 'Hidden Backlog', position: 0, hidden: true }] }
+    });
+    assert.equal(hideBacklog.statusCode, 200, hideBacklog.body);
+
+    const shell = await app.inject({ method: 'GET', url: `/p/${planId}` });
+    assert.equal(shell.statusCode, 200, shell.body);
+    const currentStatusHtml = shell.body.slice(shell.body.indexOf('id="current-plan-status-control"'), shell.body.indexOf('</select>', shell.body.indexOf('id="current-plan-status-control"')));
+    assert.match(currentStatusHtml, /<option value="backlog" selected disabled>Hidden Backlog \(hidden\)<\/option>/);
+    assert.match(currentStatusHtml, /<option value="ready_to_pull">Ready to Pull<\/option>/);
+    assert.doesNotMatch(currentStatusHtml, /<option value="backlog" selected>Hidden Backlog<\/option>/);
+    const navigatorStatusHtml = shell.body.slice(shell.body.indexOf('id="status-filter-control"'), shell.body.indexOf('</select>', shell.body.indexOf('id="status-filter-control"')));
+    assert.doesNotMatch(navigatorStatusHtml, /Hidden Backlog|value="backlog"/);
+
+    const hiddenUpdate = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/column`, payload: { boardColumnKey: 'backlog' } });
+    assert.equal(hiddenUpdate.statusCode, 400);
+    assert.equal(hiddenUpdate.json().error.code, 'validation_failed');
   } finally {
     await app.close();
   }
