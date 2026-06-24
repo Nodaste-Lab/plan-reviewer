@@ -2094,6 +2094,27 @@ try {
     await page.waitForSelector('#quick-open-backdrop:not([hidden])');
     assert.equal(await page.locator(`[data-quick-open-result][data-plan-id="${registered.planId}"]`).count(), 1);
     await page.keyboard.press('Escape');
+    let releaseStaleNavigator: (() => void) | undefined;
+    let heldNavigator = true;
+    await page.route('**/api/plans/navigator?**', async route => {
+      if (!heldNavigator) {
+        await route.continue();
+        return;
+      }
+      heldNavigator = false;
+      const response = await route.fetch();
+      await new Promise<void>(resolve => { releaseStaleNavigator = resolve; });
+      await route.fulfill({ response });
+    });
+    await page.reload();
+    await page.waitForSelector('#archive-plan');
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+O' : 'Control+O');
+    await page.waitForSelector('#quick-open-backdrop:not([hidden])');
+    for (let attempt = 0; attempt < 50 && !releaseStaleNavigator; attempt += 1) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    if (!releaseStaleNavigator) throw new Error('Navigator request was not held before archive');
+    await page.keyboard.press('Escape');
     await page.click('#archive-plan');
     await page.waitForSelector('#archive-toast:not([hidden])');
     assert.equal(await page.evaluate(() => document.activeElement?.id), 'archive-toast-undo');
@@ -2102,10 +2123,15 @@ try {
     assert.match(page.url(), new RegExp(`/p/${registered.planId}$`));
     await page.waitForFunction(() => document.querySelector<HTMLElement>('#archive-status')?.hidden === false && document.querySelector('#plan-navbar')?.textContent?.includes('Archived'));
     await page.waitForFunction(() => document.querySelector<HTMLElement>('#restore-plan')?.hidden === false);
-    assert.equal(await page.locator(`[data-plan-nav-item][data-plan-id="${registered.planId}"]`).count(), 1);
+    assert.equal(await page.locator(`[data-plan-nav-item][data-plan-id="${registered.planId}"]`).count(), 0);
+    const staleNavigatorResponse = page.waitForResponse(response => response.url().includes('/api/plans/navigator') && response.status() === 200);
+    releaseStaleNavigator();
+    await staleNavigatorResponse;
+    await page.unroute('**/api/plans/navigator?**');
+    await page.waitForFunction(planId => !document.querySelector(`[data-plan-nav-item][data-plan-id="${planId}"]`), registered.planId);
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+O' : 'Control+O');
     await page.waitForSelector('#quick-open-backdrop:not([hidden])');
-    assert.equal(await page.locator(`[data-quick-open-result][data-plan-id="${registered.planId}"]`).count(), 1);
+    assert.equal(await page.locator(`[data-quick-open-result][data-plan-id="${registered.planId}"]`).count(), 0);
     await page.keyboard.press('Escape');
     await page.evaluate(() => {
       const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
@@ -2113,6 +2139,13 @@ try {
     });
     await page.waitForFunction(() => document.querySelector<HTMLElement>('#archive-toast')?.hidden === true);
     assert.match(await page.locator('#plan-navbar').innerText(), /Archived/);
+    await page.reload();
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#archive-status')?.hidden === false && document.querySelector('#plan-navbar')?.textContent?.includes('Archived'));
+    assert.equal(await page.locator(`[data-plan-nav-item][data-plan-id="${registered.planId}"]`).count(), 1);
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+O' : 'Control+O');
+    await page.waitForSelector('#quick-open-backdrop:not([hidden])');
+    assert.equal(await page.locator(`[data-quick-open-result][data-plan-id="${registered.planId}"]`).count(), 1);
+    await page.keyboard.press('Escape');
     await context.post(`/api/plans/${registered.planId}/unarchive`, { data: {} });
     await page.goto(`${baseUrl}/p/${registered.planId}`);
     await page.setViewportSize({ width: 390, height: 760 });
