@@ -1,3 +1,5 @@
+require "json"
+
 class PlanReviewer < Formula
   desc "Local HTML plan review daemon and CLI for agent comment workflows"
   homepage "https://github.com/Nodaste-Lab/plan-reviewer"
@@ -16,6 +18,14 @@ class PlanReviewer < Formula
     system "npm", "prune", "--omit=dev"
 
     libexec.install "bin", "dist", "node_modules", "package.json", "package-lock.json"
+    build_commit = (buildpath/".git").exist? ? Utils.safe_popen_read("git", "rev-parse", "HEAD").strip : ""
+    build_metadata = {
+      source: "homebrew",
+      formula: "plan-reviewer",
+      formulaVersion: version.to_s,
+      gitCommit: build_commit.empty? ? nil : build_commit
+    }.compact
+    (libexec/"plan-reviewer-build.json").write(JSON.pretty_generate(build_metadata))
     bin.install_symlink libexec/"bin/plan-review" => "plan-review"
   end
 

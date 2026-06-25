@@ -13,6 +13,7 @@ import { buildAgentNextClaimed, buildAgentNextEmpty, type AgentNextResult } from
 import { discoverPullRequest, fetchPullRequestByUrl, parseGitHubRemote, refreshPullRequest } from './githubPr.js';
 import type { PlanPullRequest } from './schemas.js';
 import { deliveryTargetUpdateSchema } from './schemas.js';
+import { checkForUpdates, formatUpdateStatus, readBuildIdentity } from './updateStatus.js';
 
 interface PlanApiRecord {
   plan: {
@@ -1090,9 +1091,21 @@ async function retryDelivery(planId: string, options: { url?: string; adapter?: 
   else process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
 }
 
+async function updateCheck(options: { json?: boolean; stableFormulaUrl?: string; headCompareUrl?: string; timeoutMs?: string }) {
+  const timeoutMs = options.timeoutMs ? Number(options.timeoutMs) : undefined;
+  const status = await checkForUpdates({
+    stableFormulaUrl: options.stableFormulaUrl,
+    headCompareUrl: options.headCompareUrl,
+    timeoutMs: Number.isFinite(timeoutMs) && timeoutMs! > 0 ? timeoutMs : undefined
+  });
+  if (options.json) printJson(status);
+  else process.stdout.write(`${formatUpdateStatus(status)}\n`);
+}
+
 export async function main(argv: string[] = process.argv.slice(2)) {
   const program = new Command();
-  program.name('plan-review').description('Local HTML plan review daemon and CLI');
+  const version = readBuildIdentity().packageVersion ?? '0.0.0';
+  program.name('plan-review').description('Local HTML plan review daemon and CLI').version(version);
 
   program.command('serve')
     .option('--host <host>', 'host to bind', '0.0.0.0')
@@ -1138,6 +1151,15 @@ export async function main(argv: string[] = process.argv.slice(2)) {
     .option('--output <directory>', 'output directory; created when missing')
     .option('--version-id <id>', 'download a specific displayed version')
     .action(downloadPlan);
+
+  const update = program.command('update');
+  update.command('check')
+    .description('Check whether a Homebrew-installable plan-reviewer update is available')
+    .option('--json')
+    .option('--stable-formula-url <url>', 'override stable formula metadata URL for diagnostics/tests')
+    .option('--head-compare-url <url>', 'override HEAD compare metadata URL; use {commit} for the current commit')
+    .option('--timeout-ms <ms>', 'metadata request timeout in milliseconds')
+    .action(updateCheck);
 
   const comments = program.command('comments');
   comments.command('add <planId>')

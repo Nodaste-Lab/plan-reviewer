@@ -40,7 +40,8 @@ import { PlanReviewStore, type BoardColumnRecord, type PlanProjectRecord, type P
 import { SourceSyncService } from './sourceSync.js';
 import { fail, ok, PlanReviewError } from '../util.js';
 import { planTitleFallback, renderedHtmlTitle, reviewShellTitle } from '../planTitles.js';
-import { resolveDeliveryWorkerConfig, type DeliveryWorkerConfig } from '../config.js';
+import { resolveDeliveryWorkerConfig, resolveUpdateCheckConfig, setUpdateChecksEnabled, type DeliveryWorkerConfig, type UpdateCheckConfig } from '../config.js';
+import { checkForUpdates, readBuildIdentity, type UpdateStatus } from '../updateStatus.js';
 import { DeliveryWorker, type DeliveryWorkerOptions } from '../delivery/worker.js';
 import { buildAgentNextClaimed, buildAgentNextEmpty } from '../agentNext.js';
 import { buildPlanExport, contentDispositionAttachment } from '../exportPlan.js';
@@ -48,6 +49,16 @@ import { buildPlanExport, contentDispositionAttachment } from '../exportPlan.js'
 export interface AppOptions {
   dbPath: string;
   delivery?: Partial<DeliveryWorkerConfig> & Pick<DeliveryWorkerOptions, 'clientFactory'>;
+  updateChecks?: {
+    enabled?: boolean;
+    configFile?: string;
+    initialStatus?: UpdateStatus;
+    checker?: () => Promise<UpdateStatus>;
+    stableFormulaUrl?: string;
+    headCompareUrl?: string;
+    timeoutMs?: number;
+    cacheMs?: number;
+  };
 }
 
 interface EventBus {
@@ -110,6 +121,26 @@ function latestNoteHtml(item: ListedPlan): string {
 
 function localTimestampScript(): string {
   return `document.querySelectorAll('[data-local-timestamp]').forEach(time=>{const date=new Date(time.getAttribute('datetime')||''); if(Number.isNaN(date.getTime())) return; time.textContent=new Intl.DateTimeFormat(undefined,{dateStyle:'medium',timeStyle:'short'}).format(date); time.title=date.toISOString();});`;
+}
+
+function runtimeUpdateIndicatorStyles(): string {
+  return `.runtime-update-indicator{position:fixed;right:16px;bottom:16px;z-index:80;display:grid;justify-items:end;gap:8px}.runtime-update-button{width:38px;height:38px;border-radius:999px;border:2px solid #86efac;background:linear-gradient(180deg,#22c55e,#15803d);color:#052e16;font-size:22px;font-weight:950;line-height:1;box-shadow:0 0 0 3px rgba(34,197,94,.18),0 12px 28px rgba(21,128,61,.38);cursor:pointer}.runtime-update-popover{max-width:min(360px,calc(100vw - 32px));border:1px solid #22c55e;border-radius:12px;background:#0f172a;color:#e5e7eb;padding:12px;box-shadow:0 18px 48px rgba(2,6,23,.62)}.runtime-update-popover[hidden]{display:none}.runtime-update-popover strong{display:block;color:#bbf7d0;margin-bottom:6px}.runtime-update-popover code{display:block;margin-top:6px;white-space:normal;overflow-wrap:anywhere}body.comments-open .runtime-update-indicator{right:calc(var(--comments-width, 0px) + 16px)}@media(max-width:760px),(pointer:coarse){.runtime-update-indicator{right:14px;bottom:calc(68px + env(safe-area-inset-bottom))}body.comments-open .runtime-update-indicator{right:14px}}`;
+}
+
+function runtimeUpdateIndicatorMarkup(status: UpdateStatus | undefined): string {
+  if (status?.status !== 'update_available' || !status.updateCommand) return '';
+  const restart = status.restartCommand ? `<code>${escapeHtml(status.restartCommand)}</code>` : '';
+  const verify = status.verifyCommand ? `<code>${escapeHtml(status.verifyCommand)}</code>` : '';
+  return `<div class="runtime-update-indicator" role="status"><button class="runtime-update-button" type="button" aria-label="plan-reviewer update available" title="plan-reviewer update available">↑</button><div class="runtime-update-popover" hidden><strong>plan-reviewer update available</strong><span>Run:</span><code>${escapeHtml(status.updateCommand)}</code>${restart ? `<span>Then restart if managed by Homebrew:</span>${restart}` : ''}${verify ? `<span>Verify:</span>${verify}` : ''}</div></div>`;
+}
+
+function runtimeUpdateIndicatorScript(): string {
+  return `(function(){const root=document.getElementById('runtime-update-indicator-root');if(!root)return;function text(value){return String(value==null?'':value)}function render(status){root.textContent='';if(!status||status.status!=='update_available'||!status.updateCommand)return;const label='plan-reviewer update '+ 'available';const wrap=document.createElement('div');wrap.className='runtime-update-indicator';wrap.setAttribute('role','status');const button=document.createElement('button');button.className='runtime-update-button';button.type='button';button.setAttribute('aria-label',label);button.title=label;button.textContent='↑';const popover=document.createElement('div');popover.className='runtime-update-popover';popover.hidden=true;const title=document.createElement('strong');title.textContent=label;popover.append(title,document.createTextNode('Run:'));const command=document.createElement('code');command.textContent=text(status.updateCommand);popover.append(command);if(status.restartCommand){popover.append(document.createTextNode('Then restart if managed by Homebrew:'));const restart=document.createElement('code');restart.textContent=text(status.restartCommand);popover.append(restart);}if(status.verifyCommand){popover.append(document.createTextNode('Verify:'));const verify=document.createElement('code');verify.textContent=text(status.verifyCommand);popover.append(verify);}button.addEventListener('click',()=>{popover.hidden=!popover.hidden;});wrap.append(button,popover);root.append(wrap);}try{const initial=root.dataset.runtimeUpdateInitial;if(initial)render(JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(initial),c=>c.charCodeAt(0)))));}catch{}fetch('/api/runtime/update',{cache:'no-store'}).then(response=>response.ok?response.json():null).then(payload=>render(payload&&payload.data?payload.data:payload)).catch(()=>{});})();`;
+}
+
+function runtimeUpdateIndicatorHtml(status: UpdateStatus | undefined): string {
+  const encoded = status ? ` data-runtime-update-initial="${escapeHtml(encodeClientData(JSON.stringify(status)))}"` : '';
+  return `<div id="runtime-update-indicator-root"${encoded}>${runtimeUpdateIndicatorMarkup(status)}</div><script>${runtimeUpdateIndicatorScript()}</script>`;
 }
 
 function fullyQualifiedPlanPath(item: ReturnType<PlanReviewStore['listPlans']>[number]): string {
@@ -385,20 +416,20 @@ function kanbanCardHtml(item: ListedPlan, columns: BoardColumnRecord[]): string 
   return `<article class="kanban-card" draggable="true" data-plan-id="${escapeHtml(item.plan.id)}" data-column="${escapeHtml(item.plan.boardColumnKey ?? '')}"><div class="plan-card-header"><strong><a href="/p/${escapeHtml(item.plan.id)}">${escapeHtml(displayTitle(item))}</a></strong></div><p class="card-summary">${escapeHtml(summaryForItem(item))}</p>${planBadgesHtml(item, columns)}<a class="card-detail-link" href="/p/${escapeHtml(item.plan.id)}">Details / Open</a></article>`;
 }
 
-function kanbanIndexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCount: number, deferredCount: number, columns: BoardColumnRecord[], projectName?: string): string {
+function kanbanIndexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCount: number, deferredCount: number, columns: BoardColumnRecord[], projectName?: string, updateStatus?: UpdateStatus): string {
   const planning = plans.filter(item => item.plan.reviewMode === 'planning');
   const cardsFor = (column: BoardColumnRecord) => planning.filter(item => item.plan.boardColumnKey === column.key).sort((a, b) => String(b.activityAt).localeCompare(String(a.activityAt)) || displayTitle(a).localeCompare(displayTitle(b))).map(item => kanbanCardHtml(item, columns)).join('\n');
   const board = columns.map(column => `<section class="kanban-column" data-column-key="${escapeHtml(column.key)}"><h2>${escapeHtml(column.label)} <span>${planning.filter(item => item.plan.boardColumnKey === column.key).length}</span></h2>${cardsFor(column) || '<p class="muted">No plans.</p>'}</section>`).join('\n');
   const projectSummary = projectName ? `<p class="muted">Project: ${escapeHtml(projectName)} · <a href="/">Show all projects</a></p>` : '';
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Plans · Kanban</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"><style>${baseIndexStyles()}${organizationIndexStyles()}</style></head><body><main class="kanban-page"><div class="topbar">${documentViewSwitcher('kanban')}<div class="plan-actions">${configurationGearAction()}</div></div><div class="page-header"><div><h1>Plans · Kanban</h1><p class="muted">Columns are workflow status for planning documents. Execution readiness is a separate badge.</p>${projectSummary}</div></div><div id="organizer-error" class="organizer-error" hidden></div><section class="kanban-board" aria-label="Plan board columns">${board}</section><script>${localTimestampScript()}\n${organizationScript()}</script></main></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Plans · Kanban</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"><style>${baseIndexStyles()}${organizationIndexStyles()}${runtimeUpdateIndicatorStyles()}</style></head><body><main class="kanban-page"><div class="topbar">${documentViewSwitcher('kanban')}<div class="plan-actions">${configurationGearAction()}</div></div><div class="page-header"><div><h1>Plans · Kanban</h1><p class="muted">Columns are workflow status for planning documents. Execution readiness is a separate badge.</p>${projectSummary}</div></div><div id="organizer-error" class="organizer-error" hidden></div><section class="kanban-board" aria-label="Plan board columns">${board}</section><script>${localTimestampScript()}\n${organizationScript()}</script>${runtimeUpdateIndicatorHtml(updateStatus)}</main></body></html>`;
 }
 
 function organizationScript(): string {
   return `let draggedPlanId=null;document.addEventListener('dragstart',event=>{const card=event.target instanceof Element?event.target.closest('[data-plan-id]'):null;if(!card)return;draggedPlanId=card.dataset.planId;event.dataTransfer?.setData('text/plain',draggedPlanId||'');});document.addEventListener('dragover',event=>{const col=event.target instanceof Element?event.target.closest('[data-column-key]'):null;if(!col)return;event.preventDefault();col.classList.add('drop-target');});document.addEventListener('dragleave',event=>{const col=event.target instanceof Element?event.target.closest('[data-column-key]'):null;col?.classList.remove('drop-target');});document.addEventListener('drop',async event=>{const col=event.target instanceof Element?event.target.closest('[data-column-key]'):null;if(!col||!draggedPlanId)return;event.preventDefault();col.classList.remove('drop-target');const card=document.querySelector('[data-plan-id="'+CSS.escape(draggedPlanId)+'"]');const previous=card?.parentElement;col.appendChild(card);const res=await fetch('/api/plans/'+encodeURIComponent(draggedPlanId)+'/column',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({boardColumnKey:col.dataset.columnKey})}).catch(()=>null);if(!res?.ok){previous?.appendChild(card);const box=document.getElementById('organizer-error');if(box){box.hidden=false;box.textContent='Column update failed; the card was restored.';}}});`;
 }
 
-function indexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCount: number, deferredCount: number, columns: BoardColumnRecord[] = [], view: 'kanban' | 'all' = 'kanban', projectName?: string, typeFilter?: 'plan' | 'collaborative', kanbanEnabled = true): string {
-  if (view === 'kanban' && kanbanEnabled) return kanbanIndexHtml(plans, archivedCount, deferredCount, columns, projectName);
+function indexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCount: number, deferredCount: number, columns: BoardColumnRecord[] = [], view: 'kanban' | 'all' = 'kanban', projectName?: string, typeFilter?: 'plan' | 'collaborative', kanbanEnabled = true, updateStatus?: UpdateStatus): string {
+  if (view === 'kanban' && kanbanEnabled) return kanbanIndexHtml(plans, archivedCount, deferredCount, columns, projectName, updateStatus);
   const repos = [...new Set(plans.map(item => item.plan.repoName))].sort();
   const attentionCount = plans.filter(planNeedsAttention).length;
   const attentionSummary = attentionCount
@@ -410,7 +441,7 @@ function indexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCoun
   const viewActions = view === 'all' ? `${topbarIconAction('/deferred', `Deferred (${deferredCount})`, '⏸')}${topbarIconAction('/archive', `Archived (${archivedCount})`, '🗄')}${configurationGearAction()}` : '';
   return `<!doctype html><html><head><meta charset="utf-8"><title>Plan Review Index</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <style>${baseIndexStyles()}${organizationIndexStyles()}</style>
+    <style>${baseIndexStyles()}${organizationIndexStyles()}${runtimeUpdateIndicatorStyles()}</style>
   </head><body><main class="documents-page"><div class="topbar">${documentViewSwitcher('all', kanbanEnabled)}<div class="plan-actions">${viewActions}</div></div><div class="page-header"><div><h1>Plan Review Index · All documents</h1><p class="muted">Planning and collaboration documents are shown together. Use Type to narrow the list.</p></div></div>${attentionSummary}<div class="toolbar"><input id="q" placeholder="Filter documents" aria-label="Filter documents"><select id="repo" aria-label="Filter by repo"><option value="">All repos</option>${repos.map(repo => `<option value="${escapeHtml(repo)}">${escapeHtml(repo)}</option>`).join('')}</select><select id="type" aria-label="Filter by type"><option value="">All types</option><option value="plan"${typeFilter === 'plan' ? ' selected' : ''}>Plan</option><option value="collaborative"${typeFilter === 'collaborative' ? ' selected' : ''}>Collaborative</option></select></div><div id="plans">${rows || '<p>No active documents registered.</p>'}</div><script>
   const q=document.getElementById('q'), repo=document.getElementById('repo'), type=document.getElementById('type'), attentionFilter=document.querySelector('[data-attention-filter]'), cards=[...document.querySelectorAll('.plan-card')];
   let attentionOnly=false;
@@ -424,7 +455,7 @@ function indexHtml(plans: ReturnType<PlanReviewStore['listPlans']>, archivedCoun
   function showArchiveToast(message, planId, options={}){ dismissArchiveToast(); archiveToast=document.createElement('div'); archiveToast.className='archive-toast'+(options.error?' error':''); archiveToast.setAttribute('role','status'); archiveToast.setAttribute('aria-label', options.error ? 'Archive error' : 'Archived plan undo toast'); const text=document.createElement('div'), title=document.createElement('strong'), detail=document.createElement('p'), undo=document.createElement('button'); title.textContent=message; detail.textContent=options.error?'Check the service and try Archive again.':'Undo is available for 10 seconds. It clears when you keep working.'; undo.type='button'; undo.textContent='Undo'; text.append(title,detail); archiveToast.append(text,undo); undo.addEventListener('click',async event=>{ event.stopPropagation(); stopArchiveToastDismissal(); undo.disabled=true; const res=await fetch('/api/plans/'+encodeURIComponent(planId)+'/unarchive',{method:'POST'}).catch(()=>null); if(!res?.ok){ undo.disabled=false; detail.textContent='Undo failed. The plan remains archived; use Archived plans to restore it.'; restartArchiveToastDismissal(); return; } window.location.reload(); }); document.body.appendChild(archiveToast); if(!options.error) undo.focus({preventScroll:true}); restartArchiveToastDismissal(); }
   q.addEventListener('input',apply); repo.addEventListener('change',apply); type.addEventListener('change',apply); attentionFilter?.addEventListener('click',()=>{attentionOnly=!attentionOnly; attentionFilter.setAttribute('aria-pressed', String(attentionOnly)); apply();}); apply();
   document.addEventListener('click',async event=>{const target=event.target; const button=target instanceof Element ? target.closest('[data-archive-plan]') : null; if(!button) return; button.disabled=true; const planId=button.dataset.archivePlan; const card=button.closest('.plan-card'); const title=card?.querySelector('h2')?.textContent?.trim()||'plan'; const res=await fetch('/api/plans/'+encodeURIComponent(planId)+'/archive',{method:'POST'}).catch(()=>null); if(!res?.ok){button.disabled=false; showArchiveToast('Unable to archive '+title+'.', planId, {error:true}); return;} card?.remove(); const index=cards.findIndex(card=>card.dataset.planId===planId); if(index>=0) cards.splice(index,1); apply(); showArchiveToast('Archived '+title+'.', planId);});
-  </script></main></body></html>`;
+  </script>${runtimeUpdateIndicatorHtml(updateStatus)}</main></body></html>`;
 }
 
 function archiveHtml(plans: ReturnType<PlanReviewStore['listPlans']>, deferredCount = 0, kanbanEnabled = true): string {
@@ -608,15 +639,25 @@ function boardColumnsConfigurationSectionHtml(columns: BoardColumnRecord[], plan
   return `<section id="kanban-columns" class="configuration-section"><h2>Board columns</h2><p class="muted">Column labels, keys, order, done behavior, and visibility are persisted in the local database. Renaming a column updates its stable key and migrates assigned plans. Hidden columns and their plans are omitted from the Kanban board until shown again.</p><table class="columns-table"><thead><tr><th>Stable key</th><th>Label</th><th>Position</th><th>Behavior</th><th>Plans</th><th>Visibility</th></tr></thead><tbody>${boardColumnRowsHtml(columns, planCounts)}</tbody></table><div class="columns-save"><button id="save-columns" class="nav-link primary" type="button">Save columns</button><span id="columns-message" class="columns-message"></span></div></section>`;
 }
 
-function configurationHtml(configuration: AppConfiguration, columns: BoardColumnRecord[], planCounts: Map<string, number>): string {
+function configurationHtml(configuration: AppConfiguration, columns: BoardColumnRecord[], planCounts: Map<string, number>, updateConfig: UpdateCheckConfig, cachedStatus: UpdateStatus | undefined): string {
   const executionPreview = executionReviewRequestBody('thoughts/plans/example.html', configuration.executionReadySkillName);
   const buildPreview = buildPlanRequestBody('thoughts/plans/example.html', configuration.buildPlanSkillName);
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Configuration</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"><style>${baseIndexStyles()}${organizationIndexStyles()}</style></head><body><main class="configuration-page"><div class="topbar">${documentViewSwitcher(undefined, configuration.kanbanEnabled)}<div class="plan-actions">${configurationGearAction()}</div></div><div class="page-header"><div><h1>Configuration</h1><p class="muted">Service-local settings for the review shell, action buttons, and Kanban board.</p></div></div><div id="organizer-error" class="organizer-error" hidden></div><div class="configuration-layout"><nav class="configuration-nav" aria-label="Configuration sections"><a href="#review-shell-defaults">Review shell defaults</a><a href="#action-button-skills">Action button skills</a><a href="#kanban-availability">Kanban availability</a><a href="#kanban-columns">Board columns</a></nav><div><section id="review-shell-defaults" class="configuration-section"><h2>Review shell defaults</h2><p class="muted">Choose which side panels are open by default when entering a plan.</p><div class="configuration-grid"><label for="show-plan-navigator-default">Show plan navigator by default</label><input id="show-plan-navigator-default" type="checkbox"${checked(configuration.showPlanNavigatorByDefault)}><label for="show-comments-default">Show comments by default</label><input id="show-comments-default" type="checkbox"${checked(configuration.showCommentsByDefault)}></div></section><section id="action-button-skills" class="configuration-section"><h2>Action button skills</h2><p class="muted">These skill names are inserted into fixed, single-line-safe action comments. Prompt body shape is not configurable.</p><div class="configuration-grid"><label for="execution-ready-skill-name">Review execution ready skill</label><input id="execution-ready-skill-name" class="configuration-input" value="${escapeHtml(configuration.executionReadySkillName)}" aria-describedby="execution-ready-preview"><label for="build-plan-skill-name">Build Plan skill</label><input id="build-plan-skill-name" class="configuration-input" value="${escapeHtml(configuration.buildPlanSkillName)}" aria-describedby="build-plan-preview"></div><h3>Preview</h3><pre id="execution-ready-preview" class="configuration-preview"><code>${escapeHtml(executionPreview)}</code></pre><pre id="build-plan-preview" class="configuration-preview"><code>${escapeHtml(buildPreview)}</code></pre></section><section id="kanban-availability" class="configuration-section"><h2>Kanban availability</h2><p class="muted">Disabling Kanban hides board navigation and movement controls without deleting columns or plan assignments.</p><div class="configuration-grid"><label for="kanban-enabled">Enable Kanban board</label><input id="kanban-enabled" type="checkbox"${checked(configuration.kanbanEnabled)}></div></section><div class="configuration-save"><button id="save-configuration" class="nav-link primary" type="button">Save configuration</button><span id="configuration-message" class="configuration-message"></span></div>${boardColumnsConfigurationSectionHtml(columns, planCounts)}</div></div><script>
-      const message=document.getElementById('columns-message'), configMessage=document.getElementById('configuration-message'), error=document.getElementById('organizer-error');
+  const updateChecked = updateConfig.enabled ? ' checked' : '';
+  const updateStatusText = cachedStatus ? `${cachedStatus.status} · checked ${cachedStatus.checkedAt}` : 'No cached update status yet.';
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Configuration</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"><style>${baseIndexStyles()}${organizationIndexStyles()}</style></head><body><main class="configuration-page"><div class="topbar">${documentViewSwitcher(undefined, configuration.kanbanEnabled)}<div class="plan-actions">${configurationGearAction()}</div></div><div class="page-header"><div><h1>Configuration</h1><p class="muted">Service-local settings for the review shell, action buttons, and Kanban board.</p></div></div><div id="organizer-error" class="organizer-error" hidden></div><div class="configuration-layout"><nav class="configuration-nav" aria-label="Configuration sections"><a href="#review-shell-defaults">Review shell defaults</a><a href="#action-button-skills">Action button skills</a><a href="#kanban-availability">Kanban availability</a><a href="#update-checks-settings">Update checks</a><a href="#kanban-columns">Board columns</a></nav><div><section id="review-shell-defaults" class="configuration-section"><h2>Review shell defaults</h2><p class="muted">Choose which side panels are open by default when entering a plan.</p><div class="configuration-grid"><label for="show-plan-navigator-default">Show plan navigator by default</label><input id="show-plan-navigator-default" type="checkbox"${checked(configuration.showPlanNavigatorByDefault)}><label for="show-comments-default">Show comments by default</label><input id="show-comments-default" type="checkbox"${checked(configuration.showCommentsByDefault)}></div></section><section id="action-button-skills" class="configuration-section"><h2>Action button skills</h2><p class="muted">These skill names are inserted into fixed, single-line-safe action comments. Prompt body shape is not configurable.</p><div class="configuration-grid"><label for="execution-ready-skill-name">Review execution ready skill</label><input id="execution-ready-skill-name" class="configuration-input" value="${escapeHtml(configuration.executionReadySkillName)}" aria-describedby="execution-ready-preview"><label for="build-plan-skill-name">Build Plan skill</label><input id="build-plan-skill-name" class="configuration-input" value="${escapeHtml(configuration.buildPlanSkillName)}" aria-describedby="build-plan-preview"></div><h3>Preview</h3><pre id="execution-ready-preview" class="configuration-preview"><code>${escapeHtml(executionPreview)}</code></pre><pre id="build-plan-preview" class="configuration-preview"><code>${escapeHtml(buildPreview)}</code></pre></section><section id="kanban-availability" class="configuration-section"><h2>Kanban availability</h2><p class="muted">Disabling Kanban hides board navigation and movement controls without deleting columns or plan assignments.</p><div class="configuration-grid"><label for="kanban-enabled">Enable Kanban board</label><input id="kanban-enabled" type="checkbox"${checked(configuration.kanbanEnabled)}></div></section><section id="update-checks-settings" class="configuration-section"><h2>Update checks</h2><p class="muted">Automatic checks fetch only public Homebrew/GitHub metadata. They never send plan data and never apply updates.</p><div class="configuration-grid"><label for="update-checks-enabled">Enable automatic update checks</label><input id="update-checks-enabled" type="checkbox"${updateChecked}><span class="row-label">Cached status</span><span id="update-checks-status">${escapeHtml(updateStatusText)}</span><span class="row-label">Manual check</span><code>plan-review update check --json</code></div><div class="columns-save"><button id="save-update-checks" class="nav-link primary" type="button">Save update checks</button><span id="update-checks-message" class="columns-message"></span></div></section><div class="configuration-save"><button id="save-configuration" class="nav-link primary" type="button">Save configuration</button><span id="configuration-message" class="configuration-message"></span></div>${boardColumnsConfigurationSectionHtml(columns, planCounts)}</div></div><script>
+      const message=document.getElementById('columns-message'), configMessage=document.getElementById('configuration-message'), updateMessage=document.getElementById('update-checks-message'), error=document.getElementById('organizer-error');
       const keyFromLabel=value=>(value||'').trim().toLowerCase().replace(/['"]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'')||'column';
       const skillPattern=/^[a-z0-9][a-z0-9_-]*$/;
       function setError(text){ if(error){error.hidden=!text; error.textContent=text||'';} }
       for(const input of document.querySelectorAll('[data-column-label]')) input.addEventListener('input',()=>{const row=input.closest('[data-column-row]'), preview=row?.querySelector('[data-column-key-preview]'); if(preview) preview.textContent=keyFromLabel(input.value);});
+      document.getElementById('save-update-checks')?.addEventListener('click', async event => {
+        const button=event.currentTarget;
+        button.disabled=true; setError(''); if(updateMessage) updateMessage.textContent='Saving…';
+        const res=await fetch('/api/configuration/update-checks',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({enabled:Boolean(document.getElementById('update-checks-enabled')?.checked)})}).catch(()=>null);
+        button.disabled=false;
+        if(!res?.ok){const json=await res?.json().catch(()=>null); setError(json?.error?.nextAction||json?.error?.message||'Update check setting could not be saved.'); if(updateMessage) updateMessage.textContent=''; return;}
+        if(updateMessage) updateMessage.textContent='Update checks saved.';
+      });
       document.getElementById('save-configuration')?.addEventListener('click', async event => {
         const button=event.currentTarget;
         const executionReadySkillName=document.getElementById('execution-ready-skill-name')?.value?.trim()||'';
@@ -669,7 +710,7 @@ function currentPlanStatusControl(plan: ReturnType<PlanReviewStore['getPlan']>['
   return `<label class="current-plan-status-control">Current plan status <select id="current-plan-status-control" aria-label="Current plan status" data-current-value="${escapeHtml(currentKey)}">${statusOptions}</select><span id="current-plan-status-error" class="current-plan-status-error" role="status" hidden></span></label>`;
 }
 
-function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], currentTitle: string, shellTitle: string, plans: ListedPlan[], columns: BoardColumnRecord[], projects: PlanProjectRecord[], configuration: AppConfiguration, navigatorFilters = emptyReviewShellNavigatorFilters(), allColumns = columns, planNavigatorOpen = configuration.showPlanNavigatorByDefault): string {
+function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], currentTitle: string, shellTitle: string, plans: ListedPlan[], columns: BoardColumnRecord[], projects: PlanProjectRecord[], configuration: AppConfiguration, navigatorFilters = emptyReviewShellNavigatorFilters(), allColumns = columns, planNavigatorOpen = configuration.showPlanNavigatorByDefault, updateStatus?: UpdateStatus): string {
   const escapedPlanId = escapeHtml(plan.id);
   const escapedShellTitle = escapeHtml(shellTitle);
   const escapedCurrentTitle = escapeHtml(currentTitle);
@@ -710,6 +751,7 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
       <aside id="sidebar"><h1>Comments</h1><div id="sync-warning" hidden></div><section id="plan-notes-panel"><h2>${isCollaboration ? 'Document notes' : 'Plan notes'}</h2><div id="plan-notes"></div><textarea id="plan-note-body" placeholder="${isCollaboration ? 'Add context for agents' : 'Add a plan note for agents'}"></textarea><button id="add-plan-note" type="button">Add note</button></section><div id="deferred-refresh-notice" hidden>Document updated in the background. Finish or cancel this comment to refresh.</div><div id="comments"></div></aside>
     </div>
     <div id="archive-toast" role="status" aria-label="Archived plan undo toast" hidden><div><strong id="archive-toast-title"></strong><p id="archive-toast-message"></p></div><button id="archive-toast-undo" type="button">Undo</button></div>
+    ${runtimeUpdateIndicatorHtml(updateStatus)}
     <div id="quick-open-backdrop" hidden>
       <section id="quick-open-dialog" role="dialog" aria-modal="true" aria-labelledby="quick-open-title" aria-describedby="quick-open-status">
         <div class="quick-open-header"><div><h2 id="quick-open-title">Quick open ${escapeHtml(documentKind)}</h2><p id="quick-open-status">Search all registered documents across lifecycle, columns, readiness, pins, and collaboration docs.</p></div><span class="quick-open-shortcut">⌘O</span></div>
@@ -759,7 +801,7 @@ body{--plan-nav-width:260px;--comments-width:48px;--plan-navbar-height:86px;marg
 #composer button{margin-top:8px;margin-right:8px}#plan-notes-panel{border:1px solid #2b364d;border-radius:10px;background:#0f172a;padding:10px;margin:0 0 14px}#plan-notes-panel h2{font-size:15px;margin:0 0 8px}#plan-notes .note-row{border-top:1px solid #263246;padding:8px 0}#plan-notes .note-row:first-child{border-top:0}#plan-note-body{width:100%;min-height:70px;box-sizing:border-box;background:#020617;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px}#add-plan-note{margin-top:8px;background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px 10px;cursor:pointer}.plan-review-selected{outline:2px dotted #38bdf8!important;box-shadow:none!important}#quick-open-backdrop{position:fixed;inset:0;z-index:70;display:grid;align-items:start;justify-items:center;padding-top:min(12vh,96px);background:rgba(2,6,23,.46)}#quick-open-backdrop[hidden]{display:none}#quick-open-dialog{width:min(680px,calc(100vw - 36px));max-height:min(78vh,720px);display:grid;grid-template-rows:auto auto auto auto minmax(0,1fr);overflow:hidden;border:1px solid #38bdf8;border-radius:16px;background:#0f172a;color:#e5e7eb;box-shadow:0 30px 90px rgba(2,6,23,.68)}.quick-open-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:16px 18px 10px}.quick-open-header h2{margin:0;color:#f8fafc;font-size:18px}.quick-open-header p{margin:4px 0 0;color:#a7b0c0;font-size:13px}.quick-open-shortcut{border:1px solid #475569;border-bottom-color:#64748b;border-radius:7px;background:#111827;color:#dbeafe;padding:2px 8px;font:12px ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:800}#quick-open-input{margin:0 18px 14px;width:calc(100% - 36px);box-sizing:border-box;border:1px solid #475569;border-radius:10px;background:#020617;color:#e5e7eb;padding:12px 14px;font:16px system-ui,sans-serif;outline:none}#quick-open-input:focus{border-color:#38bdf8;box-shadow:0 0 0 3px rgba(56,189,248,.18)}#quick-open-error,#quick-open-empty{margin:0 18px 12px;border-radius:10px;padding:10px 12px;font-size:13px}#quick-open-error{border:1px solid #f59e0b;background:rgba(245,158,11,.12);color:#fde68a}#quick-open-error button{margin-left:8px;border:1px solid #f59e0b;border-radius:6px;background:#1e293b;color:#fde68a;padding:4px 8px;cursor:pointer}#quick-open-empty{border:1px solid #475569;background:#111827;color:#a7b0c0}#quick-open-results{overflow:auto;border-top:1px solid #2b364d}#quick-open-result-list{padding:6px}.quick-open-result{display:grid;gap:3px;width:100%;box-sizing:border-box;text-align:left;border:1px solid transparent;border-radius:10px;background:transparent;color:#cbd5e1;padding:11px 12px;cursor:pointer}.quick-open-result:hover,.quick-open-result.active{border-color:#38bdf8;background:rgba(56,189,248,.14)}.quick-open-result-title{font-weight:850;color:#f8fafc;line-height:1.25}.quick-open-result-meta{font-size:12px;color:#a7b0c0}.lightbox{position:fixed;inset:36px calc(var(--comments-width) + 40px) 36px 36px;background:#020617;border:1px solid #38bdf8;z-index:50;display:grid;grid-template-rows:auto 1fr}.lightbox[hidden]{display:none}.lightbox header{display:flex;gap:8px;padding:10px;border-bottom:1px solid #2b364d}.lightbox img{max-width:100%;max-height:100%;place-self:center;transform-origin:center}.lightbox-stage{display:grid;overflow:hidden;position:relative}#image-selection-box{position:absolute;border:2px solid #38bdf8;background:rgba(56,189,248,.2);pointer-events:none}#mobile-comments-toggle{display:none}
 @media(prefers-reduced-motion:reduce){.selection-box{transition:none}}
 @media(max-width:760px),(pointer:coarse){body{overflow:hidden;--comments-width:0;--plan-navbar-height:88px}#plan-navbar{position:sticky;top:0;z-index:30;min-height:88px;box-sizing:border-box;gap:6px;padding:8px;overflow-x:auto;overscroll-behavior-x:contain}#plan-navbar-actions{justify-content:flex-start;gap:8px}#plan-navbar a,#plan-navbar button{flex:0 0 auto;min-height:40px;padding:8px 10px;font-size:13px;line-height:1.15;white-space:normal}#current-plan-bar{font-size:13px}#request-execution-review{max-width:170px}#build-plan{max-width:120px}#plan-navbar #desktop-plan-nav-toggle,#desktop-comments-toggle{display:none}#app{display:block;min-height:calc(100dvh - var(--plan-navbar-height))}#plan-list-nav{display:none}#review{height:calc(100dvh - var(--plan-navbar-height));overflow-y:auto;overscroll-behavior-y:contain;overflow-x:hidden;-webkit-overflow-scrolling:touch}#plan-frame{width:100%;min-height:calc(100dvh - var(--plan-navbar-height));border:0;display:block;pointer-events:none}#plan-touch-layer{display:block;position:absolute;top:0;left:0;width:100%;min-height:calc(100dvh - var(--plan-navbar-height));z-index:22;background:transparent;touch-action:pan-y;pointer-events:auto}#sidebar{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:24;height:auto;max-height:min(72dvh,620px);box-sizing:border-box;border-left:0;border-top:1px solid #2b364d;border-radius:18px 18px 0 0;padding:12px 16px calc(16px + env(safe-area-inset-bottom));background:#111827;box-shadow:0 -16px 40px rgba(0,0,0,.45);overflow:auto;transform:translateY(100%);transition:transform .18s ease}#sidebar>h1,#sidebar>#sync-warning,#sidebar>#plan-notes-panel,#sidebar>#deferred-refresh-notice,#sidebar>#comments{display:block}body.comments-open #sidebar{transform:translateY(0)}#sidebar h1{position:sticky;top:-12px;margin:0 0 12px;padding:8px 0 10px;background:#111827;font-size:20px;z-index:1}.comment-row{padding:12px;margin:10px 0}.comment-row p{margin:.55rem 0}.comments-empty{margin:0;color:#a7b0c0;font-size:14px}#mobile-comments-toggle{display:flex;position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:25;min-height:44px;align-items:center;gap:6px;border:1px solid #38bdf8;border-radius:999px;background:#075985;color:#e0f2fe;padding:0 14px;font-weight:800;box-shadow:0 12px 28px rgba(0,0,0,.35)}body.comments-open #mobile-comments-toggle{background:#0f172a;border-color:#64748b}#quick-open-backdrop{padding-top:18px;align-items:start}#quick-open-dialog{width:calc(100vw - 24px);max-height:calc(100dvh - 36px)}#composer{left:0;right:0;bottom:0;top:auto;z-index:60;box-sizing:border-box;border-left:0;border-right:0;border-bottom:0;border-radius:18px 18px 0 0;padding:14px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -16px 40px rgba(0,0,0,.48)}#composer textarea{width:100%;height:122px;box-sizing:border-box;font-size:16px}#composer button{min-height:44px;padding:8px 12px}.lightbox{inset:0;z-index:50;border:0}.lightbox header{flex-wrap:wrap}.selection-box{border-radius:4px}.marker{width:28px;height:28px}}
-`;
+${runtimeUpdateIndicatorStyles()}`;
 
 const clientJs = `
 import { finder } from '/vendor/finder.js';
@@ -3348,6 +3390,62 @@ export function createApp(options: AppOptions): FastifyInstance {
       ? 'Automatic Codex delivery worker is enabled.'
       : 'Automatic Codex delivery is disabled by service config. Set PLAN_REVIEW_CODEX_DELIVERY=1 to enable the worker; manual agent next remains available.'
   });
+  let cachedUpdateStatus = options.updateChecks?.initialStatus;
+  let cachedUpdateConfig: UpdateCheckConfig | undefined;
+  const readUpdateCheckConfig = () => {
+    const resolved = resolveUpdateCheckConfig({ userConfigFile: options.updateChecks?.configFile });
+    return {
+      ...resolved,
+      enabled: options.updateChecks?.enabled ?? resolved.enabled,
+      stableFormulaUrl: options.updateChecks?.stableFormulaUrl ?? resolved.stableFormulaUrl,
+      headCompareUrl: options.updateChecks?.headCompareUrl ?? resolved.headCompareUrl,
+      timeoutMs: options.updateChecks?.timeoutMs ?? resolved.timeoutMs,
+      cacheMs: options.updateChecks?.cacheMs ?? resolved.cacheMs
+    };
+  };
+  const updateCheckConfig = () => cachedUpdateConfig ??= readUpdateCheckConfig();
+  const cachedRuntimeUpdateStatus = () => {
+    const config = updateCheckConfig();
+    const checkedAt = cachedUpdateStatus ? Date.parse(cachedUpdateStatus.checkedAt) : Number.NaN;
+    return config.enabled && cachedUpdateStatus && Number.isFinite(checkedAt) && Date.now() - checkedAt <= config.cacheMs
+      ? cachedUpdateStatus
+      : undefined;
+  };
+  const runtimeUpdateStatus = async () => {
+    const config = updateCheckConfig();
+    if (!config.enabled) {
+      return {
+        status: 'unknown' as const,
+        checkedAt: new Date().toISOString(),
+        current: readBuildIdentity(),
+        automaticChecksEnabled: false,
+        nextAction: 'Automatic update checks are disabled. Manual checks remain available with plan-review update check --json.'
+      };
+    }
+    const checkedAt = cachedUpdateStatus ? Date.parse(cachedUpdateStatus.checkedAt) : Number.NaN;
+    if (cachedUpdateStatus && Number.isFinite(checkedAt) && Date.now() - checkedAt <= config.cacheMs) {
+      return { ...cachedUpdateStatus, automaticChecksEnabled: true };
+    }
+    try {
+      cachedUpdateStatus = options.updateChecks?.checker
+        ? await options.updateChecks.checker()
+        : await checkForUpdates({
+          stableFormulaUrl: config.stableFormulaUrl,
+          headCompareUrl: config.headCompareUrl,
+          timeoutMs: config.timeoutMs
+        });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      cachedUpdateStatus = {
+        status: 'check_failed',
+        checkedAt: new Date().toISOString(),
+        current: readBuildIdentity(),
+        error: message,
+        nextAction: `Update metadata could not be reached (${message}). Retry with plan-review update check --json, or verify network access to the configured metadata endpoint.`
+      };
+    }
+    return { ...cachedUpdateStatus, automaticChecksEnabled: true };
+  };
 
   app.addHook('onClose', async () => {
     deliveryWorker.stop();
@@ -3389,7 +3487,7 @@ export function createApp(options: AppOptions): FastifyInstance {
     const effectiveQuery = configuration.kanbanEnabled ? query : { ...query, boardColumnKey: undefined };
     const filtered = filterPlans(activePlans, effectiveQuery).plans;
     const projectName = query.projectKey ? store.listPlanProjects().find(project => project.projectKey === query.projectKey)?.projectName : undefined;
-    reply.type('text/html').send(indexHtml(filtered, lifecycleCounts.archived, lifecycleCounts.deferred, store.listBoardColumns(), view, projectName, query.view === 'collab' ? 'collaborative' : query.type, configuration.kanbanEnabled));
+    reply.type('text/html').send(indexHtml(filtered, lifecycleCounts.archived, lifecycleCounts.deferred, store.listBoardColumns(), view, projectName, query.view === 'collab' ? 'collaborative' : query.type, configuration.kanbanEnabled, cachedRuntimeUpdateStatus()));
   });
 
   app.get('/deferred', async (_request, reply) => {
@@ -3405,7 +3503,7 @@ export function createApp(options: AppOptions): FastifyInstance {
   });
 
   app.get('/configuration', async (_request, reply) => {
-    reply.type('text/html').send(configurationHtml(store.getConfiguration(), store.listBoardColumns({ includeHidden: true }), store.countActivePlanningPlansByColumn()));
+    reply.type('text/html').send(configurationHtml(store.getConfiguration(), store.listBoardColumns({ includeHidden: true }), store.countActivePlanningPlansByColumn(), updateCheckConfig(), cachedUpdateStatus));
   });
 
   app.get('/api/configuration', async (_request, reply) => {
@@ -3434,8 +3532,29 @@ export function createApp(options: AppOptions): FastifyInstance {
     }
   });
 
+  app.get('/api/runtime/update', async (_request, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    return ok(await runtimeUpdateStatus());
+  });
+
+  app.put('/api/configuration/update-checks', async (request, reply) => {
+    try {
+      const enabled = (request.body as { enabled?: unknown } | undefined)?.enabled;
+      if (typeof enabled !== 'boolean') {
+        throw new PlanReviewError('validation_failed', 'enabled must be a boolean', 400, { enabled });
+      }
+      const current = updateCheckConfig();
+      const userConfig = setUpdateChecksEnabled(enabled, current.userConfigFile);
+      cachedUpdateConfig = readUpdateCheckConfig();
+      if (!enabled) cachedUpdateStatus = undefined;
+      return ok({ updateChecks: cachedUpdateConfig, userConfig });
+    } catch (error) {
+      sendError(reply, error);
+    }
+  });
+
   app.get('/columns', async (_request, reply) => {
-    reply.type('text/html').send(configurationHtml(store.getConfiguration(), store.listBoardColumns({ includeHidden: true }), store.countActivePlanningPlansByColumn()));
+    reply.type('text/html').send(configurationHtml(store.getConfiguration(), store.listBoardColumns({ includeHidden: true }), store.countActivePlanningPlansByColumn(), updateCheckConfig(), cachedUpdateStatus));
   });
 
   app.get('/api/plans', async (request, reply) => {
@@ -3528,7 +3647,7 @@ export function createApp(options: AppOptions): FastifyInstance {
       const navigatorFilters = normalizeReviewShellNavigatorFilters(request.query as { projectKey?: string; lifecycle?: string; boardColumnKey?: string }, plan, columns, projects);
       if (!configuration.kanbanEnabled) navigatorFilters.status = '';
       const planNavigatorOpen = planNavigatorOpenFromCookie(request.headers.cookie, configuration.showPlanNavigatorByDefault);
-      reply.header('Cache-Control', 'no-store').type('text/html').send(reviewShell(plan, title, reviewShellTitle(title), filteredReviewShellNavigatorItems(store, plan.id, navigatorFilters), columns, projects, configuration, navigatorFilters, allColumns, planNavigatorOpen));
+      reply.header('Cache-Control', 'no-store').type('text/html').send(reviewShell(plan, title, reviewShellTitle(title), filteredReviewShellNavigatorItems(store, plan.id, navigatorFilters), columns, projects, configuration, navigatorFilters, allColumns, planNavigatorOpen, cachedRuntimeUpdateStatus()));
     } catch (error) {
       sendError(reply, error);
     }
