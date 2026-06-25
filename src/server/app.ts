@@ -541,7 +541,7 @@ function filterPlans(plans: ReturnType<PlanReviewStore['listPlans']>, query: { q
   };
 }
 
-const clientAssetVersion = 'download-export-v1';
+const clientAssetVersion = 'plan-nav-session-state-v1';
 
 function safeActionPlanPath(planPath: string): string {
   const parsed = actionCommentPlanPathSchema.safeParse(planPath);
@@ -908,6 +908,22 @@ function updateDownloadLink(){
   const suffix = versionId ? '?versionId=' + encodeURIComponent(versionId) : '';
   downloadRawPlan.setAttribute('href', '/download/' + encodeURIComponent(planId) + suffix);
 }
+const planNavSessionStateKey = 'plan-review:plan-nav-open';
+function readPlanNavSessionState(){
+  try {
+    const value = window.sessionStorage?.getItem(planNavSessionStateKey);
+    if (value === 'open') return true;
+    if (value === 'closed') return false;
+  } catch {
+  }
+  return null;
+}
+function writePlanNavSessionState(open){
+  try {
+    window.sessionStorage?.setItem(planNavSessionStateKey, open ? 'open' : 'closed');
+  } catch {
+  }
+}
 function setPlanNavOpen(open){
   document.body.classList.toggle('plan-nav-collapsed', !open);
   if (planListNav) {
@@ -953,12 +969,14 @@ mobileCommentsToggle?.addEventListener('click', () => {
   setCommentsOpen(!document.body.classList.contains('comments-open'));
 });
 desktopPlanNavToggle?.addEventListener('click', () => {
-  setPlanNavOpen(document.body.classList.contains('plan-nav-collapsed'));
+  const open = document.body.classList.contains('plan-nav-collapsed');
+  setPlanNavOpen(open);
+  writePlanNavSessionState(open);
 });
 desktopCommentsToggle?.addEventListener('click', () => {
   setCommentsOpen(!document.body.classList.contains('comments-open'));
 });
-setPlanNavOpen(!document.body.classList.contains('plan-nav-collapsed'));
+setPlanNavOpen(readPlanNavSessionState() ?? !document.body.classList.contains('plan-nav-collapsed'));
 setCommentsOpen(!isMobileShell() && document.body.classList.contains('comments-open'));
 updateDownloadLink();
 let archiveToastTimer = null;
