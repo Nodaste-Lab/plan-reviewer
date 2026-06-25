@@ -1778,6 +1778,10 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     assert.match(shellClient.body, /frame\.contentDocument.*keydown/s);
     assert.match(shellClient.body, /setPlanNavOpen\(open\)/);
     assert.match(shellClient.body, /planListNav\.inert = !open/);
+    assert.match(shellClient.body, /planNavSessionStateKey = 'plan-review:plan-nav-open'/);
+    assert.match(shellClient.body, /window\.sessionStorage\?\.getItem\(planNavSessionStateKey\)/);
+    assert.match(shellClient.body, /window\.sessionStorage\?\.setItem\(planNavSessionStateKey, open \? 'open' : 'closed'\)/);
+    assert.match(shellClient.body, /setPlanNavOpen\(readPlanNavSessionState\(\) \?\? !document\.body\.classList\.contains\('plan-nav-collapsed'\)\)/);
     assert.match(shellClient.body, /projectFilterControl/);
     assert.match(shellClient.body, /stateFilterControl/);
     assert.match(shellClient.body, /statusFilterControl/);

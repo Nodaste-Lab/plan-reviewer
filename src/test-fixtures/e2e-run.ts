@@ -714,10 +714,15 @@ try {
     assert.equal(await page.evaluate(() => document.activeElement?.id), 'comment-body');
     await page.click('#cancel-comment');
     assert.equal(await page.evaluate(() => document.body.classList.contains('comments-open')), false);
-    assert.equal(await page.evaluate(() => document.body.classList.contains('plan-nav-collapsed')), true);
+    assert.equal(await page.evaluate(() => document.body.classList.contains('plan-nav-collapsed')), false);
     assert.equal(await page.evaluate(() => document.querySelector('#plan-navbar-actions')?.firstElementChild?.id), 'desktop-plan-nav-toggle');
     assert.equal(await page.evaluate(() => Math.round(document.querySelector<HTMLElement>('#sidebar')!.getBoundingClientRect().width) <= 60), true);
-    assert.equal(await page.evaluate(() => Math.round(document.querySelector<HTMLElement>('#plan-list-nav')!.getBoundingClientRect().width) <= 1), true);
+    assert.equal(await page.evaluate(() => Math.round(document.querySelector<HTMLElement>('#plan-list-nav')!.getBoundingClientRect().width) >= 250), true);
+    assert.equal(await page.locator('#plan-list-nav').getAttribute('aria-hidden'), 'false');
+    assert.equal(await page.evaluate(() => document.querySelector<HTMLElement>('#plan-list-nav')!.inert), false);
+    await page.click('#desktop-plan-nav-toggle');
+    await page.waitForFunction(() => document.body.classList.contains('plan-nav-collapsed'));
+    await page.waitForFunction(() => Math.round(document.querySelector<HTMLElement>('#plan-list-nav')!.getBoundingClientRect().width) <= 1);
     assert.equal(await page.locator('#plan-list-nav').getAttribute('aria-hidden'), 'true');
     assert.equal(await page.evaluate(() => document.querySelector<HTMLElement>('#plan-list-nav')!.inert), true);
     const frameWidthWithNavCollapsed = await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')!.getBoundingClientRect().width);
@@ -764,6 +769,8 @@ try {
     await page.waitForFunction(id => document.querySelector(`#plan-list-nav a[data-plan-id="${id}"]`)?.getAttribute('href')?.includes('projectKey=&lifecycle=active'), navSwitch.planId);
     await page.click(`#plan-list-nav a[data-plan-id="${navSwitch.planId}"]`);
     await page.waitForURL(`${baseUrl}/p/${navSwitch.planId}?projectKey=&lifecycle=active`);
+    assert.equal(await page.evaluate(() => document.body.classList.contains('plan-nav-collapsed')), false);
+    assert.equal(await page.locator('#desktop-plan-nav-toggle').getAttribute('aria-expanded'), 'true');
     assert.equal(await page.locator('#state-filter-control').inputValue(), 'active');
     assert.equal(await page.locator('#project-filter-control').inputValue(), '');
     assert.equal(await page.locator('#plan-list-nav [aria-current="page"]').getAttribute('data-plan-id'), navSwitch.planId);
