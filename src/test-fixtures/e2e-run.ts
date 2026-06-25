@@ -752,9 +752,47 @@ try {
       navLink?.focus();
       return document.activeElement === navLink;
     }), false);
+    await page.addInitScript(() => {
+      const installObserver = () => {
+        const globals = window as typeof window & { __planNavClassMutations?: string[] };
+        globals.__planNavClassMutations = [];
+        if (!document.body) return false;
+        new MutationObserver(records => {
+          for (const record of records) {
+            const before = String(record.oldValue || '');
+            const after = document.body?.className || '';
+            if (before.includes('plan-nav-collapsed') !== after.includes('plan-nav-collapsed')) {
+              globals.__planNavClassMutations?.push(`${before} -> ${after}`);
+            }
+          }
+        }).observe(document.body, { attributes: true, attributeFilter: ['class'], attributeOldValue: true });
+        return true;
+      };
+      if (!installObserver()) {
+        const observer = new MutationObserver(() => {
+          if (installObserver()) observer.disconnect();
+        });
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+      }
+    });
+    await page.reload();
+    await page.waitForSelector('#desktop-plan-nav-toggle[aria-expanded="false"]');
+    assert.equal(await page.evaluate(() => document.body.classList.contains('plan-nav-collapsed')), true);
+    assert.deepEqual(await page.evaluate(() => (window as typeof window & { __planNavClassMutations?: string[] }).__planNavClassMutations ?? []), []);
+    await page.goto(`${baseUrl}/p/${navSwitch.planId}`);
+    await page.waitForSelector('#desktop-plan-nav-toggle[aria-expanded="false"]');
+    assert.equal(await page.evaluate(() => document.body.classList.contains('plan-nav-collapsed')), true);
+    assert.deepEqual(await page.evaluate(() => (window as typeof window & { __planNavClassMutations?: string[] }).__planNavClassMutations ?? []), []);
+    await page.goto(`${baseUrl}/p/${registered.planId}`);
+    await page.waitForSelector('#desktop-plan-nav-toggle[aria-expanded="false"]');
+    assert.deepEqual(await page.evaluate(() => (window as typeof window & { __planNavClassMutations?: string[] }).__planNavClassMutations ?? []), []);
     await page.click('#desktop-plan-nav-toggle');
     await page.waitForFunction(() => !document.body.classList.contains('plan-nav-collapsed'));
     await page.waitForFunction(() => Math.round(document.querySelector<HTMLElement>('#plan-list-nav')!.getBoundingClientRect().width) >= 250);
+    await page.reload();
+    await page.waitForSelector('#desktop-plan-nav-toggle[aria-expanded="true"]');
+    assert.equal(await page.evaluate(() => document.body.classList.contains('plan-nav-collapsed')), false);
+    assert.deepEqual(await page.evaluate(() => (window as typeof window & { __planNavClassMutations?: string[] }).__planNavClassMutations ?? []), []);
     await page.click('#desktop-comments-toggle');
     await page.waitForFunction(() => document.body.classList.contains('comments-open'));
     await page.waitForFunction(() => Math.round(document.querySelector<HTMLElement>('#sidebar')!.getBoundingClientRect().width) >= 300);

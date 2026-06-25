@@ -1731,6 +1731,15 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     assert.match(shell.body, /id="quick-open-retry"/);
     assert.match(shell.body, /<body[^>]*class="plan-nav-collapsed"/);
     assert.match(shell.body, /id="desktop-plan-nav-toggle"[^>]*aria-controls="plan-list-nav"[^>]*aria-expanded="false"/);
+    assert.match(shell.body, /id="plan-list-nav"[^>]*aria-hidden="true"[^>]*inert/);
+    const cookieOpenShell = await app.inject({ method: 'GET', url: `/p/${notReady.json().data.planId}`, headers: { cookie: 'plan_review_plan_nav=open' } });
+    assert.equal(cookieOpenShell.statusCode, 200);
+    assert.doesNotMatch(cookieOpenShell.body, /<body[^>]*class="[^\"]*plan-nav-collapsed/);
+    assert.match(cookieOpenShell.body, /id="desktop-plan-nav-toggle"[^>]*aria-controls="plan-list-nav"[^>]*aria-expanded="true"/);
+    assert.doesNotMatch(cookieOpenShell.body, /id="plan-list-nav"[^>]*aria-hidden="true"/);
+    const invalidCookieShell = await app.inject({ method: 'GET', url: `/p/${notReady.json().data.planId}`, headers: { cookie: 'plan_review_plan_nav=maybe' } });
+    assert.equal(invalidCookieShell.statusCode, 200);
+    assert.match(invalidCookieShell.body, /<body[^>]*class="plan-nav-collapsed"/);
     assert.match(shell.body, /id="desktop-comments-toggle"[^>]*aria-controls="sidebar"[^>]*aria-expanded="false"/);
     assert.match(shell.body, /id="archive-plan"[\s\S]*id="restore-plan"[\s\S]*id="configuration-link"[\s\S]*id="desktop-comments-toggle"/);
     assert.match(shell.body, /<nav class="doc-kind-switcher" aria-label="Document view selector"><a class="doc-kind-seg" href="\/">Kanban<\/a><a class="doc-kind-seg" href="\/\?view=all">All documents<\/a><\/nav>/);
@@ -1778,10 +1787,11 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     assert.match(shellClient.body, /frame\.contentDocument.*keydown/s);
     assert.match(shellClient.body, /setPlanNavOpen\(open\)/);
     assert.match(shellClient.body, /planListNav\.inert = !open/);
-    assert.match(shellClient.body, /planNavSessionStateKey = 'plan-review:plan-nav-open'/);
-    assert.match(shellClient.body, /window\.sessionStorage\?\.getItem\(planNavSessionStateKey\)/);
-    assert.match(shellClient.body, /window\.sessionStorage\?\.setItem\(planNavSessionStateKey, open \? 'open' : 'closed'\)/);
-    assert.match(shellClient.body, /setPlanNavOpen\(readPlanNavSessionState\(\) \?\? !document\.body\.classList\.contains\('plan-nav-collapsed'\)\)/);
+    assert.match(shellClient.body, /planNavStateCookieName = 'plan_review_plan_nav'/);
+    assert.match(shellClient.body, /document\.cookie = planNavStateCookieName \+ '=' \+ \(open \? 'open' : 'closed'\) \+ '; Path=\/; SameSite=Lax'/);
+    assert.match(shellClient.body, /initializePlanNavState\(\)/);
+    assert.doesNotMatch(shellClient.body, /sessionStorage/);
+    assert.doesNotMatch(shellClient.body, /readPlanNavSessionState/);
     assert.match(shellClient.body, /projectFilterControl/);
     assert.match(shellClient.body, /stateFilterControl/);
     assert.match(shellClient.body, /statusFilterControl/);
@@ -1834,6 +1844,11 @@ test('review shell opt-in side panels honor configuration independently', async 
     assert.doesNotMatch(shell.body, /<body[^>]*class="[^"]*plan-nav-collapsed/);
     assert.match(shell.body, /id="desktop-plan-nav-toggle"[^>]*aria-controls="plan-list-nav"[^>]*aria-expanded="true"/);
     assert.match(shell.body, /id="desktop-comments-toggle"[^>]*aria-controls="sidebar"[^>]*aria-expanded="true"/);
+
+    const cookieClosedShell = await app.inject({ method: 'GET', url: `/p/${planId}`, headers: { cookie: 'plan_review_plan_nav=closed' } });
+    assert.equal(cookieClosedShell.statusCode, 200, cookieClosedShell.body);
+    assert.match(cookieClosedShell.body, /<body[^>]*class="[^"]*plan-nav-collapsed/);
+    assert.match(cookieClosedShell.body, /id="desktop-plan-nav-toggle"[^>]*aria-controls="plan-list-nav"[^>]*aria-expanded="false"/);
   } finally {
     await app.close();
   }

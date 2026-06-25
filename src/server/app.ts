@@ -292,11 +292,12 @@ function filteredReviewShellNavigatorItems(store: PlanReviewStore, currentPlanId
   });
 }
 
-function planNavigatorHtml(plans: ListedPlan[], currentPlanId: string, label = 'plans', filters = emptyReviewShellNavigatorFilters(), filterControls = ''): string {
+function planNavigatorHtml(plans: ListedPlan[], currentPlanId: string, label = 'plans', filters = emptyReviewShellNavigatorFilters(), filterControls = '', open = true): string {
   const items = sortPlansForNavigator(plans).map(item => planNavigatorItemHtml(item, currentPlanId, filters)).join('');
   const title = label === 'documents' ? 'Active documents' : 'Active plans';
   const empty = label === 'documents' ? 'No active documents.' : 'No active plans.';
-  return `<aside id="plan-list-nav" aria-label="${escapeHtml(title)}"><div class="plan-list-header"><h2>${escapeHtml(title)}</h2><button id="plan-list-retry" type="button" hidden>Retry</button></div>${filterControls}<div class="plan-list-error" id="plan-list-error" hidden>Unable to load ${escapeHtml(label)}.</div><div id="plan-list-items">${items || `<p class="plan-list-empty">${escapeHtml(empty)}</p>`}</div></aside>`;
+  const hiddenAttributes = open ? '' : ' aria-hidden="true" inert';
+  return `<aside id="plan-list-nav" aria-label="${escapeHtml(title)}"${hiddenAttributes}><div class="plan-list-header"><h2>${escapeHtml(title)}</h2><button id="plan-list-retry" type="button" hidden>Retry</button></div>${filterControls}<div class="plan-list-error" id="plan-list-error" hidden>Unable to load ${escapeHtml(label)}.</div><div id="plan-list-items">${items || `<p class="plan-list-empty">${escapeHtml(empty)}</p>`}</div></aside>`;
 }
 
 function planCardHtml(item: ListedPlan): string {
@@ -541,7 +542,33 @@ function filterPlans(plans: ReturnType<PlanReviewStore['listPlans']>, query: { q
   };
 }
 
-const clientAssetVersion = 'plan-nav-session-state-v1';
+const clientAssetVersion = 'plan-nav-first-paint-state-v1';
+const planNavStateCookieName = 'plan_review_plan_nav';
+
+function cookieValue(cookieHeader: string | string[] | undefined, name: string): string | undefined {
+  const rawCookie = Array.isArray(cookieHeader) ? cookieHeader.join('; ') : cookieHeader;
+  if (!rawCookie) return undefined;
+  for (const part of rawCookie.split(';')) {
+    const trimmed = part.trim();
+    const separator = trimmed.indexOf('=');
+    const key = separator >= 0 ? trimmed.slice(0, separator) : trimmed;
+    if (key !== name) continue;
+    const value = separator >= 0 ? trimmed.slice(separator + 1) : '';
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function planNavigatorOpenFromCookie(cookieHeader: string | string[] | undefined, fallback: boolean): boolean {
+  const value = cookieValue(cookieHeader, planNavStateCookieName);
+  if (value === 'open') return true;
+  if (value === 'closed') return false;
+  return fallback;
+}
 
 function safeActionPlanPath(planPath: string): string {
   const parsed = actionCommentPlanPathSchema.safeParse(planPath);
@@ -642,7 +669,7 @@ function currentPlanStatusControl(plan: ReturnType<PlanReviewStore['getPlan']>['
   return `<label class="current-plan-status-control">Current plan status <select id="current-plan-status-control" aria-label="Current plan status" data-current-value="${escapeHtml(currentKey)}">${statusOptions}</select><span id="current-plan-status-error" class="current-plan-status-error" role="status" hidden></span></label>`;
 }
 
-function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], currentTitle: string, shellTitle: string, plans: ListedPlan[], columns: BoardColumnRecord[], projects: PlanProjectRecord[], configuration: AppConfiguration, navigatorFilters = emptyReviewShellNavigatorFilters(), allColumns = columns): string {
+function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], currentTitle: string, shellTitle: string, plans: ListedPlan[], columns: BoardColumnRecord[], projects: PlanProjectRecord[], configuration: AppConfiguration, navigatorFilters = emptyReviewShellNavigatorFilters(), allColumns = columns, planNavigatorOpen = configuration.showPlanNavigatorByDefault): string {
   const escapedPlanId = escapeHtml(plan.id);
   const escapedShellTitle = escapeHtml(shellTitle);
   const escapedCurrentTitle = escapeHtml(currentTitle);
@@ -652,7 +679,7 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
   const encodedTitleFallback = escapeHtml(encodeClientData(reviewShellTitle(planTitleFallback(plan))));
   const reviewButton = isCollaboration ? '' : '<button id="request-execution-review" class="tool-button" type="button" aria-label="Request execution-ready review" title="Request execution-ready review">✓</button>';
   const buildButton = isCollaboration ? '' : '<button id="build-plan" class="tool-button" type="button" aria-label="Build Plan" title="Build Plan">⚒</button>';
-  const planNavToggle = `<button id="desktop-plan-nav-toggle" class="tool-button" type="button" aria-controls="plan-list-nav" aria-expanded="${configuration.showPlanNavigatorByDefault ? 'true' : 'false'}" aria-label="Plan Navigator" title="Plan Navigator">☰</button>`;
+  const planNavToggle = `<button id="desktop-plan-nav-toggle" class="tool-button" type="button" aria-controls="plan-list-nav" aria-expanded="${planNavigatorOpen ? 'true' : 'false'}" aria-label="Plan Navigator" title="Plan Navigator">☰</button>`;
   const downloadAction = `<a id="download-raw-plan" class="tool-button download-tool" href="/download/${escapedPlanId}" aria-label="Download raw plan" title="Download raw plan HTML; ZIP includes required assets." download>⬇</a>`;
   const commentsButton = `<button id="desktop-comments-toggle" class="tool-button comments-toggle" type="button" aria-controls="sidebar" aria-expanded="${configuration.showCommentsByDefault ? 'true' : 'false'}" aria-label="${configuration.showCommentsByDefault ? 'Close comments' : 'Open comments'}" title="Comments">💬 <span id="desktop-comments-count" class="comments-count" hidden></span></button>`;
   const indexLink = documentViewSwitcher(undefined, configuration.kanbanEnabled);
@@ -664,7 +691,7 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
   const restoreLabel = isCollaboration ? 'Restore document' : 'Restore plan';
   const resumeLabel = isCollaboration ? 'Resume document' : 'Resume plan';
   const deferAction = isCollaboration ? '' : '<button id="defer-plan" class="tool-button" type="button" aria-label="Defer plan" title="Defer plan">⏸</button>';
-  const bodyClasses = [configuration.showPlanNavigatorByDefault ? '' : 'plan-nav-collapsed', configuration.showCommentsByDefault ? 'comments-open' : ''].filter(Boolean).join(' ');
+  const bodyClasses = [planNavigatorOpen ? '' : 'plan-nav-collapsed', configuration.showCommentsByDefault ? 'comments-open' : ''].filter(Boolean).join(' ');
   const bodyClassAttribute = bodyClasses ? ` class="${escapeHtml(bodyClasses)}"` : '';
   const navActions = plan.archivedAt
     ? `${planNavToggle}${indexLink}${organizationControls}${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="archive-status" role="status" aria-label="Archived" title="Archived">🗄</span><button id="restore-plan" class="tool-button" type="button" aria-label="${restoreLabel}" title="${restoreLabel}">↩</button>${configurationToolAction()}${commentsButton}`
@@ -678,7 +705,7 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
   </head><body${bodyClassAttribute} data-plan-id="${escapedPlanId}" data-review-mode="${escapeHtml(plan.reviewMode)}" data-plan-title-fallback="${encodedTitleFallback}">
     <nav id="plan-navbar" aria-label="Plan actions"><div id="plan-navbar-actions">${navActions}</div><div id="current-plan-bar"><strong id="current-plan-title">${escapedCurrentTitle}</strong><span class="ready-pill ${isCollaboration || plan.publicationMetadata?.executionReady ? 'ready' : 'not-ready'}">${escapeHtml(readyLabel)}</span>${currentStatusControl}<span id="comment-status-banner" class="comment-status-banner" hidden></span></div></nav>
     <div id="app">
-      ${planNavigatorHtml(plans, plan.id, isCollaboration ? 'documents' : 'plans', navigatorFilters, navFilterControls)}
+      ${planNavigatorHtml(plans, plan.id, isCollaboration ? 'documents' : 'plans', navigatorFilters, navFilterControls, planNavigatorOpen)}
       <main id="review"><iframe id="plan-frame" sandbox="allow-same-origin allow-popups" src="/render/${escapedPlanId}"></iframe><div id="plan-touch-layer" aria-hidden="true"></div><button id="mobile-comments-toggle" class="comments-toggle" type="button" aria-controls="sidebar" aria-expanded="false">Comments</button><div id="hover-selection-box" class="selection-box hover" hidden></div><div id="active-selection-box" class="selection-box active" hidden></div></main>
       <aside id="sidebar"><h1>Comments</h1><div id="sync-warning" hidden></div><section id="plan-notes-panel"><h2>${isCollaboration ? 'Document notes' : 'Plan notes'}</h2><div id="plan-notes"></div><textarea id="plan-note-body" placeholder="${isCollaboration ? 'Add context for agents' : 'Add a plan note for agents'}"></textarea><button id="add-plan-note" type="button">Add note</button></section><div id="deferred-refresh-notice" hidden>Document updated in the background. Finish or cancel this comment to refresh.</div><div id="comments"></div></aside>
     </div>
@@ -908,30 +935,25 @@ function updateDownloadLink(){
   const suffix = versionId ? '?versionId=' + encodeURIComponent(versionId) : '';
   downloadRawPlan.setAttribute('href', '/download/' + encodeURIComponent(planId) + suffix);
 }
-const planNavSessionStateKey = 'plan-review:plan-nav-open';
-function readPlanNavSessionState(){
-  try {
-    const value = window.sessionStorage?.getItem(planNavSessionStateKey);
-    if (value === 'open') return true;
-    if (value === 'closed') return false;
-  } catch {
-  }
-  return null;
-}
+const planNavStateCookieName = 'plan_review_plan_nav';
 function writePlanNavSessionState(open){
-  try {
-    window.sessionStorage?.setItem(planNavSessionStateKey, open ? 'open' : 'closed');
-  } catch {
-  }
+  document.cookie = planNavStateCookieName + '=' + (open ? 'open' : 'closed') + '; Path=/; SameSite=Lax';
 }
-function setPlanNavOpen(open){
-  document.body.classList.toggle('plan-nav-collapsed', !open);
+function syncPlanNavAccessibility(){
+  const open = !document.body.classList.contains('plan-nav-collapsed');
   if (planListNav) {
     planListNav.inert = !open;
     planListNav.setAttribute('aria-hidden', String(!open));
   }
   updatePlanNavToggle();
+}
+function setPlanNavOpen(open){
+  document.body.classList.toggle('plan-nav-collapsed', !open);
+  syncPlanNavAccessibility();
   reflowAfterShellTransition();
+}
+function initializePlanNavState(){
+  syncPlanNavAccessibility();
 }
 function setCommentsOpen(open){
   document.body.classList.toggle('comments-open', open);
@@ -976,7 +998,7 @@ desktopPlanNavToggle?.addEventListener('click', () => {
 desktopCommentsToggle?.addEventListener('click', () => {
   setCommentsOpen(!document.body.classList.contains('comments-open'));
 });
-setPlanNavOpen(readPlanNavSessionState() ?? !document.body.classList.contains('plan-nav-collapsed'));
+initializePlanNavState();
 setCommentsOpen(!isMobileShell() && document.body.classList.contains('comments-open'));
 updateDownloadLink();
 let archiveToastTimer = null;
@@ -3477,7 +3499,8 @@ export function createApp(options: AppOptions): FastifyInstance {
       const configuration = store.getConfiguration();
       const navigatorFilters = normalizeReviewShellNavigatorFilters(request.query as { projectKey?: string; lifecycle?: string; boardColumnKey?: string }, plan, columns, projects);
       if (!configuration.kanbanEnabled) navigatorFilters.status = '';
-      reply.header('Cache-Control', 'no-store').type('text/html').send(reviewShell(plan, title, reviewShellTitle(title), filteredReviewShellNavigatorItems(store, plan.id, navigatorFilters), columns, projects, configuration, navigatorFilters, allColumns));
+      const planNavigatorOpen = planNavigatorOpenFromCookie(request.headers.cookie, configuration.showPlanNavigatorByDefault);
+      reply.header('Cache-Control', 'no-store').type('text/html').send(reviewShell(plan, title, reviewShellTitle(title), filteredReviewShellNavigatorItems(store, plan.id, navigatorFilters), columns, projects, configuration, navigatorFilters, allColumns, planNavigatorOpen));
     } catch (error) {
       sendError(reply, error);
     }
