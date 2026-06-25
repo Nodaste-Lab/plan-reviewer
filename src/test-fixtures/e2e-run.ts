@@ -2308,6 +2308,24 @@ try {
       archiveDialogs.push(dialog.message());
       await dialog.dismiss();
     });
+    const waitForArchivedToolbarStatus = async () => {
+      await page.waitForFunction(() => {
+        const status = document.querySelector<HTMLElement>('#archive-status');
+        return status?.hidden === false
+          && status.textContent === '🗄'
+          && status.getAttribute('role') === 'status'
+          && status.getAttribute('aria-label') === 'Archived'
+          && status.getAttribute('title') === 'Archived';
+      });
+    };
+    const assertArchivedToolbarStatus = async () => {
+      await waitForArchivedToolbarStatus();
+      const status = page.locator('#archive-status');
+      assert.equal(await status.textContent(), '🗄');
+      assert.equal(await status.getAttribute('role'), 'status');
+      assert.equal(await status.getAttribute('aria-label'), 'Archived');
+      assert.equal(await status.getAttribute('title'), 'Archived');
+    };
 
     await page.goto(`${baseUrl}/?view=all`);
     await page.route(`**/api/plans/${registered.planId}/archive`, route => route.abort('failed'));
@@ -2394,7 +2412,7 @@ try {
     await page.keyboard.press('Tab');
     assert.equal(await page.locator('#archive-toast:not([hidden])').count(), 1);
     assert.match(page.url(), new RegExp(`/p/${registered.planId}$`));
-    await page.waitForFunction(() => document.querySelector<HTMLElement>('#archive-status')?.hidden === false && document.querySelector('#plan-navbar')?.textContent?.includes('Archived'));
+    await assertArchivedToolbarStatus();
     await page.waitForFunction(() => document.querySelector<HTMLElement>('#restore-plan')?.hidden === false);
     assert.equal(await page.locator(`[data-plan-nav-item][data-plan-id="${registered.planId}"]`).count(), 0);
     const staleNavigatorResponse = page.waitForResponse(response => response.url().includes('/api/plans/navigator') && response.status() === 200);
@@ -2411,9 +2429,9 @@ try {
       iframe.contentDocument!.body.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: iframe.contentWindow ?? window }));
     });
     await page.waitForFunction(() => document.querySelector<HTMLElement>('#archive-toast')?.hidden === true);
-    assert.match(await page.locator('#plan-navbar').innerText(), /Archived/);
+    await assertArchivedToolbarStatus();
     await page.reload();
-    await page.waitForFunction(() => document.querySelector<HTMLElement>('#archive-status')?.hidden === false && document.querySelector('#plan-navbar')?.textContent?.includes('Archived'));
+    await assertArchivedToolbarStatus();
     assert.equal(await page.locator(`[data-plan-nav-item][data-plan-id="${registered.planId}"]`).count(), 1);
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+O' : 'Control+O');
     await page.waitForSelector('#quick-open-backdrop:not([hidden])');
@@ -2427,7 +2445,7 @@ try {
     await page.waitForSelector('#archive-toast:not([hidden])');
     await page.dispatchEvent('#plan-touch-layer', 'touchstart');
     await page.waitForFunction(() => document.querySelector<HTMLElement>('#archive-toast')?.hidden === true);
-    assert.match(await page.locator('#plan-navbar').innerText(), /Archived/);
+    await assertArchivedToolbarStatus();
     await context.post(`/api/plans/${registered.planId}/unarchive`, { data: {} });
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto(`${baseUrl}/p/${registered.planId}`);
@@ -2437,7 +2455,7 @@ try {
     await page.route(`**/api/plans/${registered.planId}/unarchive`, route => route.abort('failed'));
     await page.click('#archive-toast-undo');
     await page.waitForFunction(() => document.querySelector<HTMLElement>('#archive-toast-message')?.textContent?.includes('Undo failed. The plan remains archived'));
-    assert.match(await page.locator('#plan-navbar').innerText(), /Archived/);
+    await assertArchivedToolbarStatus();
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => document.querySelector<HTMLElement>('#archive-toast')?.hidden === true);
     await page.unroute(`**/api/plans/${registered.planId}/unarchive`);
@@ -2464,7 +2482,8 @@ try {
     await page.waitForSelector('#resume-plan');
     await page.click('#archive-plan');
     await page.waitForSelector('#archive-toast:not([hidden])');
-    await page.waitForFunction(() => document.querySelector<HTMLElement>('#resume-plan')?.hidden === true && document.querySelector<HTMLElement>('#restore-plan')?.hidden === false && document.querySelector<HTMLElement>('#archive-status')?.textContent === 'Archived');
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#resume-plan')?.hidden === true && document.querySelector<HTMLElement>('#restore-plan')?.hidden === false);
+    await assertArchivedToolbarStatus();
     await page.click('#archive-toast-undo');
     await page.waitForFunction(() => document.querySelector<HTMLElement>('#archive-status')?.hidden === true);
     await page.waitForSelector('#archive-plan');
@@ -2509,7 +2528,7 @@ try {
     await page.click(`[data-plan-id="${registered.planId}"] a[href="/p/${registered.planId}"]`);
     await page.waitForSelector('#restore-plan');
     assert.equal(await page.locator('#archive-plan').count(), 0);
-    assert.match(await page.locator('#plan-navbar').innerText(), /Archived/);
+    await assertArchivedToolbarStatus();
 
     await page.goto(`${baseUrl}/archive`);
     await page.route('**/api/plans/*/unarchive', route => route.abort('failed'));
