@@ -2511,7 +2511,18 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     assert.doesNotMatch(kanban.body, /\.kanban-card \.pin-button/);
     assert.doesNotMatch(kanban.body, /<span class="badge">Pinned<\/span>/);
     assert.match(kanban.body, /data-column-key="backlog"/);
-    assert.match(kanban.body, /data-plan-id="[^"]+" data-column="backlog"/);
+    assert.match(kanban.body, /data-column-label="Backlog"/);
+    assert.match(kanban.body, /data-column-count/);
+    assert.match(kanban.body, /class="kanban-card" draggable="true" tabindex="0" aria-label="Card actions for/);
+    assert.match(kanban.body, /data-plan-id="[^"]+" data-plan-title="[^"]+" data-column="backlog"/);
+    assert.match(kanban.body, /kanban-context-menu/);
+    assert.match(kanban.body, /role','menu'/);
+    assert.match(kanban.body, /menuitemradio/);
+    assert.match(kanban.body, /Defer plan/);
+    assert.match(kanban.body, /Archive plan/);
+    assert.match(kanban.body, /Enter a note for deferring this plan/);
+    assert.match(kanban.body, /window\.location\.reload\(\)/);
+    assert.match(kanban.body, /Math\.min\(x,window\.innerWidth-rect\.width-margin\)/);
     assert.match(kanban.body, /\.doc-kind-seg\{border-radius:999px;padding:5px 10px;color:#a7b0c0;font-size:12px;font-weight:850;text-decoration:none;white-space:nowrap\}/);
     assert.match(kanban.body, /\.doc-kind-seg\.active\{background:#0ea5e9;color:#e0f2fe\}/);
     assert.match(kanban.body, /href="\/configuration"[^>]*aria-label="Configuration"[^>]*title="Configuration"[^>]*>⚙<\/a>/);
@@ -2616,6 +2627,7 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     assert.equal(hiddenReadyColumn.json().data.events.some((event: { eventType: string }) => event.eventType === 'plan.columns.changed'), true);
     const hiddenReadyKanban = await app.inject({ method: 'GET', url: '/' });
     assert.doesNotMatch(hiddenReadyKanban.body, /data-column-key="ready_to_pull"/);
+    assert.doesNotMatch(hiddenReadyKanban.body, /data-column-label="Ready to Pull"/);
 
     const moved = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/column`, payload: { boardColumnKey: 'in_progress' } });
     assert.equal(moved.statusCode, 200, moved.body);
@@ -2724,6 +2736,9 @@ test('disabled Kanban defaults to all documents and blocks movement without dele
     assert.doesNotMatch(index.body, /Plans · Kanban/);
     assert.doesNotMatch(index.body, /href="\/">Kanban/);
     assert.doesNotMatch(index.body, /data-column-key=/);
+    assert.doesNotMatch(index.body, /document\.addEventListener\('contextmenu'/);
+    assert.doesNotMatch(index.body, /Defer plan/);
+    assert.doesNotMatch(index.body, /Archive plan/);
     assert.doesNotMatch(index.body, /draggable="true"/);
 
     const configurationPage = await app.inject({ method: 'GET', url: '/configuration' });
@@ -2796,6 +2811,45 @@ test('disabled Kanban defaults to all documents and blocks movement without dele
     const kanban = await app.inject({ method: 'GET', url: '/' });
     assert.match(kanban.body, /Plans · Kanban/);
     assert.match(kanban.body, /data-column-key="in_progress"/);
+  } finally {
+    await app.close();
+  }
+});
+
+test('board column moves reject deferred and archived plans', async () => {
+  const { app, planId } = await registeredApp('board-column-lifecycle-guard');
+  try {
+    const deferred = await app.inject({ method: 'POST', url: `/api/plans/${planId}/defer`, payload: { note: 'Pause status moves.' } });
+    assert.equal(deferred.statusCode, 200, deferred.body);
+    assert.equal(deferred.json().data.plan.lifecycleState, 'deferred');
+
+    const deferredMove = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/column`, payload: { boardColumnKey: 'in_progress' } });
+    assert.equal(deferredMove.statusCode, 409, deferredMove.body);
+    assert.equal(deferredMove.json().error.code, 'invalid_state');
+    assert.match(deferredMove.json().error.nextAction, /Resume the plan/);
+
+    const afterDeferredMove = await app.inject({ method: 'GET', url: `/api/plans/${planId}` });
+    assert.equal(afterDeferredMove.statusCode, 200, afterDeferredMove.body);
+    assert.equal(afterDeferredMove.json().data.plan.lifecycleState, 'deferred');
+    assert.equal(afterDeferredMove.json().data.plan.boardColumnKey, 'backlog');
+
+    const resumed = await app.inject({ method: 'POST', url: `/api/plans/${planId}/resume`, payload: {} });
+    assert.equal(resumed.statusCode, 200, resumed.body);
+    assert.equal(resumed.json().data.plan.lifecycleState, 'active');
+
+    const archived = await app.inject({ method: 'POST', url: `/api/plans/${planId}/archive` });
+    assert.equal(archived.statusCode, 200, archived.body);
+    assert.equal(archived.json().data.plan.lifecycleState, 'archived');
+
+    const archivedMove = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/column`, payload: { boardColumnKey: 'in_progress' } });
+    assert.equal(archivedMove.statusCode, 409, archivedMove.body);
+    assert.equal(archivedMove.json().error.code, 'invalid_state');
+    assert.match(archivedMove.json().error.nextAction, /Restore the archived plan/);
+
+    const afterArchivedMove = await app.inject({ method: 'GET', url: `/api/plans/${planId}` });
+    assert.equal(afterArchivedMove.statusCode, 200, afterArchivedMove.body);
+    assert.equal(afterArchivedMove.json().data.plan.lifecycleState, 'archived');
+    assert.equal(afterArchivedMove.json().data.plan.boardColumnKey, 'backlog');
   } finally {
     await app.close();
   }
