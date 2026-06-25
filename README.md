@@ -101,7 +101,7 @@ The index has two primary document views:
 
 Board columns are workflow status only. They are independent from lifecycle (`active`, `deferred`, `archived`) and independent from execution readiness. A plan can be in a "ready" board column while still reporting `executionReady: false` until the reviewed-plan gate has passed.
 
-Use the browser Configuration panel (`/configuration`) to edit labels and hide columns in the Board columns section. The older `/columns` path remains compatible and renders the same configuration surface. Hidden columns and their assigned active plans are omitted from the Kanban board until shown again; deferred/archived plans in a hidden column are moved to the first visible column if they are resumed/restored. Use the CLI for ordering, label editing, and inspection:
+Use the browser Configuration panel (`/configuration`) to edit labels and hide columns in the Board columns section. The older `/columns` path remains compatible and renders the same configuration surface. Hidden columns and their assigned active plans are omitted from the Kanban board until shown again, but hidden columns remain selectable from a plan's Current plan status control when Kanban is enabled; deferred/archived plans in a hidden column are moved to the first visible column if they are resumed/restored. Use the CLI for ordering, label editing, and inspection:
 
 ```bash
 plan-review columns list --json

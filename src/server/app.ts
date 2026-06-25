@@ -635,15 +635,11 @@ function navigatorFilterControls(plan: ReturnType<PlanReviewStore['getPlan']>['p
   return `<section class="plan-nav-filters" aria-label="Filter navigator plans">${projectFilterControl}${stateFilterControl}${statusFilterControl}</section>`;
 }
 
-function currentPlanStatusControl(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], visibleColumns: BoardColumnRecord[], allColumns: BoardColumnRecord[]): string {
+function currentPlanStatusControl(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], allColumns: BoardColumnRecord[]): string {
   if (plan.reviewMode === 'collaboration') return '';
   const currentKey = plan.boardColumnKey ?? '';
-  const currentColumn = allColumns.find(column => column.key === currentKey);
-  const visibleOptions = visibleColumns.map(column => `<option value="${escapeHtml(column.key)}"${selectedOption(currentKey, column.key)}>${escapeHtml(column.label)}</option>`).join('');
-  const hiddenCurrentOption = currentKey && currentColumn?.hiddenAt && !visibleColumns.some(column => column.key === currentKey)
-    ? `<option value="${escapeHtml(currentKey)}" selected disabled>${escapeHtml(currentColumn.label)} (hidden)</option>`
-    : '';
-  return `<label class="current-plan-status-control">Current plan status <select id="current-plan-status-control" aria-label="Current plan status" data-current-value="${escapeHtml(currentKey)}">${hiddenCurrentOption}${visibleOptions}</select><span id="current-plan-status-error" class="current-plan-status-error" role="status" hidden></span></label>`;
+  const statusOptions = allColumns.map(column => `<option value="${escapeHtml(column.key)}"${selectedOption(currentKey, column.key)}>${escapeHtml(column.label)}</option>`).join('');
+  return `<label class="current-plan-status-control">Current plan status <select id="current-plan-status-control" aria-label="Current plan status" data-current-value="${escapeHtml(currentKey)}">${statusOptions}</select><span id="current-plan-status-error" class="current-plan-status-error" role="status" hidden></span></label>`;
 }
 
 function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], currentTitle: string, shellTitle: string, plans: ListedPlan[], columns: BoardColumnRecord[], projects: PlanProjectRecord[], configuration: AppConfiguration, navigatorFilters = emptyReviewShellNavigatorFilters(), allColumns = columns): string {
@@ -663,7 +659,7 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
   const pinControl = isCollaboration ? '' : `<button id="pin-plan" class="pin-button" type="button" data-pin-plan="${escapedPlanId}" aria-pressed="${plan.pinnedAt ? 'true' : 'false'}" aria-label="${plan.pinnedAt ? 'Unpin plan' : 'Pin plan'}" title="${plan.pinnedAt ? 'Unpin plan' : 'Pin plan'}">${plan.pinnedAt ? '★' : '☆'}</button>`;
   const organizationControls = pinControl;
   const navFilterControls = navigatorFilterControls(plan, columns, projects, navigatorFilters, configuration.kanbanEnabled);
-  const currentStatusControl = configuration.kanbanEnabled ? currentPlanStatusControl(plan, columns, allColumns) : '';
+  const currentStatusControl = configuration.kanbanEnabled ? currentPlanStatusControl(plan, allColumns) : '';
   const archiveLabel = isCollaboration ? 'Archive document' : 'Archive plan';
   const restoreLabel = isCollaboration ? 'Restore document' : 'Restore plan';
   const resumeLabel = isCollaboration ? 'Resume document' : 'Resume plan';

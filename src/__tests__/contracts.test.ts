@@ -2706,28 +2706,34 @@ test('disabled Kanban defaults to all documents and blocks movement without dele
   }
 });
 
-test('review shell shows hidden current plan status without making it selectable', async () => {
+test('review shell status selector exposes and accepts hidden board columns', async () => {
   const { app, planId } = await registeredApp('hidden-current-status-shell');
   try {
-    const hideBacklog = await app.inject({
+    const hideColumns = await app.inject({
       method: 'PUT',
       url: '/api/board-columns',
-      payload: { columns: [{ key: 'backlog', label: 'Hidden Backlog', position: 0, hidden: true }] }
+      payload: {
+        columns: [
+          { key: 'backlog', label: 'Hidden Backlog', position: 0, hidden: true },
+          { key: 'done', label: 'Done', position: 3, isDone: true, hidden: true }
+        ]
+      }
     });
-    assert.equal(hideBacklog.statusCode, 200, hideBacklog.body);
+    assert.equal(hideColumns.statusCode, 200, hideColumns.body);
 
     const shell = await app.inject({ method: 'GET', url: `/p/${planId}` });
     assert.equal(shell.statusCode, 200, shell.body);
     const currentStatusHtml = shell.body.slice(shell.body.indexOf('id="current-plan-status-control"'), shell.body.indexOf('</select>', shell.body.indexOf('id="current-plan-status-control"')));
-    assert.match(currentStatusHtml, /<option value="backlog" selected disabled>Hidden Backlog \(hidden\)<\/option>/);
+    assert.match(currentStatusHtml, /<option value="backlog" selected>Hidden Backlog<\/option>/);
     assert.match(currentStatusHtml, /<option value="ready_to_pull">Ready to Pull<\/option>/);
-    assert.doesNotMatch(currentStatusHtml, /<option value="backlog" selected>Hidden Backlog<\/option>/);
+    assert.match(currentStatusHtml, /<option value="done">Done<\/option>/);
     const navigatorStatusHtml = shell.body.slice(shell.body.indexOf('id="status-filter-control"'), shell.body.indexOf('</select>', shell.body.indexOf('id="status-filter-control"')));
-    assert.doesNotMatch(navigatorStatusHtml, /Hidden Backlog|value="backlog"/);
+    assert.doesNotMatch(navigatorStatusHtml, /Hidden Backlog|value="backlog"|value="done"/);
 
-    const hiddenUpdate = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/column`, payload: { boardColumnKey: 'backlog' } });
-    assert.equal(hiddenUpdate.statusCode, 400);
-    assert.equal(hiddenUpdate.json().error.code, 'validation_failed');
+    const hiddenUpdate = await app.inject({ method: 'PUT', url: `/api/plans/${planId}/column`, payload: { boardColumnKey: 'done' } });
+    assert.equal(hiddenUpdate.statusCode, 200, hiddenUpdate.body);
+    assert.equal(hiddenUpdate.json().data.plan.boardColumnKey, 'done');
+    assert.equal(hiddenUpdate.json().data.column.hiddenAt !== undefined, true);
   } finally {
     await app.close();
   }

@@ -909,10 +909,10 @@ export class PlanReviewStore {
     }));
   }
 
-  private requireVisibleBoardColumn(key: string): BoardColumnRecord {
-    const column = this.listBoardColumns().find(item => item.key === key);
+  private requireBoardColumn(key: string): BoardColumnRecord {
+    const column = this.listBoardColumns({ includeHidden: true }).find(item => item.key === key);
     if (!column) {
-      throw new PlanReviewError('validation_failed', `Board column '${key}' was not found`, 400, { boardColumnKey: key }, 'Run plan-review columns list, then retry with an existing visible column key.');
+      throw new PlanReviewError('validation_failed', `Board column '${key}' was not found`, 400, { boardColumnKey: key }, 'Run plan-review columns list, then retry with an existing column key.');
     }
     return column;
   }
@@ -1937,7 +1937,7 @@ export class PlanReviewStore {
       if (plan.reviewMode !== 'planning') {
         throw new PlanReviewError('not_applicable', 'Collaboration documents cannot be moved to board columns', 400, { planId: plan.id, reviewMode: plan.reviewMode }, 'Use All documents with Filter by type set to Collaborative; board columns apply only to planning documents.');
       }
-      const column = this.requireVisibleBoardColumn(boardColumnKey);
+      const column = this.requireBoardColumn(boardColumnKey);
       const changed = plan.boardColumnKey !== column.key;
       if (changed) this.db.prepare('UPDATE plans SET board_column_key = ?, updated_at = ? WHERE id = ?').run(column.key, nowIso(), plan.id);
       const updated = this.getPlan(plan.id).plan;
