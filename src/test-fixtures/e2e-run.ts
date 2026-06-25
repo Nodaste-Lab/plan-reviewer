@@ -820,7 +820,7 @@ try {
     await page.selectOption('#current-plan-status-control', 'ready_to_pull');
     await page.waitForFunction(() => document.querySelector<HTMLSelectElement>('#current-plan-status-control')?.value === 'in_progress');
     await page.waitForSelector('#current-plan-status-error:not([hidden])');
-    assert.match(await page.locator('#current-plan-status-error').innerText(), /Status was not changed|retry/i);
+    assert.match(await page.locator('#current-plan-status-error').innerText(), /forced status failure/);
     await page.waitForFunction(() => {
       const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame');
       if (!iframe?.contentDocument) return false;

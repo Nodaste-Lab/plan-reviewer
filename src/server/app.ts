@@ -664,7 +664,7 @@ function navigatorFilterControls(plan: ReturnType<PlanReviewStore['getPlan']>['p
 }
 
 function currentPlanStatusControl(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], allColumns: BoardColumnRecord[]): string {
-  if (plan.reviewMode === 'collaboration') return '';
+  if (plan.reviewMode === 'collaboration' || plan.lifecycleState !== 'active') return '';
   const currentKey = plan.boardColumnKey ?? '';
   const statusOptions = allColumns.map(column => `<option value="${escapeHtml(column.key)}"${selectedOption(currentKey, column.key)}>${escapeHtml(column.label)}</option>`).join('');
   return `<label class="current-plan-status-control">Current plan status <select id="current-plan-status-control" aria-label="Current plan status" data-current-value="${escapeHtml(currentKey)}">${statusOptions}</select><span id="current-plan-status-error" class="current-plan-status-error" role="status" hidden></span></label>`;
@@ -1202,7 +1202,8 @@ async function saveCurrentPlanStatus(){
   currentPlanStatusControl.disabled = false;
   if (!res?.ok || !json?.ok) {
     currentPlanStatusControl.value = previous;
-    if (currentPlanStatusError) { currentPlanStatusError.textContent = 'Status was not changed. Check the service and retry.'; currentPlanStatusError.hidden = false; }
+    const message = json?.error?.nextAction || json?.error?.message || 'Status was not changed. Check the service and retry.';
+    if (currentPlanStatusError) { currentPlanStatusError.textContent = message; currentPlanStatusError.hidden = false; }
     return;
   }
   currentPlanStatusControl.dataset.currentValue = next;

@@ -1658,6 +1658,7 @@ test('deferred lifecycle hides plans from active index and preserves agent-visib
     assert.match(deferredShell.body, /id="resume-plan"/);
     assert.match(deferredShell.body, /id="archive-plan"/);
     assert.doesNotMatch(deferredShell.body, /id="defer-plan"/);
+    assert.doesNotMatch(deferredShell.body, /id="current-plan-status-control"/);
 
     const activeIndex = await app.inject({ method: 'GET', url: '/?view=all' });
     assert.match(activeIndex.body, /href="\/deferred"[^>]*aria-label="Deferred \(1\)"[^>]*title="Deferred \(1\)"[^>]*>⏸<\/a>/);
@@ -2385,6 +2386,7 @@ test('review shell toolbar actions stay icon-only with tooltips across lifecycle
     assertIconOnlyControl(deferredShell.body, 'resume-plan', 'Resume plan', '▶');
     assertIconOnlyControl(deferredShell.body, 'archive-plan', 'Archive plan', '🗄');
     assertIconOnlyControl(deferredShell.body, 'restore-plan', 'Restore plan', '↩');
+    assert.doesNotMatch(deferredShell.body, /id="current-plan-status-control"/);
 
     const archived = await app.inject({ method: 'POST', url: `/api/plans/${planId}/archive` });
     assert.equal(archived.statusCode, 200, archived.body);
@@ -2394,6 +2396,7 @@ test('review shell toolbar actions stay icon-only with tooltips across lifecycle
     assert.match(elementById(archivedShell.body, 'archive-status'), /\brole="status"/);
     assertIconOnlyControl(archivedShell.body, 'restore-plan', 'Restore plan', '↩');
     assert.doesNotMatch(archivedShell.body, /id="archive-plan"/);
+    assert.doesNotMatch(archivedShell.body, /id="current-plan-status-control"/);
   } finally {
     await app.close();
   }

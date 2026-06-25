@@ -148,6 +148,10 @@ GLM independently verified the guard placement, caller impact, stale-state clien
 | --- | --- | --- | --- | --- | --- |
 | `setPlanBoardColumn` does not reject deferred/archived plans server-side | GLM cycle 1 / user follow-up | P3 | IN_PLAN | Fixed and verified clean in cycle 3 | `setPlanBoardColumn` now throws `invalid_state` 409 for non-active plans before column mutation; contract coverage asserts deferred and archived plans keep `boardColumnKey: backlog`; browser fixture still passes stale-state recovery. |
 
+## PR feedback follow-up
+
+Codex PR review found one P2: deferred/archived detail pages still rendered the editable current-status selector even though the server now rejects non-active column moves. Fixed by hiding `#current-plan-status-control` whenever `plan.lifecycleState !== 'active'`, preserving the selector only for active planning documents, and by showing server-provided `nextAction` text for any remaining status-update race failure. Contract tests now assert deferred and archived shells do not render the selector.
+
 ## Remaining out-of-scope follow-ups
 
 None.
@@ -162,5 +166,7 @@ None.
 - Targeted verification after the stale-message fix: `bun run build && node --test dist/__tests__/contracts.test.js` passed with 128 tests; `node dist/test-fixtures/e2e-run.js` passed in 54s.
 - Targeted verification after the lifecycle-guard fix: `bun run build && node --test dist/__tests__/contracts.test.js` passed with 129 tests; `node dist/test-fixtures/e2e-run.js` passed in 54s.
 - Post-rebase verification after reconciling with `origin/main`: `bun run test` passed with 130 tests; `bun run test:e2e` passed in 54s.
+- PR feedback fix verification: `bun run build && node --test dist/__tests__/contracts.test.js` passed with 129 tests after hiding inactive-plan status selectors.
+- Final PR feedback verification: `bun run test` passed with 130 tests; `bun run test:e2e` passed in 55s.
 
 Next step: `OPEN_PR_READY` — continue with final PR preparation, including reconciling with current `origin/main` if needed, commit, push, PR creation, and post-PR monitoring.
