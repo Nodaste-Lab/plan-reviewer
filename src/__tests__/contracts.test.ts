@@ -50,6 +50,27 @@ function storelessComment(id: string): StoredComment {
   };
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function elementById(html: string, id: string): string {
+  const match = html.match(new RegExp(`<(?<tag>button|a|span)\\b[^>]*\\bid="${escapeRegExp(id)}"[^>]*>[\\s\\S]*?<\\/\\k<tag>>`));
+  assert.ok(match, `expected element #${id}`);
+  return match[0];
+}
+
+function elementText(element: string): string {
+  return element.replace(/^<[^>]*>/, '').replace(/<\/(button|a|span)>$/, '').replace(/<[^>]*>/g, '').replace(/\s+/g, '').trim();
+}
+
+function assertIconOnlyControl(html: string, id: string, label: string, icon: string, title = label): void {
+  const element = elementById(html, id);
+  assert.match(element, new RegExp(`\\baria-label="${escapeRegExp(label)}"`));
+  assert.match(element, new RegExp(`\\btitle="${escapeRegExp(title)}"`));
+  assert.equal(elementText(element), icon, `#${id} should render only its icon text`);
+}
+
 test('schemas validate locked registration, comment, and claim contracts', () => {
   const register = registerPlanSchema.parse(sampleRegisterPayload());
   assert.equal(register.updateMode, 'upsert');
@@ -2299,6 +2320,55 @@ test('empty archive page is quiet and archived shell shows restore state', async
     assert.match(shell.body, /Archived/);
     assert.match(shell.body, /id="restore-plan"/);
     assert.doesNotMatch(shell.body, />Archive plan</);
+  } finally {
+    await app.close();
+  }
+});
+
+test('review shell toolbar actions stay icon-only with tooltips across lifecycle states', async () => {
+  const app = createApp({ dbPath: tempDbPath('toolbar-icons') });
+  try {
+    const registered = await app.inject({ method: 'POST', url: '/api/plans/register', payload: sampleRegisterPayload() });
+    assert.equal(registered.statusCode, 200, registered.body);
+    const planId = registered.json().data.planId;
+
+    const activeShell = await app.inject({ method: 'GET', url: `/p/${planId}` });
+    assert.equal(activeShell.statusCode, 200, activeShell.body);
+    assertIconOnlyControl(activeShell.body, 'desktop-plan-nav-toggle', 'Plan Navigator', '☰');
+    assertIconOnlyControl(activeShell.body, 'pin-plan', 'Pin plan', '☆');
+    assertIconOnlyControl(activeShell.body, 'download-raw-plan', 'Download raw plan', '⬇', 'Download raw plan HTML; ZIP includes required assets.');
+    assertIconOnlyControl(activeShell.body, 'request-execution-review', 'Request execution-ready review', '✓');
+    assertIconOnlyControl(activeShell.body, 'build-plan', 'Build Plan', '⚒');
+    assertIconOnlyControl(activeShell.body, 'defer-plan', 'Defer plan', '⏸');
+    assertIconOnlyControl(activeShell.body, 'archive-plan', 'Archive plan', '🗄');
+    assertIconOnlyControl(activeShell.body, 'restore-plan', 'Restore plan', '↩');
+    assertIconOnlyControl(activeShell.body, 'configuration-link', 'Configuration', '⚙');
+    assertIconOnlyControl(activeShell.body, 'desktop-comments-toggle', 'Open comments', '💬', 'Comments');
+    const activeArchiveStatus = elementById(activeShell.body, 'archive-status');
+    assert.match(activeArchiveStatus, /\bhidden\b/);
+    assert.equal(elementText(activeArchiveStatus), '');
+    const css = await app.inject({ method: 'GET', url: '/client.css' });
+    assert.equal(css.statusCode, 200, css.body);
+    assert.match(css.body, /#archive-status\[hidden\]\{display:none\}/);
+
+    const deferred = await app.inject({ method: 'POST', url: `/api/plans/${planId}/defer`, payload: { note: 'Waiting on review.' } });
+    assert.equal(deferred.statusCode, 200, deferred.body);
+    const deferredShell = await app.inject({ method: 'GET', url: `/p/${planId}` });
+    assert.equal(deferredShell.statusCode, 200, deferredShell.body);
+    assertIconOnlyControl(deferredShell.body, 'archive-status', 'Deferred', '⏸');
+    assert.match(elementById(deferredShell.body, 'archive-status'), /\brole="status"/);
+    assertIconOnlyControl(deferredShell.body, 'resume-plan', 'Resume plan', '▶');
+    assertIconOnlyControl(deferredShell.body, 'archive-plan', 'Archive plan', '🗄');
+    assertIconOnlyControl(deferredShell.body, 'restore-plan', 'Restore plan', '↩');
+
+    const archived = await app.inject({ method: 'POST', url: `/api/plans/${planId}/archive` });
+    assert.equal(archived.statusCode, 200, archived.body);
+    const archivedShell = await app.inject({ method: 'GET', url: `/p/${planId}` });
+    assert.equal(archivedShell.statusCode, 200, archivedShell.body);
+    assertIconOnlyControl(archivedShell.body, 'archive-status', 'Archived', '🗄');
+    assert.match(elementById(archivedShell.body, 'archive-status'), /\brole="status"/);
+    assertIconOnlyControl(archivedShell.body, 'restore-plan', 'Restore plan', '↩');
+    assert.doesNotMatch(archivedShell.body, /id="archive-plan"/);
   } finally {
     await app.close();
   }
