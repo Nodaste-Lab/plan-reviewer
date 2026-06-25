@@ -136,8 +136,8 @@ try {
   assert.match(clientCssText, /\.selection-box\.hover\{[^}]*border:2px dotted/);
   assert.match(clientCssText, /\.selection-box\.active\{[^}]*border:2px dotted/);
   assert.match(clientCssText, /@media\(prefers-reduced-motion:reduce\)\{\.selection-box\{transition:none\}\}/);
-  assert.doesNotMatch(clientCssText, /#plan-frame\{[^}]*;height:calc\(100vh - 86px\)/);
-  assert.match(clientCssText, /#plan-frame\{[^}]*min-height:calc\(100vh - 86px\)[^}]*display:block/);
+  assert.doesNotMatch(clientCssText, /#plan-frame\{[^}]*;height:calc\(100vh - (?:86px|var\(--plan-navbar-height\))\)/);
+  assert.match(clientCssText, /#plan-frame\{[^}]*min-height:calc\(100vh - var\(--plan-navbar-height\)\)[^}]*display:block/);
   // Mobile review surface contract: the parent #review is the native scroll
   // container, the iframe is laid out at full content height (so #review can
   // scroll it natively), and #plan-touch-layer sits on top as the tap surface.
@@ -145,8 +145,8 @@ try {
   // parent-registered listeners, so the overlay (a parent element) must be the
   // tap surface, and native scroll must come from #review (touch-action), not
   // from JS emulation or from the iframe being the input target.
-  assert.match(clientCssText, /#review\{height:calc\(100dvh - 88px\);overflow-y:auto;[^}]*-webkit-overflow-scrolling:touch\}/);
-  assert.match(clientCssText, /#plan-frame\{width:100%;min-height:calc\(100dvh - 88px\);border:0;display:block;pointer-events:none\}/);
+  assert.match(clientCssText, /#review\{height:calc\(100dvh - var\(--plan-navbar-height\)\);overflow-y:auto;[^}]*-webkit-overflow-scrolling:touch\}/);
+  assert.match(clientCssText, /#plan-frame\{width:100%;min-height:calc\(100dvh - var\(--plan-navbar-height\)\);border:0;display:block;pointer-events:none\}/);
   assert.match(clientCssText, /#plan-touch-layer\{display:block;[^}]*touch-action:pan-y;pointer-events:auto\}/);
   // The old JS scroll-emulation must stay gone (it produced janky non-native scroll).
   assert.doesNotMatch(clientJsText, /touchScrollStart\.scrollY \+ touchScrollStart\.clientY - raw\.clientY/);
@@ -611,15 +611,64 @@ try {
     });
     assert.deepEqual(desktopScrollSurfaceBefore, { outerScrollable: true, frameSizedToContent: true, frameInternalScrollY: 0 });
     const desktopStickyColumnHeights = await page.evaluate(() => {
-      const expected = window.innerHeight - 86;
+      const navbarBox = document.querySelector<HTMLElement>('#plan-navbar')!.getBoundingClientRect();
+      const navBox = document.querySelector<HTMLElement>('#plan-list-nav')!.getBoundingClientRect();
+      const sidebarBox = document.querySelector<HTMLElement>('#sidebar')!.getBoundingClientRect();
+      const expected = window.innerHeight - Math.ceil(navbarBox.height);
       return {
         expected,
-        planNavHeight: Math.round(document.querySelector<HTMLElement>('#plan-list-nav')!.getBoundingClientRect().height),
-        sidebarHeight: Math.round(document.querySelector<HTMLElement>('#sidebar')!.getBoundingClientRect().height)
+        navbarBottom: Math.round(navbarBox.bottom),
+        planNavTop: Math.round(navBox.top),
+        sidebarTop: Math.round(sidebarBox.top),
+        planNavHeight: Math.round(navBox.height),
+        sidebarHeight: Math.round(sidebarBox.height)
       };
     });
     assert.equal(Math.abs(desktopStickyColumnHeights.planNavHeight - desktopStickyColumnHeights.expected) <= 2, true);
     assert.equal(Math.abs(desktopStickyColumnHeights.sidebarHeight - desktopStickyColumnHeights.expected) <= 2, true);
+    assert.equal(desktopStickyColumnHeights.planNavTop >= desktopStickyColumnHeights.navbarBottom, true);
+    assert.equal(desktopStickyColumnHeights.sidebarTop >= desktopStickyColumnHeights.navbarBottom, true);
+    const expandedNavbarAlignment = await page.evaluate(async () => {
+      const navbar = document.querySelector<HTMLElement>('#plan-navbar')!;
+      const actions = document.querySelector<HTMLElement>('#plan-navbar-actions')!;
+      const initialHeight = Math.ceil(navbar.getBoundingClientRect().height);
+      const spacer = document.createElement('span');
+      spacer.id = 'navbar-height-test-spacer';
+      spacer.textContent = 'Dynamic navbar height test';
+      spacer.style.cssText = 'flex:0 0 100%;height:36px;overflow:hidden;';
+      actions.append(spacer);
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      const expandedNavbarBox = navbar.getBoundingClientRect();
+      const expandedNavBox = document.querySelector<HTMLElement>('#plan-list-nav')!.getBoundingClientRect();
+      const expandedSidebarBox = document.querySelector<HTMLElement>('#sidebar')!.getBoundingClientRect();
+      const expandedHeight = Math.ceil(expandedNavbarBox.height);
+      const cssHeight = document.body.style.getPropertyValue('--plan-navbar-height');
+      spacer.remove();
+      window.dispatchEvent(new Event('resize'));
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      const restoredHeight = Math.ceil(navbar.getBoundingClientRect().height);
+      return {
+        initialHeight,
+        expandedHeight,
+        cssHeight,
+        navbarBottom: Math.round(expandedNavbarBox.bottom),
+        planNavTop: Math.round(expandedNavBox.top),
+        sidebarTop: Math.round(expandedSidebarBox.top),
+        planNavHeight: Math.round(expandedNavBox.height),
+        sidebarHeight: Math.round(expandedSidebarBox.height),
+        expected: window.innerHeight - expandedHeight,
+        restoredHeight,
+        restoredCssHeight: document.body.style.getPropertyValue('--plan-navbar-height')
+      };
+    });
+    assert.equal(expandedNavbarAlignment.expandedHeight > expandedNavbarAlignment.initialHeight, true);
+    assert.equal(expandedNavbarAlignment.cssHeight, `${expandedNavbarAlignment.expandedHeight}px`);
+    assert.equal(expandedNavbarAlignment.planNavTop >= expandedNavbarAlignment.navbarBottom, true);
+    assert.equal(expandedNavbarAlignment.sidebarTop >= expandedNavbarAlignment.navbarBottom, true);
+    assert.equal(Math.abs(expandedNavbarAlignment.planNavHeight - expandedNavbarAlignment.expected) <= 2, true);
+    assert.equal(Math.abs(expandedNavbarAlignment.sidebarHeight - expandedNavbarAlignment.expected) <= 2, true);
+    assert.equal(expandedNavbarAlignment.restoredCssHeight, `${expandedNavbarAlignment.restoredHeight}px`);
+    await page.waitForFunction(() => !document.querySelector('#navbar-height-test-spacer'));
     const desktopFrameBox = await page.locator('#plan-frame').boundingBox();
     assert.ok(desktopFrameBox);
     await page.mouse.move(desktopFrameBox.x + desktopFrameBox.width / 2, desktopFrameBox.y + 220);

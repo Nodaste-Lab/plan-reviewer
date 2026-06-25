@@ -1766,8 +1766,12 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     const shellCss = await app.inject({ method: 'GET', url: '/client.css' });
     assert.equal(shellCss.statusCode, 200);
     assert.match(shellCss.body, /--plan-nav-width:260px/);
+    assert.match(shellCss.body, /--plan-navbar-height:86px/);
     assert.match(shellCss.body, /body\.plan-nav-collapsed\{--plan-nav-width:0\}/);
     assert.match(shellCss.body, /grid-template-columns:var\(--plan-nav-width\) minmax\(0,1fr\) var\(--comments-width\)/);
+    assert.match(shellCss.body, /#plan-list-nav\{[^}]*top:var\(--plan-navbar-height\);height:calc\(100vh - var\(--plan-navbar-height\)\)/);
+    assert.match(shellCss.body, /#sidebar\{[^}]*top:var\(--plan-navbar-height\);height:calc\(100vh - var\(--plan-navbar-height\)\)/);
+    assert.match(shellCss.body, /#composer\{[^}]*top:calc\(var\(--plan-navbar-height\) \+ 26px\)/);
     assert.match(shellCss.body, /#plan-navbar-actions\{display:flex;align-items:center;justify-content:flex-end/);
     assert.match(shellCss.body, /#plan-navbar \.doc-kind-switcher\{display:inline-flex;gap:2px;padding:3px;border:1px solid #334155;border-radius:999px;background:#08111f/);
     assert.match(shellCss.body, /#plan-navbar \.doc-kind-seg\{border-radius:999px;padding:5px 10px;color:#a7b0c0;font-size:12px;font-weight:850;text-decoration:none;white-space:nowrap\}/);
@@ -1786,6 +1790,8 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     assert.match(shellClient.body, /handleQuickOpenKeydown/);
     assert.match(shellClient.body, /frame\.contentDocument.*keydown/s);
     assert.match(shellClient.body, /setPlanNavOpen\(open\)/);
+    assert.match(shellClient.body, /updatePlanNavbarHeight/);
+    assert.match(shellClient.body, /ResizeObserver\(updatePlanNavbarHeight\)/);
     assert.match(shellClient.body, /planListNav\.inert = !open/);
     assert.match(shellClient.body, /planNavStateCookieName = 'plan_review_plan_nav'/);
     assert.match(shellClient.body, /document\.cookie = planNavStateCookieName \+ '=' \+ \(open \? 'open' : 'closed'\) \+ '; Path=\/; SameSite=Lax'/);
