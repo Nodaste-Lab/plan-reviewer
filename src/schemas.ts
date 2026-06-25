@@ -6,6 +6,22 @@ export const anchorStateSchema = z.enum(['mapped', 'stale', 'unmapped']);
 export const claimModeSchema = z.enum(['one', 'selected', 'bulk']);
 export const planLifecycleStateSchema = z.enum(['active', 'deferred', 'archived']);
 export const boardColumnKeySchema = z.string().trim().min(1).regex(/^[a-z0-9][a-z0-9_-]*$/, 'board column keys must use lowercase letters, numbers, underscores, or dashes');
+export const skillNameSchema = z.string().trim().min(1).max(80).regex(/^[a-z0-9][a-z0-9_-]*$/, 'skill names must use lowercase letters, numbers, underscores, or dashes');
+export const actionCommentPlanPathSchema = z.string().min(1).refine(value => !/[\p{Cc}\p{Zl}\p{Zp}]/u.test(value), 'action comment plan paths must be single-line and contain no Unicode control or line-separator characters');
+export const appConfigurationSchema = z.object({
+  showPlanNavigatorByDefault: z.boolean(),
+  showCommentsByDefault: z.boolean(),
+  executionReadySkillName: skillNameSchema,
+  buildPlanSkillName: skillNameSchema,
+  kanbanEnabled: z.boolean()
+}).strict();
+export const defaultAppConfiguration = appConfigurationSchema.parse({
+  showPlanNavigatorByDefault: false,
+  showCommentsByDefault: false,
+  executionReadySkillName: 'plan-reviewer-execution-ready',
+  buildPlanSkillName: 'plan-reviewer-build',
+  kanbanEnabled: true
+});
 export const noteAuthorSchema = z.object({ displayName: z.string().optional() }).optional();
 export const reviewModeSchema = z.enum(['planning', 'collaboration']);
 export const threadEntryRoleSchema = z.enum(['human', 'agent', 'system']);
@@ -154,7 +170,7 @@ export const registerPlanSchema = z.object({
   rootPath: z.string().optional(),
   branch: z.string().min(1),
   commitSha: z.string().optional(),
-  planPath: z.string().min(1),
+  planPath: actionCommentPlanPathSchema,
   slug: z.string().optional(),
   html: z.string().min(1),
   fileHash: z.string().min(1),
@@ -362,6 +378,7 @@ export const resumePlanSchema = z.object({
 
 export type ReviewMode = z.infer<typeof reviewModeSchema>;
 export type ThreadEntryRole = z.infer<typeof threadEntryRoleSchema>;
+export type AppConfiguration = z.infer<typeof appConfigurationSchema>;
 export type PlanPublicationMetadata = z.infer<typeof planPublicationMetadataSchema>;
 export type PlanPullRequest = z.infer<typeof planPullRequestSchema>;
 export type RegisterPlanInput = z.infer<typeof registerPlanSchema>;

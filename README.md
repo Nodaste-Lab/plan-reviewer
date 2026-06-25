@@ -90,18 +90,18 @@ plan-review notes add plan_123 --note "Current status: tests need AC-4 coverage"
 plan-review notes list plan_123 --json
 ```
 
-Browser navigation keeps lifecycle buckets separate: `/` opens the active planning Kanban board, `/?view=all` opens the All documents list, `/deferred` shows paused plans with resume controls and latest notes, and `/archive` shows archived plans. Plan detail pages expose notes plus lifecycle actions: active plans can be deferred, deferred plans can be resumed or archived, and archived plans can be restored.
+Browser navigation keeps lifecycle buckets separate: `/` opens the active planning Kanban board when Kanban is enabled and the All documents list when Kanban is disabled, `/?view=all` opens the All documents list, `/deferred` shows paused plans with resume controls and latest notes, and `/archive` shows archived plans. Plan detail pages expose notes plus lifecycle actions: active plans can be deferred, deferred plans can be resumed or archived, and archived plans can be restored.
 
 ## Organize Plans and Documents
 
 The index has two primary document views:
 
-- `Kanban` is the planning board. It shows active planning documents grouped into configurable columns.
+- `Kanban` is the planning board. When enabled, it shows active planning documents grouped into configurable columns.
 - `All documents` is the mixed discovery list. Use `Filter by type` to show only `Plan` or `Collaborative` documents.
 
 Board columns are workflow status only. They are independent from lifecycle (`active`, `deferred`, `archived`) and independent from execution readiness. A plan can be in a "ready" board column while still reporting `executionReady: false` until the reviewed-plan gate has passed.
 
-Use the browser `/columns` page to edit labels and hide empty columns. Columns with active plans cannot be hidden until those plans move elsewhere; deferred/archived plans in a hidden column are moved to the first visible column if they are resumed/restored. Use the CLI for ordering, label editing, and inspection:
+Use the browser Configuration panel (`/configuration`) to edit labels and hide columns in the Board columns section. The older `/columns` path remains compatible and renders the same configuration surface. Hidden columns and their assigned active plans are omitted from the Kanban board until shown again, but hidden columns remain selectable from a plan's Current plan status control when Kanban is enabled; deferred/archived plans in a hidden column are moved to the first visible column if they are resumed/restored. Use the CLI for ordering, label editing, and inspection:
 
 ```bash
 plan-review columns list --json
@@ -109,6 +109,26 @@ plan-review columns save-order backlog,ready_to_pull,in_progress,done --json
 plan-review columns rename in_progress "Doing" --json
 plan-review column set plan_123 in_progress --json
 ```
+
+When Kanban is disabled, board navigation, drag/drop, and Status filters are hidden, `/` defaults to All documents, and `plan-review column set` fails with `feature_disabled`. Column definitions and plan assignments are retained; `columns list`, `columns save-order`, and `columns rename` remain available so operators can prepare or repair columns before re-enabling Kanban.
+
+## Configuration Panel
+
+Open the icon-only Configuration gear from the Kanban board, All documents, lifecycle pages, the Configuration page, or a plan review shell. The panel stores service-local settings in SQLite:
+
+- Review shell defaults: `showPlanNavigatorByDefault` and `showCommentsByDefault`, both `false` by default.
+- Action button skill routing: `executionReadySkillName` defaults to `plan-reviewer-execution-ready`; `buildPlanSkillName` defaults to `plan-reviewer-build`.
+- Kanban availability: `kanbanEnabled`, `true` by default.
+- Board columns: the existing column label, key, order, done behavior, and visibility controls.
+
+The API exposes the same source of truth:
+
+```http
+GET /api/configuration
+PUT /api/configuration
+```
+
+`PUT /api/configuration` requires the full configuration payload and rejects unknown keys. Skill names must use lowercase letters, numbers, underscores, or dashes. Action buttons still create fixed request-comment bodies; only the skill-name token changes, and registered plan paths must be single-line values without control characters before an action comment is created.
 
 Set a user-facing project label without editing source HTML:
 
