@@ -2845,6 +2845,20 @@ planTouchLayer?.addEventListener('click', event => {
 document.getElementById('review')?.addEventListener('scroll', scheduleMarkerReflow, { passive: true });
 window.addEventListener('resize', () => { syncFrameHeight(); scheduleMarkerReflow(); });
 window.addEventListener('scroll', scheduleMarkerReflow, { passive: true });
+const nativeWindowScrollTo = window.scrollTo.bind(window);
+// WebKit can swallow the first immediate wheel after a desktop shell scrollTo;
+// defer desktop programmatic shell scrolls one frame so the next trackpad/wheel
+// input reaches the native window scroller instead of producing a no-op bump.
+// Current shell callers pass absolute coordinates and do not require same-tick
+// scrollY reads after scrollTo; keep that constraint if adding new callers.
+window.scrollTo = (...args) => {
+  if (isMobileShell()) {
+    nativeWindowScrollTo(...args);
+    return;
+  }
+  requestAnimationFrame(() => nativeWindowScrollTo(...args));
+};
+
 if (frame.contentDocument && frame.contentDocument.readyState !== 'loading') setTimeout(() => { attachFrameListeners(); void renderMermaidDiagrams().finally(() => { mountWashiOverlay(); syncFrameHeight(); redrawMarkers(); }); }, 0);
 document.getElementById('close-lightbox').addEventListener('click', () => { lightbox.hidden = true; });
 document.getElementById('zoom-in').addEventListener('click', () => { zoom = Math.min(4, zoom + .25); applyImageTransform(); });

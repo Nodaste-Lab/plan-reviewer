@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { chromium, request } from 'playwright';
+import { chromium, request, webkit } from 'playwright';
 import { unzipSync, strFromU8 } from 'fflate';
 import { createApp } from '../server/app.js';
 import { sha256 } from '../util.js';
@@ -628,6 +628,73 @@ try {
     assert.equal(await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollY), 0);
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.waitForFunction(() => window.scrollY === 0);
+
+    // WebKit exposes the user-reported bump/pull path that Chromium masks: the
+    // first small wheel/trackpad input over the rendered iframe can produce no
+    // native scroll, while a second same-direction input scrolls. This must be
+    // red on the current regression and green only when the first input moves
+    // the correct native scroll owner.
+    const webkitBrowser = await webkit.launch({ headless: true });
+    try {
+      const webkitPage = await webkitBrowser.newPage({ viewport: { width: 1280, height: 720 } });
+      await webkitPage.goto(`${baseUrl}/p/${registered.planId}`);
+      await webkitPage.waitForFunction(() => {
+        const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame');
+        if (!iframe?.contentDocument) return false;
+        return Math.abs(iframe.offsetHeight - iframe.contentDocument.documentElement.scrollHeight) <= 2;
+      }, undefined, { timeout: 3000 });
+      const webkitFrameBox = await webkitPage.locator('#plan-frame').boundingBox();
+      assert.ok(webkitFrameBox);
+      const webkitWheelPoint = { x: webkitFrameBox.x + webkitFrameBox.width / 2, y: webkitFrameBox.y + 220 };
+      await webkitPage.mouse.move(webkitWheelPoint.x, webkitWheelPoint.y);
+      await webkitPage.evaluate(() => {
+        (window as typeof window & { __wheelProbe?: Array<{ deltaY: number; defaultPrevented: boolean; target: string; scrollY: number; frameInternalScrollY: number }> }).__wheelProbe = [];
+        window.addEventListener('wheel', event => {
+          const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+          (window as typeof window & { __wheelProbe?: Array<{ deltaY: number; defaultPrevented: boolean; target: string; scrollY: number; frameInternalScrollY: number }> }).__wheelProbe?.push({
+            deltaY: event.deltaY,
+            defaultPrevented: event.defaultPrevented,
+            target: (event.target as HTMLElement | null)?.id || (event.target as HTMLElement | null)?.tagName || '',
+            scrollY: window.scrollY,
+            frameInternalScrollY: iframe.contentWindow?.scrollY ?? 0
+          });
+        });
+        const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+        iframe.contentWindow?.scrollTo(0, 0);
+        window.scrollTo(0, 240);
+      });
+      await webkitPage.waitForFunction(() => Math.abs(window.scrollY - 240) <= 1, undefined, { timeout: 3000 });
+      const webkitWheelState = async (label: string) => webkitPage.evaluate(({ stateLabel, x, y }) => {
+        const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+        const probe = (window as typeof window & { __wheelProbe?: Array<{ deltaY: number; defaultPrevented: boolean; target: string; scrollY: number; frameInternalScrollY: number }> }).__wheelProbe ?? [];
+        const hit = document.elementFromPoint(x, y) as HTMLElement | null;
+        return {
+          label: stateLabel,
+          wheelPoint: { x, y },
+          hitTarget: hit?.id || hit?.tagName || '',
+          windowScrollY: window.scrollY,
+          frameInternalScrollY: iframe.contentWindow?.scrollY ?? 0,
+          wheelEvents: probe
+        };
+      }, { stateLabel: label, ...webkitWheelPoint });
+      const dispatchWebkitWheel = async (deltaY: number, label: string) => {
+        const before = await webkitWheelState(label + ' before');
+        await webkitPage.mouse.wheel(0, deltaY);
+        await webkitPage.waitForFunction(({ startingScrollY }) => window.scrollY !== startingScrollY, { startingScrollY: before.windowScrollY }, { timeout: 500 }).catch(() => undefined);
+        const after = await webkitWheelState(label + ' after');
+        return { before, after };
+      };
+      const firstWebkitWheel = await dispatchWebkitWheel(12, 'first wheel');
+      const secondWebkitWheel = await dispatchWebkitWheel(12, 'second wheel');
+      assert.equal(['plan-frame', 'plan-touch-layer'].includes(firstWebkitWheel.before.hitTarget), true, `WebKit wheel precondition should target the rendered plan surface: ${JSON.stringify(firstWebkitWheel)}`);
+      assert.equal(secondWebkitWheel.after.windowScrollY > firstWebkitWheel.after.windowScrollY, true, `WebKit second wheel should demonstrate the same-direction follow-up scrolls: ${JSON.stringify({ firstWebkitWheel, secondWebkitWheel })}`);
+      assert.equal(firstWebkitWheel.after.windowScrollY > firstWebkitWheel.before.windowScrollY, true, `WebKit first wheel over the rendered plan did not scroll; this reproduces the bump/pull where the first input is swallowed and the second scrolls: ${JSON.stringify({ firstWebkitWheel, secondWebkitWheel })}`);
+      assert.equal(firstWebkitWheel.after.frameInternalScrollY, 0);
+      assert.equal(secondWebkitWheel.after.frameInternalScrollY, 0);
+    } finally {
+      await webkitBrowser.close();
+    }
+
     const beforeNoOverlaySidebarToggle = await page.evaluate(() => {
       const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
       return iframe.contentDocument!.documentElement.scrollHeight;
