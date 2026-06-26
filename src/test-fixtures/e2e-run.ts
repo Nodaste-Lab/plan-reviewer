@@ -527,6 +527,242 @@ try {
     }
 
 	    const page = await browser.newPage();
+    const openKanbanContextMenu = async (planId: string) => {
+      await page.goto(`${baseUrl}/`);
+      const card = page.locator(`[data-plan-id="${planId}"]`);
+      await card.waitFor({ state: 'visible' });
+      await card.click({ button: 'right' });
+      await page.waitForSelector('.kanban-context-menu:not([hidden])');
+    };
+    const setReadyToPullHidden = async (hidden: boolean) => {
+      await context.put('/api/board-columns', { data: { columns: [
+        { key: 'backlog', label: 'Backlog', position: 0 },
+        { key: 'ready_to_pull', label: 'Ready to Pull', position: 1, ...(hidden ? { hidden: true } : {}) },
+        { key: 'in_progress', label: 'In Progress', position: 2 },
+        { key: 'done', label: 'Done', position: 3, isDone: true }
+      ] } });
+    };
+
+    const moveMenuPlan = await registerTinyPlan('kanban-menu-move');
+    await openKanbanContextMenu(moveMenuPlan.planId);
+    assert.equal(await page.locator('.kanban-context-menu').getAttribute('role'), 'menu');
+    assert.equal(await page.locator('.kanban-context-menu button[role="menuitemradio"]').count(), 4);
+    assert.match(await page.locator('.kanban-context-menu').innerText(), /Backlog/);
+    assert.match(await page.locator('.kanban-context-menu').innerText(), /Ready to Pull/);
+    assert.match(await page.locator('.kanban-context-menu').innerText(), /In Progress/);
+    assert.match(await page.locator('.kanban-context-menu').innerText(), /Done/);
+    assert.match(await page.locator('.kanban-context-menu').innerText(), /Defer plan/);
+    assert.match(await page.locator('.kanban-context-menu').innerText(), /Archive plan/);
+    await page.setViewportSize({ width: 760, height: 180 });
+    await openKanbanContextMenu(moveMenuPlan.planId);
+    assert.equal(await page.locator('.kanban-context-menu').evaluate(menu => menu.scrollHeight > menu.clientHeight), true);
+    await page.locator('.kanban-context-menu').evaluate(menu => {
+      menu.scrollTop = menu.scrollHeight;
+      menu.dispatchEvent(new Event('scroll'));
+    });
+    assert.equal(await page.locator('.kanban-context-menu').count(), 1);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await openKanbanContextMenu(moveMenuPlan.planId);
+    await page.locator('.kanban-context-menu button[data-column-key="in_progress"]').click();
+    await page.waitForFunction(planId => document.querySelector(`[data-column-key="in_progress"] [data-plan-id="${CSS.escape(String(planId))}"]`), moveMenuPlan.planId);
+    let moveDetail = await context.get(`/api/plans/${moveMenuPlan.planId}`);
+    assert.equal(moveDetail.ok(), true);
+    assert.equal(((await moveDetail.json()).data as { plan: { boardColumnKey: string } }).plan.boardColumnKey, 'in_progress');
+    await page.waitForFunction(planId => document.querySelector(`[data-plan-id="${CSS.escape(String(planId))}"]`)?.textContent?.includes('Status: In Progress'), moveMenuPlan.planId);
+
+    await page.locator(`[data-plan-id="${moveMenuPlan.planId}"]`).focus();
+    await page.keyboard.press('Shift+F10');
+    await page.waitForSelector('.kanban-context-menu:not([hidden])');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('.kanban-context-menu', { state: 'detached' });
+
+    await setReadyToPullHidden(true);
+    try {
+      await openKanbanContextMenu(moveMenuPlan.planId);
+      assert.doesNotMatch(await page.locator('.kanban-context-menu').innerText(), /Ready to Pull/);
+      await page.locator('body').click();
+    } finally {
+      await setReadyToPullHidden(false);
+    }
+
+    await page.goto(`${baseUrl}/?view=all`);
+    await page.waitForFunction(() => !document.querySelector('.kanban-context-menu'));
+
+    const failurePlan = await registerTinyPlan('kanban-menu-failure');
+    await openKanbanContextMenu(failurePlan.planId);
+    await page.route(`**/api/plans/${failurePlan.planId}/column`, async route => {
+      await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ ok: false, error: { code: 'unavailable', message: 'forced menu move failure' } }) });
+    }, { times: 1 });
+    await page.locator('.kanban-context-menu button[data-column-key="in_progress"]').click();
+    await page.waitForSelector('#organizer-error:not([hidden])');
+    assert.match(await page.locator('#organizer-error').innerText(), /Column update failed|restored|try again/);
+    await page.waitForFunction(planId => document.querySelector(`[data-column-key="backlog"] [data-plan-id="${CSS.escape(String(planId))}"]`), failurePlan.planId);
+    await page.unroute(`**/api/plans/${failurePlan.planId}/column`);
+
+    const rapidPlan = await registerTinyPlan('kanban-menu-rapid');
+    await openKanbanContextMenu(rapidPlan.planId);
+    await page.evaluate(planId => {
+      const originalFetch = window.fetch;
+      (window as any).__rapidMoveRequests = 0;
+      (window as any).__restoreRapidFetch = () => { window.fetch = originalFetch; };
+      window.fetch = async (...args) => {
+        const input = args[0];
+        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        if (url.includes('/api/plans/' + encodeURIComponent(String(planId)) + '/column')) {
+          (window as any).__rapidMoveRequests += 1;
+          await new Promise(resolve => setTimeout(resolve, 150));
+        }
+        return originalFetch(...args);
+      };
+    }, rapidPlan.planId);
+    await page.evaluate(() => {
+      const button = document.querySelector<HTMLButtonElement>('.kanban-context-menu button[data-column-key="in_progress"]');
+      button?.click();
+      button?.click();
+    });
+    await page.waitForFunction(planId => document.querySelector(`[data-column-key="in_progress"] [data-plan-id="${CSS.escape(String(planId))}"]`), rapidPlan.planId);
+    assert.equal(await page.evaluate(() => (window as any).__rapidMoveRequests), 1);
+    await page.evaluate(() => (window as any).__restoreRapidFetch?.());
+
+    const stalePlan = await registerTinyPlan('kanban-menu-stale');
+    await openKanbanContextMenu(stalePlan.planId);
+    await page.route(`**/api/plans/${stalePlan.planId}/column`, async route => {
+      await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ ok: false, error: { code: 'conflict', message: 'stale plan state' } }) });
+    }, { times: 1 });
+    await Promise.all([
+      page.waitForLoadState('domcontentloaded'),
+      page.locator('.kanban-context-menu button[data-column-key="in_progress"]').click()
+    ]);
+    await page.waitForSelector(`[data-plan-id="${stalePlan.planId}"]`);
+    await page.waitForSelector('#organizer-error:not([hidden])');
+    assert.match(await page.locator('#organizer-error').innerText(), /changed elsewhere|server truth/i);
+    const staleDetail = await context.get(`/api/plans/${stalePlan.planId}`);
+    assert.equal(staleDetail.ok(), true);
+    assert.equal(((await staleDetail.json()).data as { plan: { boardColumnKey: string } }).plan.boardColumnKey, 'backlog');
+    await page.unroute(`**/api/plans/${stalePlan.planId}/column`);
+
+    const hiddenStalePlan = await registerTinyPlan('kanban-menu-hidden-stale');
+    await openKanbanContextMenu(hiddenStalePlan.planId);
+    await setReadyToPullHidden(true);
+    try {
+      await Promise.all([
+        page.waitForLoadState('domcontentloaded'),
+        page.locator('.kanban-context-menu button[data-column-key="ready_to_pull"]').click()
+      ]);
+      await page.waitForFunction(planId => !document.querySelector(`[data-plan-id="${CSS.escape(String(planId))}"]`), hiddenStalePlan.planId);
+      await page.waitForSelector('#organizer-error:not([hidden])');
+      assert.match(await page.locator('#organizer-error').innerText(), /changed elsewhere|server truth/i);
+      const hiddenStaleDetail = await context.get(`/api/plans/${hiddenStalePlan.planId}`);
+      assert.equal(hiddenStaleDetail.ok(), true);
+      assert.equal(((await hiddenStaleDetail.json()).data as { plan: { boardColumnKey: string } }).plan.boardColumnKey, 'ready_to_pull');
+    } finally {
+      await setReadyToPullHidden(false);
+    }
+
+    const archivedStalePlan = await registerTinyPlan('kanban-menu-archived-stale');
+    await openKanbanContextMenu(archivedStalePlan.planId);
+    assert.equal((await context.post(`/api/plans/${archivedStalePlan.planId}/archive`)).ok(), true);
+    await Promise.all([
+      page.waitForLoadState('domcontentloaded'),
+      page.locator('.kanban-context-menu button[data-column-key="in_progress"]').click()
+    ]);
+    await page.waitForFunction(planId => !document.querySelector(`[data-plan-id="${CSS.escape(String(planId))}"]`), archivedStalePlan.planId);
+    await page.waitForSelector('#organizer-error:not([hidden])');
+    assert.match(await page.locator('#organizer-error').innerText(), /changed elsewhere|server truth/i);
+    const archivedStaleDetail = await context.get(`/api/plans/${archivedStalePlan.planId}`);
+    assert.equal(archivedStaleDetail.ok(), true);
+    assert.equal(Boolean(((await archivedStaleDetail.json()).data as { plan: { archivedAt?: string } }).plan.archivedAt), true);
+
+    const deferCancelPlan = await registerTinyPlan('kanban-menu-defer-cancel');
+    await openKanbanContextMenu(deferCancelPlan.planId);
+    let deferCancelRequests = 0;
+    await page.route(`**/api/plans/${deferCancelPlan.planId}/defer`, async route => {
+      deferCancelRequests += 1;
+      await route.continue();
+    });
+    page.once('dialog', async dialog => {
+      assert.match(dialog.message(), /defer/i);
+      await dialog.dismiss();
+    });
+    await page.locator('.kanban-context-menu button[data-action="defer"]').click();
+    await page.waitForTimeout(100);
+    assert.equal(deferCancelRequests, 0);
+    await page.waitForSelector(`[data-plan-id="${deferCancelPlan.planId}"]`);
+    await page.unroute(`**/api/plans/${deferCancelPlan.planId}/defer`);
+
+    const deferFailurePlan = await registerTinyPlan('kanban-menu-defer-failure');
+    await openKanbanContextMenu(deferFailurePlan.planId);
+    await page.route(`**/api/plans/${deferFailurePlan.planId}/defer`, async route => {
+      await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ ok: false, error: { code: 'unavailable', message: 'forced menu defer failure' } }) });
+    }, { times: 1 });
+    page.once('dialog', async dialog => {
+      assert.match(dialog.message(), /defer/i);
+      await dialog.accept('Pause from Kanban menu');
+    });
+    await page.locator('.kanban-context-menu button[data-action="defer"]').click();
+    await page.waitForSelector('#organizer-error:not([hidden])');
+    assert.match(await page.locator('#organizer-error').innerText(), /Defer failed|remains on the board|try again/);
+    await page.waitForSelector(`[data-plan-id="${deferFailurePlan.planId}"]`);
+    await page.unroute(`**/api/plans/${deferFailurePlan.planId}/defer`);
+
+    const deferPlan = await registerTinyPlan('kanban-menu-defer');
+    await openKanbanContextMenu(deferPlan.planId);
+    page.once('dialog', async dialog => {
+      assert.match(dialog.message(), /defer/i);
+      await dialog.accept('Pause from Kanban menu');
+    });
+    await page.locator('.kanban-context-menu button[data-action="defer"]').click();
+    await page.waitForFunction(planId => !document.querySelector(`[data-plan-id="${CSS.escape(String(planId))}"]`), deferPlan.planId);
+    const deferDetail = await context.get(`/api/plans/${deferPlan.planId}`);
+    assert.equal(deferDetail.ok(), true);
+    assert.equal(((await deferDetail.json()).data as { plan: { lifecycleState: string } }).plan.lifecycleState, 'deferred');
+
+    const archiveFailurePlan = await registerTinyPlan('kanban-menu-archive-failure');
+    await openKanbanContextMenu(archiveFailurePlan.planId);
+    await page.route(`**/api/plans/${archiveFailurePlan.planId}/archive`, async route => {
+      await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ ok: false, error: { code: 'unavailable', message: 'forced menu archive failure' } }) });
+    }, { times: 1 });
+    await page.locator('.kanban-context-menu button[data-action="archive"]').click();
+    await page.waitForSelector('#organizer-error:not([hidden])');
+    assert.match(await page.locator('#organizer-error').innerText(), /Archive failed|remains on the board|try again/);
+    await page.waitForSelector(`[data-plan-id="${archiveFailurePlan.planId}"]`);
+    await page.unroute(`**/api/plans/${archiveFailurePlan.planId}/archive`);
+
+    const archivePlan = await registerTinyPlan('kanban-menu-archive');
+    await openKanbanContextMenu(archivePlan.planId);
+    await page.locator('.kanban-context-menu button[data-action="archive"]').click();
+    await page.waitForSelector('.archive-toast:not(.error)');
+    assert.match(await page.locator('.archive-toast').innerText(), /Archived kanban-menu-archive|Undo/);
+    await page.waitForFunction(planId => !document.querySelector(`[data-plan-id="${CSS.escape(String(planId))}"]`), archivePlan.planId);
+    await page.click('.archive-toast button');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForSelector(`[data-plan-id="${archivePlan.planId}"]`);
+
+    const archiveDismissPlan = await registerTinyPlan('kanban-menu-archive-dismiss');
+    await openKanbanContextMenu(archiveDismissPlan.planId);
+    await page.locator('.kanban-context-menu button[data-action="archive"]').click();
+    await page.waitForSelector('.archive-toast:not(.error)');
+    await page.locator('.kanban-board').click({ position: { x: 4, y: 4 } });
+    await page.waitForSelector('.archive-toast', { state: 'detached' });
+
+    await page.setViewportSize({ width: 760, height: 520 });
+    await page.goto(`${baseUrl}/`);
+    await page.evaluate(planId => {
+      document.querySelector(`[data-plan-id="${CSS.escape(String(planId))}"]`)?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5000, clientY: 5000 }));
+    }, moveMenuPlan.planId);
+    await page.waitForSelector('.kanban-context-menu:not([hidden])');
+    const menuBox = await page.locator('.kanban-context-menu').boundingBox();
+    assert.ok(menuBox);
+    assert.equal(menuBox.x + menuBox.width <= 760, true);
+    assert.equal(menuBox.y + menuBox.height <= 520, true);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    for (const plan of [moveMenuPlan, failurePlan, rapidPlan, stalePlan, hiddenStalePlan, deferCancelPlan, deferFailurePlan, archiveFailurePlan, archivePlan]) {
+      assert.equal((await context.post(`/api/plans/${plan.planId}/archive`)).ok(), true);
+    }
+    assert.equal((await context.post(`/api/plans/${deferPlan.planId}/resume`, { data: { note: 'Clean up Kanban context menu e2e plan.' } })).ok(), true);
+    assert.equal((await context.post(`/api/plans/${deferPlan.planId}/archive`)).ok(), true);
+
     await page.goto(`${baseUrl}/?view=all`);
     await page.waitForSelector('[data-attention-filter]');
     assert.equal(await page.locator('.plan-card').count(), 2);
@@ -594,7 +830,7 @@ try {
     await page.selectOption('#current-plan-status-control', 'ready_to_pull');
     await page.waitForFunction(() => document.querySelector<HTMLSelectElement>('#current-plan-status-control')?.value === 'in_progress');
     await page.waitForSelector('#current-plan-status-error:not([hidden])');
-    assert.match(await page.locator('#current-plan-status-error').innerText(), /Status was not changed|retry/i);
+    assert.match(await page.locator('#current-plan-status-error').innerText(), /forced status failure/);
     await page.waitForFunction(() => {
       const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame');
       if (!iframe?.contentDocument) return false;

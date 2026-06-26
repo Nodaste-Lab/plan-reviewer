@@ -1937,6 +1937,9 @@ export class PlanReviewStore {
       if (plan.reviewMode !== 'planning') {
         throw new PlanReviewError('not_applicable', 'Collaboration documents cannot be moved to board columns', 400, { planId: plan.id, reviewMode: plan.reviewMode }, 'Use All documents with Filter by type set to Collaborative; board columns apply only to planning documents.');
       }
+      if (plan.lifecycleState !== 'active') {
+        throw new PlanReviewError('invalid_state', 'Only active plans can be moved to board columns', 409, { planId: plan.id, lifecycleState: plan.lifecycleState }, plan.lifecycleState === 'deferred' ? 'Resume the plan before changing its board column.' : 'Restore the archived plan before changing its board column.');
+      }
       const column = this.requireBoardColumn(boardColumnKey);
       const changed = plan.boardColumnKey !== column.key;
       if (changed) this.db.prepare('UPDATE plans SET board_column_key = ?, updated_at = ? WHERE id = ?').run(column.key, nowIso(), plan.id);

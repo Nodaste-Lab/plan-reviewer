@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kanban Card Context Menu Plan</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07111f;
+      --panel: #0f172a;
+      --panel-2: #111827;
+      --panel-3: #0b1220;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #38bdf8;
+      --good: #22c55e;
+      --warn: #f59e0b;
+      --danger: #fb7185;
+      --border: #334155;
+      --code: #020617;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top left, rgba(56,189,248,.13), transparent 36rem), var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.55;
+    }
+    .page { width: min(1500px, calc(100vw - 40px)); margin: 0 auto; padding: 32px 0 72px; }
+    nav.toc { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; width: 100%; max-height: 30vh; overflow: auto; border: 1px solid var(--border); border-radius: 16px; background: rgba(15,23,42,.94); padding: 12px; margin: 14px 0 18px; box-shadow: 0 12px 36px rgba(2,6,23,.34); }
+    nav.toc h2 { font-size: .78rem; text-transform: uppercase; letter-spacing: .12em; color: var(--accent); margin: 0 8px 0 0; white-space: nowrap; }
+    nav.toc a { display: inline-flex; color: #cbd5e1; text-decoration: none; padding: 7px 9px; border-radius: 999px; font-weight: 750; font-size: .9rem; white-space: nowrap; }
+    nav.toc a:hover { background: rgba(56,189,248,.12); color: #e0f2fe; }
+    main { min-width: 0; width: 100%; }
+    section, article { border: 1px solid var(--border); border-radius: 16px; background: rgba(15,23,42,.84); padding: 22px; margin: 18px 0; }
+    .hero { border-color: rgba(56,189,248,.45); background: linear-gradient(135deg, rgba(14,165,233,.16), rgba(15,23,42,.9)); }
+    h1, h2, h3, h4 { line-height: 1.18; margin: 0 0 12px; }
+    h1 { font-size: clamp(2rem, 4vw, 3.25rem); }
+    h2 { font-size: 1.45rem; color: #f8fafc; }
+    h3 { font-size: 1.05rem; color: #bae6fd; }
+    p { margin: 0 0 12px; }
+    a { color: #7dd3fc; }
+    code, pre { background: var(--code); color: #dbeafe; border-radius: 6px; }
+    code { padding: .12rem .28rem; }
+    pre { padding: 14px; overflow: auto; border: 1px solid #1e293b; }
+    ul, ol { margin-top: 8px; padding-left: 22px; }
+    li { margin: 6px 0; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+    th, td { border: 1px solid var(--border); padding: 10px; text-align: left; vertical-align: top; }
+    th { background: var(--panel-3); color: #f8fafc; }
+    .eyebrow { text-transform: uppercase; letter-spacing: .1em; color: var(--accent); font-weight: 850; font-size: .78rem; }
+    .status { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0 0; }
+    .pill { display: inline-flex; align-items: center; border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; background: var(--panel-3); color: #cbd5e1; font-size: .86rem; font-weight: 850; }
+    .pill.review { border-color: var(--warn); color: #fde68a; }
+    .pill.ready { border-color: var(--good); color: #bbf7d0; }
+    .pill.blocked { border-color: var(--danger); color: #fecdd3; }
+    .muted { color: var(--muted); }
+    .callout { border-left: 4px solid var(--accent); padding: 12px 14px; background: rgba(56,189,248,.08); border-radius: 10px; }
+    .progress-list { list-style: none; padding: 0; }
+    .progress-list li { display: flex; gap: 10px; align-items: flex-start; }
+    .progress-list input { margin-top: 4px; }
+    .phase { border-color: rgba(56,189,248,.32); }
+    .phase h3 { color: #f8fafc; }
+    .matrix td:first-child, .matrix th:first-child { width: 18%; }
+    .mock-wide { width: min(1280px, calc(100vw - 44px)); margin-left: 50%; transform: translateX(-50%); }
+    .mock-flow { display: grid; gap: 18px; }
+    .mock-browser { border: 1px solid #2b364d; border-radius: 18px; overflow: hidden; background: #0b1020; box-shadow: 0 24px 80px rgba(2,6,23,.55); margin: 0; }
+    .mock-browserbar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #020617; border-bottom: 1px solid #1e293b; color: #94a3b8; font-size: .82rem; }
+    .mock-dot { width: 10px; height: 10px; border-radius: 50%; background: #475569; }
+    .mock-dot.red { background: #ef4444; } .mock-dot.yellow { background: #f59e0b; } .mock-dot.green { background: #22c55e; }
+    .mock-url { margin-left: 8px; border: 1px solid #1f2937; border-radius: 999px; background: #0f172a; padding: 4px 10px; flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .mock-page { min-height: 530px; padding: 22px; background: #0b1020; position: relative; }
+    .mock-page.menu-expanded { min-height: 720px; padding-bottom: 170px; }
+    .mock-topbar, .mock-header, .mock-actions, .mock-card-title { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; }
+    .mock-topbar { margin-bottom: 18px; align-items: center; }
+    .mock-switcher { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid #334155; border-radius: 999px; background: #08111f; }
+    .mock-seg { border-radius: 999px; padding: 5px 10px; color: #a7b0c0; font-size: 12px; font-weight: 850; }
+    .mock-seg.active { background: #0ea5e9; color: #e0f2fe; }
+    .mock-btn { border: 1px solid #475569; border-radius: 7px; background: #1e293b; color: #e5e7eb; padding: 8px 10px; font-weight: 850; font-size: .84rem; }
+    .mock-btn.primary { border-color: #38bdf8; color: #bae6fd; }
+    .mock-heading { margin-bottom: 18px; }
+    .mock-board { display: grid; grid-template-columns: repeat(4, minmax(230px, 1fr)); gap: 16px; align-items: start; }
+    .mock-column { background: #0b1220; border: 1px solid #334155; border-radius: 12px; padding: 12px; min-height: 340px; }
+    .mock-column h4 { font-size: 16px; margin: 0 0 8px; display: flex; justify-content: space-between; color: #f8fafc; }
+    .mock-card { border: 1px solid #253248; border-radius: 10px; background: #111827; padding: 12px; margin: 8px 0; position: relative; }
+    .mock-card.active { outline: 2px solid #7dd3fc; outline-offset: 2px; }
+    .mock-card.moving { opacity: .38; border-style: dashed; }
+    .mock-card h5 { margin: 0 0 8px; color: #f8fafc; font-size: .96rem; }
+    .mock-summary { color: #cbd5e1; font-size: .84rem; margin-bottom: 10px; }
+    .mock-meta { display: flex; flex-wrap: wrap; gap: 5px; }
+    .mock-badge { display: inline-block; border: 1px solid #475569; border-radius: 999px; padding: 1px 7px; background: #0b1220; color: #cbd5e1; font-size: 12px; }
+    .mock-badge.ready { border-color: #22c55e; color: #bbf7d0; }
+    .mock-badge.not-ready { border-color: #f59e0b; color: #fde68a; }
+    .context-menu { position: absolute; width: 250px; border: 1px solid #475569; border-radius: 12px; background: rgba(15,23,42,.98); box-shadow: 0 22px 54px rgba(2,6,23,.62); padding: 6px; z-index: 4; }
+    .context-menu strong { display: block; padding: 8px 10px 6px; color: #f8fafc; font-size: .82rem; letter-spacing: .03em; text-transform: uppercase; }
+    .menu-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 9px 10px; border-radius: 8px; color: #e5e7eb; font-weight: 800; font-size: .9rem; }
+    .menu-item:hover, .menu-item.focus { background: rgba(56,189,248,.14); color: #e0f2fe; }
+    .menu-item.current { color: #bbf7d0; }
+    .menu-item.danger { color: #fecdd3; }
+    .menu-separator { height: 1px; background: #334155; margin: 5px 4px; }
+    .mock-toast { position: absolute; top: 18px; right: 20px; width: min(520px, calc(100% - 40px)); display: flex; align-items: center; justify-content: space-between; gap: 14px; border: 1px solid #38bdf8; border-radius: 14px; background: rgba(15,23,42,.97); color: #e5e7eb; padding: 12px 14px; box-shadow: 0 18px 50px rgba(2,6,23,.64); z-index: 5; }
+    .mock-toast strong { color: #f8fafc; }
+    .mock-toast p { margin: 2px 0 0; color: #a7b0c0; font-size: .88rem; }
+    .mock-toast button { border: 2px solid #86efac; border-radius: 10px; background: linear-gradient(180deg,#22c55e,#15803d); color: #052e16; padding: 10px 18px; font-weight: 950; font-size: .95rem; box-shadow: 0 0 0 3px rgba(34,197,94,.18), 0 10px 24px rgba(21,128,61,.38); }
+    .mock-error { border: 1px solid #fb7185; border-radius: 8px; background: rgba(251,113,133,.12); color: #fecdd3; padding: 10px; margin: 12px 0; }
+    @media (max-width: 920px) { .page { width: min(100vw - 24px, 1500px); padding-top: 18px; } nav.toc { position: static; max-height: none; } .mock-board { grid-template-columns: 1fr; } .context-menu { position: static; width: 100%; margin: 10px 0; } }
+  </style>
+</head>
+<body>
+<div class="page">
+  <section class="hero" id="title">
+    <p class="eyebrow">Plan-reviewer HTML implementation plan</p>
+    <h1>Kanban Card Right-click Status and Archive Menu</h1>
+    <p id="solution-narrative">Add a custom context menu to Kanban board cards so a reviewer can right-click a card, move it directly to another visible board column, defer it with a note, or archive it without opening the plan detail page. The menu uses existing column and lifecycle APIs, preserves drag-and-drop, offers keyboard parity, and keeps failure recovery inline with the board.</p>
+    <div class="status" id="status">
+      <span class="pill ready">Status: execution-ready</span>
+      <span class="pill">Linear issue: none supplied</span>
+      <span class="pill">Plan path: <code>thoughts/plans/kanban-card-context-menu.html</code></span>
+    </div>
+  </section>
+
+  <nav class="toc" aria-label="Plan sections">
+    <h2>Sections</h2>
+    <a href="#title">Title</a>
+    <a href="#status">Status</a>
+    <a href="#goal">Goal</a>
+    <a href="#decision-attention">Decision attention</a>
+    <a href="#solution-narrative">Solution narrative</a>
+    <a href="#authority-inputs">Authority & inputs</a>
+    <a href="#current-reality">Current reality</a>
+    <a href="#ui-impact">UI impact</a>
+    <a href="#ui-mocks">UI mocks</a>
+    <a href="#progress">Progress</a>
+    <a href="#resume-instructions">Resume</a>
+    <a href="#product-intent">Product intent</a>
+    <a href="#locked-decisions">Locked decisions</a>
+    <a href="#acceptance-criteria">Acceptance criteria</a>
+    <a href="#bdd-scenarios">BDD scenarios</a>
+    <a href="#test-matrix">Test matrix</a>
+    <a href="#phases">Phases</a>
+    <a href="#verification">Verification</a>
+    <a href="#delivery-order">Delivery order</a>
+    <a href="#non-goals">Non-goals</a>
+    <a href="#decisions-log">Decisions log</a>
+  </nav>
+
+  <main>
+    <section id="goal">
+      <h2>Goal</h2>
+      <p>Let users manage Kanban planning cards in place: right-click a card to choose another board column, defer the card with a required note, or archive the card immediately from the board, with clear success/failure state and no trip through the detail shell.</p>
+    </section>
+
+    <section id="decision-attention">
+      <h2>Decision Attention / Low-confidence Areas</h2>
+      <ul>
+        <li><strong>No product decision required:</strong> the requested behavior maps cleanly to existing visible board columns and archive/unarchive/defer APIs. Defer from the menu must collect the same required note as the detail-shell Defer action.</li>
+        <li><strong>Execution-readiness gates cleared:</strong> browser feedback is integrated, PM/product-intent review is ready, and independent GPT/GLM plan reviews returned execution-ready verdicts on 2026-06-25.</li>
+        <li><strong>Scope guard:</strong> hidden columns are not shown in the Kanban context menu because the Kanban board intentionally omits hidden columns and their plans. Hidden-column movement remains available in the detail status selector.</li>
+      </ul>
+    </section>
+
+    <section id="why-this-exists">
+      <h2>Why this plan exists</h2>
+      <p>The Kanban board already supports status movement through drag-and-drop, but drag can be imprecise for wide boards or trackpad use. The board also lacks direct defer and archive actions, forcing users to open a detail page or switch views. A right-click menu makes common card lifecycle actions discoverable to power users while preserving the existing drag and detail workflows.</p>
+    </section>
+
+    <section id="authority-inputs">
+      <h2>Authority and inputs</h2>
+      <ul>
+        <li>User request: create a right-click menu for Kanban cards to change status by choosing a column or archive a card from the board.</li>
+        <li>Browser reviewer feedback on 2026-06-25: the mock should show the full menu, including Archive and Defer options.</li>
+        <li>Browser reviewer feedback on 2026-06-25: the plan format should use a full-width layout with a horizontal ToC below the top panel, and the shared plan skills should adopt that format going forward.</li>
+        <li><code>AGENTS.md</code> and <code>thoughts/plans/AGENTS.md</code>: non-trivial repo work needs a semantic HTML plan under <code>thoughts/plans/</code>, with UI mocks for UI-impacting work.</li>
+        <li><code>thoughts/specs/product_intent.md</code>: simplest browser workflows should work without tribal knowledge, status should be truthful, and recoverable failures need clear next actions.</li>
+        <li>Code inspection: <code>src/server/app.ts</code> owns the Kanban markup/styles/scripts, current board movement, archive toast behavior, and API routes.</li>
+        <li>Code inspection: <code>src/storage/database.ts</code> already persists board columns, validates column moves, archives plans, and restores archived plans.</li>
+        <li>Test inspection: <code>src/__tests__/contracts.test.ts</code> and <code>src/test-fixtures/e2e-run.ts</code> already cover board rendering, column movement, disabled-Kanban behavior, archive/unarchive, and browser shell status controls.</li>
+      </ul>
+    </section>
+
+    <section id="current-reality">
+      <h2>Current implementation reality</h2>
+      <table>
+        <thead><tr><th>Surface</th><th>Current behavior</th><th>Plan implication</th></tr></thead>
+        <tbody>
+          <tr><td>Kanban card markup</td><td><code>kanbanCardHtml</code> renders planning cards with <code>draggable="true"</code>, <code>data-plan-id</code>, and <code>data-column</code>.</td><td>Add context-menu affordances and accessible focus metadata without changing card identity or detail links.</td></tr>
+          <tr><td>Kanban columns</td><td><code>kanbanIndexHtml</code> receives visible <code>BoardColumnRecord[]</code>, groups active planning cards, and omits hidden columns.</td><td>Use the same visible column list for menu status choices so selecting a hidden destination never surprises users by making the card disappear.</td></tr>
+          <tr><td>Drag-and-drop move</td><td><code>organizationScript</code> handles <code>dragstart</code>, <code>dragover</code>, and <code>drop</code>, then calls <code>PUT /api/plans/:planId/column</code>.</td><td>Refactor only as needed to share the move helper between drop and menu selection, preserving rollback on failure.</td></tr>
+          <tr><td>Defer API</td><td><code>POST /api/plans/:planId/defer</code> already defers a plan, requires a non-empty note, and emits deferred lifecycle metadata.</td><td>The menu can reuse the detail-shell prompt language to collect a note, call the existing endpoint, and remove the card from the active board after success.</td></tr>
+          <tr><td>Archive API</td><td><code>POST /api/plans/:planId/archive</code> already archives a plan and emits <code>plan.archived</code>.</td><td>The menu can call the existing endpoint and remove the card from the active board after success.</td></tr>
+          <tr><td>Archive recovery UI</td><td>All-documents and deferred indexes already show a top-right archive undo toast.</td><td>Reuse the same visual and behavioral pattern on the Kanban board instead of introducing a new snackbar style.</td></tr>
+          <tr><td>Disabled Kanban</td><td>When Kanban is disabled, the root route defaults to all documents and movement is blocked at <code>PUT /column</code>.</td><td>No context menu is exposed because the Kanban page is unavailable; API fail-closed behavior remains unchanged.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="ui-impact">
+      <h2>UI impact triage</h2>
+      <p><strong>UI impact: yes.</strong> This changes the Kanban board interaction model, adds a custom context menu, adds board-level defer and archive actions, and updates card movement feedback. The mocks below use the current dark plan-reviewer style: slate panels, blue focus/accent borders, pill badges, raised green Undo button, and top-right organizer error/toast placement.</p>
+    </section>
+
+    <section id="ui-mocks" class="mock-wide">
+      <h2>Full-width UI mocks</h2>
+      <p class="muted">The menu is anchored at the pointer for mouse users and at the focused card for keyboard users. It closes on Escape, outside click, scroll, successful action, or card drag start. It never covers the entire board and does not replace the existing detail link or drag-and-drop behavior. The full menu includes status choices, Defer plan, and Archive plan.</p>
+
+      <div class="mock-flow">
+        <figure class="mock-browser" id="mock-board-default">
+          <div class="mock-browserbar"><span class="mock-dot red"></span><span class="mock-dot yellow"></span><span class="mock-dot green"></span><span class="mock-url">http://mbp.braid-python.ts.net:4317/</span></div>
+          <div class="mock-page">
+            <div class="mock-topbar"><div class="mock-switcher"><span class="mock-seg active">Kanban</span><span class="mock-seg">All documents</span></div><span class="mock-btn primary">⚙</span></div>
+            <div class="mock-heading"><h3>Plans · Kanban</h3><p class="muted">Columns are workflow status for planning documents. Execution readiness is a separate badge.</p></div>
+            <div class="mock-board" aria-label="Plan board columns mock">
+              <div class="mock-column"><h4>Backlog <span>2</span></h4><article class="mock-card active"><h5>plan-reviewer / kanban-card-context-menu</h5><p class="mock-summary">Add a right-click menu for status changes and archive.</p><div class="mock-meta"><span class="mock-badge">Status: Backlog</span><span class="mock-badge not-ready">Execution not ready</span><span class="mock-badge">Pending: 0</span></div></article><article class="mock-card"><h5>plan-reviewer / source-sync-guard</h5><p class="mock-summary">Guard partial source writes.</p></article></div>
+              <div class="mock-column"><h4>Ready to Pull <span>1</span></h4><article class="mock-card"><h5>plan-reviewer / visible-comment-status</h5><p class="mock-summary">Show comment queue status.</p></article></div>
+              <div class="mock-column"><h4>In Progress <span>1</span></h4><article class="mock-card"><h5>plan-reviewer / agent-listener-harness</h5><p class="mock-summary">Harness smoke test coverage.</p></article></div>
+              <div class="mock-column"><h4>Done <span>0</span></h4><p class="muted">No plans.</p></div>
+            </div>
+            <figcaption class="muted">Default board: no extra persistent buttons are added to each card. Existing cards remain draggable and their titles still link to details.</figcaption>
+          </div>
+        </figure>
+
+        <figure class="mock-browser" id="mock-right-click-menu">
+          <div class="mock-browserbar"><span class="mock-dot red"></span><span class="mock-dot yellow"></span><span class="mock-dot green"></span><span class="mock-url">http://mbp.braid-python.ts.net:4317/</span></div>
+          <div class="mock-page menu-expanded">
+            <div class="mock-topbar"><div class="mock-switcher"><span class="mock-seg active">Kanban</span><span class="mock-seg">All documents</span></div><span class="mock-btn primary">⚙</span></div>
+            <div class="mock-heading"><h3>Plans · Kanban</h3><p class="muted">Right-click on a card opens workflow actions.</p></div>
+            <div class="mock-board" aria-label="Plan board columns mock with context menu">
+              <div class="mock-column"><h4>Backlog <span>2</span></h4><article class="mock-card active"><h5>plan-reviewer / kanban-card-context-menu</h5><p class="mock-summary">Add a right-click menu for status changes and archive.</p><div class="mock-meta"><span class="mock-badge">Status: Backlog</span><span class="mock-badge not-ready">Execution not ready</span></div><div class="context-menu" style="left: 205px; top: 168px;" role="menu" aria-label="Card actions for kanban-card-context-menu"><strong>Move to status</strong><div class="menu-item current" role="menuitemradio" aria-checked="true">Backlog <span>✓</span></div><div class="menu-item focus" role="menuitemradio">Ready to Pull</div><div class="menu-item" role="menuitemradio">In Progress</div><div class="menu-item" role="menuitemradio">Done</div><div class="menu-separator"></div><div class="menu-item" role="menuitem">Defer plan <span>⏸</span></div><div class="menu-item danger" role="menuitem">Archive plan <span>🗄</span></div></div></article><article class="mock-card"><h5>plan-reviewer / source-sync-guard</h5><p class="mock-summary">Guard partial source writes.</p></article></div>
+              <div class="mock-column"><h4>Ready to Pull <span>1</span></h4><article class="mock-card"><h5>plan-reviewer / visible-comment-status</h5><p class="mock-summary">Show comment queue status.</p></article></div>
+              <div class="mock-column"><h4>In Progress <span>1</span></h4><article class="mock-card"><h5>plan-reviewer / agent-listener-harness</h5><p class="mock-summary">Harness smoke test coverage.</p></article></div>
+              <div class="mock-column"><h4>Done <span>0</span></h4><p class="muted">No plans.</p></div>
+            </div>
+            <figcaption class="muted">Expanded mock canvas keeps the full menu visible, including all visible status choices plus Defer plan and Archive plan. Menu items use visible board-column labels. The current column is checked and selectable as a no-op. Defer opens the existing required-note prompt before calling the defer API. Arrow keys move focus; Enter/Space activates.</figcaption>
+          </div>
+        </figure>
+
+        <figure class="mock-browser" id="mock-status-moved">
+          <div class="mock-browserbar"><span class="mock-dot red"></span><span class="mock-dot yellow"></span><span class="mock-dot green"></span><span class="mock-url">http://mbp.braid-python.ts.net:4317/</span></div>
+          <div class="mock-page">
+            <div class="mock-topbar"><div class="mock-switcher"><span class="mock-seg active">Kanban</span><span class="mock-seg">All documents</span></div><span class="mock-btn primary">⚙</span></div>
+            <div class="mock-heading"><h3>Plans · Kanban</h3><p class="muted">After choosing In Progress, the card moves and counts update without a page reload.</p></div>
+            <div class="mock-board" aria-label="Plan board columns mock after move">
+              <div class="mock-column"><h4>Backlog <span>1</span></h4><article class="mock-card"><h5>plan-reviewer / source-sync-guard</h5><p class="mock-summary">Guard partial source writes.</p></article></div>
+              <div class="mock-column"><h4>Ready to Pull <span>1</span></h4><article class="mock-card"><h5>plan-reviewer / visible-comment-status</h5><p class="mock-summary">Show comment queue status.</p></article></div>
+              <div class="mock-column"><h4>In Progress <span>2</span></h4><article class="mock-card active"><h5>plan-reviewer / kanban-card-context-menu</h5><p class="mock-summary">Add a right-click menu for status changes and archive.</p><div class="mock-meta"><span class="mock-badge">Status: In Progress</span><span class="mock-badge not-ready">Execution not ready</span></div></article><article class="mock-card"><h5>plan-reviewer / agent-listener-harness</h5><p class="mock-summary">Harness smoke test coverage.</p></article></div>
+              <div class="mock-column"><h4>Done <span>0</span></h4><p class="muted">No plans.</p></div>
+            </div>
+            <figcaption class="muted">The same helper should support drop-based and menu-based movement so rollback/error behavior stays consistent.</figcaption>
+          </div>
+        </figure>
+
+        <figure class="mock-browser" id="mock-archive-toast">
+          <div class="mock-browserbar"><span class="mock-dot red"></span><span class="mock-dot yellow"></span><span class="mock-dot green"></span><span class="mock-url">http://mbp.braid-python.ts.net:4317/</span></div>
+          <div class="mock-page">
+            <div class="mock-topbar"><div class="mock-switcher"><span class="mock-seg active">Kanban</span><span class="mock-seg">All documents</span></div><span class="mock-btn primary">⚙</span></div>
+            <div class="mock-heading"><h3>Plans · Kanban</h3><p class="muted">After choosing Archive plan, the card is removed and a recovery toast appears.</p></div>
+            <div class="mock-board" aria-label="Plan board columns mock after archive">
+              <div class="mock-column"><h4>Backlog <span>1</span></h4><article class="mock-card"><h5>plan-reviewer / source-sync-guard</h5><p class="mock-summary">Guard partial source writes.</p></article></div>
+              <div class="mock-column"><h4>Ready to Pull <span>1</span></h4><article class="mock-card"><h5>plan-reviewer / visible-comment-status</h5><p class="mock-summary">Show comment queue status.</p></article></div>
+              <div class="mock-column"><h4>In Progress <span>1</span></h4><article class="mock-card"><h5>plan-reviewer / agent-listener-harness</h5><p class="mock-summary">Harness smoke test coverage.</p></article></div>
+              <div class="mock-column"><h4>Done <span>0</span></h4><p class="muted">No plans.</p></div>
+            </div>
+            <div class="mock-toast" role="status" aria-label="Archived plan undo toast"><div><strong>Archived “kanban-card-context-menu”.</strong><p>Undo is available for 10 seconds. It clears when you keep working.</p></div><button type="button">Undo</button></div>
+            <figcaption class="muted">Archive uses the established top-right undo toast pattern from the all-documents and deferred indexes.</figcaption>
+          </div>
+        </figure>
+
+        <figure class="mock-browser" id="mock-menu-failure">
+          <div class="mock-browserbar"><span class="mock-dot red"></span><span class="mock-dot yellow"></span><span class="mock-dot green"></span><span class="mock-url">http://mbp.braid-python.ts.net:4317/</span></div>
+          <div class="mock-page">
+            <div class="mock-topbar"><div class="mock-switcher"><span class="mock-seg active">Kanban</span><span class="mock-seg">All documents</span></div><span class="mock-btn primary">⚙</span></div>
+            <div class="mock-error" role="status">Column update failed; the card was restored. Check the service and try again.</div>
+            <div class="mock-board" aria-label="Plan board columns mock after failed move">
+              <div class="mock-column"><h4>Backlog <span>2</span></h4><article class="mock-card active"><h5>plan-reviewer / kanban-card-context-menu</h5><p class="mock-summary">The card is restored to its previous column when the API rejects a move.</p><div class="mock-meta"><span class="mock-badge">Status: Backlog</span></div></article><article class="mock-card"><h5>plan-reviewer / source-sync-guard</h5><p class="mock-summary">Guard partial source writes.</p></article></div>
+              <div class="mock-column"><h4>Ready to Pull <span>1</span></h4><article class="mock-card"><h5>plan-reviewer / visible-comment-status</h5><p class="mock-summary">Show comment queue status.</p></article></div>
+              <div class="mock-column"><h4>In Progress <span>1</span></h4><article class="mock-card"><h5>plan-reviewer / agent-listener-harness</h5><p class="mock-summary">Harness smoke test coverage.</p></article></div>
+              <div class="mock-column"><h4>Done <span>0</span></h4><p class="muted">No plans.</p></div>
+            </div>
+            <figcaption class="muted">Failure handling is board-level and actionable; it does not leave a phantom moved or archived card.</figcaption>
+          </div>
+        </figure>
+      </div>
+    </section>
+
+    <section id="progress">
+      <h2>Progress</h2>
+      <ul class="progress-list">
+        <li><input type="checkbox" checked disabled> <span>P1 — Add Kanban context-menu structure and tests.</span></li>
+        <li><input type="checkbox" checked disabled> <span>P2 — Implement status move, defer, and archive actions.</span></li>
+        <li><input type="checkbox" checked disabled> <span>P3 — Verify browser behavior and review results.</span></li>
+      </ul>
+    </section>
+
+    <section id="resume-instructions">
+      <h2>Resume instructions</h2>
+      <p>Implementation is complete for the Kanban card context menu scope. Before handoff, inspect <code>git status --short</code>, confirm the final full test gate result, and preserve scope limited to Kanban card context-menu status changes, defer, archive, rollback, stale-state recovery, and toast parity.</p>
+    </section>
+
+    <section id="product-intent">
+      <h2>Product intent alignment</h2>
+      <p>This plan cites and advances <code>thoughts/specs/product_intent.md</code>.</p>
+      <ul>
+        <li><strong>Golden path:</strong> users can change a planning card’s workflow status, defer it, or archive it directly where they already see the work.</li>
+        <li><strong>Truthful state:</strong> after a status move, the card appears in the selected visible column and counts update; after defer or archive, the card leaves the active board.</li>
+        <li><strong>Safe recovery:</strong> archive uses the existing undo-toast recovery pattern; failed moves and archive failures keep or restore the card and explain the retry path.</li>
+        <li><strong>Fail-closed boundary:</strong> if Kanban is disabled, if a card is not a planning document, or if the service rejects a move/archive, the UI does not fabricate success.</li>
+        <li><strong>Minimal hidden state:</strong> the menu uses the visible server-rendered board columns already present on the Kanban board.</li>
+      </ul>
+    </section>
+
+    <section id="locked-decisions">
+      <h2>Locked decisions</h2>
+      <ul>
+        <li>Use a custom HTML context menu opened by the card <code>contextmenu</code> event, not the browser-native menu, because the browser-native menu cannot call app actions.</li>
+        <li>Expose menu actions only on rendered Kanban cards for planning documents.</li>
+        <li>Include keyboard parity with focusable cards plus <kbd>Shift</kbd>+<kbd>F10</kbd> and the Context Menu key.</li>
+        <li>Show only visible Kanban columns in the menu. Hidden columns remain manageable through configuration and the detail-shell status selector.</li>
+        <li>Reuse <code>PUT /api/plans/:planId/column</code>, <code>POST /api/plans/:planId/defer</code>, <code>POST /api/plans/:planId/archive</code>, and <code>POST /api/plans/:planId/unarchive</code>; no new API is required.</li>
+        <li>Defer from the menu must require a note/reason before calling the API, matching the existing detail-shell Defer behavior.</li>
+        <li>Preserve drag-and-drop as an equivalent movement path.</li>
+      </ul>
+    </section>
+
+    <section id="acceptance-criteria">
+      <h2>Acceptance criteria</h2>
+      <ol>
+        <li id="ac-1"><strong>AC1:</strong> Right-clicking a Kanban card opens a context menu with visible board columns, Defer plan, and Archive plan actions.</li>
+        <li id="ac-2"><strong>AC2:</strong> Choosing a different visible column calls the existing column endpoint, moves the card to that column after success, updates the card status badge and column counts, and closes the menu.</li>
+        <li id="ac-3"><strong>AC3:</strong> Choosing the current column is a safe no-op that closes the menu without creating misleading UI state.</li>
+        <li id="ac-4"><strong>AC4:</strong> If a column update fails, the card remains or returns to its previous column, counts are restored, and the board-level error explains that the move failed and can be retried.</li>
+        <li id="ac-5"><strong>AC5:</strong> Choosing Defer plan prompts for the required note/reason, calls the existing defer endpoint after a non-empty note, removes the card from the active board after success, updates column counts, and does not archive the plan.</li>
+        <li id="ac-5a"><strong>AC5a:</strong> Choosing Archive plan calls the existing archive endpoint, removes the card from the board after success, updates column counts, and shows an Undo toast using the existing archive-toast interaction pattern.</li>
+        <li id="ac-6"><strong>AC6:</strong> If defer or archive fails, the card remains visible and actionable, the menu closes, and the board-level error or toast reports what failed.</li>
+        <li id="ac-7"><strong>AC7:</strong> The menu is accessible: cards can receive focus, keyboard users can open the menu with Shift+F10 or Context Menu, arrow through actions, activate with Enter/Space, and dismiss with Escape or outside click.</li>
+        <li id="ac-8"><strong>AC8:</strong> Existing drag-and-drop movement and detail links continue to work.</li>
+        <li id="ac-9"><strong>AC9:</strong> When Kanban is disabled, no new board context menu is exposed and existing movement API fail-closed behavior remains unchanged.</li>
+        <li id="ac-10"><strong>AC10:</strong> Menu actions are single-flight per card: repeated clicks, Enter key repeats, or a drag start while a menu request is pending do not issue duplicate lifecycle calls or corrupt counts.</li>
+        <li id="ac-11"><strong>AC11:</strong> If the card or destination state becomes stale while the menu is open, the board refreshes from server truth, closes the menu, and reports that the plan changed elsewhere instead of leaving a ghost card.</li>
+        <li id="ac-12"><strong>AC12:</strong> The menu clamps or flips inside the visible board viewport near edges so every action remains visible and reachable without horizontal page scrolling.</li>
+      </ol>
+    </section>
+
+    <section id="bdd-scenarios">
+      <h2>BDD scenarios</h2>
+      <article id="bdd-status-change">
+        <h3>Status change from context menu</h3>
+        <p><strong>Given</strong> the Kanban board is enabled and a planning card is in Backlog, <strong>when</strong> the user right-clicks the card and chooses In Progress, <strong>then</strong> the service receives <code>PUT /api/plans/:planId/column</code> with <code>boardColumnKey: "in_progress"</code>, the card moves to In Progress, and Backlog/In Progress counts update.</p>
+      </article>
+      <article id="bdd-current-column-noop">
+        <h3>Current column no-op</h3>
+        <p><strong>Given</strong> the menu is open for a Backlog card, <strong>when</strong> the user chooses Backlog, <strong>then</strong> the menu closes and the board does not show an error, duplicate the card, or change counts.</p>
+      </article>
+      <article id="bdd-move-failure">
+        <h3>Move failure rollback</h3>
+        <p><strong>Given</strong> the menu opens for a Backlog card, <strong>when</strong> choosing In Progress receives a non-OK response, <strong>then</strong> the card is still in Backlog, counts are unchanged, and the board shows an actionable failure message.</p>
+      </article>
+      <article id="bdd-defer-success">
+        <h3>Defer success with required note</h3>
+        <p><strong>Given</strong> the menu opens for a Kanban card, <strong>when</strong> the user chooses Defer plan, enters a non-empty reason, and the defer endpoint succeeds, <strong>then</strong> the card is removed from the active board, the column count decreases, and the plan appears in Deferred Plans with the note.</p>
+      </article>
+      <article id="bdd-defer-cancel">
+        <h3>Defer cancellation</h3>
+        <p><strong>Given</strong> the menu opens for a Kanban card, <strong>when</strong> the user chooses Defer plan but cancels or submits an empty note, <strong>then</strong> no API call is made and the card remains on the board.</p>
+      </article>
+      <article id="bdd-archive-success">
+        <h3>Archive success with undo</h3>
+        <p><strong>Given</strong> the menu opens for a Kanban card, <strong>when</strong> the user chooses Archive plan and the archive endpoint succeeds, <strong>then</strong> the card is removed from the active board, the column count decreases, and the archive undo toast appears.</p>
+      </article>
+      <article id="bdd-defer-failure">
+        <h3>Defer failure</h3>
+        <p><strong>Given</strong> the menu opens for a Kanban card, <strong>when</strong> Defer plan receives a non-OK response after a valid note, <strong>then</strong> the card remains visible, the menu closes, and the user sees a defer failure message with retry guidance.</p>
+      </article>
+      <article id="bdd-archive-failure">
+        <h3>Archive failure</h3>
+        <p><strong>Given</strong> the menu opens for a Kanban card, <strong>when</strong> Archive plan receives a non-OK response, <strong>then</strong> the card remains visible, the menu closes, and the user sees an archive failure message with retry guidance.</p>
+      </article>
+      <article id="bdd-keyboard-menu">
+        <h3>Keyboard parity</h3>
+        <p><strong>Given</strong> keyboard focus is on a Kanban card, <strong>when</strong> the user presses Shift+F10, moves with ArrowDown, and presses Enter, <strong>then</strong> the focused menu item activates the same action as a pointer click.</p>
+      </article>
+      <article id="bdd-drag-preserved">
+        <h3>Drag remains supported</h3>
+        <p><strong>Given</strong> the new context menu code is present, <strong>when</strong> the user drags a card to another column, <strong>then</strong> the existing drag/drop move succeeds and no context menu opens during the drag.</p>
+      </article>
+      <article id="bdd-hidden-columns-excluded">
+        <h3>Hidden columns are excluded</h3>
+        <p><strong>Given</strong> a board column is hidden in Kanban configuration, <strong>when</strong> the context menu opens for any visible card, <strong>then</strong> the hidden column label is absent from the menu and selecting a hidden destination is not possible from the board.</p>
+      </article>
+      <article id="bdd-kanban-disabled">
+        <h3>Kanban disabled fail-closed</h3>
+        <p><strong>Given</strong> Kanban is disabled, <strong>when</strong> a user right-clicks any plan row or card-like surface, <strong>then</strong> no Kanban card menu appears and no lifecycle endpoint is called from the board menu code.</p>
+      </article>
+      <article id="bdd-rapid-activation-single-flight">
+        <h3>Rapid activation is single-flight</h3>
+        <p><strong>Given</strong> the context menu is open and a lifecycle action has just been activated, <strong>when</strong> the user double-clicks, presses Enter repeatedly, or starts a drag before the request settles, <strong>then</strong> only one API request is sent, the card cannot be moved twice, and column counts stay consistent.</p>
+      </article>
+      <article id="bdd-stale-card-recovery">
+        <h3>Stale card recovery</h3>
+        <p><strong>Given</strong> the menu is open for a card that is archived, deferred, deleted, or moved by another browser session before selection, <strong>when</strong> the chosen endpoint returns not found, conflict, or stale state, <strong>then</strong> the menu closes, the board refreshes from server truth, and a message explains that the plan changed elsewhere.</p>
+      </article>
+      <article id="bdd-viewport-edge-placement">
+        <h3>Viewport edge placement</h3>
+        <p><strong>Given</strong> a card sits near the right or bottom edge of a wide board, <strong>when</strong> the menu opens, <strong>then</strong> the menu clamps or flips into the visible board area so status options, Defer plan, and Archive plan remain visible and keyboard-reachable.</p>
+      </article>
+    </section>
+
+    <section id="test-matrix">
+      <h2>Test coverage matrix</h2>
+      <table class="matrix">
+        <thead><tr><th>Coverage</th><th>Acceptance / BDD</th><th>Planned tests</th><th>Verify</th></tr></thead>
+        <tbody>
+          <tr><td>Contract HTML</td><td>AC1, AC7, AC9, AC12</td><td><code>src/__tests__/contracts.test.ts</code>: Kanban page includes context-menu data, visible column labels, Defer/Archive lifecycle actions, ARIA roles/attributes, no menu when Kanban is disabled, and placement data/classes needed for viewport clamping.</td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></td></tr>
+          <tr><td>API reuse</td><td>AC2, AC4, AC5, AC5a, AC6, AC10, AC11</td><td>Existing organization API assertions remain; add assertions only if HTML contracts require embedded endpoint/action attributes. Client tests must mock duplicate activation and stale/conflict responses without requiring new endpoints.</td><td><code>bun run test</code></td></tr>
+          <tr><td>Browser menu</td><td>All BDD scenarios</td><td><code>src/test-fixtures/e2e-run.ts</code>: right-click menu, keyboard menu, successful move, failed move rollback, defer success/cancel/failure, archive success with undo, archive failure, hidden-column exclusion, Kanban-disabled fail-closed behavior, duplicate activation single-flight, stale-card recovery, viewport-edge placement, and drag/drop regression.</td><td><code>bun run test:e2e</code></td></tr>
+          <tr><td>Visual/UX inspection</td><td>AC1, AC7</td><td>Manual or Playwright screenshot inspection confirms menu placement, top-right archive toast, and board-level error do not cover key card content unnecessarily.</td><td>Review e2e screenshots or run local server and inspect <code>/</code>.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="phases">
+      <h2>Phase-by-phase execution plan</h2>
+
+      <article class="phase" id="phase-p1-context-menu-structure">
+        <h3>P1 — Add Kanban context-menu structure and tests</h3>
+        <h4>End State</h4>
+        <p>The Kanban page renders enough semantic card and column metadata for a single reusable context menu, and contract/e2e tests fail until menu rendering and keyboard opening behavior exists.</p>
+        <h4>Tests first</h4>
+        <ul>
+          <li>Add contract assertions for focusable/actionable Kanban cards, visible column metadata, context-menu CSS/markup, and ARIA labels.</li>
+          <li>Add e2e expectations that right-click and Shift+F10 open a menu with the current visible board-column labels, Defer plan, and Archive plan.</li>
+          <li>Add adversarial e2e expectations for hidden-column exclusion, Kanban-disabled fail-closed behavior, and viewport-edge menu clamping.</li>
+        </ul>
+        <h4>Expected files</h4>
+        <ul>
+          <li><code>src/server/app.ts</code></li>
+          <li><code>src/__tests__/contracts.test.ts</code></li>
+          <li><code>src/test-fixtures/e2e-run.ts</code></li>
+        </ul>
+        <h4>Work</h4>
+        <ul>
+          <li>Update <code>kanbanCardHtml</code> to make cards keyboard focusable and expose a concise accessible label for card actions.</li>
+          <li>Render or create one board-level context menu populated from visible columns in <code>kanbanIndexHtml</code>/<code>organizationScript</code>.</li>
+          <li>Add CSS for menu placement, focus state, current column checkmark, separator, danger-colored archive item, and viewport edge clamping/flipping.</li>
+          <li>Implement opening/closing mechanics: contextmenu, Shift+F10, Context Menu key, Escape, outside click, scroll, and drag start.</li>
+        </ul>
+        <h4>Open questions / decision dependencies</h4>
+        <p>None.</p>
+        <h4>Verify</h4>
+        <pre><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js
+bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js</code></pre>
+      </article>
+
+      <article class="phase" id="phase-p2-menu-actions">
+        <h3>P2 — Implement status move, defer, and archive actions</h3>
+        <h4>End State</h4>
+        <p>Menu actions call existing APIs, update the board in place after success, rollback or preserve state on failure, require a note for deferral, and show archive Undo using the established toast behavior.</p>
+        <h4>Tests first</h4>
+        <ul>
+          <li>Extend e2e tests to route one move failure and assert rollback/error text.</li>
+          <li>Extend e2e tests to choose Defer plan from the menu, assert the required-note prompt, cancel behavior, successful card removal, and deferred-page presence.</li>
+          <li>Extend e2e tests to choose Archive plan from the menu, assert card removal and undo toast, click Undo, and assert the card returns after reload or direct board refresh.</li>
+          <li>Add adversarial e2e tests for rapid duplicate activation, stale cross-session card responses, and drag-start while a menu request is pending.</li>
+          <li>Keep the existing drag/drop e2e path and prove it still changes columns.</li>
+        </ul>
+        <h4>Expected files</h4>
+        <ul>
+          <li><code>src/server/app.ts</code></li>
+          <li><code>src/test-fixtures/e2e-run.ts</code></li>
+          <li><code>src/__tests__/contracts.test.ts</code> if action markup contracts need updates after implementation.</li>
+        </ul>
+        <h4>Work</h4>
+        <ul>
+          <li>Extract a small board helper inside <code>organizationScript</code> for moving a card to a target column and refreshing both affected column counts.</li>
+          <li>Use the helper from both drop and menu status actions so behavior does not diverge.</li>
+          <li>On success, update <code>data-column</code>, the visible status badge text, and counts without a page reload.</li>
+          <li>On failure, restore DOM position/counts and show <code>#organizer-error</code> with actionable text.</li>
+          <li>Add Kanban defer handling that prompts for the required note, calls <code>POST /api/plans/:planId/defer</code>, removes the card after success, and updates counts.</li>
+          <li>Add Kanban archive handling that calls <code>POST /api/plans/:planId/archive</code>, removes the card after success, updates counts, and shows a top-right Undo toast backed by <code>POST /api/plans/:planId/unarchive</code>.</li>
+          <li>Guard each card action with a single-flight pending state, disable menu activation while pending, and refresh from server truth on not-found/conflict/stale responses.</li>
+        </ul>
+        <h4>Open questions / decision dependencies</h4>
+        <p>None.</p>
+        <h4>Verify</h4>
+        <pre><code>bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js
+bun run test</code></pre>
+      </article>
+
+      <article class="phase" id="phase-p3-final-verification">
+        <h3>P3 — Verify browser behavior and review results</h3>
+        <h4>End State</h4>
+        <p>The implementation is verified through the shipped Kanban UI, contract tests, e2e tests, and scoped implementation review; the plan records final evidence and deviations.</p>
+        <h4>Tests first</h4>
+        <p>No new RED test is expected in this phase unless P1/P2 verification exposes a missed edge case.</p>
+        <h4>Expected files</h4>
+        <ul>
+          <li><code>thoughts/plans/kanban-card-context-menu.html</code></li>
+          <li>Implementation/test files touched in P1/P2 only if final fixes are needed.</li>
+        </ul>
+        <h4>Work</h4>
+        <ul>
+          <li>Run the full relevant gates.</li>
+          <li>Perform a scoped implementation review focused on UI behavior, rollback safety, keyboard accessibility, and regression risk to drag/drop and archive toast behavior.</li>
+          <li>Update Progress and Decisions / Deviations Log with RED/GREEN and review evidence.</li>
+        </ul>
+        <h4>Open questions / decision dependencies</h4>
+        <p>None.</p>
+        <h4>Verify</h4>
+        <pre><code>bun run build
+bun run test
+bun run test:e2e</code></pre>
+      </article>
+    </section>
+
+    <section id="verification">
+      <h2>Verification strategy</h2>
+      <ul>
+        <li><strong>Targeted contract gate:</strong> <code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code>.</li>
+        <li><strong>Runtime browser gate:</strong> <code>bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js</code>.</li>
+        <li><strong>Full repo gates:</strong> <code>bun run build</code>, <code>bun run test</code>, and <code>bun run test:e2e</code>.</li>
+        <li><strong>Manual UI inspection if needed:</strong> <code>bun run dev -- serve --host 127.0.0.1 --port 4317</code>, then inspect <code>http://mbp.braid-python.ts.net:4317/</code>.</li>
+      </ul>
+    </section>
+
+    <section id="delivery-order">
+      <h2>Delivery order</h2>
+      <ol>
+        <li>Lock the menu contract and browser tests before implementation.</li>
+        <li>Implement menu opening/closing and keyboard navigation.</li>
+        <li>Wire status movement through the existing column endpoint and shared move helper.</li>
+        <li>Wire defer through the existing defer endpoint and required-note prompt.</li>
+        <li>Wire archive and undo through the existing archive/unarchive endpoints and toast pattern.</li>
+        <li>Run scoped and full verification, then update this plan with evidence.</li>
+      </ol>
+    </section>
+
+    <section id="non-goals">
+      <h2>Non-goals</h2>
+      <ul>
+        <li>No new board-column API, persistence model, or migration.</li>
+        <li>No redesign of Kanban columns, configuration, hidden-column policy, or project filtering.</li>
+        <li>No new defer/archive lifecycle state or permanent undo queue beyond the existing unarchive endpoint and toast window.</li>
+        <li>No context menu for all-documents, archive, deferred, or detail-shell pages.</li>
+        <li>No changes to collaboration document behavior.</li>
+        <li>No replacement of existing drag-and-drop movement.</li>
+      </ul>
+    </section>
+
+    <section id="decisions-log">
+      <h2>Decisions / Deviations Log</h2>
+      <table>
+        <thead><tr><th>Date</th><th>Decision or deviation</th><th>Evidence</th></tr></thead>
+        <tbody>
+          <tr><td>2026-06-25</td><td>Created browser-review draft plan with UI mocks; not execution-ready until browser, PM, GPT, and GLM gates complete.</td><td>User requested plan and mocks; repo planning workflow requires reviewed HTML plan registration before execution.</td></tr>
+          <tr><td>2026-06-25</td><td>Menu will show visible board columns only.</td><td><code>kanbanIndexHtml</code> receives <code>store.listBoardColumns()</code>, which excludes hidden columns; hidden destinations can make cards disappear from the board.</td></tr>
+          <tr><td>2026-06-25</td><td>Archive from Kanban reuses existing archive/unarchive endpoints and toast pattern.</td><td><code>src/server/app.ts</code> already exposes archive/unarchive routes and index/deferred archive toast behavior.</td></tr>
+          <tr><td>2026-06-25</td><td>Integrated browser feedback to show the full menu with both Defer plan and Archive plan. Defer requires the same non-empty note as the existing detail-shell Defer action.</td><td>Reviewer comment <code>cmt_aaAoKZzUpIvX</code>; <code>src/server/app.ts</code> detail shell calls <code>POST /api/plans/:planId/defer</code> only after prompting for a note.</td></tr>
+          <tr><td>2026-06-25</td><td>Changed this plan to a full-width layout with a horizontal ToC under the hero panel; updated shared plan skills to require that layout for future HTML plans.</td><td>Reviewer comment <code>cmt_9OtX79HkmeBh</code>; changed <code>reviewed-html-plan</code>, <code>html-plan-reviewer</code>, and <code>planning-workflow</code> skill guidance.</td></tr>
+          <tr><td>2026-06-25</td><td>Expanded the right-click menu mock canvas so the full status, defer, and archive menu is visible in the browser review.</td><td>Reviewer comment <code>cmt_w-RSqiSowb-Z</code>.</td></tr>
+          <tr><td>2026-06-25</td><td>Added adversarial BDD coverage for hidden columns, disabled Kanban, rapid duplicate activation, stale cross-session card state, and viewport-edge placement.</td><td>Reviewer comment <code>cmt_FwxfK1KcbfJq</code>.</td></tr>
+          <tr><td>2026-06-25</td><td>Marked the plan execution-ready after PM/product-intent, GPT, and GLM readiness gates found no blockers.</td><td>PM verdict: <code>PRODUCT_INTENT_READY</code>; GPT verdict: <code>PLAN_EXECUTION_READY</code>; GLM verdict: <code>PLAN_EXECUTION_READY</code>.</td></tr>
+          <tr><td>2026-06-25</td><td>Completed P1/P2 implementation for Kanban card right-click, keyboard menu opening, visible-column status moves, defer with required note, archive with Undo, failure rollback, stale refresh, single-flight guard, hidden-column exclusion, disabled-Kanban fail-closed behavior, and viewport edge clamping.</td><td>Changed <code>src/server/app.ts</code>, <code>src/__tests__/contracts.test.ts</code>, and <code>src/test-fixtures/e2e-run.ts</code>.</td></tr>
+          <tr><td>2026-06-25</td><td>P1/P2 targeted verification is green.</td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code> passed with 128 tests; <code>node dist/test-fixtures/e2e-run.js</code> passed after the same build.</td></tr>
+          <tr><td>2026-06-25</td><td>Scoped implementation review found no P1/P2 production failures and identified P3 parity/test-hardening improvements.</td><td>GLM review verified stale 200-response handling, single-flight guards, hidden-column policy, archived/deferred ghost prevention, rollback behavior, accessibility, and disabled-Kanban behavior; P3 findings covered Kanban toast dismissal parity, e2e board-column cleanup, and optional brittle contract hardening.</td></tr>
+          <tr><td>2026-06-25</td><td>Addressed actionable P3 review findings.</td><td>Kanban archive toast now uses the same interaction-dismiss pattern as existing archive toasts; e2e hidden-column mutations now restore columns in <code>try</code>/<code>finally</code>; e2e covers click-to-dismiss toast behavior.</td></tr>
+          <tr><td>2026-06-25</td><td>Post-review targeted verification is green.</td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code> passed with 128 tests; <code>node dist/test-fixtures/e2e-run.js</code> passed in 54s using the rebuilt <code>dist</code>.</td></tr>
+          <tr><td>2026-06-25</td><td>Final full test, e2e gate, and scoped P3 review are clean.</td><td><code>bun run test</code> passed with 129 tests; <code>bun run test:e2e</code> passed in 54s; final scoped implementation review returned no P1/P2/P3 findings.</td></tr>
+          <tr><td>2026-06-25</td><td>Pre-PR review found and resolved stale-reload message persistence plus the requested server-side lifecycle guard.</td><td>Added one-shot Kanban <code>sessionStorage</code> reload messages so stale refreshes still report that the board refreshed from server truth; added e2e assertions for 409 stale move, hidden-destination stale 200, and archived-card stale 200 reload messages. Added a storage-level guard so deferred and archived plans cannot be moved to board columns, with contract coverage proving <code>invalid_state</code> 409 and unchanged assignment. GPT and GLM rereviews returned clean verdicts; post-rebase <code>bun run test</code> passed with 130 tests and <code>bun run test:e2e</code> passed in 54s.</td></tr>
+          <tr><td>2026-06-25</td><td>Addressed PR feedback on inactive detail-shell status selectors.</td><td>Deferred and archived plan detail pages no longer render <code>#current-plan-status-control</code>; remaining status-update race failures show server-provided error guidance. Verification: <code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code> passed with 129 tests; <code>bun run test</code> passed with 130 tests; <code>bun run test:e2e</code> passed in 55s.</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+</div>
+</body>
+</html>
