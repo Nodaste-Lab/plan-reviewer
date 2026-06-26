@@ -126,6 +126,10 @@ function fullUrl(base: string, maybePath: string): string {
   return maybePath.startsWith('http') ? maybePath : `${base.replace(/\/$/, '')}${maybePath}`;
 }
 
+function terminalLink(url: string): string {
+  return `<${url}>`;
+}
+
 function registrationInstructionsOutput(data: RegisterResponse, serviceUrl: string): string {
   if (!data.agentInstructions) return `Watch command: ${data.watchCommand} --url ${serviceUrl}\n`;
   const renderedCommands = renderRegistrationInstructionCommands(data.agentInstructions, serviceUrl);
@@ -257,7 +261,7 @@ async function registerPlan(filePath: string, options: { url?: string; json?: bo
       ? `PR auto-discovery: linked ${pullRequestDiscovery.pullRequest.url}\n`
       : `PR auto-discovery: ${pullRequestDiscovery.message}\nNEXT: ${pullRequestDiscovery.nextAction}\n`
     : '';
-  process.stdout.write(`Plan ID: ${data.planId}\nIndex URL: ${fullUrl(serviceUrl, data.indexUrl)}\nReview URL: ${fullUrl(serviceUrl, data.reviewUrl)}\nSource sync: ${sync}\n${discoveryNote}${registrationInstructionsOutput(data, serviceUrl)}`);
+  process.stdout.write(`Plan ID: ${data.planId}\nIndex URL: ${terminalLink(fullUrl(serviceUrl, data.indexUrl))}\nReview URL: ${terminalLink(fullUrl(serviceUrl, data.reviewUrl))}\nSource sync: ${sync}\n${discoveryNote}${registrationInstructionsOutput(data, serviceUrl)}`);
 }
 
 async function printIndex(options: { url?: string; json?: boolean; q?: string; repoKey?: string; limit?: string; cursor?: string }) {
@@ -275,9 +279,9 @@ async function printIndex(options: { url?: string; json?: boolean; q?: string; r
     const table = rows.map(item => {
       const pr = item.plan.pullRequest;
       const prLabel = pr ? `PR ${pr.status ?? pr.state} #${pr.number}` : 'No PR';
-      return `${item.plan.repoName}\t${item.plan.slug}\t${item.plan.projectName ?? '-'}\t${item.plan.lifecycleState ?? '-'}\t${item.plan.boardColumnKey ?? '-'}\t${item.plan.pinnedAt ? 'pinned' : '-'}\t${item.plan.publicationMetadata?.branch ?? item.plan.branch ?? '-'}\t${item.plan.publicationMetadata?.linearIssue ?? '-'}\t${prLabel}\tmode:${item.plan.reviewMode} executionReady:${item.plan.publicationMetadata?.executionReady ?? '-'}\tpending:${item.counts.pending} claimed:${item.counts.claimed} ack:${item.counts.acknowledged} resolved:${item.counts.resolved}\t${fullUrl(serviceUrl, item.reviewUrl)}`;
+      return `${item.plan.repoName}\t${item.plan.slug}\t${item.plan.projectName ?? '-'}\t${item.plan.lifecycleState ?? '-'}\t${item.plan.boardColumnKey ?? '-'}\t${item.plan.pinnedAt ? 'pinned' : '-'}\t${item.plan.publicationMetadata?.branch ?? item.plan.branch ?? '-'}\t${item.plan.publicationMetadata?.linearIssue ?? '-'}\t${prLabel}\tmode:${item.plan.reviewMode} executionReady:${item.plan.publicationMetadata?.executionReady ?? '-'}\tpending:${item.counts.pending} claimed:${item.counts.claimed} ack:${item.counts.acknowledged} resolved:${item.counts.resolved}\t${terminalLink(fullUrl(serviceUrl, item.reviewUrl))}`;
     });
-    process.stdout.write(`Index URL: ${serviceUrl}/\nRepo\tDocument\tProject\tLifecycle\tColumn\tPin\tBranch\tLinear\tPR\tMode / Execution Ready\tStatus\tReview URL\n${table.join('\n')}${data.nextCursor ? `\nNext cursor: ${data.nextCursor}` : ''}\n`);
+    process.stdout.write(`Index URL: ${terminalLink(`${serviceUrl}/`)}\nRepo\tDocument\tProject\tLifecycle\tColumn\tPin\tBranch\tLinear\tPR\tMode / Execution Ready\tStatus\tReview URL\n${table.join('\n')}${data.nextCursor ? `\nNext cursor: ${data.nextCursor}` : ''}\n`);
   }
 }
 
