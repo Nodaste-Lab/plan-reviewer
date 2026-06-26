@@ -551,6 +551,7 @@ try {
     assert.match(await page.locator('.kanban-context-menu').innerText(), /Ready to Pull/);
     assert.match(await page.locator('.kanban-context-menu').innerText(), /In Progress/);
     assert.match(await page.locator('.kanban-context-menu').innerText(), /Done/);
+    assert.match(await page.locator('.kanban-context-menu').innerText(), /Mark plan done/);
     assert.match(await page.locator('.kanban-context-menu').innerText(), /Defer plan/);
     assert.match(await page.locator('.kanban-context-menu').innerText(), /Archive plan/);
     await page.setViewportSize({ width: 760, height: 180 });
@@ -569,6 +570,14 @@ try {
     assert.equal(moveDetail.ok(), true);
     assert.equal(((await moveDetail.json()).data as { plan: { boardColumnKey: string } }).plan.boardColumnKey, 'in_progress');
     await page.waitForFunction(planId => document.querySelector(`[data-plan-id="${CSS.escape(String(planId))}"]`)?.textContent?.includes('Status: In Progress'), moveMenuPlan.planId);
+
+    const markDonePlan = await registerTinyPlan('kanban-menu-mark-done');
+    await openKanbanContextMenu(markDonePlan.planId);
+    await page.locator('.kanban-context-menu button[data-action="mark-done"]').click();
+    await page.waitForFunction(planId => document.querySelector(`[data-column-key="done"] [data-plan-id="${CSS.escape(String(planId))}"]`), markDonePlan.planId);
+    const markDoneDetail = await context.get(`/api/plans/${markDonePlan.planId}`);
+    assert.equal(markDoneDetail.ok(), true);
+    assert.equal(((await markDoneDetail.json()).data as { plan: { boardColumnKey: string } }).plan.boardColumnKey, 'done');
 
     await page.locator(`[data-plan-id="${moveMenuPlan.planId}"]`).focus();
     await page.keyboard.press('Shift+F10');
@@ -757,7 +766,7 @@ try {
     assert.equal(menuBox.x + menuBox.width <= 760, true);
     assert.equal(menuBox.y + menuBox.height <= 520, true);
     await page.setViewportSize({ width: 1280, height: 720 });
-    for (const plan of [moveMenuPlan, failurePlan, rapidPlan, stalePlan, hiddenStalePlan, deferCancelPlan, deferFailurePlan, archiveFailurePlan, archivePlan]) {
+    for (const plan of [moveMenuPlan, markDonePlan, failurePlan, rapidPlan, stalePlan, hiddenStalePlan, deferCancelPlan, deferFailurePlan, archiveFailurePlan, archivePlan]) {
       assert.equal((await context.post(`/api/plans/${plan.planId}/archive`)).ok(), true);
     }
     assert.equal((await context.post(`/api/plans/${deferPlan.planId}/resume`, { data: { note: 'Clean up Kanban context menu e2e plan.' } })).ok(), true);
