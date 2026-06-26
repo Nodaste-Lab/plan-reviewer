@@ -152,6 +152,8 @@ GLM independently verified the guard placement, caller impact, stale-state clien
 
 Codex PR review found one P2: deferred/archived detail pages still rendered the editable current-status selector even though the server now rejects non-active column moves. Fixed by hiding `#current-plan-status-control` whenever `plan.lifecycleState !== 'active'`, preserving the selector only for active planning documents, and by showing server-provided `nextAction` text for any remaining status-update race failure. Contract tests now assert deferred and archived shells do not render the selector.
 
+Codex PR review found a second P2 after the feedback fix: the capture-phase Kanban scroll listener closed the context menu when users scrolled inside an overflowing menu, making lower menu items unreachable. Fixed by ignoring scroll events whose target is inside the open `.kanban-context-menu`; e2e coverage now asserts menu-internal scrolling leaves the menu open on a short viewport.
+
 ## Remaining out-of-scope follow-ups
 
 None.
@@ -168,5 +170,6 @@ None.
 - Post-rebase verification after reconciling with `origin/main`: `bun run test` passed with 130 tests; `bun run test:e2e` passed in 54s.
 - PR feedback fix verification: `bun run build && node --test dist/__tests__/contracts.test.js` passed with 129 tests after hiding inactive-plan status selectors.
 - Final PR feedback verification: `bun run test` passed with 130 tests; `bun run test:e2e` passed in 55s.
+- Second PR feedback verification: `bun run build && node --test dist/__tests__/contracts.test.js` passed with 129 tests; `bun run build && node dist/test-fixtures/e2e-run.js` passed in 55s; focused quality-reviewer pass returned `CLEAN`.
 
 Next step: `OPEN_PR_READY` — continue with final PR preparation, including reconciling with current `origin/main` if needed, commit, push, PR creation, and post-PR monitoring.

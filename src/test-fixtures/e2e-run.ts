@@ -553,6 +553,16 @@ try {
     assert.match(await page.locator('.kanban-context-menu').innerText(), /Done/);
     assert.match(await page.locator('.kanban-context-menu').innerText(), /Defer plan/);
     assert.match(await page.locator('.kanban-context-menu').innerText(), /Archive plan/);
+    await page.setViewportSize({ width: 760, height: 180 });
+    await openKanbanContextMenu(moveMenuPlan.planId);
+    assert.equal(await page.locator('.kanban-context-menu').evaluate(menu => menu.scrollHeight > menu.clientHeight), true);
+    await page.locator('.kanban-context-menu').evaluate(menu => {
+      menu.scrollTop = menu.scrollHeight;
+      menu.dispatchEvent(new Event('scroll'));
+    });
+    assert.equal(await page.locator('.kanban-context-menu').count(), 1);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await openKanbanContextMenu(moveMenuPlan.planId);
     await page.locator('.kanban-context-menu button[data-column-key="in_progress"]').click();
     await page.waitForFunction(planId => document.querySelector(`[data-column-key="in_progress"] [data-plan-id="${CSS.escape(String(planId))}"]`), moveMenuPlan.planId);
     let moveDetail = await context.get(`/api/plans/${moveMenuPlan.planId}`);
