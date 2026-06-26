@@ -2564,12 +2564,15 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     assert.doesNotMatch(kanban.body, /<span class="badge">Pinned<\/span>/);
     assert.match(kanban.body, /data-column-key="backlog"/);
     assert.match(kanban.body, /data-column-label="Backlog"/);
+    assert.match(kanban.body, /data-column-is-done="false"/);
+    assert.match(kanban.body, /data-done-column-key="done"/);
     assert.match(kanban.body, /data-column-count/);
     assert.match(kanban.body, /class="kanban-card" draggable="true" tabindex="0" aria-label="Card actions for/);
     assert.match(kanban.body, /data-plan-id="[^"]+" data-plan-title="[^"]+" data-column="backlog"/);
     assert.match(kanban.body, /kanban-context-menu/);
     assert.match(kanban.body, /role','menu'/);
     assert.match(kanban.body, /menuitemradio/);
+    assert.match(kanban.body, /Mark plan done/);
     assert.match(kanban.body, /Defer plan/);
     assert.match(kanban.body, /Archive plan/);
     assert.match(kanban.body, /Enter a note for deferring this plan/);
@@ -2789,6 +2792,7 @@ test('disabled Kanban defaults to all documents and blocks movement without dele
     assert.doesNotMatch(index.body, /href="\/">Kanban/);
     assert.doesNotMatch(index.body, /data-column-key=/);
     assert.doesNotMatch(index.body, /document\.addEventListener\('contextmenu'/);
+    assert.doesNotMatch(index.body, /Mark plan done/);
     assert.doesNotMatch(index.body, /Defer plan/);
     assert.doesNotMatch(index.body, /Archive plan/);
     assert.doesNotMatch(index.body, /draggable="true"/);
