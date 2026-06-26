@@ -4796,15 +4796,15 @@ test('CLI register prints required watcher instructions and preserves JSON paylo
   let registerRequests = 0;
   const registerBodies: Array<Record<string, unknown>> = [];
   const registrationData = {
-    planId: 'plan_cli',
+    planId: 'plan_cli_',
     versionId: 'ver_cli',
     repoId: 'repo_cli',
-    reviewUrl: '/p/plan_cli',
+    reviewUrl: '/p/plan_cli_',
     indexUrl: '/',
-    watchCommand: 'plan-review watch plan_cli --mode queue',
+    watchCommand: 'plan-review watch plan_cli_ --mode queue',
     sourceSync: { watchMode: 'snapshot', status: 'synced', error: null, active: false },
     renderedWithWarnings: [],
-    agentInstructions: buildRegistrationAgentInstructions({ planId: 'plan_cli', reviewUrl: '/p/plan_cli' })
+    agentInstructions: buildRegistrationAgentInstructions({ planId: 'plan_cli_', reviewUrl: '/p/plan_cli_' })
   };
   const server = http.createServer((request, response) => {
     if (request.url === '/api/plans/register') {
@@ -4846,18 +4846,20 @@ test('CLI register prints required watcher instructions and preserves JSON paylo
 
     const human = await runRegister(['--execution-ready', 'false', '--linear-issue', 'NOD-999']);
     assert.equal(human.code, 0, human.stderr);
-    assert.match(human.stdout, /Plan ID: plan_cli/);
-    assert.match(human.stdout, /Review URL: http:\/\/127\.0\.0\.1:\d+\/p\/plan_cli/);
+    assert.match(human.stdout, /Plan ID: plan_cli_/);
+    assert.match(human.stdout, /Index URL: <http:\/\/127\.0\.0\.1:\d+\/>/);
+    assert.match(human.stdout, /Review URL: <http:\/\/127\.0\.0\.1:\d+\/p\/plan_cli_>/);
+    assert.doesNotMatch(human.stdout, /Review URL: http:\/\/127\.0\.0\.1:\d+\/p\/plan_cli_\n/);
     assert.match(human.stdout, /Source sync: snapshot/);
     assert.doesNotMatch(human.stdout, /^Watch command:/m);
     assert.match(human.stdout, /REQUIRED NEXT ACTION:/);
     assert.match(human.stdout, /Drain pending comments with agent next --no-wait/);
     assert.match(human.stdout, /Drain pending comments:/);
-    assert.match(human.stdout, /plan-review agent next plan_cli --no-wait --json --url http:\/\/127\.0\.0\.1:\d+/);
+    assert.match(human.stdout, /plan-review agent next plan_cli_ --no-wait --json --url http:\/\/127\.0\.0\.1:\d+/);
     assert.match(human.stdout, /Primary listener command:/);
-    assert.match(human.stdout, /plan-review agent next plan_cli --wait --json --url http:\/\/127\.0\.0\.1:\d+/);
+    assert.match(human.stdout, /plan-review agent next plan_cli_ --wait --json --url http:\/\/127\.0\.0\.1:\d+/);
     assert.match(human.stdout, /Optional debug watch stream:/);
-    assert.match(human.stdout, /plan-review watch plan_cli --mode queue --format browser-comment --json --url http:\/\/127\.0\.0\.1:\d+/);
+    assert.match(human.stdout, /plan-review watch plan_cli_ --mode queue --format browser-comment --json --url http:\/\/127\.0\.0\.1:\d+/);
     assert.match(human.stdout, /Comment lifecycle:/);
     assert.match(human.stdout, /commentId and claimId/);
     assert.match(human.stdout, /plan-review ack <commentId> --claim <claimId>/);
@@ -4866,8 +4868,8 @@ test('CLI register prints required watcher instructions and preserves JSON paylo
     assert.equal(json.code, 0, json.stderr);
     const parsed = JSON.parse(json.stdout);
     assert.deepEqual(parsed, registrationData);
-    assert.equal(parsed.agentInstructions.preferredCommand, 'plan-review agent next plan_cli --wait --json');
-    assert.equal(parsed.agentInstructions.drainCommand, 'plan-review agent next plan_cli --no-wait --json');
+    assert.equal(parsed.agentInstructions.preferredCommand, 'plan-review agent next plan_cli_ --wait --json');
+    assert.equal(parsed.agentInstructions.drainCommand, 'plan-review agent next plan_cli_ --no-wait --json');
     assert.doesNotMatch(parsed.agentInstructions.durableCommand, /--url/);
 
     const codex = await runRegister(['--execution-ready', 'true', '--codex-thread', 'thr_cli', '--codex-delivery', 'enabled', '--codex-mode', 'sdk', '--json']);
@@ -4882,6 +4884,69 @@ test('CLI register prints required watcher instructions and preserves JSON paylo
     assert.equal(registerRequests, 3);
   } finally {
     fs.rmSync(planDir, { recursive: true, force: true });
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
+
+test('CLI index wraps human review URLs with trailing underscores and preserves JSON payload', async () => {
+  const indexData = {
+    plans: [
+      {
+        plan: {
+          id: 'plan_cli_',
+          repoName: 'repo-cli',
+          repoKey: 'repo-cli-key',
+          slug: 'terminal-safe',
+          branch: 'fix-terminal-urls',
+          reviewMode: 'planning',
+          publicationMetadata: { branch: 'fix-terminal-urls', executionReady: true }
+        },
+        counts: { pending: 0, claimed: 0, acknowledged: 1, resolved: 1 },
+        reviewUrl: '/p/plan_cli_'
+      }
+    ],
+    nextCursor: 'cursor_2'
+  };
+  const server = http.createServer((request, response) => {
+    if (request.url === '/api/plans') {
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ ok: true, data: indexData }));
+      return;
+    }
+    response.statusCode = 404;
+    response.end('not found');
+  });
+
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+  try {
+    const address = server.address();
+    assert(address && typeof address !== 'string');
+    const serviceUrl = `http://127.0.0.1:${address.port}`;
+
+    const runIndex = (args: string[]) => new Promise<{ code: number | null; stdout: string; stderr: string }>(resolve => {
+      const child = spawn(process.execPath, ['dist/cli.js', 'index', '--url', serviceUrl, ...args], {
+        cwd: root,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', chunk => { stdout += chunk; });
+      child.stderr.on('data', chunk => { stderr += chunk; });
+      child.on('close', code => resolve({ code, stdout, stderr }));
+    });
+
+    const human = await runIndex([]);
+    assert.equal(human.code, 0, human.stderr);
+    assert.match(human.stdout, /Index URL: <http:\/\/127\.0\.0\.1:\d+\/>/);
+    assert.match(human.stdout, /\t<http:\/\/127\.0\.0\.1:\d+\/p\/plan_cli_>\n/);
+    assert.doesNotMatch(human.stdout, /\thttp:\/\/127\.0\.0\.1:\d+\/p\/plan_cli_\n/);
+    assert.match(human.stdout, /Next cursor: cursor_2/);
+
+    const json = await runIndex(['--json']);
+    assert.equal(json.code, 0, json.stderr);
+    assert.deepEqual(JSON.parse(json.stdout), indexData);
+  } finally {
     await new Promise<void>(resolve => server.close(() => resolve()));
   }
 });

@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Terminal-safe plan review URLs</title>
+  <style>
+    :root { color-scheme: dark; --bg: #0f172a; --panel: #111827; --panel-2: #1f2937; --text: #e5e7eb; --muted: #a7b0c0; --accent: #7dd3fc; --border: #334155; --ok: #86efac; --warn: #facc15; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    main { max-width: 1180px; margin: 0 auto; padding: 32px 24px 56px; }
+    h1, h2, h3, h4 { line-height: 1.2; margin: 0 0 0.7rem; }
+    h1 { font-size: clamp(2rem, 4vw, 3rem); }
+    h2 { margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid var(--border); }
+    h3 { margin-top: 1.4rem; }
+    p, li { color: var(--text); }
+    a { color: var(--accent); }
+    code, pre { background: #020617; border: 1px solid var(--border); border-radius: 8px; }
+    code { padding: 0.1rem 0.35rem; }
+    pre { padding: 1rem; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    th, td { text-align: left; vertical-align: top; padding: 0.65rem; border: 1px solid var(--border); }
+    th { background: var(--panel-2); }
+    .summary, section { background: rgba(17, 24, 39, 0.74); border: 1px solid var(--border); border-radius: 16px; padding: 20px; margin: 18px 0; }
+    .summary strong, .ok { color: var(--ok); }
+    .muted { color: var(--muted); }
+    .toc { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+    .toc a { display: block; margin: 0.25rem 0; }
+    .status { display: inline-block; border: 1px solid var(--warn); color: var(--warn); border-radius: 999px; padding: 0.2rem 0.65rem; font-weight: 700; }
+    .phase { border-left: 4px solid var(--accent); }
+  </style>
+</head>
+<body>
+<main>
+  <header class="summary" id="top">
+    <p class="status">Status: execution-ready</p>
+    <h1>Terminal-safe plan review URLs</h1>
+    <p><strong>Goal:</strong> Change human-facing plan URL formatting so plan review links remain clickable when a generated plan ID ends in an underscore.</p>
+    <p><strong>Linear issue:</strong> No Linear issue exists for this user-requested planning task.</p>
+    <p><strong>UI impact:</strong> text-only. The implementation changes CLI/terminal text output and documentation, not browser UI layout or interaction.</p>
+  </header>
+
+  <nav class="summary toc" id="toc" aria-label="Table of contents">
+    <div><strong>Overview</strong><a href="#decision-attention">Decision attention</a><a href="#why">Why this exists</a><a href="#solution">Solution narrative</a><a href="#inputs">Authority and inputs</a></div>
+    <div><strong>Contracts</strong><a href="#current-reality">Current implementation reality</a><a href="#product-intent">Product intent alignment</a><a href="#locked-decisions">Locked decisions</a><a href="#acceptance">Acceptance criteria</a></div>
+    <div><strong>Behavior</strong><a href="#bdd">BDD scenarios</a><a href="#coverage">Test coverage matrix</a><a href="#phases">Phases</a></div>
+    <div><strong>Delivery</strong><a href="#verification">Verification strategy</a><a href="#delivery-order">Delivery order</a><a href="#non-goals">Non-goals</a><a href="#resume">Resume instructions</a><a href="#review-record">Review record</a><a href="#log">Decisions / deviations</a></div>
+  </nav>
+
+  <section id="decision-attention">
+    <h2>Decision Attention / Low-confidence Areas</h2>
+    <p><strong>None blocking.</strong> Repo evidence points to a display-formatting fix. The plan intentionally does not change generated ID semantics or route identity.</p>
+  </section>
+
+  <section id="why">
+    <h2>Why this plan exists</h2>
+    <p>Plan IDs are generated with <code>nanoid(12)</code> and prefixed with strings such as <code>plan_</code>. Nanoid's default alphabet can produce an underscore as the final random character, creating URLs such as <code>http://127.0.0.1:4317/p/plan_abc_</code>. Current human CLI output prints those URLs naked, so some terminal linkifiers stop before the trailing underscore and open <code>.../plan_abc</code>, which is a different plan ID and breaks the link.</p>
+  </section>
+
+  <section id="solution">
+    <h2>Solution narrative</h2>
+    <p>Add a small terminal-display formatter for human output that renders user-facing plan URLs as angle-bracketed links, for example <code>&lt;http://127.0.0.1:4317/p/plan_abc_&gt;</code>. The visible token no longer ends with an underscore, and common terminal linkifiers include the full URL inside the brackets. Keep machine-readable JSON, stored review URLs, API payloads, route paths, and existing plan IDs unchanged.</p>
+    <p>The implementation should apply this formatter anywhere the CLI prints a plan review URL for humans, especially registration output and index/list output. Commands that carry only a service base URL in <code>--url</code> do not need plan-link wrapping unless they add a full plan URL later.</p>
+  </section>
+
+  <section id="inputs">
+    <h2>Authority and inputs</h2>
+    <ul>
+      <li>User request: terminal links break when the plan URL ends with an underscore.</li>
+      <li><code>AGENTS.md</code>: keep API, CLI, README, browser UI, and fixture behavior aligned for public contract changes.</li>
+      <li><code>thoughts/specs/product_intent.md</code>: public command examples must be copy-paste ready and agent/operator errors or guidance must make the next step obvious.</li>
+      <li>Inspected code: <code>src/storage/database.ts</code>, <code>src/cli.ts</code>, <code>src/server/app.ts</code>, <code>src/registrationInstructions.ts</code>, <code>src/__tests__/contracts.test.ts</code>, and <code>README.md</code>.</li>
+    </ul>
+  </section>
+
+  <section id="current-reality">
+    <h2>Current implementation reality</h2>
+    <table>
+      <thead><tr><th>Surface</th><th>Current behavior</th><th>Implication</th></tr></thead>
+      <tbody>
+        <tr><td>ID generation</td><td><code>src/storage/database.ts</code> defines <code>id(prefix) =&gt; `${prefix}_${nanoid(12)}`</code>.</td><td>Future plan IDs, version IDs, comment IDs, claims, and other records can contain underscores. Existing IDs already can.</td></tr>
+        <tr><td>Review URL storage</td><td><code>registerPlan()</code>, plan listing, plan detail, and comment evidence emit <code>/p/${planId}</code>.</td><td>If <code>planId</code> ends in <code>_</code>, the review URL ends in <code>_</code>.</td></tr>
+        <tr><td>Human CLI output</td><td><code>src/cli.ts</code> prints <code>Review URL: ${fullUrl(...)}</code> and index rows end with <code>${fullUrl(serviceUrl, item.reviewUrl)}</code>.</td><td>Terminal linkification sees a bare URL and may omit the trailing underscore.</td></tr>
+        <tr><td>JSON/API output</td><td>Registration JSON and API responses preserve relative <code>reviewUrl</code> values.</td><td>Machine consumers should not receive angle brackets or display-only formatting.</td></tr>
+        <tr><td>Routing</td><td><code>src/server/app.ts</code> serves <code>GET /p/:planId</code>.</td><td>No route change is needed for the display-layer fix.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="progress">
+    <h2>Progress</h2>
+    <ul>
+      <li><input type="checkbox" checked disabled /> P1 — Lock URL display contract with tests</li>
+      <li><input type="checkbox" checked disabled /> P2 — Implement terminal-safe human formatting</li>
+      <li><input type="checkbox" checked disabled /> P3 — Align docs and verify regression gates</li>
+    </ul>
+  </section>
+
+  <section id="resume">
+    <h2>Resume instructions</h2>
+    <p>Read this plan fully, then start with the first unchecked progress item. Do not change product code until this plan has completed browser review and execution-readiness gates or the user explicitly asks for a direct fix. During execution, keep machine-readable URL values unchanged and limit display formatting to human CLI/documentation output.</p>
+  </section>
+
+  <section id="product-intent">
+    <h2>Product intent alignment</h2>
+    <p>This plan advances <code>thoughts/specs/product_intent.md</code> outcomes for stable URLs, minimal hidden state, and copy-paste-ready command output. It keeps the simplest reviewer workflow intact: register a plan, open the printed review URL, and comment. The safe default is to fix terminal-visible formatting where the failure appears rather than changing record identity or routing semantics.</p>
+  </section>
+
+  <section id="locked-decisions">
+    <h2>Locked decisions</h2>
+    <ul>
+      <li id="decision-display-layer"><strong>Display-layer fix:</strong> Human-facing plan URLs printed in terminal contexts are wrapped in angle brackets.</li>
+      <li id="decision-json-unchanged"><strong>Machine contracts unchanged:</strong> JSON/API values such as <code>reviewUrl</code>, <code>agentInstructions.reviewUrl</code>, and conversation payload evidence remain plain URLs/paths without brackets.</li>
+      <li id="decision-id-stability"><strong>No ID alphabet migration:</strong> Do not change <code>nanoid</code> alphabet or stored ID formats. That would not repair existing affected links and would affect every ID prefix, not just plan URLs.</li>
+      <li id="decision-no-route-slash"><strong>No trailing-slash route change:</strong> Do not make <code>/p/:planId/</code> the canonical URL solely to avoid the trailing underscore. It is broader than needed and would require URL/query parity work across browser navigation.</li>
+    </ul>
+  </section>
+
+  <section id="acceptance">
+    <h2>Acceptance criteria</h2>
+    <ol>
+      <li id="ac-1">Human <code>plan-review register</code> output prints <code>Review URL: &lt;http://.../p/plan_with_trailing_&gt;</code> when the API returns a review URL ending in underscore.</li>
+      <li id="ac-2">Human <code>plan-review index</code> output wraps every plan review URL in angle brackets, including rows whose plan ID ends in underscore.</li>
+      <li id="ac-3">Machine-readable <code>--json</code> registration output remains byte-for-byte plain JSON from the service and does not include display-only angle brackets.</li>
+      <li id="ac-4">Plan API, route paths, comment evidence, agent-next enrichment, and stored plan IDs continue to use plain unbracketed URL or path values; relative paths such as <code>/p/:planId</code> and enriched absolute URLs such as <code>http://.../p/:planId</code> never receive terminal-display angle brackets in machine-readable payloads.</li>
+      <li id="ac-5">README or command guidance states that printed review URLs may be angle-bracketed for terminal-safe clicking, while commands remain copy-paste ready.</li>
+    </ol>
+  </section>
+
+  <section id="bdd">
+    <h2>BDD scenarios</h2>
+    <article id="bdd-register-trailing-underscore">
+      <h3>Register output with trailing underscore</h3>
+      <p><strong>Given</strong> the service registers a plan with <code>reviewUrl: "/p/plan_cli_"</code>, <strong>when</strong> the CLI prints normal human output, <strong>then</strong> the Review URL line is angle-bracketed and the clickable token includes the trailing underscore.</p>
+    </article>
+    <article id="bdd-index-trailing-underscore">
+      <h3>Index output with trailing underscore</h3>
+      <p><strong>Given</strong> the index API returns a row with <code>reviewUrl: "/p/plan_cli_"</code>, <strong>when</strong> <code>plan-review index</code> prints the table, <strong>then</strong> the review URL cell is <code>&lt;http://.../p/plan_cli_&gt;</code>.</p>
+    </article>
+    <article id="bdd-json-plain">
+      <h3>JSON remains plain</h3>
+      <p><strong>Given</strong> the same registration response, <strong>when</strong> the user passes <code>--json</code>, <strong>then</strong> stdout preserves the service payload exactly and contains <code>"reviewUrl":"/p/plan_cli_"</code>, not brackets.</p>
+    </article>
+    <article id="bdd-existing-non-underscore">
+      <h3>Normal IDs are still readable</h3>
+      <p><strong>Given</strong> a plan ID that does not end in underscore, <strong>when</strong> the CLI prints a human review URL, <strong>then</strong> the URL is still consistently bracketed so operators learn one format.</p>
+    </article>
+  </section>
+
+  <section id="coverage">
+    <h2>Test coverage matrix</h2>
+    <table>
+      <thead><tr><th>Acceptance</th><th>Test layer</th><th>Files</th><th>Verification</th></tr></thead>
+      <tbody>
+        <tr><td><a href="#ac-1">AC1</a>, <a href="#bdd-register-trailing-underscore">register BDD</a></td><td>Spawned CLI contract with fake register API returning <code>/p/plan_cli_</code></td><td><code>src/__tests__/contracts.test.ts</code></td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js --test-name-pattern "CLI register"</code></td></tr>
+        <tr><td><a href="#ac-2">AC2</a>, <a href="#bdd-index-trailing-underscore">index BDD</a></td><td>Spawned CLI contract with fake index API row ending in underscore</td><td><code>src/__tests__/contracts.test.ts</code></td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js --test-name-pattern "CLI index"</code></td></tr>
+        <tr><td><a href="#ac-3">AC3</a>, <a href="#bdd-json-plain">JSON BDD</a></td><td>Existing register JSON preservation assertion, updated fixture ID with trailing underscore</td><td><code>src/__tests__/contracts.test.ts</code></td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js --test-name-pattern "CLI register"</code></td></tr>
+        <tr><td><a href="#ac-4">AC4</a></td><td>Existing API, route, agent-next, and conversation payload tests stay green</td><td><code>src/__tests__/contracts.test.ts</code></td><td><code>bun run build &amp;&amp; bun run test</code></td></tr>
+        <tr><td><a href="#ac-5">AC5</a></td><td>README inspection plus optional contract text guard if command examples are generated</td><td><code>README.md</code>, optional <code>src/__tests__/contracts.test.ts</code></td><td><code>bun run build &amp;&amp; bun run test</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="phases">
+    <h2>Phase-by-phase execution plan</h2>
+
+    <article class="phase" id="phase-p1-url-contract-tests">
+      <h3>P1 — Lock URL display contract with tests</h3>
+      <h4>End State</h4>
+      <p>Contract tests fail because human CLI output is expected to wrap plan review URLs whose IDs end in underscore.</p>
+      <h4>Tests first</h4>
+      <p>Update the existing CLI register contract fixture to use <code>plan_cli_</code> and <code>/p/plan_cli_</code>. Add or extend a CLI index human-output test with a returned row whose <code>reviewUrl</code> ends in underscore. Assert bracketed human output and unmodified JSON output.</p>
+      <h4>Expected files</h4>
+      <p><code>src/__tests__/contracts.test.ts</code></p>
+      <h4>Work</h4>
+      <ul><li>Make the RED assertions specific enough to catch both missing brackets and accidental JSON mutation.</li><li>If no focused CLI index test exists, add a small fake HTTP server patterned after the existing CLI register test.</li></ul>
+      <h4>Open questions / decision dependencies</h4>
+      <p>None.</p>
+      <h4>Verify</h4>
+      <pre><code>bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "CLI register|CLI index"</code></pre>
+    </article>
+
+    <article class="phase" id="phase-p2-url-formatting">
+      <h3>P2 — Implement terminal-safe human formatting</h3>
+      <h4>End State</h4>
+      <p>Human CLI plan review URLs are consistently angle-bracketed; JSON/API values remain unchanged.</p>
+      <h4>Tests first</h4>
+      <p>Use the P1 failing tests as the RED contract.</p>
+      <h4>Expected files</h4>
+      <p><code>src/cli.ts</code>, <code>src/__tests__/contracts.test.ts</code></p>
+      <h4>Work</h4>
+      <ul><li>Add a tiny local helper in <code>src/cli.ts</code>, such as <code>terminalLink(url)</code>, that returns <code>&lt;${url}&gt;</code>.</li><li>Apply it to the human register <code>Index URL</code> and <code>Review URL</code> lines, and to each human index table review URL.</li><li>Do not apply it to command arguments, JSON output, stored server URLs, or API request construction.</li></ul>
+      <h4>Open questions / decision dependencies</h4>
+      <p>None.</p>
+      <h4>Verify</h4>
+      <pre><code>bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "CLI register|CLI index"</code></pre>
+    </article>
+
+    <article class="phase" id="phase-p3-docs-verification">
+      <h3>P3 — Align docs and verify regression gates</h3>
+      <h4>End State</h4>
+      <p>README guidance matches the CLI behavior and the relevant repo test gate passes.</p>
+      <h4>Tests first</h4>
+      <p>No separate RED test is required unless implementation exposes generated help text. The contract tests from P1/P2 are the behavior gate.</p>
+      <h4>Expected files</h4>
+      <p><code>README.md</code>, possibly <code>src/__tests__/contracts.test.ts</code></p>
+      <h4>Work</h4>
+      <ul><li>Update the registration section to say the printed review URL may be angle-bracketed for terminal-safe clicking and should be opened without the brackets if manually copied into contexts that do not accept them.</li><li>Run the focused gate, then the full repo test gate.</li></ul>
+      <h4>Open questions / decision dependencies</h4>
+      <p>None.</p>
+      <h4>Verify</h4>
+      <pre><code>bun run build && bun run test</code></pre>
+    </article>
+  </section>
+
+  <section id="verification">
+    <h2>Verification strategy</h2>
+    <ul>
+      <li>Primary targeted gate: <code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js --test-name-pattern "CLI register|CLI index"</code></li>
+      <li>Final repo gate for non-doc source changes: <code>bun run build &amp;&amp; bun run test</code></li>
+      <li>Manual inspection: run a local fake or real registration whose returned plan ID ends in <code>_</code> and verify the terminal-visible Review URL is bracketed.</li>
+    </ul>
+  </section>
+
+  <section id="delivery-order">
+    <h2>Delivery order</h2>
+    <ol>
+      <li>Write failing CLI contract tests for trailing-underscore plan review URLs.</li>
+      <li>Implement the smallest human-output formatter in <code>src/cli.ts</code>.</li>
+      <li>Update README guidance and run targeted/full gates.</li>
+    </ol>
+  </section>
+
+  <section id="non-goals">
+    <h2>Non-goals</h2>
+    <ul>
+      <li>Changing generated ID alphabet, ID prefixes, stored IDs, or existing database rows.</li>
+      <li>Changing canonical API <code>reviewUrl</code> values, route shape, or browser navigation to add trailing slashes.</li>
+      <li>Changing queue, comment lifecycle, source sync, or rendered-plan safety semantics.</li>
+      <li>Changing terminal linkification behavior itself; the product only controls its output format.</li>
+    </ul>
+  </section>
+
+  <section id="review-record">
+    <h2>Review record</h2>
+    <ul>
+      <li id="review-2026-06-26-gpt">2026-06-26: GPT quality-reviewer plan review returned <code>VERDICT: PLAN_EXECUTION_READY</code> with no readiness blockers.</li>
+      <li id="review-2026-06-26-glm">2026-06-26: GLM quality-reviewer plan review returned <code>VERDICT: PLAN_EXECUTION_READY</code> with no readiness blockers. One wording precision note on AC4 was integrated before final re-review.</li>
+    </ul>
+  </section>
+
+  <section id="log">
+    <h2>Decisions / Deviations Log</h2>
+    <ul>
+      <li id="log-2026-06-26-created">2026-06-26: Created plan after tracing the issue to <code>nanoid</code>-generated IDs plus naked human CLI URL output. Chose terminal-safe display formatting over ID or route changes.</li>
+      <li id="log-2026-06-26-readiness">2026-06-26: Browser feedback requested execution-ready review. GPT and GLM reviewers agreed the plan is execution-ready; integrated GLM's non-blocking AC4 wording precision so machine outputs are described as unbracketed relative paths or absolute URLs.</li>
+      <li id="log-2026-06-26-red-green-p1-p2">2026-06-26: P1 RED evidence: <code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js --test-name-pattern "CLI register|CLI index"</code> failed because register and index printed bare URLs. P1-P2 GREEN evidence: the same command passed after adding trailing-underscore register/index contracts and terminal-safe human URL formatting.</li>
+      <li id="log-2026-06-26-p3-green">2026-06-26: P3 complete. Updated README terminal-safe URL guidance and ran final verification <code>bun run build &amp;&amp; bun run test</code>; 143 tests passed.</li>
+      <li id="log-2026-06-26-implementation-review">2026-06-26: Scoped implementation review passed with GPT <code>PASS_SCOPED</code> and GLM <code>PASS_SCOPED</code>. Pre-PR review passed with GPT <code>CLEAN_FOR_PR</code> and GLM <code>CLEAN_FOR_PR</code>; artifact: <code>thoughts/validation/pre-pr-reviews/2026-06-26-fix-terminal-urls.md</code>. Final post-review verification <code>bun run build &amp;&amp; bun run test</code> passed with 143 tests.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>
