@@ -50,6 +50,14 @@ brew services restart plan-reviewer
 plan-review --version && curl -fsS http://127.0.0.1:4317/health
 ```
 
+Maintainer/local HEAD deployment should use the checked-in deploy guard instead of copying files into `/opt/homebrew/Cellar` manually:
+
+```bash
+bun run deploy:homebrew:head
+```
+
+The guard uses Homebrew to install or upgrade the HEAD formula, relinks the formula to repair stale plan-reviewer symlinks left by older manual deploys, restarts the service, verifies `/health`, and fails if the linked keg is missing Homebrew's `.brew/plan-reviewer.rb` or `INSTALL_RECEIPT.json` metadata. Do not manually rewrite `/opt/homebrew/opt/plan-reviewer` or `/opt/homebrew/bin/plan-review`; those symlinks must remain Homebrew-managed so `brew services restart plan-reviewer` can locate the formula service definition.
+
 Development checkouts, unsupported install shapes, local-ahead HEAD builds, and metadata failures fail closed with `unknown`, `unsupported_channel`, or `check_failed` plus a next action. They do not show the browser update-available indicator.
 
 The running service exposes the same status at:

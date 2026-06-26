@@ -5482,6 +5482,8 @@ test('Homebrew formula locks the daemon service contract', () => {
 
   assert.match(formula, /class PlanReviewer < Formula/);
   assert.match(formula, /head "https:\/\/github\.com\/Nodaste-Lab\/plan-reviewer\.git", branch: "main"/);
+  assert.match(formula, /libexec\.rmtree if libexec\.exist\?/);
+  assert.match(formula, /rm_f bin\/"plan-review"/);
   assert.match(formula, /bin\.install_symlink/);
   assert.match(formula, /"serve",\s+"--host", "0\.0\.0\.0",\s+"--port", "4317"/);
   assert.match(formula, /"\#\{Dir\.home\}\/\.plan-reviewer\/plan-reviewer\.sqlite"/);
@@ -5500,11 +5502,37 @@ test('README documents update checks and stable Homebrew release process', () =>
   assert.match(readme, /Formula\/plan-reviewer\.rb` points at a newer tag tarball/);
   assert.match(readme, /brew update && brew upgrade Nodaste-Lab\/plan-reviewer\/plan-reviewer/);
   assert.match(readme, /brew update && brew upgrade --fetch-HEAD Nodaste-Lab\/plan-reviewer\/plan-reviewer/);
+  assert.match(readme, /bun run deploy:homebrew:head/);
+  assert.match(readme, /Do not manually rewrite `\/opt\/homebrew\/opt\/plan-reviewer`/);
+  assert.match(readme, /INSTALL_RECEIPT\.json/);
   assert.match(readme, /GET \/api\/runtime\/update/);
   assert.match(readme, /"updateChecks"/);
   assert.match(readme, /Maintainer release process/);
   assert.match(readme, /curl -L https:\/\/github\.com\/Nodaste-Lab\/plan-reviewer\/archive\/refs\/tags\/v0\.1\.1\.tar\.gz \| shasum -a 256/);
   assert.match(readme, /GitHub Release objects and packaged binary assets are optional/);
+});
+
+test('Homebrew HEAD deploy guard preserves service-manageable keg metadata', () => {
+  const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+  const packageJson = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8'));
+  const script = fs.readFileSync(path.join(packageRoot, 'scripts/deploy-homebrew-head.sh'), 'utf8');
+
+  assert.equal(packageJson.scripts['deploy:homebrew:head'], 'bash scripts/deploy-homebrew-head.sh');
+  assert.match(script, /brew update/);
+  assert.match(script, /installed_version=/);
+  assert.match(script, /latest_head="HEAD-\$\(git -C "\$tap_repo" rev-parse --short=7 HEAD\)"/);
+  assert.match(script, /skipping Homebrew rebuild/);
+  assert.match(script, /brew upgrade --fetch-HEAD "\$formula"/);
+  assert.match(script, /brew reinstall "\$formula"/);
+  assert.match(script, /brew link --overwrite "\$formula"/);
+  assert.match(script, /brew services restart "\$service"/);
+  assert.match(script, /INSTALL_RECEIPT\.json/);
+  assert.match(script, /\.brew\/plan-reviewer\.rb/);
+  assert.match(script, /for attempt in \{1\.\.40\}/);
+  assert.match(script, /curl -fsS "\$health_url"/);
+  assert.match(script, /service did not become healthy/);
+  assert.doesNotMatch(script, /ln -sfn/);
+  assert.doesNotMatch(script, /\/opt\/homebrew\/opt\/plan-reviewer/);
 });
 
 test('build metadata classifies realistic Homebrew stable and HEAD install shapes', () => {
