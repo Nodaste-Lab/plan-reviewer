@@ -12,6 +12,7 @@
     "test": "bun run build && node --test dist/**/*.test.js",
     "test:e2e": "bun run build && node dist/test-fixtures/e2e-run.js",
     "test:fixtures": "bun run build && node dist/test-fixtures/run.js",
+    "deploy:homebrew:head": "bash scripts/deploy-homebrew-head.sh",
     "dev": "tsx src/cli.ts"
   },
   "engines": {

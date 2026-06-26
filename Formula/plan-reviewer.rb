@@ -17,6 +17,12 @@ class PlanReviewer < Formula
     system "npm", "run", "build"
     system "npm", "prune", "--omit=dev"
 
+    # Homebrew HEAD reinstalls can target the same HEAD-<sha> keg path.
+    # Clear formula-owned artifacts first so a reinstall does not fail on
+    # existing libexec contents or the generated CLI symlink.
+    libexec.rmtree if libexec.exist?
+    rm_f bin/"plan-review"
+
     libexec.install "bin", "dist", "node_modules", "package.json", "package-lock.json"
     build_commit = (buildpath/".git").exist? ? Utils.safe_popen_read("git", "rev-parse", "HEAD").strip : ""
     build_metadata = {
