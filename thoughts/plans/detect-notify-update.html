@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Detect and notify when plan-reviewer updates are available</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #08111f;
+      --panel: #0f172a;
+      --panel-2: #111827;
+      --text: #e5e7eb;
+      --muted: #a7b0c0;
+      --accent: #38bdf8;
+      --accent-2: #a78bfa;
+      --border: #2b364d;
+      --warn: #fbbf24;
+      --danger: #fb7185;
+      --ok: #22c55e;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.55; }
+    a { color: #7dd3fc; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+    code { background: rgba(15, 23, 42, .9); color: #dbeafe; padding: .12rem .28rem; border-radius: 4px; }
+    pre { background: #020617; border: 1px solid var(--border); border-radius: 12px; padding: 14px; overflow-x: auto; }
+    .layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 24px; max-width: 1440px; margin: 0 auto; padding: 28px; }
+    nav { position: sticky; top: 18px; align-self: start; max-height: calc(100vh - 36px); overflow-y: auto; border: 1px solid var(--border); border-radius: 16px; background: rgba(15, 23, 42, .92); padding: 18px; }
+    nav h2 { margin: 0 0 12px; font-size: 13px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+    nav a { display: block; padding: 7px 0; color: #c4e7ff; text-decoration: none; font-size: 14px; }
+    nav a:hover { color: white; }
+    main { min-width: 0; }
+    header.hero, section, article.phase { border: 1px solid var(--border); border-radius: 18px; background: rgba(15, 23, 42, .86); padding: 22px; margin: 0 0 18px; }
+    header.hero { background: linear-gradient(135deg, rgba(56,189,248,.16), rgba(167,139,250,.12) 45%, rgba(15,23,42,.9)); }
+    h1, h2, h3, h4 { line-height: 1.2; color: #f8fafc; }
+    h1 { margin: 0 0 10px; font-size: clamp(2rem, 3vw, 3.15rem); }
+    h2 { margin-top: 0; font-size: 1.45rem; }
+    h3 { margin-bottom: .35rem; }
+    p { margin: .5rem 0 .9rem; }
+    ul, ol { padding-left: 1.25rem; }
+    li + li { margin-top: .35rem; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+    th, td { border-bottom: 1px solid var(--border); padding: 10px; text-align: left; vertical-align: top; }
+    th { color: #bfdbfe; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; }
+    .muted { color: var(--muted); }
+    .pill { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #475569; border-radius: 999px; padding: 3px 9px; margin: 2px 6px 2px 0; font-size: 12px; font-weight: 800; color: #e2e8f0; background: #111827; }
+    .pill.warn { border-color: rgba(251,191,36,.65); color: #fde68a; background: rgba(251,191,36,.12); }
+    .pill.ok { border-color: rgba(34,197,94,.65); color: #bbf7d0; background: rgba(34,197,94,.12); }
+    .callout { border: 1px solid rgba(251,191,36,.55); border-radius: 14px; background: rgba(251,191,36,.10); color: #fde68a; padding: 14px; margin: 14px 0; }
+    .decision-card, .scenario, .criteria { border: 1px solid #334155; border-radius: 14px; background: rgba(17, 24, 39, .9); padding: 14px; margin: 12px 0; }
+    .phase h3 { margin-top: 0; }
+    .phase-grid { display: grid; gap: 12px; }
+    .phase-grid > div { border-top: 1px solid var(--border); padding-top: 10px; }
+    .progress-list { list-style: none; padding: 0; }
+    .progress-list li { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; border: 1px solid #334155; border-radius: 12px; padding: 12px; background: rgba(17,24,39,.75); }
+    .progress-list input { margin-top: 5px; }
+    .diagram { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-items: stretch; margin: 14px 0; }
+    .node { border: 1px solid #475569; border-radius: 12px; background: #0b1220; padding: 12px; min-height: 92px; }
+    .node strong { display: block; color: #dbeafe; margin-bottom: 4px; }
+    @media (max-width: 860px) { .layout { grid-template-columns: 1fr; padding: 18px; } nav { position: static; max-height: none; } .diagram { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <nav aria-label="Plan sections">
+      <h2>Sections</h2>
+      <a href="#status">Status</a>
+      <a href="#goal">Goal</a>
+      <a href="#decision-attention">Decision attention</a>
+      <a href="#solution-narrative">Solution narrative</a>
+      <a href="#why-this-exists">Why this exists</a>
+      <a href="#authority-inputs">Authority and inputs</a>
+      <a href="#current-reality">Current reality</a>
+      <a href="#ui-impact">UI impact</a>
+      <a href="#progress">Progress</a>
+      <a href="#resume-instructions">Resume instructions</a>
+      <a href="#product-intent">Product intent</a>
+      <a href="#locked-decisions">Locked decisions</a>
+      <a href="#acceptance-criteria">Acceptance criteria</a>
+      <a href="#bdd-scenarios">BDD scenarios</a>
+      <a href="#coverage-matrix">Coverage matrix</a>
+      <a href="#phases">Phases</a>
+      <a href="#phase-p1-build-metadata">P1 metadata</a>
+      <a href="#phase-p2-update-checker">P2 checker</a>
+      <a href="#phase-p3-service-ui">P3 service/UI</a>
+      <a href="#phase-p4-docs-formula">P4 release process</a>
+      <a href="#verification-strategy">Verification</a>
+      <a href="#delivery-order">Delivery order</a>
+      <a href="#non-goals">Non-goals</a>
+      <a href="#decisions-log">Decisions log</a>
+    </nav>
+
+    <main>
+      <header class="hero" id="title">
+        <p class="pill ok">Execution-ready</p>
+        <p class="pill">No Linear issue exists</p>
+        <p class="pill">UI impact: yes</p>
+        <h1>Detect and notify when plan-reviewer updates are available</h1>
+        <p class="muted">Plan for adding a truthful update-availability signal to the CLI, service API, and browser shell without confusing stable Homebrew installs with HEAD-only commits.</p>
+      </header>
+
+      <section id="status">
+        <h2>Status</h2>
+        <p><strong>Implementation validation complete; PR feedback addressed.</strong> D1-D4 are resolved: stable releases are canonical, automatic checks require a visible browser opt-out, the browser notification is a no-layout-shift green up-arrow, and upgrades remain instruction-only. Independent GPT, GLM, and product-intent readiness gates cleared on the plan before implementation. P1-P4 implementation, full build/test/e2e verification, final GPT/GLM pre-PR implementation review, and PR creation are complete. Codex PR feedback on stable Homebrew current-version precedence has been fixed, verified, pushed, replied to, and marked resolved; final PR monitoring remains. PR: <a href="https://github.com/Nodaste-Lab/plan-reviewer/pull/60">#60</a>. No Linear issue was supplied; this checked-in plan is the tracker for the work.</p>
+      </section>
+
+      <section id="goal">
+        <h2>Goal</h2>
+        <p>Let operators and agents know when the installed <code>plan-reviewer</code> is behind the version that Homebrew can actually install, and show the exact safe command to update. The notification must distinguish normal stable installs, Homebrew <code>--HEAD</code> installs, development checkouts, and ambiguous builds.</p>
+      </section>
+
+      <section id="decision-attention">
+        <h2>Decision Attention / Low-confidence Areas</h2>
+        <div class="callout" id="release-decision-summary">
+          <strong>Core decision accepted:</strong> normal Homebrew users should be notified from stable formula availability, not arbitrary commits on <code>main</code>. Keep the release path as lightweight as possible while staying compatible with <code>brew update</code>: bump the package version, create and push a version tag, update <code>Formula/plan-reviewer.rb</code> to that tag tarball with the matching checksum, and push the formula change. A separate rich GitHub Release and packaged binary assets are optional follow-ups, not required for this slice. HEAD commit detection remains an advanced channel for users who explicitly installed with <code>brew install --HEAD</code>, and its update command must use <code>brew upgrade --fetch-HEAD</code>.
+        </div>
+        <article class="decision-card" id="decision-release-channel">
+          <h3>D1 — Release channel policy (resolved)</h3>
+          <p><strong>Decision:</strong> stable formula releases are the canonical update signal. Commit-based detection is a secondary HEAD-channel signal only.</p>
+          <p><strong>Release process requirement:</strong> document the essential Homebrew-compatible release procedure in repo-visible docs such as <code>README.md</code> or a checked-in release note, then create or update a project-specific, user-local skill at <code>~/.agents/skills/plan-reviewer-release/SKILL.md</code> that mirrors that repo-visible procedure for agents. The skill is intentionally not checked into this repository, but it is a convenience wrapper rather than the sole source of truth. Both docs and skill must cover preflight, version bump, version tag, formula URL/checksum update, push order, and install/upgrade smoke verification. They should treat rich GitHub Release creation as optional unless we later decide we need release notes or binary artifacts.</p>
+        </article>
+        <article class="decision-card" id="decision-network-default">
+          <h3>D2 — Outbound network checks (resolved)</h3>
+          <p><strong>Decision:</strong> enable a throttled automatic check against GitHub/Homebrew metadata by default, with a service-level opt-out visible in the browser configuration screen and backed by the user config file. Send no plan data; cache status; never block service startup if the check fails.</p>
+          <p><strong>Config requirement:</strong> add an Update checks section to the browser configuration/settings screen linked from the existing top-bar gear. It must show the current automatic-check setting, last-check status/cache timestamp when available, a checkbox or toggle to disable automatic checks, and the manual <code>plan-review update check</code> command. Saving persists to <code>~/.config/plan-reviewer/config.json</code> (for example <code>updateChecks.enabled: false</code>) without sending plan data upstream. Env/CLI overrides may exist for tests and ad hoc runs, but the visible config screen is the normal operator control.</p>
+        </article>
+        <article class="decision-card" id="decision-notification-surface">
+          <h3>D3 — Notification surfaces (resolved)</h3>
+          <p><strong>Decision:</strong> implement both a CLI command and a very unobtrusive browser indicator. The CLI gives agents copy-paste JSON and shell output; the browser gives human operators passive visibility.</p>
+          <p><strong>Browser indicator requirement:</strong> when an update is available, show a small fixed-position green up-arrow control that does not participate in page layout and therefore does not move existing buttons, cards, columns, comments, or plan content. On the desktop review shell, the preferred spot is the lower-right viewport corner inside the currently sparse collapsed comments rail; if the comments sidebar is open or the mobile comments control would collide, keep the same fixed/no-layout-shift behavior and move to the nearest unobstructed corner. The icon must have accessible text/tooltip such as “plan-reviewer update available” and open a compact detail/popover with the exact update command. Ambiguous, unsupported, dev, or <code>check_failed</code> states must not use the green up-arrow because that icon means an upgrade is actually available; those states remain visible through CLI/API/config status details only.</p>
+        </article>
+        <article class="decision-card" id="decision-auto-upgrade">
+          <h3>D4 — Apply updates automatically? (resolved)</h3>
+          <p><strong>Decision:</strong> no auto-update and no update/apply flow in this slice. Detection is instruction-only: show the exact Homebrew command for the detected install channel, explain whether a service restart is needed, and leave execution to the operator.</p>
+          <p><strong>Instruction requirement:</strong> CLI output, JSON <code>nextAction</code>, API status, and the browser up-arrow detail must provide copy-paste instructions. Stable installs should show <code>brew update && brew upgrade Nodaste-Lab/plan-reviewer/plan-reviewer</code>; HEAD installs should show <code>brew update && brew upgrade --fetch-HEAD Nodaste-Lab/plan-reviewer/plan-reviewer</code>. When the service appears Homebrew-managed, include a follow-up restart/verify step such as <code>brew services restart plan-reviewer</code> and a version or health check, but never run those commands automatically.</p>
+        </article>
+      </section>
+
+      <section id="solution-narrative">
+        <h2>Solution narrative</h2>
+        <p>Add one canonical update-status module that classifies the current install from local executable/package shape, fetches the latest installable target for that proven channel, compares current versus latest, and returns an actionable status object. Stable update checks use the Homebrew formula stable version as the installable source of truth; tags or GitHub releases that the formula does not point to must not trigger stable update notices. HEAD update checks use upstream branch metadata only for installs whose local Homebrew shape proves they are HEAD installs. Surface the same status object through:</p>
+        <ul>
+          <li><code>plan-review update check [--json]</code> for local CLI diagnostics.</li>
+          <li><code>GET /api/runtime/update</code> for the running service and browser shell.</li>
+          <li>A browser configuration/settings screen control that lets operators disable or re-enable automatic checks while keeping manual CLI checks available.</li>
+          <li>A non-blocking fixed green up-arrow browser indicator on the index and review pages only when an update is available.</li>
+        </ul>
+        <p>Add companion release-process deliverables: repo-visible release/update documentation that operators and maintainers can inspect, plus a project-specific user-local skill that is not committed to this repo and guides agents through the same minimum stable Homebrew-installable release path. The path should rely on GitHub's tag archive plus a formula update so <code>brew update</code> sees the new version through the tap.</p>
+        <figure id="update-flow-diagram">
+          <figcaption class="muted">Proposed data flow. The update checker is the single source of truth; UI and CLI render the same status.</figcaption>
+          <div class="diagram" role="img" aria-label="Build metadata and latest upstream metadata feed an update checker, which serves CLI JSON, HTTP status, and browser indicator text">
+            <div class="node"><strong>Installed build</strong>version, commit, executable/package path shape, formula name</div>
+            <div class="node"><strong>Latest metadata</strong>formula stable version or main HEAD commit</div>
+            <div class="node"><strong>Update checker</strong>compare, classify, cache, next action</div>
+            <div class="node"><strong>Surfaces</strong>CLI JSON, API, browser indicator</div>
+          </div>
+        </figure>
+      </section>
+
+      <section id="why-this-exists">
+        <h2>Why this plan exists</h2>
+        <p>The installed service is long-lived and currently gives no signal that a newer build exists. That creates hidden drift: agents may follow current docs while the daemon/CLI serving plans is older, lacks newer commands, or has stale queue/source-sync behavior. A truthful update notice reduces support burden and keeps operator-facing behavior aligned with the repository.</p>
+      </section>
+
+      <section id="authority-inputs">
+        <h2>Authority and inputs</h2>
+        <ul>
+          <li><code>AGENTS.md</code>: planning workflow, canonical build/test commands, and source-of-truth repo guidance.</li>
+          <li><code>thoughts/specs/product_intent.md</code>: operator installability, actionable diagnostics, and aligned CLI/API/browser behavior.</li>
+          <li><code>thoughts/plans/AGENTS.md</code>: HTML plan structure and registration requirements.</li>
+          <li><code>Formula/plan-reviewer.rb</code>: current stable URL is <code>v0.1.0</code>; formula also defines <code>head "https://github.com/Nodaste-Lab/plan-reviewer.git", branch: "main"</code>, installs the package under Homebrew <code>libexec</code>, and symlinks <code>bin/plan-review</code>.</li>
+          <li><code>README.md</code>: public install path is <code>brew install Nodaste-Lab/plan-reviewer/plan-reviewer</code> followed by <code>brew services start plan-reviewer</code>; it should become the repo-visible source for essential update and release commands.</li>
+          <li><code>~/.agents/skills/plan-reviewer-release/SKILL.md</code>: target user-local skill path for the release process; it must remain outside this repository and mirror the repo-visible release procedure rather than replace it.</li>
+          <li><code>src/cli.ts</code> and <code>src/server/app.ts</code>: no current <code>--version</code>, update check command, runtime status endpoint, fixed update indicator, or browser setting for update checks.</li>
+          <li><code>src/config.ts</code> and the existing top-bar gear route: user config already lives at <code>~/.config/plan-reviewer/config.json</code>, but the browser gear currently configures board columns only. The update-check opt-out needs a visible settings/configuration section rather than a hidden config-file-only switch.</li>
+          <li>Local Homebrew help: <code>brew upgrade --fetch-HEAD</code> is required to fetch upstream for HEAD freshness checks; otherwise HEAD is normally checked only when a stable/development version changes.</li>
+        </ul>
+      </section>
+
+      <section id="current-reality">
+        <h2>Current implementation reality</h2>
+        <table>
+          <thead><tr><th>Surface</th><th>Observed state</th><th>Implication</th></tr></thead>
+          <tbody>
+            <tr><td>Package version</td><td><code>package.json</code> is <code>0.1.0</code> and the package license is <code>Apache-2.0</code>.</td><td>There is no runtime-visible version command today.</td></tr>
+            <tr><td>Formula stable channel</td><td><code>Formula/plan-reviewer.rb</code> points stable installs at tag <code>v0.1.0</code> with a fixed SHA.</td><td>Ordinary <code>brew upgrade</code> will not pick up arbitrary new commits unless the formula stable version changes.</td></tr>
+            <tr><td>Formula install shape</td><td>The formula installs dependencies and built output under Homebrew <code>libexec</code>, then exposes <code>plan-review</code> through a Homebrew-managed bin symlink such as <code>.../Cellar/plan-reviewer/0.1.0/bin/plan-review</code> or <code>.../opt/plan-reviewer/bin/plan-review</code>.</td><td>Install-channel detection must inspect the canonicalized executable/package path shape; package version, latest metadata, or a generated file alone cannot prove a stable or HEAD Homebrew install.</td></tr>
+            <tr><td>Formula HEAD channel</td><td>The formula has a <code>head</code> URL for <code>main</code>; Homebrew HEAD installs use a different Cellar version segment such as <code>HEAD-...</code>.</td><td>Commit-based detection can work only for locally proven HEAD installs, and update instructions must use <code>--fetch-HEAD</code>.</td></tr>
+            <tr><td>Formula license</td><td>The formula still says <code>MIT</code> because the current stable tarball predates the package's <code>Apache-2.0</code> migration.</td><td>The next formula bump should update the formula license when its tarball contains the migrated package metadata; release docs and checks should prevent package/formula license drift.</td></tr>
+            <tr><td>Service health</td><td><code>GET /health</code> returns only <code>{ status: "ok" }</code>.</td><td>Runtime metadata needs a new endpoint rather than overloading health.</td></tr>
+            <tr><td>Browser shell</td><td>Index/review pages already have top-bar actions, a sticky navbar, optional left navigator, and a mostly empty collapsed comments rail at the lower-right edge when comments are closed.</td><td>The update notice should be a fixed green up-arrow indicator anchored in an empty corner, not a navbar item or inline banner, so showing it causes no layout shift.</td></tr>
+            <tr><td>Browser configuration</td><td>The top-bar gear currently opens <code>/columns</code>; the config file supports service URL and Codex delivery settings but has no update-check preference.</td><td>The implementation should introduce or extend a settings/configuration screen with an Update checks section and persist the opt-out through the shared config path.</td></tr>
+            <tr><td>Tests</td><td>Contract tests cover CLI/API/browser shell behavior with fake HTTP servers and app injection.</td><td>Update checks should be tested with fake metadata endpoints and no real network dependency.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="ui-impact">
+        <h2>UI impact triage</h2>
+        <p><strong>UI impact: yes.</strong> The work changes operator-facing CLI output and browser chrome.</p>
+        <div class="decision-card" id="current-target-ui">
+          <h3>Current / target textual rendition</h3>
+          <p><strong>Current:</strong> no update status is shown in <code>plan-review --help</code>, the index, review pages, or health output.</p>
+          <p><strong>Target CLI:</strong> <code>plan-review update check</code> prints <code>Update available: HEAD 4f09103 → 58b550f</code> plus the exact <code>brew update && brew upgrade --fetch-HEAD ...</code> or stable <code>brew upgrade ...</code> command, followed by service restart/verify instructions when applicable. <code>--json</code> returns the same fields used by the service.</p>
+          <p><strong>Target browser:</strong> a tiny fixed green up-arrow appears in a largely empty corner only when an update is available. It does not reserve layout space or move any existing button/artifact; on the desktop review shell, use the lower-right corner inside the sparse collapsed comments rail when available. The arrow has accessible text/tooltip and opens a compact detail/popover with “plan-reviewer update available” plus the safe Homebrew command and any service restart/verify instructions. The browser configuration/settings screen includes an Update checks section where operators can opt out of automatic checks, see the current cached status, and copy the manual check command. If checks fail or the channel is ambiguous/dev/unsupported, no green upgrade indicator appears; those states are visible through CLI/API/config status details with next actions.</p>
+        </div>
+      </section>
+
+      <section id="progress">
+        <h2>Progress</h2>
+        <ul class="progress-list">
+          <li id="progress-p1"><input type="checkbox" checked disabled> <span><strong>P1 — Build metadata and install-channel detection:</strong> complete; targeted metadata/install-shape tests are green.</span></li>
+          <li id="progress-p2"><input type="checkbox" checked disabled> <span><strong>P2 — Update checker and CLI command:</strong> complete; targeted formula/HEAD/CLI update-check tests are green.</span></li>
+          <li id="progress-p3"><input type="checkbox" checked disabled> <span><strong>P3 — Service API and browser notification:</strong> complete; runtime API, configuration opt-out, fixed green up-arrow, and quiet non-upgrade states are covered by targeted tests.</span></li>
+          <li id="progress-p4"><input type="checkbox" checked disabled> <span><strong>P4 — Release docs, skill, and formula alignment:</strong> complete; README release/update guidance, formula syntax, and user-local release skill checks are green.</span></li>
+        </ul>
+      </section>
+
+      <section id="resume-instructions">
+        <h2>Resume instructions (agent)</h2>
+        <p>Read this plan fully before resuming. D1-D4 are resolved and P1-P4 are implemented. Targeted update-detection checks, full build/test/e2e, final GPT/GLM pre-PR implementation review, and PR creation are complete. Codex PR feedback on stable Homebrew Cellar-versus-package precedence has been fixed, verified, pushed, replied to, and marked resolved. Next step is final monitoring of <a href="https://github.com/Nodaste-Lab/plan-reviewer/pull/60">#60</a>. Preserve the distinction between stable release updates and HEAD commit updates throughout any follow-up changes.</p>
+      </section>
+
+      <section id="product-intent">
+        <h2>Product intent alignment</h2>
+        <p>This plan cites and advances <code>thoughts/specs/product_intent.md</code>:</p>
+        <ul>
+          <li><strong>Operators need installable CLI/service behavior with actionable diagnostics:</strong> update status returns the exact safe Homebrew command and explains unsupported/ambiguous installs.</li>
+          <li><strong>Repo maintainers need source-linked plans, stable metadata, and aligned tests:</strong> repo-visible release documentation is the source of truth for bumping versions, tagging source, updating the Homebrew formula, and verifying <code>brew update</code>/<code>brew upgrade</code> compatibility; the user-local release skill mirrors that path for agents without becoming hidden tribal knowledge.</li>
+          <li><strong>HTTP API, CLI, browser UI, README guidance, and tests should describe the same lifecycle semantics:</strong> one update-status object drives every surface.</li>
+          <li><strong>Routine recoverable failures should self-heal or retry inside the normal flow:</strong> network failures are cached as non-blocking <code>check_failed</code> status with next action; stale checks refresh on demand.</li>
+          <li><strong>Every failure should explain the next safe action:</strong> ambiguous channel, dev checkout, missing GitHub metadata, and outdated install all produce agent-legible next actions.</li>
+        </ul>
+      </section>
+
+      <section id="locked-decisions">
+        <h2>Locked decisions</h2>
+        <ul>
+          <li id="locked-no-health-overload"><strong>Do not overload <code>/health</code>.</strong> Health remains a liveness probe; update status belongs in a runtime/status endpoint and CLI command.</li>
+          <li id="locked-no-auto-upgrade"><strong>No automatic upgrade in this slice.</strong> Detection shows copy-paste instructions only; it does not stop services, run Homebrew, restart daemons, or mutate user data.</li>
+          <li id="locked-visible-opt-out"><strong>Automatic checks require visible opt-out.</strong> If the service/browser performs automatic metadata checks, the browser configuration/settings screen must expose an Update checks toggle backed by persisted user config. Manual <code>plan-review update check</code> remains available even when automatic checks are disabled.</li>
+          <li id="locked-no-layout-shift-notice"><strong>Browser update notice must not move existing UI.</strong> The browser surface is a fixed green up-arrow indicator in a sparse corner, not an inline banner, navbar button, card, or grid item.</li>
+          <li id="locked-channel-truth"><strong>Do not claim stable updates from arbitrary commits, tags, or releases.</strong> A commit on <code>main</code> is an installable update only for the HEAD channel, and a stable tag/release is installable for normal users only after <code>Formula/plan-reviewer.rb</code> points to it.</li>
+          <li id="locked-install-channel-evidence"><strong>Install channel must come from local install shape.</strong> Production code must not infer <code>stable</code>, <code>head</code>, or <code>dev</code> from package version, latest formula metadata, GitHub tags/releases, or env/test overrides. Resolve the running CLI/service executable and package root; classify Homebrew stable only for realistic Cellar/opt stable shapes such as <code>.../Cellar/plan-reviewer/0.1.0/...</code>, classify HEAD only for realistic Homebrew HEAD shapes such as <code>.../Cellar/plan-reviewer/HEAD-.../...</code>, and return <code>unknown</code> or <code>unsupported_channel</code> when the shape is absent, conflicting, or unparseable.</li>
+          <li id="locked-repo-visible-release-docs"><strong>Essential release procedure is repo-visible.</strong> README or checked-in docs must document the minimal Homebrew release path; hidden user-local skills can mirror but not replace it.</li>
+          <li id="locked-user-local-skill"><strong>Release automation skill stays user-local.</strong> The project-specific release skill belongs at <code>~/.agents/skills/plan-reviewer-release/SKILL.md</code> or the user-approved global skill location, not in this repository.</li>
+          <li id="locked-no-real-network-tests"><strong>No real network in tests.</strong> Tests use fake endpoints and deterministic metadata fixtures.</li>
+        </ul>
+      </section>
+
+      <section id="acceptance-criteria">
+        <h2>Acceptance criteria</h2>
+        <ol>
+          <li class="criteria" id="ac-1"><strong>Current build is identifiable from local evidence:</strong> the CLI/service can report package version, build commit when available, formula name when installed through Homebrew, canonical executable/package path evidence, metadata source, and a clear <code>dev</code>/<code>stable</code>/<code>head</code>/<code>unknown</code> classification. Stable and HEAD channel classification must be derived from realistic Homebrew install shapes, not from package version, latest metadata, tags/releases, or production env overrides.</li>
+          <li class="criteria" id="ac-2"><strong>Stable update truthfulness:</strong> stable installs compare against the latest stable version exposed by <code>Formula/plan-reviewer.rb</code>. If a newer tag or GitHub release exists but the formula still points at the installed version, the status does not say ordinary <code>brew upgrade</code> will install it.</li>
+          <li class="criteria" id="ac-3"><strong>HEAD update truthfulness:</strong> HEAD installs compare against the configured upstream branch and return update-available only when the upstream branch is ahead of the installed commit; the next action includes <code>brew upgrade --fetch-HEAD</code>.</li>
+          <li class="criteria" id="ac-4"><strong>Ambiguous builds and failed checks fail closed:</strong> dev checkouts, local commits not present on the tracked branch, and missing build metadata return <code>unknown</code> or <code>unsupported_channel</code>; unreachable metadata endpoints return retryable <code>check_failed</code>. All include specific next actions rather than false update claims, and none render the green update-available arrow.</li>
+          <li class="criteria" id="ac-5"><strong>CLI/API/UI parity:</strong> <code>plan-review update check --json</code>, <code>GET /api/runtime/update</code>, and the browser indicator/config details use the same status vocabulary, next-action wording, and update instructions when an update is actually available.</li>
+          <li class="criteria" id="ac-6"><strong>Non-blocking behavior:</strong> update checks are throttled/cached and never block service startup, plan registration, comment queue delivery, or source sync.</li>
+          <li class="criteria" id="ac-7"><strong>No-layout-shift browser indicator:</strong> update-available browser UI is a fixed green up-arrow in a sparse corner, preferably the desktop review shell's lower-right collapsed-comments rail, with accessible text and a compact command detail; rendering it does not change navbar, board, review-shell, iframe, navigator, or comments layout measurements.</li>
+          <li class="criteria" id="ac-8"><strong>Instruction-only upgrade guidance:</strong> update-available statuses include copy-paste Homebrew upgrade, optional service restart, and verification instructions, but no CLI, API, browser, or service path runs upgrade/restart commands automatically.</li>
+          <li class="criteria" id="ac-9"><strong>Visible automatic-check opt-out:</strong> the browser configuration/settings screen can disable and re-enable automatic update checks, persists the setting to the shared user config path, and the service/browser respects the disabled state without removing manual <code>plan-review update check</code>.</li>
+          <li class="criteria" id="ac-10"><strong>Docs match the chosen channel:</strong> README or checked-in docs explain stable formula releases as the normal channel, HEAD as an explicit advanced channel, local install-shape detection, the matching update commands for both, how to restart/verify after upgrading, how to disable automatic checks, and the minimal maintainer release procedure, including formula license alignment when the stable tarball license changes.</li>
+          <li class="criteria" id="ac-11"><strong>Release skill exists outside the repo and mirrors docs:</strong> a project-specific user-local skill mirrors the repo-visible minimal Homebrew-compatible release process: preflight, version bump, tag creation, formula URL/checksum update, push, <code>brew update</code>, and Homebrew install/upgrade smoke test.</li>
+        </ol>
+      </section>
+
+      <section id="bdd-scenarios">
+        <h2>BDD scenarios</h2>
+        <article class="scenario" id="bdd-stable-up-to-date">
+          <h3>Stable install, no newer release</h3>
+          <p><strong>Given</strong> the installed build is stable <code>0.1.0</code> and the latest stable formula version is also <code>0.1.0</code>, <strong>when</strong> the operator runs <code>plan-review update check --json</code>, <strong>then</strong> the status is <code>up_to_date</code> and no browser update indicator is shown.</p>
+        </article>
+        <article class="scenario" id="bdd-homebrew-stable-install-shape">
+          <h3>Homebrew stable install shape proves stable channel</h3>
+          <p><strong>Given</strong> the running command is invoked through a Homebrew stable path such as <code>.../opt/plan-reviewer/bin/plan-review</code> that resolves to <code>.../Cellar/plan-reviewer/0.1.0/bin/plan-review</code> and the package root is under the matching <code>libexec</code>, <strong>when</strong> build identity is read, <strong>then</strong> the channel is <code>stable</code>, formula name is <code>plan-reviewer</code>, current version is <code>0.1.0</code>, the path evidence is included in JSON diagnostics, and no network metadata is needed to prove the channel.</p>
+        </article>
+        <article class="scenario" id="bdd-homebrew-head-install-shape">
+          <h3>Homebrew HEAD install shape proves HEAD channel</h3>
+          <p><strong>Given</strong> the running command resolves to a Homebrew HEAD Cellar path such as <code>.../Cellar/plan-reviewer/HEAD-abcdef0/bin/plan-review</code> and the build commit is available, <strong>when</strong> build identity is read, <strong>then</strong> the channel is <code>head</code>, the commit is reported, and later update instructions use <code>brew upgrade --fetch-HEAD</code>. If the HEAD-shaped install lacks a usable commit, the checker returns <code>unknown</code> or <code>unsupported_channel</code> rather than comparing raw version strings.</p>
+        </article>
+        <article class="scenario" id="bdd-untrusted-channel-evidence">
+          <h3>Untrusted metadata cannot prove install channel</h3>
+          <p><strong>Given</strong> a local checkout, npm global install, or fixture supplies a package version, generated metadata, or latest formula response that says <code>stable</code> or <code>head</code>, but the canonical executable/package path does not match a supported Homebrew install shape, <strong>when</strong> update status is checked in production mode, <strong>then</strong> the status is <code>unknown</code> or <code>unsupported_channel</code>, no green update arrow appears, and env/test overrides are accepted only by explicit test seams.</p>
+        </article>
+        <article class="scenario" id="bdd-stable-new-release">
+          <h3>Stable install, newer release available</h3>
+          <p><strong>Given</strong> the installed build is stable <code>0.1.0</code> and <code>Formula/plan-reviewer.rb</code> exposes stable version <code>0.1.1</code>, <strong>when</strong> the checker runs, <strong>then</strong> it returns <code>update_available</code>, identifies <code>0.1.1</code>, renders <code>brew update && brew upgrade Nodaste-Lab/plan-reviewer/plan-reviewer</code>, and provides service restart/verify instructions without running them.</p>
+        </article>
+        <article class="scenario" id="bdd-release-skill-stable-release">
+          <h3>Release docs and skill publish a stable Homebrew update</h3>
+          <p><strong>Given</strong> a maintainer follows the repo-visible release docs or invokes the user-local plan-reviewer release skill mirror for version <code>0.1.1</code>, <strong>when</strong> the minimal procedure completes, <strong>then</strong> <code>package.json</code> is bumped, a <code>v0.1.1</code> git tag exists on the remote, <code>Formula/plan-reviewer.rb</code> points at the tag tarball with the matching checksum, the formula change is pushed to the tap, and <code>brew update && brew upgrade Nodaste-Lab/plan-reviewer/plan-reviewer</code> can install the release.</p>
+        </article>
+        <article class="scenario" id="bdd-stable-tag-without-formula-bump">
+          <h3>Stable tag exists but formula is not bumped</h3>
+          <p><strong>Given</strong> a <code>v0.1.1</code> tag or GitHub release exists but <code>Formula/plan-reviewer.rb</code> still exposes stable version <code>0.1.0</code>, <strong>when</strong> a stable install checks for updates, <strong>then</strong> the status remains <code>up_to_date</code> for the stable channel or reports a non-upgradeable informational note, and it must not show the green update arrow or tell the operator that ordinary <code>brew upgrade</code> will install <code>0.1.1</code>.</p>
+        </article>
+        <article class="scenario" id="bdd-stable-new-commit-no-release">
+          <h3>Stable install, newer main commit but no release</h3>
+          <p><strong>Given</strong> the installed build is stable and <code>main</code> has newer commits but the stable formula still points at the installed version, <strong>when</strong> update status is checked, <strong>then</strong> it must not claim ordinary Homebrew has a stable update; it may report an optional HEAD-channel note only if the chosen policy includes HEAD suggestions.</p>
+        </article>
+        <article class="scenario" id="bdd-head-behind">
+          <h3>HEAD install behind upstream</h3>
+          <p><strong>Given</strong> the installed build is <code>HEAD-abc1234</code> and upstream <code>main</code> is <code>def5678</code> ahead of that commit, <strong>when</strong> update status is checked, <strong>then</strong> the status is <code>update_available</code> and the next action includes <code>brew update && brew upgrade --fetch-HEAD Nodaste-Lab/plan-reviewer/plan-reviewer</code>.</p>
+        </article>
+        <article class="scenario" id="bdd-head-local-ahead">
+          <h3>HEAD install not present on upstream branch</h3>
+          <p><strong>Given</strong> the installed commit is not reachable from upstream <code>main</code>, <strong>when</strong> update status is checked, <strong>then</strong> the status is <code>unsupported_channel</code> or <code>unknown</code>, the next action tells the operator to reinstall from the chosen Homebrew channel rather than claiming an update, and no green update-available arrow is shown.</p>
+        </article>
+        <article class="scenario" id="bdd-dev-checkout-no-update-claim">
+          <h3>Development checkout or missing build metadata</h3>
+          <p><strong>Given</strong> the operator runs from a local development checkout or the installed build lacks Homebrew channel metadata, <strong>when</strong> update status is checked, <strong>then</strong> the status is <code>unknown</code> or <code>unsupported_channel</code>, the next action explains how to run a manual check or reinstall through a supported Homebrew channel, and no browser green up-arrow is shown.</p>
+        </article>
+        <article class="scenario" id="bdd-network-failure">
+          <h3>Metadata endpoint failure</h3>
+          <p><strong>Given</strong> GitHub or Homebrew metadata cannot be reached, <strong>when</strong> the service starts or the browser loads the index, <strong>then</strong> normal plan-reviewer workflows continue and the update status records a retryable <code>check_failed</code> result with the exact manual retry command.</p>
+        </article>
+        <article class="scenario" id="bdd-update-indicator-no-layout-shift">
+          <h3>Browser update indicator appears without layout shift</h3>
+          <p><strong>Given</strong> the service reports <code>update_available</code> and the desktop review shell has the comments sidebar closed, <strong>when</strong> the review page renders, <strong>then</strong> a small fixed green up-arrow appears in the lower-right sparse comments rail, has accessible text/tooltip, opens a compact command detail, and the navbar, iframe, navigator, and comments rail keep the same layout measurements they had before the indicator rendered.</p>
+        </article>
+        <article class="scenario" id="bdd-update-check-opt-out">
+          <h3>Operator disables automatic update checks</h3>
+          <p><strong>Given</strong> automatic update checks are enabled by default, <strong>when</strong> the operator opens the browser configuration/settings screen, disables Update checks, and saves, <strong>then</strong> the setting is persisted in <code>~/.config/plan-reviewer/config.json</code>, the service/browser stops scheduling automatic metadata fetches, the runtime update API reports <code>automaticChecksEnabled: false</code>, and <code>plan-review update check</code> remains available for manual checks.</p>
+        </article>
+        <article class="scenario" id="bdd-instructions-no-auto-update">
+          <h3>Update notice gives instructions but does not apply them</h3>
+          <p><strong>Given</strong> an update is available for a Homebrew-managed service install, <strong>when</strong> the operator opens CLI output or the browser up-arrow detail, <strong>then</strong> it shows the channel-correct Homebrew upgrade command, restart guidance such as <code>brew services restart plan-reviewer</code>, and a verification step, and <strong>then</strong> no process is spawned and no upgrade/restart command is executed by plan-reviewer.</p>
+        </article>
+      </section>
+
+      <section id="coverage-matrix">
+        <h2>Test coverage matrix</h2>
+        <table>
+          <thead><tr><th>Acceptance</th><th>Scenarios</th><th>Planned test layer</th><th>Verify command</th></tr></thead>
+          <tbody>
+            <tr><td>AC1</td><td>Build metadata and install shape</td><td>Unit/contract tests for metadata reader, CLI version/update output, stable Cellar/opt path fixtures, HEAD Cellar path fixtures, symlink realpath handling, and untrusted metadata/env override rejection in production mode.</td><td><code>bun run build && node --test --test-name-pattern "build metadata|install shape|update check" dist/__tests__/contracts.test.js</code></td></tr>
+            <tr><td>AC2, AC3, AC4</td><td>Stable, HEAD, ambiguous/dev, <code>check_failed</code></td><td>Pure update-checker tests with fake latest-metadata endpoints and compare fixtures.</td><td><code>bun run build && node --test --test-name-pattern "update checker" dist/__tests__/contracts.test.js</code></td></tr>
+            <tr><td>AC5</td><td>CLI/API/UI parity</td><td>CLI fake-server tests, app injection for <code>/api/runtime/update</code>, and HTML assertions for indicator text/command parity.</td><td><code>bun run test</code></td></tr>
+            <tr><td>AC6</td><td>Non-blocking checks</td><td>Contract tests proving service startup and index render succeed when metadata fetch times out/fails.</td><td><code>bun run test</code></td></tr>
+            <tr><td>AC7</td><td>No-layout-shift indicator</td><td>HTML/CSS assertions and a focused browser/e2e check proving the fixed green up-arrow appears in a sparse corner, remains accessible, and does not alter navbar, iframe, navigator, or comments layout measurements.</td><td><code>bun run test:e2e</code></td></tr>
+            <tr><td>AC8</td><td>Instruction-only update</td><td>CLI/API/UI tests proving update status contains channel-correct instructions and no implementation path shells out to <code>brew upgrade</code> or <code>brew services restart</code>.</td><td><code>bun run test</code></td></tr>
+            <tr><td>AC9</td><td>Opt-out config</td><td>Config API/page tests proving the browser toggle persists, the service/browser skips automatic metadata fetches when disabled, and manual CLI checks still work.</td><td><code>bun run test</code></td></tr>
+            <tr><td>AC10, AC11</td><td>Docs/formula/release skill</td><td>Inspection plus formula syntax/smoke checks; verify repo-visible release docs exist and the release skill exists in the user-local skill directory, mirrors those docs, and is not under the repo.</td><td><code>bun run build && ruby -c Formula/plan-reviewer.rb && test -f "$HOME/.agents/skills/plan-reviewer-release/SKILL.md"</code></td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="phases">
+        <h2>Phase-by-phase execution plan</h2>
+
+        <article class="phase" id="phase-p1-build-metadata">
+          <h3>P1 — Build metadata and install-channel detection</h3>
+          <div class="phase-grid">
+            <div><h4>End State</h4><p>The running CLI can identify its own package version, build commit when known, formula name, canonical executable/package path evidence, metadata source, and install channel. Homebrew stable/HEAD classification comes from realistic local install shape; generated metadata and package metadata enrich diagnostics but do not override path evidence.</p></div>
+            <div><h4>Tests first</h4><p>Add tests for reading generated build metadata, resolving symlinked executable paths, stable Homebrew <code>Cellar/plan-reviewer/0.1.0</code> and <code>opt/plan-reviewer</code> shapes, HEAD Homebrew <code>Cellar/plan-reviewer/HEAD-...</code> shapes, package metadata fallback, dev checkout fallback, production rejection of env/test channel overrides, and clear unknown state when local path evidence or commit metadata is missing.</p></div>
+            <div><h4>Expected files</h4><p><code>src/updateStatus.ts</code> or <code>src/update/*</code>, <code>src/cli.ts</code>, <code>package.json</code>, <code>Formula/plan-reviewer.rb</code>, <code>src/__tests__/contracts.test.ts</code>.</p></div>
+            <div><h4>Work</h4><ul><li>Add a small metadata reader with no network behavior.</li><li>Resolve the invoked CLI/service entrypoint and package root through real paths so Homebrew <code>bin</code>, <code>opt</code>, <code>Cellar</code>, and <code>libexec</code> shapes can be recognized deterministically.</li><li>Classify stable only for semver-like Homebrew Cellar versions and HEAD only for Homebrew HEAD version segments with usable commit metadata; classify local checkouts, npm/global installs, conflicting shapes, and missing metadata as <code>dev</code>, <code>unknown</code>, or <code>unsupported_channel</code> without claiming an update.</li><li>Add a generated or formula-written build metadata artifact only as supporting evidence for installed builds, never as the sole proof of Homebrew channel.</li><li>Add <code>plan-review --version</code> or equivalent version output if needed for operator diagnostics.</li><li>Ensure dev runs are truthfully classified and do not pretend to be Homebrew installs.</li></ul></div>
+            <div><h4>Open questions / decision dependencies</h4><p>None for D1; stable release metadata is required because stable releases are the canonical update channel. This phase must still leave room for HEAD build metadata as a secondary channel.</p></div>
+            <div><h4>Verify</h4><pre><code>bun run build && node --test --test-name-pattern "build metadata|version" dist/__tests__/contracts.test.js</code></pre></div>
+          </div>
+        </article>
+
+        <article class="phase" id="phase-p2-update-checker">
+          <h3>P2 — Update checker and CLI command</h3>
+          <div class="phase-grid">
+            <div><h4>End State</h4><p><code>plan-review update check</code> reports <code>up_to_date</code>, <code>update_available</code>, <code>unknown</code>, <code>unsupported_channel</code>, or retryable <code>check_failed</code> with matching human and JSON output.</p></div>
+            <div><h4>Tests first</h4><p>Add fake metadata endpoint tests for stable no-update, stable newer release, stable newer commit with no release, HEAD behind, HEAD local-ahead/unknown, dev checkout or missing build metadata, and endpoint failure returning <code>check_failed</code>.</p></div>
+            <div><h4>Expected files</h4><p><code>src/updateStatus.ts</code> or <code>src/update/*</code>, <code>src/client/api.ts</code> only if reused request helpers are needed, <code>src/cli.ts</code>, <code>src/__tests__/contracts.test.ts</code>.</p></div>
+            <div><h4>Work</h4><ul><li>Define the update status schema and next-action strings.</li><li>Fetch the latest stable Homebrew formula metadata for stable installs according to D1; do not treat standalone tags or GitHub releases as installable stable updates until the formula points at them.</li><li>Fetch and compare upstream HEAD for HEAD installs; use ancestry/compare semantics rather than raw SHA inequality.</li><li>Implement <code>plan-review update check --json</code> and readable human output with copy-paste upgrade, service restart, and verification instructions.</li><li>Throttle or timeout network calls so CLI failures are actionable and bounded.</li><li>Keep the checker side-effect-free: it must not execute Homebrew or service restart commands.</li></ul></div>
+            <div><h4>Open questions / decision dependencies</h4><p>D2 is resolved: service/browser checks may run automatically, but only with a visible browser config opt-out and bounded caching. Canonical upstream metadata is otherwise locked: Homebrew formula stable metadata for stable installs and upstream branch metadata for HEAD installs.</p></div>
+            <div><h4>Verify</h4><pre><code>bun run build && node --test --test-name-pattern "update check|update checker" dist/__tests__/contracts.test.js</code></pre></div>
+          </div>
+        </article>
+
+        <article class="phase" id="phase-p3-service-ui">
+          <h3>P3 — Service API and browser notification</h3>
+          <div class="phase-grid">
+            <div><h4>End State</h4><p>The service exposes cached update status and the browser shell/index render a quiet, actionable fixed green up-arrow indicator only when warranted.</p></div>
+            <div><h4>Tests first</h4><p>Add app-injection tests for <code>/api/runtime/update</code>, config/settings toggle rendering and save behavior, index/review HTML indicator rendering, no-indicator up-to-date state, disabled automatic-check state, no-layout-shift placement, and startup behavior when update metadata fetch fails.</p></div>
+            <div><h4>Expected files</h4><p><code>src/server/app.ts</code>, <code>src/server/serve.ts</code> if startup wiring is needed, <code>src/config.ts</code>, <code>src/updateStatus.ts</code> or <code>src/update/*</code>, <code>src/__tests__/contracts.test.ts</code>, optional e2e fixture if browser behavior cannot be proven by contract tests.</p></div>
+            <div><h4>Work</h4><ul><li>Add a runtime update-status provider with cache, timeout, and explicit refresh behavior.</li><li>Add <code>GET /api/runtime/update</code> returning the same schema as CLI JSON plus whether automatic checks are enabled.</li><li>Introduce or extend the browser configuration/settings screen linked from the top-bar gear with an Update checks section, current cached status, manual command, and persisted enable/disable toggle.</li><li>Persist the toggle through <code>~/.config/plan-reviewer/config.json</code> and ensure disabled automatic checks do not schedule service/browser metadata fetches.</li><li>Render a fixed green up-arrow indicator only for <code>update_available</code> in the index and review shell without injecting plan-authored scripts, affecting iframe safety, or changing layout measurements; prefer the desktop review shell's lower-right collapsed-comments rail and avoid the mobile comments control.</li><li>Show the same copy-paste upgrade, restart, and verification instructions in the up-arrow detail without executing them.</li><li>Make <code>check_failed</code>, <code>unknown</code>, and <code>unsupported_channel</code> states quiet by default and available through API/CLI/config screen only, not through the green upgrade arrow.</li></ul></div>
+            <div><h4>Open questions / decision dependencies</h4><p>None. D2 requires the visible opt-out whenever automatic service/browser checks ship, and D3 is resolved: the browser notice ships as a no-layout-shift fixed green up-arrow indicator only for confirmed <code>update_available</code> status.</p></div>
+            <div><h4>Verify</h4><pre><code>bun run build && node --test --test-name-pattern "runtime update|update indicator" dist/__tests__/contracts.test.js
+bun run test:e2e</code></pre></div>
+          </div>
+        </article>
+
+        <article class="phase" id="phase-p4-docs-formula">
+          <h3>P4 — Release docs, skill, formula, and docs alignment</h3>
+          <div class="phase-grid">
+            <div><h4>End State</h4><p>README or checked-in docs, formula behavior, update commands, and the user-local release skill all encode the same lightweight stable-release policy. Operators know how to update stable and HEAD installs; maintainers/agents know how to publish a new Homebrew-installable stable release without adding unnecessary release infrastructure; the repo-visible docs are the source of truth and the local skill mirrors them.</p></div>
+            <div><h4>Tests first</h4><p>Add or update documentation-backed assertions if command examples are already tested. Otherwise, inspect docs, formula syntax, and the user-local skill as the phase gate.</p></div>
+            <div><h4>Expected files</h4><p><code>README.md</code>, <code>Formula/plan-reviewer.rb</code>, <code>package.json</code>, optional <code>docs/</code> release/update notes, and <code>~/.agents/skills/plan-reviewer-release/SKILL.md</code> outside this repository.</p></div>
+            <div><h4>Work</h4><ul><li>Document stable formula releases as the normal update channel and HEAD as an explicit advanced channel.</li><li>Document the automatic-update-check default, browser config opt-out, config-file key, and manual <code>plan-review update check</code> fallback.</li><li>Document that plan-reviewer never auto-applies updates; operators copy the shown Homebrew upgrade command, restart the service if needed, and verify the new version/health.</li><li>Document the minimal maintainer release procedure in repo-visible docs: preflight clean tree checks, version bump, build/test gates, release commit, annotated or lightweight version tag, tag push, tag tarball checksum calculation, formula URL/checksum/license update, formula push to the tap, <code>brew update</code>, Homebrew upgrade/install smoke, and rollback/failure guidance.</li><li>Create or update the user-local <code>plan-reviewer-release</code> skill outside the repo so it mirrors the repo-visible procedure and links back to the checked-in docs.</li><li>Make GitHub Release objects and binary artifacts explicitly optional, not required by the default process.</li><li>Keep the release skill project-specific by naming this repo, formula path, tap name, package manager, and canonical verification commands.</li><li>Document that the release skill is intentionally user-local and should not be committed to this repository.</li><li>Ensure formula-generated build metadata stays correct for both stable and HEAD installs.</li></ul></div>
+            <div><h4>Open questions / decision dependencies</h4><p>None. D1-D4 are resolved; docs should reflect the stable release policy, formula-as-source-of-truth update detection, automatic-check opt-out, green up-arrow indicator, instruction-only upgrade behavior, and repo-visible release procedure.</p></div>
+            <div><h4>Verify</h4><pre><code>bun run build
+ruby -c Formula/plan-reviewer.rb
+test -f "$HOME/.agents/skills/plan-reviewer-release/SKILL.md"
+test ! -e ".agents/skills/plan-reviewer-release/SKILL.md"
+bun run test</code></pre></div>
+          </div>
+        </article>
+      </section>
+
+      <section id="verification-strategy">
+        <h2>Verification strategy</h2>
+        <ul>
+          <li>Use fake local metadata endpoints for all automated update-check tests; no test should depend on GitHub availability.</li>
+          <li>Keep update-check failures non-fatal and prove existing plan registration/comment paths still pass the full suite.</li>
+          <li>Run <code>bun run build</code> and <code>bun run test</code> for final handoff.</li>
+          <li>Run <code>bun run test:e2e</code> because the browser shell will gain visible fixed-position update UI and a no-layout-shift requirement.</li>
+          <li>Manually smoke <code>plan-review update check --json</code> from a built tree, using a fake metadata endpoint or dependency injection if the real network policy is disabled in test mode.</li>
+        </ul>
+      </section>
+
+      <section id="delivery-order">
+        <h2>Delivery order</h2>
+        <ol>
+          <li>Confirm D1-D4 and install-shape channel evidence remain locked before execution: stable formula releases plus repo-visible release docs and user-local skill mirror; local Homebrew shape proves stable/HEAD classification; automatic checks with visible opt-out; CLI plus no-layout-shift green up-arrow; no auto-update, instructions only.</li>
+          <li>Implement metadata first; every later phase depends on truthful current-build identity.</li>
+          <li>Implement CLI update check before passive browser UI so the exact status/next-action contract is locked.</li>
+          <li>Expose service/browser surfaces from the same update-status object.</li>
+          <li>Create/update repo-visible release docs first, then mirror them in the user-local release skill and align Homebrew formula metadata after the code contract is proven.</li>
+        </ol>
+      </section>
+
+      <section id="non-goals">
+        <h2>Non-goals</h2>
+        <ul>
+          <li>No automatic <code>brew upgrade</code>, service restart, database migration, or self-updating daemon in this slice.</li>
+          <li>No public multi-tenant update telemetry or server-side analytics.</li>
+          <li>No change to comment queue, ack/resolve semantics, source sync, or rendered-plan sanitization.</li>
+          <li>No promise that stable users can install arbitrary unreleased commits through ordinary <code>brew upgrade</code>.</li>
+          <li>No per-indicator dismiss/snooze preferences in this slice; the only persistent browser preference is the service-level automatic update-check opt-out.</li>
+          <li>No repository-checked release skill; the skill is intentionally user-local and outside this repo. The essential release procedure itself must still be repo-visible in README or checked-in docs.</li>
+        </ul>
+      </section>
+
+      <section id="decisions-log">
+        <h2>Decisions / Deviations Log</h2>
+        <ul>
+          <li id="log-2026-06-24-draft"><time datetime="2026-06-24">2026-06-24</time>: Created review draft. Repo evidence shows the current formula has stable <code>v0.1.0</code> plus a HEAD channel. Plan recommends releases as the canonical stable update signal and HEAD commit comparison only for HEAD installs.</li>
+          <li id="log-2026-06-24-release-skill-feedback"><time datetime="2026-06-24">2026-06-24</time>: Integrated browser feedback on the release decision. D1 is now resolved: stable formula releases are canonical, and the plan requires a project-specific user-local release skill at <code>~/.agents/skills/plan-reviewer-release/SKILL.md</code> that is not checked into this repo.</li>
+          <li id="log-2026-06-24-lightweight-brew-update"><time datetime="2026-06-24">2026-06-24</time>: Integrated browser feedback to keep the release process lightweight while compatible with <code>brew update</code>. The default release path now uses a version tag plus formula URL/checksum update; GitHub Release objects and packaged binary assets are optional follow-ups.</li>
+          <li id="log-2026-06-24-update-check-opt-out"><time datetime="2026-06-24">2026-06-24</time>: Integrated browser feedback accepting automatic outbound update checks only with a visible browser configuration/settings opt-out backed by the user config file.</li>
+          <li id="log-2026-06-24-green-up-arrow"><time datetime="2026-06-24">2026-06-24</time>: Integrated browser feedback resolving D3 in favor of CLI plus a very unobtrusive fixed green up-arrow indicator in a sparse corner, preferably the desktop review shell's lower-right collapsed-comments rail, with no layout shift.</li>
+          <li id="log-2026-06-24-no-auto-update"><time datetime="2026-06-24">2026-06-24</time>: Integrated browser feedback resolving D4: no automatic update/apply flow; provide clear Homebrew upgrade, service restart, and verification instructions only.</li>
+          <li id="log-2026-06-25-readiness-status-vocabulary"><time datetime="2026-06-25">2026-06-25</time>: Integrated execution-readiness review feedback: <code>check_failed</code> is now an explicit retryable status, dev/missing-metadata builds have BDD coverage, and the green up-arrow is limited to confirmed <code>update_available</code> states.</li>
+          <li id="log-2026-06-25-release-docs-source"><time datetime="2026-06-25">2026-06-25</time>: Integrated product-intent readiness feedback: the essential Homebrew release process must be repo-visible, the user-local release skill mirrors that source of truth, and stable update checks key off formula availability rather than standalone tags or releases.</li>
+          <li id="log-2026-06-25-install-shape-evidence"><time datetime="2026-06-25">2026-06-25</time>: Integrated execution-readiness review feedback: P1 now locks install-channel detection to local Homebrew executable/package path shapes, binds tests to realistic stable and HEAD Cellar/opt layouts, rejects untrusted metadata/env channel claims in production, explains the no-Linear tracker, and calls out formula license alignment for the next release.</li>
+          <li id="log-2026-06-25-node-test-option-order"><time datetime="2026-06-25">2026-06-25</time>: Integrated execution-readiness review feedback: targeted Node test commands now place <code>--test-name-pattern</code> before the test file path so the documented verification commands are runnable.</li>
+          <li id="log-2026-06-25-execution-ready"><time datetime="2026-06-25">2026-06-25</time>: GPT, GLM, and product-intent readiness gates cleared the latest plan; status updated to execution-ready for implementation handoff.</li>
+          <li id="log-2026-06-25-p1-p2-green"><time datetime="2026-06-25">2026-06-25</time>: Implemented P1/P2. Added <code>src/updateStatus.ts</code>, <code>plan-review update check</code>, <code>plan-review --version</code>, Homebrew build metadata generation, stable formula parsing, HEAD compare checks, and targeted fake-endpoint contract tests. Verification: <code>bun run build &amp;&amp; node --test --test-name-pattern "build metadata|update check|update checker|CLI help" dist/__tests__/contracts.test.js</code>.</li>
+          <li id="log-2026-06-25-p3-green"><time datetime="2026-06-25">2026-06-25</time>: Implemented P3. Added cached <code>GET /api/runtime/update</code>, browser <code>/configuration</code> update-check opt-out, fixed green up-arrow rendering for confirmed <code>update_available</code>, and quiet handling for up-to-date/unknown/check-failed states. Targeted verification: <code>bun run build &amp;&amp; node --test --test-name-pattern "runtime update|browser configuration" dist/__tests__/contracts.test.js</code>.</li>
+          <li id="log-2026-06-25-head-compare-fix"><time datetime="2026-06-25">2026-06-25</time>: Scoped implementation review found the GitHub HEAD compare semantics were reversed. Fixed <code>{commit}...main</code> handling so <code>status: "ahead"</code> with <code>ahead_by &gt; 0</code> reports <code>update_available</code>, while <code>behind</code>/<code>diverged</code> fail closed.</li>
+          <li id="log-2026-06-25-p4-green"><time datetime="2026-06-25">2026-06-25</time>: Implemented P4. Added README update/operator guidance, maintainer Homebrew release process, contract assertions for docs, and the user-local release skill at <code>~/.agents/skills/plan-reviewer-release/SKILL.md</code>. Verification: <code>bun run build &amp;&amp; node --test --test-name-pattern "README documents update checks|Homebrew formula" dist/__tests__/contracts.test.js &amp;&amp; ruby -c Formula/plan-reviewer.rb &amp;&amp; test -f "$HOME/.agents/skills/plan-reviewer-release/SKILL.md" &amp;&amp; test ! -e ".agents/skills/plan-reviewer-release/SKILL.md"</code>.</li>
+          <li id="log-2026-06-25-ac7-e2e-deviation"><time datetime="2026-06-25">2026-06-25</time>: Logged AC7 verification deviation after implementation review. The plan called for an e2e layout-measurement assertion, but the implemented indicator is <code>position: fixed</code>, so it is outside document flow by CSS semantics and cannot alter navbar, iframe, navigator, board, or comments layout measurements. Contract tests lock fixed positioning, comments-open offset, mobile collision avoidance, and quiet non-upgrade rendering; <code>bun run test:e2e</code> still passed for the browser shell. No separate Playwright bounding-box assertion was added because it would duplicate the locked CSS invariant rather than test additional product behavior.</li>
+          <li id="log-2026-06-25-rebase-validation"><time datetime="2026-06-25">2026-06-25</time>: Rebased the uncommitted feature diff onto current <code>origin/main</code> and integrated the update-check opt-out into the existing <code>/configuration</code> surface instead of introducing a competing <code>/settings</code> page. Verification: <code>bun run build &amp;&amp; bun run test &amp;&amp; bun run test:e2e</code> passed with 140 contract tests plus e2e scenarios.</li>
+          <li id="log-2026-06-25-final-review"><time datetime="2026-06-25">2026-06-25</time>: Final pre-PR GPT and GLM implementation reviews both returned <code>CLEAN_FOR_PR</code>. Review artifact: <code>thoughts/validation/pre-pr-reviews/2026-06-25-detect-notify-update.md</code>.</li>
+          <li id="log-2026-06-25-pr-open"><time datetime="2026-06-25">2026-06-25</time>: Opened PR <a href="https://github.com/Nodaste-Lab/plan-reviewer/pull/60">#60</a> and linked/refreshed it in plan-review for <code>plan_kL7h2zMp1IkL</code>.</li>
+          <li id="log-2026-06-25-pr-cellar-feedback"><time datetime="2026-06-25">2026-06-25</time>: Addressed Codex PR feedback that stable update checks must prefer the Homebrew Cellar version over the packaged <code>package.json</code> version. Updated comparison and human labels to use Cellar-first stable current versions, added a Cellar/package drift regression test, reran <code>bun run build &amp;&amp; bun run test &amp;&amp; bun run test:e2e</code> with 141 contract tests plus e2e scenarios, and completed the post-feedback adversarial reviewer pair with no unresolved in-scope findings.</li>
+        </ul>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

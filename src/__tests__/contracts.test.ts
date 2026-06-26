@@ -17,6 +17,7 @@ import { findImageSources } from '../htmlImages.js';
 import { resolveDeliveryWorkerConfig, resolveServiceUrl } from '../config.js';
 import { discoverImageAssets } from '../cli.js';
 import { discoverPullRequest, parseGitHubPrUrl, pullRequestStatus } from '../githubPr.js';
+import { checkForUpdates, formatUpdateStatus, readBuildIdentity } from '../updateStatus.js';
 import { buildRegistrationAgentInstructions, renderRegistrationInstructionCommands } from '../registrationInstructions.js';
 import { buildAgentNextClaimed, buildAgentNextEmpty } from '../agentNext.js';
 import { sha256 } from '../util.js';
@@ -69,6 +70,54 @@ function assertIconOnlyControl(html: string, id: string, label: string, icon: st
   assert.match(element, new RegExp(`\\baria-label="${escapeRegExp(label)}"`));
   assert.match(element, new RegExp(`\\btitle="${escapeRegExp(title)}"`));
   assert.equal(elementText(element), icon, `#${id} should render only its icon text`);
+}
+
+function makeHomebrewInstall(versionSegment: string, packageVersion: string, metadata: Record<string, unknown> = {}) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-review-homebrew-'));
+  const cellarRoot = path.join(root, 'Cellar', 'plan-reviewer', versionSegment);
+  const libexec = path.join(cellarRoot, 'libexec');
+  const libexecBin = path.join(libexec, 'bin');
+  const cellarBin = path.join(cellarRoot, 'bin');
+  fs.mkdirSync(libexecBin, { recursive: true });
+  fs.mkdirSync(cellarBin, { recursive: true });
+  fs.writeFileSync(path.join(libexec, 'package.json'), `${JSON.stringify({ name: 'plan-reviewer', version: packageVersion, license: 'Apache-2.0' }, null, 2)}\n`);
+  fs.writeFileSync(path.join(libexecBin, 'plan-review'), '#!/usr/bin/env node\n');
+  fs.symlinkSync('../libexec/bin/plan-review', path.join(cellarBin, 'plan-review'));
+  if (Object.keys(metadata).length > 0) {
+    fs.writeFileSync(path.join(libexec, 'plan-reviewer-build.json'), `${JSON.stringify(metadata, null, 2)}\n`);
+  }
+  fs.mkdirSync(path.join(root, 'opt'), { recursive: true });
+  fs.symlinkSync(cellarRoot, path.join(root, 'opt', 'plan-reviewer'), 'dir');
+  return {
+    root,
+    packageRoot: libexec,
+    executablePath: path.join(root, 'opt', 'plan-reviewer', 'bin', 'plan-review')
+  };
+}
+
+async function withResponseServer(routes: Record<string, { status?: number; body: string; contentType?: string }>, run: (baseUrl: string, seen: string[]) => Promise<void>) {
+  const seen: string[] = [];
+  const server = http.createServer((request, response) => {
+    const url = request.url ?? '/';
+    seen.push(url);
+    const route = routes[url] ?? routes['*'];
+    if (!route) {
+      response.writeHead(404, { 'content-type': 'text/plain' });
+      response.end('not found');
+      return;
+    }
+    response.writeHead(route.status ?? 200, { 'content-type': route.contentType ?? 'text/plain' });
+    response.end(route.body);
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  const port = typeof address === 'object' && address ? address.port : undefined;
+  assert.equal(typeof port, 'number');
+  try {
+    await run(`http://127.0.0.1:${port}`, seen);
+  } finally {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
 }
 
 test('schemas validate locked registration, comment, and claim contracts', () => {
@@ -5315,6 +5364,322 @@ test('Homebrew formula locks the daemon service contract', () => {
   assert.match(formula, /error_log_path var\/"log\/plan-reviewer\.err\.log"/);
   assert.match(formula, /brew services stop plan-reviewer/);
   assert.match(formula, /rm -rf ~\/\.plan-reviewer/);
+});
+
+test('README documents update checks and stable Homebrew release process', () => {
+  const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+  const readme = fs.readFileSync(path.join(packageRoot, 'README.md'), 'utf8');
+
+  assert.match(readme, /plan-review update check --json/);
+  assert.match(readme, /Formula\/plan-reviewer\.rb` points at a newer tag tarball/);
+  assert.match(readme, /brew update && brew upgrade Nodaste-Lab\/plan-reviewer\/plan-reviewer/);
+  assert.match(readme, /brew update && brew upgrade --fetch-HEAD Nodaste-Lab\/plan-reviewer\/plan-reviewer/);
+  assert.match(readme, /GET \/api\/runtime\/update/);
+  assert.match(readme, /"updateChecks"/);
+  assert.match(readme, /Maintainer release process/);
+  assert.match(readme, /curl -L https:\/\/github\.com\/Nodaste-Lab\/plan-reviewer\/archive\/refs\/tags\/v0\.1\.1\.tar\.gz \| shasum -a 256/);
+  assert.match(readme, /GitHub Release objects and packaged binary assets are optional/);
+});
+
+test('build metadata classifies realistic Homebrew stable and HEAD install shapes', () => {
+  const stable = makeHomebrewInstall('0.1.0', '0.1.0');
+  const head = makeHomebrewInstall('HEAD-abcdef0', '0.1.0', { gitCommit: 'abcdef0123456789', formula: 'plan-reviewer', source: 'homebrew' });
+  try {
+    const stableIdentity = readBuildIdentity({ executablePath: stable.executablePath, packageRoot: stable.packageRoot });
+    assert.equal(stableIdentity.installChannel, 'stable');
+    assert.equal(stableIdentity.packageVersion, '0.1.0');
+    assert.equal(stableIdentity.formulaName, 'plan-reviewer');
+    assert.equal(stableIdentity.homebrew?.cellarVersion, '0.1.0');
+    assert.match(stableIdentity.pathEvidence.realExecutablePath, /Cellar\/plan-reviewer\/0\.1\.0\/libexec\/bin\/plan-review$/);
+
+    const headIdentity = readBuildIdentity({ executablePath: head.executablePath, packageRoot: head.packageRoot });
+    assert.equal(headIdentity.installChannel, 'head');
+    assert.equal(headIdentity.buildCommit, 'abcdef0123456789');
+    assert.equal(headIdentity.formulaName, 'plan-reviewer');
+    assert.equal(headIdentity.homebrew?.cellarVersion, 'HEAD-abcdef0');
+  } finally {
+    fs.rmSync(stable.root, { recursive: true, force: true });
+    fs.rmSync(head.root, { recursive: true, force: true });
+  }
+});
+
+test('build metadata does not trust non-Homebrew metadata to prove update channel', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-review-non-homebrew-'));
+  try {
+    fs.writeFileSync(path.join(root, 'package.json'), `${JSON.stringify({ name: 'plan-reviewer', version: '9.9.9' }, null, 2)}\n`);
+    fs.writeFileSync(path.join(root, 'plan-reviewer-build.json'), `${JSON.stringify({ channel: 'stable', formula: 'plan-reviewer', gitCommit: 'def456' }, null, 2)}\n`);
+    fs.mkdirSync(path.join(root, 'bin'));
+    const executablePath = path.join(root, 'bin', 'plan-review');
+    fs.writeFileSync(executablePath, '#!/usr/bin/env node\n');
+
+    const identity = readBuildIdentity({ executablePath, packageRoot: root });
+    assert.notEqual(identity.installChannel, 'stable');
+    assert.notEqual(identity.installChannel, 'head');
+    assert.equal(identity.formulaName, undefined);
+    assert.equal(identity.buildCommit, 'def456');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('update checker uses Homebrew formula stable version as stable source of truth', async () => {
+  const install = makeHomebrewInstall('0.1.0', '0.1.0');
+  try {
+    const identity = readBuildIdentity({ executablePath: install.executablePath, packageRoot: install.packageRoot });
+    await withResponseServer({
+      '/Formula/plan-reviewer.rb': { body: 'class PlanReviewer < Formula\n  url "https://github.com/Nodaste-Lab/plan-reviewer/archive/refs/tags/v0.1.1.tar.gz"\nend\n' }
+    }, async baseUrl => {
+      const status = await checkForUpdates({ identity, stableFormulaUrl: `${baseUrl}/Formula/plan-reviewer.rb` });
+      assert.equal(status.status, 'update_available');
+      assert.equal(status.latest?.version, '0.1.1');
+      assert.equal(status.updateCommand, 'brew update && brew upgrade Nodaste-Lab/plan-reviewer/plan-reviewer');
+      assert.match(status.nextAction, /brew update && brew upgrade Nodaste-Lab\/plan-reviewer\/plan-reviewer/);
+    });
+
+    await withResponseServer({
+      '/Formula/plan-reviewer.rb': { body: 'class PlanReviewer < Formula\n  url "https://github.com/Nodaste-Lab/plan-reviewer/archive/refs/tags/v0.1.0.tar.gz"\nend\n' }
+    }, async (baseUrl, seen) => {
+      const status = await checkForUpdates({ identity, stableFormulaUrl: `${baseUrl}/Formula/plan-reviewer.rb` });
+      assert.equal(status.status, 'up_to_date');
+      assert.deepEqual(seen, ['/Formula/plan-reviewer.rb']);
+    });
+
+    await withResponseServer({
+      '/Formula/plan-reviewer.rb': { body: 'class PlanReviewer < Formula\n  resource "fixture" do\n    version "9.9.9"\n    url "https://example.test/fixture-v9.9.9.tar.gz"\n  end\n  url "https://github.com/Nodaste-Lab/plan-reviewer/archive/refs/tags/v0.1.0.tar.gz"\nend\n' }
+    }, async baseUrl => {
+      const status = await checkForUpdates({ identity, stableFormulaUrl: `${baseUrl}/Formula/plan-reviewer.rb` });
+      assert.equal(status.status, 'up_to_date');
+      assert.equal(status.latest?.version, '0.1.0');
+    });
+  } finally {
+    fs.rmSync(install.root, { recursive: true, force: true });
+  }
+});
+
+test('update checker prefers Homebrew Cellar stable version over packaged version', async () => {
+  const install = makeHomebrewInstall('0.1.1', '0.1.0');
+  try {
+    const identity = readBuildIdentity({ executablePath: install.executablePath, packageRoot: install.packageRoot });
+    await withResponseServer({
+      '/Formula/plan-reviewer.rb': { body: 'class PlanReviewer < Formula\n  url "https://github.com/Nodaste-Lab/plan-reviewer/archive/refs/tags/v0.1.1.tar.gz"\nend\n' }
+    }, async baseUrl => {
+      const status = await checkForUpdates({ identity, stableFormulaUrl: `${baseUrl}/Formula/plan-reviewer.rb` });
+      assert.equal(status.status, 'up_to_date');
+    });
+
+    await withResponseServer({
+      '/Formula/plan-reviewer.rb': { body: 'class PlanReviewer < Formula\n  url "https://github.com/Nodaste-Lab/plan-reviewer/archive/refs/tags/v0.1.2.tar.gz"\nend\n' }
+    }, async baseUrl => {
+      const status = await checkForUpdates({ identity, stableFormulaUrl: `${baseUrl}/Formula/plan-reviewer.rb` });
+      assert.equal(status.status, 'update_available');
+      assert.match(status.nextAction, /Current stable build 0\.1\.1 is behind 0\.1\.2/);
+      assert.match(formatUpdateStatus(status), /Update available: stable 0\.1\.1 → 0\.1\.2/);
+    });
+  } finally {
+    fs.rmSync(install.root, { recursive: true, force: true });
+  }
+});
+
+test('update checker compares HEAD installs by upstream ancestry and fetch-HEAD command', async () => {
+  const install = makeHomebrewInstall('HEAD-abcdef0', '0.1.0', { gitCommit: 'abcdef0123456789' });
+  try {
+    const identity = readBuildIdentity({ executablePath: install.executablePath, packageRoot: install.packageRoot });
+    await withResponseServer({
+      '/compare/abcdef0123456789...main': { contentType: 'application/json', body: JSON.stringify({ status: 'ahead', ahead_by: 2, commits: [{ sha: '1111111' }, { sha: 'def5678' }] }) }
+    }, async baseUrl => {
+      const status = await checkForUpdates({ identity, headCompareUrl: `${baseUrl}/compare/{commit}...main` });
+      assert.equal(status.status, 'update_available');
+      assert.equal(status.latest?.commit, 'def5678');
+      assert.equal(status.updateCommand, 'brew update && brew upgrade --fetch-HEAD Nodaste-Lab/plan-reviewer/plan-reviewer');
+      assert.match(formatUpdateStatus(status), /Update available: head abcdef0123456789 → def5678/);
+    });
+
+    await withResponseServer({
+      '/compare/abcdef0123456789...main': { contentType: 'application/json', body: JSON.stringify({ status: 'behind', ahead_by: 0, commits: [] }) }
+    }, async baseUrl => {
+      const status = await checkForUpdates({ identity, headCompareUrl: `${baseUrl}/compare/{commit}...main` });
+      assert.equal(status.status, 'unsupported_channel');
+      assert.doesNotMatch(status.nextAction, /brew upgrade/);
+    });
+  } finally {
+    fs.rmSync(install.root, { recursive: true, force: true });
+  }
+});
+
+test('update checker fails closed for metadata endpoint failures and unsupported builds', async () => {
+  const install = makeHomebrewInstall('0.1.0', '0.1.0');
+  try {
+    const identity = readBuildIdentity({ executablePath: install.executablePath, packageRoot: install.packageRoot });
+    await withResponseServer({ '/Formula/plan-reviewer.rb': { status: 500, body: 'nope' } }, async baseUrl => {
+      const status = await checkForUpdates({ identity, stableFormulaUrl: `${baseUrl}/Formula/plan-reviewer.rb` });
+      assert.equal(status.status, 'check_failed');
+      assert.match(status.nextAction, /plan-review update check/);
+      assert.equal(status.updateCommand, undefined);
+    });
+
+    const unsupported = await checkForUpdates({ identity: { ...identity, installChannel: 'unknown', formulaName: undefined, homebrew: undefined } });
+    assert.equal(unsupported.status, 'unknown');
+    assert.equal(unsupported.updateCommand, undefined);
+  } finally {
+    fs.rmSync(install.root, { recursive: true, force: true });
+  }
+});
+
+test('CLI update check reports machine-readable status for development checkouts', () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+  const result = spawnSync(process.execPath, ['dist/cli.js', 'update', 'check', '--json'], {
+    cwd: root,
+    encoding: 'utf8'
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  const parsed = JSON.parse(result.stdout);
+  assert.equal(parsed.status, 'unknown');
+  assert.match(parsed.nextAction, /Homebrew/);
+  assert.equal(parsed.updateCommand, undefined);
+});
+
+test('runtime update API and browser shells expose confirmed update availability only', async () => {
+  const install = makeHomebrewInstall('0.1.0', '0.1.0');
+  try {
+    const identity = readBuildIdentity({ executablePath: install.executablePath, packageRoot: install.packageRoot });
+    const updateStatus = await checkForUpdates({
+      identity,
+      fetchImpl: async () => new Response('class PlanReviewer < Formula\n  url "https://github.com/Nodaste-Lab/plan-reviewer/archive/refs/tags/v0.1.1.tar.gz"\nend\n')
+    });
+    assert.equal(updateStatus.status, 'update_available');
+
+    const app = createApp({ dbPath: tempDbPath('runtime-update-api'), updateChecks: { initialStatus: updateStatus } });
+    try {
+      const runtime = await app.inject({ method: 'GET', url: '/api/runtime/update' });
+      assert.equal(runtime.statusCode, 200, runtime.body);
+      assert.equal(runtime.json().data.status, 'update_available');
+      assert.equal(runtime.json().data.automaticChecksEnabled, true);
+      assert.equal(runtime.json().data.updateCommand, 'brew update && brew upgrade Nodaste-Lab/plan-reviewer/plan-reviewer');
+
+      const index = await app.inject({ method: 'GET', url: '/' });
+      assert.match(index.body, /id="runtime-update-indicator-root"/);
+      assert.match(index.body, /plan-reviewer update available/);
+      assert.match(index.body, /brew update &amp;&amp; brew upgrade Nodaste-Lab\/plan-reviewer\/plan-reviewer/);
+
+      const register = await app.inject({ method: 'POST', url: '/api/plans/register', payload: sampleRegisterPayload() });
+      const planId = register.json().data.planId;
+      const shell = await app.inject({ method: 'GET', url: `/p/${planId}` });
+      assert.match(shell.body, /id="runtime-update-indicator-root"/);
+      assert.match(shell.body, /plan-reviewer update available/);
+
+      const css = await app.inject({ method: 'GET', url: '/client.css' });
+      assert.match(css.body, /\.runtime-update-indicator\{position:fixed/);
+      assert.match(css.body, /body\.comments-open \.runtime-update-indicator/);
+    } finally {
+      await app.close();
+    }
+  } finally {
+    fs.rmSync(install.root, { recursive: true, force: true });
+  }
+});
+
+test('runtime update page rendering uses cached status without blocking on cold metadata fetches', async () => {
+  let checkerCalls = 0;
+  const app = createApp({
+    dbPath: tempDbPath('runtime-update-cold-cache'),
+    updateChecks: {
+      checker: async () => {
+        checkerCalls += 1;
+        return {
+          status: 'up_to_date',
+          checkedAt: new Date().toISOString(),
+          current: readBuildIdentity(),
+          latest: { version: '0.1.0', source: 'test' },
+          nextAction: 'No update.'
+        };
+      }
+    }
+  });
+  try {
+    const index = await app.inject({ method: 'GET', url: '/' });
+    assert.equal(index.statusCode, 200, index.body);
+    assert.equal(checkerCalls, 0);
+    assert.doesNotMatch(index.body, /class="runtime-update-indicator"/);
+
+    const runtime = await app.inject({ method: 'GET', url: '/api/runtime/update' });
+    assert.equal(runtime.statusCode, 200, runtime.body);
+    assert.equal(runtime.json().data.status, 'up_to_date');
+    assert.equal(checkerCalls, 1);
+  } finally {
+    await app.close();
+  }
+});
+
+test('runtime update indicator stays quiet for non-upgrade statuses', async () => {
+  const install = makeHomebrewInstall('0.1.0', '0.1.0');
+  try {
+    const identity = readBuildIdentity({ executablePath: install.executablePath, packageRoot: install.packageRoot });
+    const status = await checkForUpdates({
+      identity,
+      fetchImpl: async () => new Response('class PlanReviewer < Formula\n  url "https://github.com/Nodaste-Lab/plan-reviewer/archive/refs/tags/v0.1.0.tar.gz"\nend\n')
+    });
+    assert.equal(status.status, 'up_to_date');
+    const app = createApp({ dbPath: tempDbPath('runtime-update-quiet'), updateChecks: { initialStatus: status } });
+    try {
+      const index = await app.inject({ method: 'GET', url: '/' });
+      assert.match(index.body, /id="runtime-update-indicator-root"/);
+      assert.doesNotMatch(index.body, /class="runtime-update-indicator"/);
+      assert.doesNotMatch(index.body, /plan-reviewer update available/);
+    } finally {
+      await app.close();
+    }
+  } finally {
+    fs.rmSync(install.root, { recursive: true, force: true });
+  }
+});
+
+test('browser configuration persists automatic update check opt-out without disabling manual CLI checks', async () => {
+  const configFile = path.join(os.tmpdir(), `plan-reviewer-update-config-${process.pid}-${Date.now()}.json`);
+  fs.writeFileSync(configFile, `${JSON.stringify({ url: 'http://127.0.0.1:4317', codexDelivery: { enabled: true, mode: 'fake' } }, null, 2)}\n`);
+  let checkerCalls = 0;
+  const app = createApp({
+    dbPath: tempDbPath('runtime-update-settings'),
+    updateChecks: {
+      configFile,
+      checker: async () => {
+        checkerCalls += 1;
+        return {
+          status: 'up_to_date',
+          checkedAt: new Date().toISOString(),
+          current: readBuildIdentity(),
+          latest: { version: '0.1.0', source: 'test' },
+          nextAction: 'No update.'
+        };
+      }
+    }
+  });
+  try {
+    const settings = await app.inject({ method: 'GET', url: '/configuration' });
+    assert.equal(settings.statusCode, 200, settings.body);
+    assert.match(settings.body, /Update checks/);
+    assert.match(settings.body, /id="update-checks-enabled"[^>]*checked/);
+    assert.match(settings.body, /plan-review update check --json/);
+
+    const disabled = await app.inject({ method: 'PUT', url: '/api/configuration/update-checks', payload: { enabled: false } });
+    assert.equal(disabled.statusCode, 200, disabled.body);
+    assert.equal(disabled.json().data.updateChecks.enabled, false);
+    assert.equal(JSON.parse(fs.readFileSync(configFile, 'utf8')).updateChecks.enabled, false);
+    assert.equal(JSON.parse(fs.readFileSync(configFile, 'utf8')).url, 'http://127.0.0.1:4317');
+    assert.equal(JSON.parse(fs.readFileSync(configFile, 'utf8')).codexDelivery.mode, 'fake');
+
+    const runtime = await app.inject({ method: 'GET', url: '/api/runtime/update' });
+    assert.equal(runtime.json().data.automaticChecksEnabled, false);
+    assert.equal(runtime.json().data.status, 'unknown');
+    assert.equal(checkerCalls, 0);
+
+    const enabled = await app.inject({ method: 'PUT', url: '/api/configuration/update-checks', payload: { enabled: true } });
+    assert.equal(enabled.json().data.updateChecks.enabled, true);
+    assert.equal(JSON.parse(fs.readFileSync(configFile, 'utf8')).updateChecks.enabled, true);
+  } finally {
+    await app.close();
+    fs.rmSync(configFile, { force: true });
+  }
 });
 
 test('registration stores authoritative source metadata and version origin', async () => {

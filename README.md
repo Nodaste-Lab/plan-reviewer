@@ -20,6 +20,100 @@ plan-review serve --host 0.0.0.0 --port 4317 --db ~/.plan-reviewer/plan-reviewer
 
 There is no authentication in the MVP. Anyone who can reach the service can view registered plans and create or process comments.
 
+## Updates
+
+Check the installed version and update status from the CLI:
+
+```bash
+plan-review --version
+plan-review update check
+plan-review update check --json
+```
+
+Normal Homebrew installs use the stable formula as the source of truth. The checker reports an update only when `Formula/plan-reviewer.rb` points at a newer tag tarball that `brew upgrade` can install; a newer commit, tag, or GitHub Release by itself is not enough for stable users. Explicit Homebrew `--HEAD` installs are checked against upstream `main` by commit ancestry and use the HEAD-specific upgrade command.
+
+When an update is available, plan-reviewer only shows instructions. It never runs `brew upgrade`, restarts services, or mutates user data automatically.
+
+Stable install update:
+
+```bash
+brew update && brew upgrade Nodaste-Lab/plan-reviewer/plan-reviewer
+brew services restart plan-reviewer
+plan-review --version && curl -fsS http://127.0.0.1:4317/health
+```
+
+HEAD install update:
+
+```bash
+brew update && brew upgrade --fetch-HEAD Nodaste-Lab/plan-reviewer/plan-reviewer
+brew services restart plan-reviewer
+plan-review --version && curl -fsS http://127.0.0.1:4317/health
+```
+
+Development checkouts, unsupported install shapes, local-ahead HEAD builds, and metadata failures fail closed with `unknown`, `unsupported_channel`, or `check_failed` plus a next action. They do not show the browser update-available indicator.
+
+The running service exposes the same status at:
+
+```http
+GET /api/runtime/update
+```
+
+The browser index and review shell show a fixed green up-arrow only for confirmed `update_available` status. The Configuration page at `/configuration` includes an **Update checks** section where automatic public GitHub/Homebrew metadata checks can be disabled. The setting persists in `~/.config/plan-reviewer/config.json`:
+
+```json
+{
+  "updateChecks": {
+    "enabled": false
+  }
+}
+```
+
+Manual `plan-review update check` remains available even when automatic service/browser checks are disabled.
+
+## Maintainer release process
+
+Stable updates require a new Homebrew-installable formula version. Keep this process repo-visible; user-local release skills may mirror it, but should not be the only source of truth.
+
+1. Start from a clean tree on the release branch and verify the target version, for example `0.1.1` / `v0.1.1`.
+2. Run preflight gates:
+
+   ```bash
+   bun install
+   bun run build
+   bun run test
+   bun run test:e2e
+   ```
+
+3. Bump `package.json` and `package-lock.json` to the target version without creating a tag yet, then commit the release change.
+4. Create and push a version tag that matches the formula URL:
+
+   ```bash
+   git tag v0.1.1
+   git push origin HEAD
+   git push origin v0.1.1
+   ```
+
+5. Calculate the tag tarball checksum:
+
+   ```bash
+   curl -L https://github.com/Nodaste-Lab/plan-reviewer/archive/refs/tags/v0.1.1.tar.gz | shasum -a 256
+   ```
+
+6. Update `Formula/plan-reviewer.rb` to the tag URL and checksum. When the tarball contains the current package metadata, keep the formula license aligned with `package.json` (`Apache-2.0` for current releases). The checked-in `v0.1.0` formula is intentionally still `MIT` because that tarball predates the repository license migration.
+7. Validate formula syntax and package behavior:
+
+   ```bash
+   ruby -c Formula/plan-reviewer.rb
+   brew update
+   brew upgrade Nodaste-Lab/plan-reviewer/plan-reviewer
+   plan-review --version
+   curl -fsS http://127.0.0.1:4317/health
+   ```
+
+8. If validation fails after publishing, fix the formula with a follow-up commit or cut a new version tag. Do not move an already-pushed release tag that users may have fetched.
+
+GitHub Release objects and packaged binary assets are optional. The default release is the tag plus formula URL/checksum update that `brew update && brew upgrade` can consume.
+
 ## Register and Review
 
 ```bash
