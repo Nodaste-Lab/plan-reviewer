@@ -4,6 +4,33 @@ set -euo pipefail
 formula="Nodaste-Lab/plan-reviewer/plan-reviewer"
 service="plan-reviewer"
 health_url="${PLAN_REVIEW_HEALTH_URL:-http://127.0.0.1:4317/health}"
+cellar_path=""
+
+relink_formula() {
+  # Homebrew will not link a newly built HEAD keg while an older HEAD keg is
+  # still linked. Unlink first, then let Homebrew recreate its managed links.
+  echo "==> Relinking Homebrew formula"
+  brew unlink "$service" >/dev/null 2>&1 || true
+  brew link --overwrite "$formula"
+}
+
+verify_keg_metadata() {
+  local opt_path
+  opt_path="$(brew --prefix "$formula")"
+  cellar_path="$(realpath "$opt_path")"
+  if [[ "$cellar_path" != */Cellar/plan-reviewer/HEAD-* ]]; then
+    echo "ERROR: expected a Homebrew HEAD Cellar path, got: $cellar_path" >&2
+    return 1
+  fi
+  if [[ ! -f "$cellar_path/INSTALL_RECEIPT.json" ]]; then
+    echo "ERROR: missing Homebrew INSTALL_RECEIPT.json in $cellar_path" >&2
+    return 1
+  fi
+  if [[ ! -f "$cellar_path/.brew/plan-reviewer.rb" ]]; then
+    echo "ERROR: missing Homebrew formula metadata in $cellar_path/.brew" >&2
+    return 1
+  fi
+}
 
 echo "==> Updating Homebrew metadata"
 brew update
@@ -31,24 +58,17 @@ else
 fi
 
 # A prior non-Homebrew deploy may have left stale plan-reviewer-owned symlinks
-# behind. Relink through Homebrew so service management sees the installed keg.
-echo "==> Relinking Homebrew formula"
-brew link --overwrite "$formula"
+# behind, and Homebrew can leave an older HEAD keg linked after building a new
+# one. Relink through Homebrew so service management sees the installed keg.
+relink_formula
 
 echo "==> Verifying Homebrew keg metadata"
-opt_path="$(brew --prefix "$formula")"
-cellar_path="$(realpath "$opt_path")"
-if [[ "$cellar_path" != */Cellar/plan-reviewer/HEAD-* ]]; then
-  echo "ERROR: expected a Homebrew HEAD Cellar path, got: $cellar_path" >&2
-  exit 1
-fi
-if [[ ! -f "$cellar_path/INSTALL_RECEIPT.json" ]]; then
-  echo "ERROR: missing Homebrew INSTALL_RECEIPT.json in $cellar_path" >&2
-  exit 1
-fi
-if [[ ! -f "$cellar_path/.brew/plan-reviewer.rb" ]]; then
-  echo "ERROR: missing Homebrew formula metadata in $cellar_path/.brew" >&2
-  exit 1
+if ! verify_keg_metadata; then
+  echo "==> Keg metadata incomplete; reinstalling the existing Homebrew formula options"
+  brew reinstall "$formula"
+  relink_formula
+  echo "==> Verifying repaired Homebrew keg metadata"
+  verify_keg_metadata
 fi
 
 echo "==> Restarting service"
