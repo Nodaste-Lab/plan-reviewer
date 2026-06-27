@@ -566,6 +566,17 @@ try {
       ] } });
     };
 
+    const openByCardClickPlan = await registerTinyPlan('kanban-card-click-open');
+    await page.goto(`${baseUrl}/`);
+    await page.locator(`[data-plan-id="${openByCardClickPlan.planId}"] .card-summary`).click();
+    await page.waitForURL(`${baseUrl}/p/${openByCardClickPlan.planId}`);
+
+    const dragPlan = await registerTinyPlan('kanban-card-drag');
+    await page.goto(`${baseUrl}/`);
+    await page.locator(`[data-plan-id="${dragPlan.planId}"]`).dragTo(page.locator('[data-column-key="in_progress"]'));
+    await page.waitForFunction(planId => document.querySelector(`[data-plan-id="${CSS.escape(String(planId))}"]`)?.closest('[data-column-key]')?.getAttribute('data-column-key') === 'in_progress', dragPlan.planId);
+    assert.equal(page.url(), `${baseUrl}/`);
+
     const moveMenuPlan = await registerTinyPlan('kanban-menu-move');
     await openKanbanContextMenu(moveMenuPlan.planId);
     assert.equal(await page.locator('.kanban-context-menu').getAttribute('role'), 'menu');
@@ -791,7 +802,7 @@ try {
     assert.equal(menuBox.x + menuBox.width <= 760, true);
     assert.equal(menuBox.y + menuBox.height <= 520, true);
     await page.setViewportSize({ width: 1280, height: 720 });
-    for (const plan of [moveMenuPlan, markDonePlan, failurePlan, rapidPlan, stalePlan, hiddenStalePlan, deferCancelPlan, deferFailurePlan, archiveFailurePlan, archivePlan, mobileReadabilityPlan]) {
+    for (const plan of [openByCardClickPlan, dragPlan, moveMenuPlan, markDonePlan, failurePlan, rapidPlan, stalePlan, hiddenStalePlan, deferCancelPlan, deferFailurePlan, archiveFailurePlan, archivePlan, mobileReadabilityPlan]) {
       assert.equal((await context.post(`/api/plans/${plan.planId}/archive`)).ok(), true);
     }
     assert.equal((await context.post(`/api/plans/${deferPlan.planId}/resume`, { data: { note: 'Clean up Kanban context menu e2e plan.' } })).ok(), true);
