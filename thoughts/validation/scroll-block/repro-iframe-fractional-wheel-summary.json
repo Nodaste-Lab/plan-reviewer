@@ -1,0 +1,471 @@
+{
+  "source": "/tmp/repro-viewer-wheel-2.json",
+  "totalEvents": 400,
+  "captureEvents": 200,
+  "summary": [
+    {
+      "run": 1,
+      "direction": "down",
+      "eventCount": 50,
+      "windowScrollStart": 0,
+      "windowScrollEnd": 2227,
+      "frameScrollStart": 0,
+      "frameScrollEnd": 0.5,
+      "firstParentMoveEventIndex": 20,
+      "initialEvents": [
+        {
+          "deltaY": 2,
+          "windowScrollY": 0,
+          "frameInternalScrollY": 0,
+          "eventTarget": "review-url",
+          "pointTarget": "review-url",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        },
+        {
+          "deltaY": 11,
+          "windowScrollY": 0,
+          "frameInternalScrollY": 0.5,
+          "eventTarget": "review-url",
+          "pointTarget": "review-url",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        },
+        {
+          "deltaY": 60,
+          "windowScrollY": 0,
+          "frameInternalScrollY": 0.5,
+          "eventTarget": "review-url",
+          "pointTarget": "review-url",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        },
+        {
+          "deltaY": 18,
+          "windowScrollY": 0,
+          "frameInternalScrollY": 0.5,
+          "eventTarget": "review-url",
+          "pointTarget": "review-url",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        },
+        {
+          "deltaY": 15,
+          "windowScrollY": 0,
+          "frameInternalScrollY": 0.5,
+          "eventTarget": "review-url",
+          "pointTarget": "review-url",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        },
+        {
+          "deltaY": 25,
+          "windowScrollY": 0,
+          "frameInternalScrollY": 0.5,
+          "eventTarget": "review-url",
+          "pointTarget": "review-url",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        },
+        {
+          "deltaY": 26,
+          "windowScrollY": 0,
+          "frameInternalScrollY": 0.5,
+          "eventTarget": "review-url",
+          "pointTarget": "review-url",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        },
+        {
+          "deltaY": 26,
+          "windowScrollY": 0,
+          "frameInternalScrollY": 0.5,
+          "eventTarget": "review-url",
+          "pointTarget": "review-url",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        }
+      ],
+      "eventsAroundFirstParentMove": [
+        {
+          "deltaY": 16,
+          "windowScrollY": 0,
+          "frameInternalScrollY": 0.5
+        },
+        {
+          "deltaY": 14,
+          "windowScrollY": 0,
+          "frameInternalScrollY": 0.5
+        },
+        {
+          "deltaY": 2,
+          "windowScrollY": 0,
+          "frameInternalScrollY": 0.5
+        },
+        {
+          "deltaY": 17,
+          "windowScrollY": 19,
+          "frameInternalScrollY": 0.5
+        },
+        {
+          "deltaY": 28,
+          "windowScrollY": 47,
+          "frameInternalScrollY": 0.5
+        },
+        {
+          "deltaY": 63,
+          "windowScrollY": 110,
+          "frameInternalScrollY": 0.5
+        }
+      ]
+    },
+    {
+      "run": 2,
+      "direction": "up",
+      "eventCount": 49,
+      "windowScrollStart": 2227,
+      "windowScrollEnd": 75,
+      "frameScrollStart": 0.5,
+      "frameScrollEnd": 0,
+      "firstParentMoveEventIndex": 22,
+      "initialEvents": [
+        {
+          "deltaY": -1,
+          "windowScrollY": 2227,
+          "frameInternalScrollY": 0.5,
+          "eventTarget": "TD",
+          "pointTarget": "TD",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        },
+        {
+          "deltaY": -9,
+          "windowScrollY": 2227,
+          "frameInternalScrollY": 0,
+          "eventTarget": "TD",
+          "pointTarget": "TD",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        },
+        {
+          "deltaY": -23,
+          "windowScrollY": 2227,
+          "frameInternalScrollY": 0,
+          "eventTarget": "TD",
+          "pointTarget": "TD",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        },
+        {
+          "deltaY": -31,
+          "windowScrollY": 2227,
+          "frameInternalScrollY": 0,
+          "eventTarget": "TD",
+          "pointTarget": "TD",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        },
+        {
+          "deltaY": -26,
+          "windowScrollY": 2227,
+          "frameInternalScrollY": 0,
+          "eventTarget": "TD",
+          "pointTarget": "TD",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        },
+        {
+          "deltaY": -20,
+          "windowScrollY": 2227,
+          "frameInternalScrollY": 0,
+          "eventTarget": "TD",
+          "pointTarget": "TD",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        },
+        {
+          "deltaY": -37,
+          "windowScrollY": 2227,
+          "frameInternalScrollY": 0,
+          "eventTarget": "TD",
+          "pointTarget": "TD",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        },
+        {
+          "deltaY": -40,
+          "windowScrollY": 2227,
+          "frameInternalScrollY": 0,
+          "eventTarget": "TD",
+          "pointTarget": "TD",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        }
+      ],
+      "eventsAroundFirstParentMove": [
+        {
+          "deltaY": -21,
+          "windowScrollY": 2227,
+          "frameInternalScrollY": 0
+        },
+        {
+          "deltaY": -19,
+          "windowScrollY": 2227,
+          "frameInternalScrollY": 0
+        },
+        {
+          "deltaY": -2,
+          "windowScrollY": 2227,
+          "frameInternalScrollY": 0
+        },
+        {
+          "deltaY": -11,
+          "windowScrollY": 2214,
+          "frameInternalScrollY": 0
+        },
+        {
+          "deltaY": -18,
+          "windowScrollY": 2196,
+          "frameInternalScrollY": 0
+        },
+        {
+          "deltaY": -56,
+          "windowScrollY": 2140,
+          "frameInternalScrollY": 0
+        }
+      ]
+    },
+    {
+      "run": 3,
+      "direction": "down",
+      "eventCount": 50,
+      "windowScrollStart": 75,
+      "windowScrollEnd": 1895,
+      "frameScrollStart": 0,
+      "frameScrollEnd": 0.5,
+      "firstParentMoveEventIndex": 24,
+      "initialEvents": [
+        {
+          "deltaY": 1,
+          "windowScrollY": 75,
+          "frameInternalScrollY": 0,
+          "eventTarget": "P",
+          "pointTarget": "P",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        },
+        {
+          "deltaY": 12,
+          "windowScrollY": 75,
+          "frameInternalScrollY": 0.5,
+          "eventTarget": "P",
+          "pointTarget": "P",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        },
+        {
+          "deltaY": 26,
+          "windowScrollY": 75,
+          "frameInternalScrollY": 0.5,
+          "eventTarget": "P",
+          "pointTarget": "P",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        },
+        {
+          "deltaY": 28,
+          "windowScrollY": 75,
+          "frameInternalScrollY": 0.5,
+          "eventTarget": "P",
+          "pointTarget": "P",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        },
+        {
+          "deltaY": 32,
+          "windowScrollY": 75,
+          "frameInternalScrollY": 0.5,
+          "eventTarget": "P",
+          "pointTarget": "P",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        },
+        {
+          "deltaY": 31,
+          "windowScrollY": 75,
+          "frameInternalScrollY": 0.5,
+          "eventTarget": "P",
+          "pointTarget": "P",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        },
+        {
+          "deltaY": 39,
+          "windowScrollY": 75,
+          "frameInternalScrollY": 0.5,
+          "eventTarget": "P",
+          "pointTarget": "P",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        },
+        {
+          "deltaY": 42,
+          "windowScrollY": 75,
+          "frameInternalScrollY": 0.5,
+          "eventTarget": "P",
+          "pointTarget": "P",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        }
+      ],
+      "eventsAroundFirstParentMove": [
+        {
+          "deltaY": 19,
+          "windowScrollY": 75,
+          "frameInternalScrollY": 0.5
+        },
+        {
+          "deltaY": 17,
+          "windowScrollY": 75,
+          "frameInternalScrollY": 0.5
+        },
+        {
+          "deltaY": 2,
+          "windowScrollY": 75,
+          "frameInternalScrollY": 0.5
+        },
+        {
+          "deltaY": 39,
+          "windowScrollY": 116,
+          "frameInternalScrollY": 0.5
+        },
+        {
+          "deltaY": 37,
+          "windowScrollY": 153,
+          "frameInternalScrollY": 0.5
+        },
+        {
+          "deltaY": 46,
+          "windowScrollY": 199,
+          "frameInternalScrollY": 0.5
+        }
+      ]
+    },
+    {
+      "run": 4,
+      "direction": "up",
+      "eventCount": 51,
+      "windowScrollStart": 1895,
+      "windowScrollEnd": 0,
+      "frameScrollStart": 0.5,
+      "frameScrollEnd": 0,
+      "firstParentMoveEventIndex": 24,
+      "initialEvents": [
+        {
+          "deltaY": -1,
+          "windowScrollY": 1895,
+          "frameInternalScrollY": 0.5,
+          "eventTarget": "TH",
+          "pointTarget": "TH",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        },
+        {
+          "deltaY": -6,
+          "windowScrollY": 1895,
+          "frameInternalScrollY": 0,
+          "eventTarget": "TH",
+          "pointTarget": "TH",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        },
+        {
+          "deltaY": -11,
+          "windowScrollY": 1895,
+          "frameInternalScrollY": 0,
+          "eventTarget": "TH",
+          "pointTarget": "TH",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        },
+        {
+          "deltaY": -16,
+          "windowScrollY": 1895,
+          "frameInternalScrollY": 0,
+          "eventTarget": "TH",
+          "pointTarget": "TH",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        },
+        {
+          "deltaY": -21,
+          "windowScrollY": 1895,
+          "frameInternalScrollY": 0,
+          "eventTarget": "TH",
+          "pointTarget": "TH",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        },
+        {
+          "deltaY": -19,
+          "windowScrollY": 1895,
+          "frameInternalScrollY": 0,
+          "eventTarget": "TH",
+          "pointTarget": "TH",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        },
+        {
+          "deltaY": -26,
+          "windowScrollY": 1895,
+          "frameInternalScrollY": 0,
+          "eventTarget": "TH",
+          "pointTarget": "TH",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        },
+        {
+          "deltaY": -28,
+          "windowScrollY": 1895,
+          "frameInternalScrollY": 0,
+          "eventTarget": "TH",
+          "pointTarget": "TH",
+          "touchLayerDisplay": "none",
+          "touchLayerPointerEvents": "none"
+        }
+      ],
+      "eventsAroundFirstParentMove": [
+        {
+          "deltaY": -12,
+          "windowScrollY": 1895,
+          "frameInternalScrollY": 0
+        },
+        {
+          "deltaY": -11,
+          "windowScrollY": 1895,
+          "frameInternalScrollY": 0
+        },
+        {
+          "deltaY": -2,
+          "windowScrollY": 1895,
+          "frameInternalScrollY": 0
+        },
+        {
+          "deltaY": -16,
+          "windowScrollY": 1877,
+          "frameInternalScrollY": 0
+        },
+        {
+          "deltaY": -55,
+          "windowScrollY": 1822,
+          "frameInternalScrollY": 0
+        },
+        {
+          "deltaY": -92,
+          "windowScrollY": 1730,
+          "frameInternalScrollY": 0
+        }
+      ]
+    }
+  ]
+}

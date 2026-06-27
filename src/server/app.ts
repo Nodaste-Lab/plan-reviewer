@@ -2273,10 +2273,12 @@ function syncFrameHeight(){
     if (planTouchLayer) planTouchLayer.style.height = '';
     return;
   }
-  const height = Math.max(
+  const height = Math.ceil(Math.max(
     doc.documentElement?.scrollHeight || 0,
-    doc.body?.scrollHeight || 0
-  );
+    doc.body?.scrollHeight || 0,
+    doc.documentElement?.getBoundingClientRect().height || 0,
+    doc.body?.getBoundingClientRect().height || 0
+  ));
   if (height > 0) {
     frame.style.height = height + 'px';
     if (planTouchLayer) planTouchLayer.style.height = isMobileShell() ? height + 'px' : '';
