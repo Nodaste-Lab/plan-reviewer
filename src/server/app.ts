@@ -302,9 +302,11 @@ function normalizeReviewShellNavigatorFilters(query: { projectKey?: string; life
   const projectKeys = new Set(projects.map(project => project.projectKey).filter(Boolean));
   projectKeys.add(currentPlan.projectKey);
   const columnKeys = new Set(columns.map(column => column.key));
+  const lifecycleRequested = Object.prototype.hasOwnProperty.call(query, 'lifecycle');
+  const defaultLifecycle = currentPlan.lifecycleState === 'archived' || currentPlan.lifecycleState === 'deferred' ? currentPlan.lifecycleState : 'active';
   return {
     project: query.projectKey === '' ? '' : query.projectKey && projectKeys.has(query.projectKey) ? query.projectKey : currentPlan.projectKey,
-    state: query.lifecycle === '' ? '' : query.lifecycle === 'active' || query.lifecycle === 'deferred' || query.lifecycle === 'archived' ? query.lifecycle : 'active',
+    state: query.lifecycle === '' ? '' : query.lifecycle === 'active' || query.lifecycle === 'deferred' || query.lifecycle === 'archived' ? query.lifecycle : lifecycleRequested ? 'active' : defaultLifecycle,
     status: currentPlan.reviewMode !== 'collaboration' && query.boardColumnKey && columnKeys.has(query.boardColumnKey) ? query.boardColumnKey : '',
     active: true
   };
@@ -325,8 +327,10 @@ function filteredReviewShellNavigatorItems(store: PlanReviewStore, currentPlanId
 
 function planNavigatorHtml(plans: ListedPlan[], currentPlanId: string, label = 'plans', filters = emptyReviewShellNavigatorFilters(), filterControls = '', open = true): string {
   const items = sortPlansForNavigator(plans).map(item => planNavigatorItemHtml(item, currentPlanId, filters)).join('');
-  const title = label === 'documents' ? 'Active documents' : 'Active plans';
-  const empty = label === 'documents' ? 'No active documents.' : 'No active plans.';
+  const noun = label === 'documents' ? 'documents' : 'plans';
+  const stateLabel = filters.state === 'archived' ? 'Archived' : filters.state === 'deferred' ? 'Deferred' : filters.state === '' && reviewShellNavigatorFiltersActive(filters) ? 'All' : 'Active';
+  const title = `${stateLabel} ${noun}`;
+  const empty = `No ${stateLabel.toLowerCase()} ${noun}.`;
   const hiddenAttributes = open ? '' : ' aria-hidden="true" inert';
   return `<aside id="plan-list-nav" aria-label="${escapeHtml(title)}"${hiddenAttributes}><div class="plan-list-header"><h2>${escapeHtml(title)}</h2><button id="plan-list-retry" type="button" hidden>Retry</button></div>${filterControls}<div class="plan-list-error" id="plan-list-error" hidden>Unable to load ${escapeHtml(label)}.</div><div id="plan-list-items">${items || `<p class="plan-list-empty">${escapeHtml(empty)}</p>`}</div></aside>`;
 }
@@ -712,6 +716,13 @@ function currentPlanStatusControl(plan: ReturnType<PlanReviewStore['getPlan']>['
   return `<label class="current-plan-status-control">Current plan status <select id="current-plan-status-control" aria-label="Current plan status" data-current-value="${escapeHtml(currentKey)}">${statusOptions}</select><span id="current-plan-status-error" class="current-plan-status-error" role="status" hidden></span></label>`;
 }
 
+function currentPlanStatusGuidance(plan: ReturnType<PlanReviewStore['getPlan']>['plan']): string {
+  if (plan.reviewMode === 'collaboration') return '';
+  if (plan.archivedAt) return '<span id="current-plan-status-guidance" class="current-plan-status-guidance">Restore this plan before changing its board status.</span>';
+  if (plan.lifecycleState === 'deferred') return '<span id="current-plan-status-guidance" class="current-plan-status-guidance">Resume this plan before changing its board status.</span>';
+  return '<span id="current-plan-status-guidance" class="current-plan-status-guidance" hidden></span>';
+}
+
 function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], currentTitle: string, shellTitle: string, plans: ListedPlan[], columns: BoardColumnRecord[], projects: PlanProjectRecord[], configuration: AppConfiguration, navigatorFilters = emptyReviewShellNavigatorFilters(), allColumns = columns, planNavigatorOpen = configuration.showPlanNavigatorByDefault, updateStatus?: UpdateStatus): string {
   const escapedPlanId = escapeHtml(plan.id);
   const escapedShellTitle = escapeHtml(shellTitle);
@@ -730,6 +741,7 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
   const organizationControls = pinControl;
   const navFilterControls = navigatorFilterControls(plan, columns, projects, navigatorFilters, configuration.kanbanEnabled);
   const currentStatusControl = configuration.kanbanEnabled ? currentPlanStatusControl(plan, allColumns) : '';
+  const currentStatusGuidance = configuration.kanbanEnabled ? currentPlanStatusGuidance(plan) : '';
   const archiveLabel = isCollaboration ? 'Archive document' : 'Archive plan';
   const restoreLabel = isCollaboration ? 'Restore document' : 'Restore plan';
   const resumeLabel = isCollaboration ? 'Resume document' : 'Resume plan';
@@ -737,16 +749,16 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
   const bodyClasses = [planNavigatorOpen ? '' : 'plan-nav-collapsed', configuration.showCommentsByDefault ? 'comments-open' : ''].filter(Boolean).join(' ');
   const bodyClassAttribute = bodyClasses ? ` class="${escapeHtml(bodyClasses)}"` : '';
   const navActions = plan.archivedAt
-    ? `${planNavToggle}${indexLink}${organizationControls}${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="archive-status" role="status" aria-label="Archived" title="Archived">🗄</span><button id="restore-plan" class="tool-button" type="button" aria-label="${restoreLabel}" title="${restoreLabel}">↩</button>${configurationToolAction()}${commentsButton}`
+    ? `${planNavToggle}${indexLink}${organizationControls}${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="lifecycle-status archived" role="status" aria-label="Status: Archived" title="Archived">Status: Archived</span><button id="restore-plan" class="tool-button" type="button" aria-label="${restoreLabel}" title="${restoreLabel}">↩</button>${configurationToolAction()}${commentsButton}`
     : plan.lifecycleState === 'deferred'
-      ? `${planNavToggle}${indexLink}${organizationControls}${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="archive-status" role="status" aria-label="Deferred" title="Deferred">⏸</span><button id="resume-plan" class="tool-button" type="button" aria-label="${resumeLabel}" title="${resumeLabel}">▶</button><button id="archive-plan" class="tool-button" type="button" aria-label="${archiveLabel}" title="${archiveLabel}">🗄</button><button id="restore-plan" class="tool-button" type="button" aria-label="${restoreLabel}" title="${restoreLabel}" hidden>↩</button>${configurationToolAction()}${commentsButton}`
-      : `${planNavToggle}${indexLink}${organizationControls}${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="archive-status" hidden></span>${deferAction}<button id="archive-plan" class="tool-button" type="button" aria-label="${archiveLabel}" title="${archiveLabel}">🗄</button><button id="restore-plan" class="tool-button" type="button" aria-label="${restoreLabel}" title="${restoreLabel}" hidden>↩</button>${configurationToolAction()}${commentsButton}`;
+      ? `${planNavToggle}${indexLink}${organizationControls}${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="lifecycle-status deferred" role="status" aria-label="Status: Deferred" title="Deferred">Deferred</span><button id="resume-plan" class="tool-button" type="button" aria-label="${resumeLabel}" title="${resumeLabel}">▶</button><button id="archive-plan" class="tool-button" type="button" aria-label="${archiveLabel}" title="${archiveLabel}">🗄</button><button id="restore-plan" class="tool-button" type="button" aria-label="${restoreLabel}" title="${restoreLabel}" hidden>↩</button>${configurationToolAction()}${commentsButton}`
+      : `${planNavToggle}${indexLink}${organizationControls}${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="lifecycle-status archived" hidden></span>${deferAction}<button id="archive-plan" class="tool-button" type="button" aria-label="${archiveLabel}" title="${archiveLabel}">🗄</button><button id="restore-plan" class="tool-button" type="button" aria-label="${restoreLabel}" title="${restoreLabel}" hidden>↩</button>${configurationToolAction()}${commentsButton}`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapedShellTitle}</title>
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="stylesheet" href="/client.css?v=${clientAssetVersion}">
   </head><body${bodyClassAttribute} data-plan-id="${escapedPlanId}" data-review-mode="${escapeHtml(plan.reviewMode)}" data-plan-title-fallback="${encodedTitleFallback}">
-    <nav id="plan-navbar" aria-label="Plan actions"><div id="plan-navbar-actions">${navActions}</div><div id="current-plan-bar"><strong id="current-plan-title">${escapedCurrentTitle}</strong><span class="ready-pill ${isCollaboration || plan.publicationMetadata?.executionReady ? 'ready' : 'not-ready'}">${escapeHtml(readyLabel)}</span>${currentStatusControl}<span id="comment-status-banner" class="comment-status-banner" hidden></span></div></nav>
+    <nav id="plan-navbar" aria-label="Plan actions"><div id="plan-navbar-actions">${navActions}</div><div id="current-plan-bar"><strong id="current-plan-title">${escapedCurrentTitle}</strong><span class="ready-pill ${isCollaboration || plan.publicationMetadata?.executionReady ? 'ready' : 'not-ready'}">${escapeHtml(readyLabel)}</span>${currentStatusControl}${currentStatusGuidance}<span id="comment-status-banner" class="comment-status-banner" hidden></span></div></nav>
     <div id="app">
       ${planNavigatorHtml(plans, plan.id, isCollaboration ? 'documents' : 'plans', navigatorFilters, navFilterControls, planNavigatorOpen)}
       <main id="review"><iframe id="plan-frame" sandbox="allow-same-origin allow-popups" src="/render/${escapedPlanId}"></iframe><div id="plan-touch-layer" aria-hidden="true"></div><button id="mobile-comments-toggle" class="comments-toggle" type="button" aria-controls="sidebar" aria-expanded="false">Comments</button><div id="hover-selection-box" class="selection-box hover" hidden></div><div id="active-selection-box" class="selection-box active" hidden></div></main>
@@ -790,7 +802,7 @@ const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" 
 
 const clientCss = `
 body{--plan-nav-width:260px;--comments-width:48px;--plan-navbar-height:86px;margin:0;background:#0b1020;color:#e5e7eb;font-family:system-ui,sans-serif}body.plan-nav-collapsed{--plan-nav-width:0}body.comments-open{--comments-width:320px}
-#plan-navbar{position:sticky;top:0;z-index:30;min-height:86px;box-sizing:border-box;display:grid;grid-template-rows:auto auto;gap:8px;padding:10px 16px;border-bottom:1px solid #2b364d;background:#0f172a}#plan-navbar-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}#plan-navbar a{color:#7dd3fc;text-decoration:none;font-weight:700}#plan-navbar a.nav-index{margin-right:auto}#plan-navbar .doc-kind-switcher{display:inline-flex;gap:2px;padding:3px;border:1px solid #334155;border-radius:999px;background:#08111f;margin-right:auto}#plan-navbar .doc-kind-seg{border-radius:999px;padding:5px 10px;color:#a7b0c0;font-size:12px;font-weight:850;text-decoration:none;white-space:nowrap}#plan-navbar .doc-kind-seg.active{background:#0ea5e9;color:#e0f2fe}.filter-control{display:inline-flex;align-items:center;gap:5px;border:1px solid #334155;border-radius:8px;background:#111827;padding:3px 6px;color:#cbd5e1;font-size:12px;font-weight:800}.filter-control select{max-width:150px;background:#020617;color:#e5e7eb;border:1px solid #7dd3fc;border-radius:6px;padding:6px 8px}.pin-button{border-color:#facc15!important;color:#fef08a!important}#plan-navbar button,#plan-navbar .tool-button{background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px 10px;cursor:pointer}#plan-navbar button:hover,#plan-navbar .tool-button:hover{border-color:#93c5fd}#plan-navbar .tool-button{display:inline-flex;align-items:center;justify-content:center;min-width:38px;min-height:34px;box-sizing:border-box;line-height:1}.download-tool{border-color:rgba(56,189,248,.72)!important;background:#075985!important;color:#ecfeff!important}#current-plan-bar{display:flex;align-items:center;gap:8px;min-width:0;border-top:1px solid rgba(71,85,105,.55);padding-top:8px;color:#cbd5e1}#current-plan-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f8fafc}.archive-status{color:#cbd5e1;border:1px solid #475569;background:#1e293b;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:800}#archive-status{display:inline-flex;align-items:center;justify-content:center;min-width:38px;min-height:34px;box-sizing:border-box;line-height:1}#archive-status[hidden]{display:none}#restore-plan{border-color:#22c55e;color:#bbf7d0}.comments-toggle{display:inline-flex;align-items:center;gap:6px}.comments-count{min-width:18px;height:18px;border-radius:999px;background:#7e22ce;color:white;display:inline-grid;place-items:center;padding:0 5px;font-size:11px;font-weight:900}.comment-status-banner{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:800;border:1px solid #475569;background:#1e293b;color:#cbd5e1;white-space:nowrap}.comment-status-banner.red{border-color:rgba(251,113,133,.7);background:rgba(127,29,29,.55);color:#fecaca}.comment-status-banner.yellow{border-color:rgba(234,179,8,.7);background:rgba(120,53,15,.55);color:#fde68a}.comment-status-banner.green{border-color:rgba(34,197,94,.7);background:rgba(22,101,52,.55);color:#dcfce7}
+#plan-navbar{position:sticky;top:0;z-index:30;min-height:86px;box-sizing:border-box;display:grid;grid-template-rows:auto auto;gap:8px;padding:10px 16px;border-bottom:1px solid #2b364d;background:#0f172a}#plan-navbar [hidden]{display:none!important}#plan-navbar-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}#plan-navbar a{color:#7dd3fc;text-decoration:none;font-weight:700}#plan-navbar a.nav-index{margin-right:auto}#plan-navbar .doc-kind-switcher{display:inline-flex;gap:2px;padding:3px;border:1px solid #334155;border-radius:999px;background:#08111f;margin-right:auto}#plan-navbar .doc-kind-seg{border-radius:999px;padding:5px 10px;color:#a7b0c0;font-size:12px;font-weight:850;text-decoration:none;white-space:nowrap}#plan-navbar .doc-kind-seg.active{background:#0ea5e9;color:#e0f2fe}.filter-control{display:inline-flex;align-items:center;gap:5px;border:1px solid #334155;border-radius:8px;background:#111827;padding:3px 6px;color:#cbd5e1;font-size:12px;font-weight:800}.filter-control select{max-width:150px;background:#020617;color:#e5e7eb;border:1px solid #7dd3fc;border-radius:6px;padding:6px 8px}.pin-button{border-color:#facc15!important;color:#fef08a!important}#plan-navbar button,#plan-navbar .tool-button{background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px 10px;cursor:pointer}#plan-navbar button:hover,#plan-navbar .tool-button:hover{border-color:#93c5fd}#plan-navbar .tool-button{display:inline-flex;align-items:center;justify-content:center;min-width:38px;min-height:34px;box-sizing:border-box;line-height:1}.download-tool{border-color:rgba(56,189,248,.72)!important;background:#075985!important;color:#ecfeff!important}#current-plan-bar{display:flex;align-items:center;gap:8px;min-width:0;border-top:1px solid rgba(71,85,105,.55);padding-top:8px;color:#cbd5e1}#current-plan-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f8fafc}.lifecycle-status{display:inline-flex;align-items:center;justify-content:center;color:#cbd5e1;border:1px solid #475569;background:#111827;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:850;line-height:1;white-space:nowrap;cursor:default;pointer-events:none}.lifecycle-status.archived{border-color:#64748b;color:#e2e8f0}.lifecycle-status.deferred{border-color:#f59e0b;color:#fde68a;background:rgba(120,53,15,.35)}#archive-status[hidden]{display:none}.current-plan-status-guidance{margin-left:auto;color:#a7b0c0;font-size:12px;font-weight:800}.current-plan-status-control+.current-plan-status-guidance{margin-left:0}#restore-plan{border-color:#22c55e;color:#bbf7d0}.comments-toggle{display:inline-flex;align-items:center;gap:6px}.comments-count{min-width:18px;height:18px;border-radius:999px;background:#7e22ce;color:white;display:inline-grid;place-items:center;padding:0 5px;font-size:11px;font-weight:900}.comment-status-banner{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:800;border:1px solid #475569;background:#1e293b;color:#cbd5e1;white-space:nowrap}.comment-status-banner.red{border-color:rgba(251,113,133,.7);background:rgba(127,29,29,.55);color:#fecaca}.comment-status-banner.yellow{border-color:rgba(234,179,8,.7);background:rgba(120,53,15,.55);color:#fde68a}.comment-status-banner.green{border-color:rgba(34,197,94,.7);background:rgba(22,101,52,.55);color:#dcfce7}
 #app{display:grid;grid-template-columns:var(--plan-nav-width) minmax(0,1fr) var(--comments-width);min-height:calc(100vh - var(--plan-navbar-height));transition:grid-template-columns .18s ease}
 .current-plan-status-control{display:inline-flex;align-items:center;gap:6px;margin-left:auto;color:#cbd5e1;font-size:12px;font-weight:850}.current-plan-status-control select{background:#020617;color:#e5e7eb;border:1px solid #7dd3fc;border-radius:6px;padding:6px 8px}.current-plan-status-error{color:#fecaca;font-size:12px;font-weight:800}
 #plan-list-nav{grid-column:1;align-self:start;position:sticky;top:var(--plan-navbar-height);height:calc(100vh - var(--plan-navbar-height));box-sizing:border-box;border-right:1px solid #2b364d;background:#0b1220;padding:14px;overflow:auto}body.plan-nav-collapsed #plan-list-nav{padding:0;border-right:0;overflow:hidden}body.plan-nav-collapsed #plan-list-nav>*{visibility:hidden}#plan-list-nav h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#a7b0c0;margin:0}.plan-list-header{display:flex;align-items:center;justify-content:space-between;gap:8px}.plan-nav-filters{display:grid;gap:8px;margin:12px 0 14px;padding:10px;border:1px solid #253248;border-radius:12px;background:#08111f}.plan-nav-filters .filter-control{display:grid;gap:5px;align-items:stretch}.plan-nav-filters .filter-control select{width:100%;max-width:none}.plan-list-error{border:1px solid #f59e0b;background:rgba(245,158,11,.12);color:#fde68a;border-radius:8px;padding:8px;margin:10px 0;font-size:13px}.plan-list-empty{color:#a7b0c0;font-size:13px}.plan-nav-item{display:grid;gap:5px;padding:10px;margin:8px 0;border:1px solid #253248;border-radius:10px;background:#101827;color:#cbd5e1;text-decoration:none}.plan-nav-item:hover{border-color:#64748b}.plan-nav-item.active{border-color:#38bdf8;background:linear-gradient(135deg,rgba(14,165,233,.18),rgba(16,24,39,.95))}.plan-nav-item.attention{border-color:#f59e0b}.plan-nav-title{font-size:13px;font-weight:850;color:#f8fafc;line-height:1.25}.plan-nav-meta{display:flex;gap:6px;align-items:center;flex-wrap:wrap;color:#a7b0c0;font-size:11px}.plan-nav-submeta{color:#8fa0b8;font-size:11px}.plan-nav-pill{border:1px solid #475569;border-radius:999px;padding:1px 6px;background:#0b1220}.plan-nav-pill.ready{border-color:#22c55e;color:#bbf7d0}.plan-nav-pill.not-ready{border-color:#f59e0b;color:#fde68a}
@@ -813,6 +825,7 @@ import mermaid from '/vendor/mermaid.esm.min.mjs';
 const planId = document.body.dataset.planId;
 const isCollaborationMode = document.body.dataset.reviewMode === 'collaboration';
 const documentKind = isCollaborationMode ? 'document' : 'plan';
+const navigatorItemNoun = isCollaborationMode ? 'documents' : 'plans';
 let planTitleFallback = 'Plan Review';
 try {
   const bytes = Uint8Array.from(atob(document.body.dataset.planTitleFallback || ''), char => char.charCodeAt(0));
@@ -915,6 +928,7 @@ let navigatorItems = [];
 let navigatorLoadError = null;
 let navigatorLoadGeneration = 0;
 let quickOpenItems = [];
+let quickOpenLoadGeneration = 0;
 let quickOpenLoadPromise = null;
 let quickOpenLoadError = null;
 let navigatorFilterLoadPromise = null;
@@ -1103,10 +1117,11 @@ function setArchivedShellState(archived){
   const status = document.getElementById('archive-status');
   if (status) {
     status.hidden = !archived;
-    status.textContent = archived ? '🗄' : '';
+    status.textContent = archived ? 'Status: Archived' : '';
+    status.className = archived ? 'lifecycle-status archived' : 'lifecycle-status archived';
     if (archived) {
       status.setAttribute('role', 'status');
-      status.setAttribute('aria-label', 'Archived');
+      status.setAttribute('aria-label', 'Status: Archived');
       status.setAttribute('title', 'Archived');
     } else {
       status.removeAttribute('role');
@@ -1114,13 +1129,29 @@ function setArchivedShellState(archived){
       status.removeAttribute('title');
     }
   }
+  const statusControlLabel = currentPlanStatusControl?.closest('.current-plan-status-control');
+  if (statusControlLabel) statusControlLabel.hidden = archived;
+  const statusGuidance = document.getElementById('current-plan-status-guidance');
+  if (statusGuidance) {
+    statusGuidance.hidden = !archived;
+    statusGuidance.textContent = archived ? 'Restore this plan before changing its board status.' : '';
+  }
+  if (archived && stateFilterControl && selectHasValue(stateFilterControl, 'archived')) {
+    stateFilterControl.value = 'archived';
+    syncNavigatorFilterUrl();
+  }
   if (archivePlanButton) { archivePlanButton.hidden = archived; archivePlanButton.disabled = false; }
   if (deferPlanButton) deferPlanButton.hidden = archived;
   if (resumePlanButton) resumePlanButton.hidden = true;
   if (restorePlanButton) { restorePlanButton.hidden = !archived; restorePlanButton.disabled = false; }
 }
+function mergePlanIntoItems(items, updatedPlan){
+  if (!updatedPlan?.id) return items;
+  return items.map(item => String(item?.plan?.id || '') === String(updatedPlan.id) ? { ...item, plan: { ...item.plan, ...updatedPlan } } : item);
+}
 function activeNavigatorItems(items){
-  return localPlanArchived ? items.filter(item => String(item?.plan?.id || '') !== String(planId)) : items;
+  const filters = currentNavigatorFilters();
+  return localPlanArchived && filters.state === 'active' ? items.filter(item => String(item?.plan?.id || '') !== String(planId)) : items;
 }
 function removeCurrentPlanFromRenderedNavigator(){
   planListItems?.querySelector('[data-plan-id="'+CSS.escape(String(planId))+'"]')?.remove();
@@ -1129,8 +1160,8 @@ function reconcileActiveNavigation(archived){
   localPlanArchived = archived;
   navigatorItems = activeNavigatorItems(navigatorItems);
   quickOpenItems = activeNavigatorItems(quickOpenItems);
-  if (archived) removeCurrentPlanFromRenderedNavigator();
-  else renderPlanNavigatorItems(navigatorItems, document.querySelector('#plan-list-nav')?.getAttribute('aria-label') === 'Active documents' ? 'documents' : 'plans');
+  if (archived && currentNavigatorFilters().state !== 'archived') removeCurrentPlanFromRenderedNavigator();
+  else renderPlanNavigatorItems(navigatorItems, navigatorItemNoun);
   if (quickOpenVisible()) renderQuickOpenResults();
 }
 function restartArchiveToastDismissal(delay = 10000){
@@ -1170,8 +1201,20 @@ archivePlanButton?.addEventListener('click', async () => {
     showArchiveToast('Unable to archive '+documentKind+'.', { error: true });
     return;
   }
+  const result = await res.json().catch(() => null);
+  const archivedPlan = result?.data?.plan;
   setArchivedShellState(true);
-  reconcileActiveNavigation(true);
+  localPlanArchived = true;
+  navigatorItems = activeNavigatorItems(mergePlanIntoItems(navigatorItems, archivedPlan));
+  quickOpenLoadGeneration += 1;
+  quickOpenLoadPromise = null;
+  quickOpenItems = activeNavigatorItems(mergePlanIntoItems(quickOpenItems, archivedPlan));
+  await loadPlanNavigator();
+  if (quickOpenVisible()) {
+    quickOpenItems = [];
+    await loadQuickOpenItems().catch(error => { quickOpenLoadError = error; });
+    renderQuickOpenResults();
+  }
   showArchiveToast('Archived this '+documentKind+'.');
 });
 restorePlanButton?.addEventListener('click', async () => {
@@ -1326,14 +1369,14 @@ async function loadNavigatorFilterSource(){
   const result = await navigatorFilterLoadPromise;
   if (result.url !== navigatorApiUrl() || result.generation !== navigatorLoadGeneration) return;
   navigatorItems = activeNavigatorItems(result.plans);
-  renderPlanNavigatorItems(navigatorItems, 'documents');
+  renderPlanNavigatorItems(navigatorItems, navigatorItemNoun);
 }
 function applyNavigatorFilters(){
   saveNavigatorFilters();
   syncNavigatorFilterUrl();
   void loadNavigatorFilterSource().catch(error => {
     navigatorLoadError = error;
-    if (planListError) { planListError.hidden = false; planListError.textContent = 'Unable to filter documents. The current plan remains reviewable.'; }
+    if (planListError) { planListError.hidden = false; planListError.textContent = 'Unable to filter '+navigatorItemNoun+'. The current '+documentKind+' remains reviewable.'; }
   });
 }
 restoreNavigatorFilters();
@@ -1724,8 +1767,18 @@ function filteredNavigatorItems(items){
   const current = items.find(item => String(item?.plan?.id || '') === planId);
   return current && !filtered.some(item => String(item?.plan?.id || '') === planId) ? [current, ...filtered] : filtered;
 }
+function navigatorListTitle(label = 'plans'){
+  const noun = label === 'documents' ? 'documents' : 'plans';
+  const state = stateFilterControl?.value || '';
+  const stateLabel = state === 'archived' ? 'Archived' : state === 'deferred' ? 'Deferred' : state === '' && navigatorFiltersActive() ? 'All' : 'Active';
+  return stateLabel + ' ' + noun;
+}
 function renderPlanNavigatorItems(items, label = 'plans'){
   if (!planListItems) return;
+  const title = navigatorListTitle(label);
+  const heading = planListNav?.querySelector('.plan-list-header h2');
+  if (heading) heading.textContent = title;
+  planListNav?.setAttribute('aria-label', title);
   const visibleItems = filteredNavigatorItems(items);
   const html = sortPlanNavItems(visibleItems).map(item => {
     const id = String(item?.plan?.id || '');
@@ -1733,8 +1786,7 @@ function renderPlanNavigatorItems(items, label = 'plans'){
     const status = planItemStatus(item);
     return '<a class="plan-nav-item'+(active ? ' active' : '')+(planItemAttention(item) ? ' attention' : '')+'" href="'+escapeHtml(planNavigatorHref(id))+'" data-plan-nav-item data-plan-id="'+escapeHtml(id)+'" aria-current="'+(active ? 'page' : 'false')+'"><span class="plan-nav-title">'+escapeHtml(planItemTitle(item))+'</span><span class="plan-nav-meta"><span class="plan-nav-pill '+(item?.plan?.reviewMode === 'collaboration' || item?.plan?.publicationMetadata?.executionReady ? 'ready' : 'not-ready')+'">'+escapeHtml(status)+'</span><span>'+escapeHtml(planItemProgress(item))+'</span></span><span class="plan-nav-submeta">pending '+Number(item?.counts?.pending || 0)+' · updated '+escapeHtml(String(item?.modifiedAt || ''))+'</span></a>';
   }).join('');
-  const filtered = navigatorFiltersActive();
-  planListItems.innerHTML = html || '<p class="plan-list-empty">No '+(filtered ? 'matching ' : 'active ')+(label === 'documents' ? 'documents' : 'plans')+'.</p>';
+  planListItems.innerHTML = html || '<p class="plan-list-empty">No '+title.toLowerCase()+'.</p>';
 }
 function quickOpenVisible(){ return Boolean(quickOpenBackdrop && !quickOpenBackdrop.hidden); }
 function normalizeQuickOpenText(value){ return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
@@ -1903,9 +1955,10 @@ function handleQuickOpenKeydown(event){
   }
 }
 async function loadQuickOpenItems(options = {}){
-  if (quickOpenLoadPromise) return quickOpenLoadPromise;
+  if (quickOpenLoadPromise && !options.force) return quickOpenLoadPromise;
   if (!options.force && quickOpenItems.length) return Promise.resolve();
   if (options.force) quickOpenItems = [];
+  const generation = ++quickOpenLoadGeneration;
   quickOpenLoadPromise = (async () => {
     const items = [];
     let cursor = '';
@@ -1917,9 +1970,10 @@ async function loadQuickOpenItems(options = {}){
       items.push(...(Array.isArray(json.data.plans) ? json.data.plans : []));
       cursor = json.data.nextCursor || '';
     } while (cursor);
+    if (generation !== quickOpenLoadGeneration) return;
     quickOpenItems = activeNavigatorItems(items);
     quickOpenLoadError = null;
-  })().finally(() => { quickOpenLoadPromise = null; });
+  })().finally(() => { if (generation === quickOpenLoadGeneration) quickOpenLoadPromise = null; });
   return quickOpenLoadPromise;
 }
 async function loadPlanNavigator(){
@@ -1933,14 +1987,14 @@ async function loadPlanNavigator(){
     if (url !== navigatorApiUrl() || generation !== navigatorLoadGeneration) return;
     navigatorItems = activeNavigatorItems(Array.isArray(json.data.plans) ? json.data.plans : []);
     navigatorLoadError = null;
-    renderPlanNavigatorItems(navigatorItems, document.querySelector('#plan-list-nav')?.getAttribute('aria-label') === 'Active documents' ? 'documents' : 'plans');
+    renderPlanNavigatorItems(navigatorItems, navigatorItemNoun);
     if (planListError) planListError.hidden = true;
     if (planListRetry) planListRetry.hidden = true;
     if (quickOpenVisible()) renderQuickOpenResults();
   } catch (error) {
     if (url !== navigatorApiUrl() || generation !== navigatorLoadGeneration) return;
     navigatorLoadError = error;
-    if (planListError) { planListError.hidden = false; planListError.textContent = 'Unable to load plans. The current plan remains reviewable.'; }
+    if (planListError) { planListError.hidden = false; planListError.textContent = 'Unable to load '+navigatorItemNoun+'. The current '+documentKind+' remains reviewable.'; }
     if (planListRetry) planListRetry.hidden = false;
     if (quickOpenVisible()) renderQuickOpenResults();
   }

@@ -2710,28 +2710,146 @@ try {
     await page.setViewportSize({ width: 1280, height: 720 });
 
     const archiveDialogs: string[] = [];
+    const screenshotToolbarOnFailure = async (name: string, run: () => Promise<void>) => {
+      try {
+        await run();
+      } catch (error) {
+        const dir = path.join(os.tmpdir(), 'plan-reviewer-toolbar-regression');
+        fs.mkdirSync(dir, { recursive: true });
+        await page.locator('#plan-navbar').screenshot({ path: path.join(dir, `${name}-${Date.now()}.png`) }).catch(() => undefined);
+        throw error;
+      }
+    };
+    const toolbarSnapshot = async () => page.evaluate(() => {
+      const visible = (selector: string) => {
+        const element = document.querySelector<HTMLElement>(selector);
+        if (!element) return false;
+        const style = getComputedStyle(element);
+        const box = element.getBoundingClientRect();
+        return !element.hidden && style.display !== 'none' && style.visibility !== 'hidden' && box.width > 0 && box.height > 0;
+      };
+      const clickable = (selector: string) => {
+        const element = document.querySelector<HTMLElement>(selector);
+        if (!element) return false;
+        const style = getComputedStyle(element);
+        return visible(selector) && style.cursor === 'pointer' && !(element as HTMLButtonElement | HTMLSelectElement).disabled;
+      };
+      const status = document.querySelector<HTMLElement>('#archive-status');
+      const statusBox = status?.getBoundingClientRect();
+      const statusStyle = status ? getComputedStyle(status) : undefined;
+      const statusHit = statusBox ? document.elementFromPoint(statusBox.left + statusBox.width / 2, statusBox.top + statusBox.height / 2) : null;
+      return {
+        restoreVisible: visible('#restore-plan'),
+        restoreClickable: clickable('#restore-plan'),
+        resumeVisible: visible('#resume-plan'),
+        resumeClickable: clickable('#resume-plan'),
+        deferVisible: visible('#defer-plan'),
+        deferClickable: clickable('#defer-plan'),
+        archiveVisible: visible('#archive-plan'),
+        archiveClickable: clickable('#archive-plan'),
+        statusVisible: visible('#archive-status'),
+        statusText: status?.textContent?.trim() ?? '',
+        statusRole: status?.getAttribute('role') ?? '',
+        statusAria: status?.getAttribute('aria-label') ?? '',
+        statusCursor: statusStyle?.cursor ?? '',
+        statusPointerEvents: statusStyle?.pointerEvents ?? '',
+        statusWidth: Math.round(statusBox?.width ?? 0),
+        statusHeight: Math.round(statusBox?.height ?? 0),
+        statusHitSelf: statusHit === status || Boolean(statusHit?.closest?.('#archive-status')),
+        currentStatusVisible: visible('#current-plan-status-control'),
+        currentStatusDisabled: Boolean(document.querySelector<HTMLSelectElement>('#current-plan-status-control')?.disabled),
+        guidance: document.querySelector<HTMLElement>('#current-plan-status-guidance')?.textContent?.trim() ?? '',
+        stateFilter: (document.querySelector<HTMLSelectElement>('#state-filter-control')?.value ?? ''),
+        navLabel: document.querySelector<HTMLElement>('#plan-list-nav')?.getAttribute('aria-label') ?? '',
+        navbarHeight: Math.round(document.querySelector<HTMLElement>('#plan-navbar')?.getBoundingClientRect().height ?? 0)
+      };
+    });
+    const assertActiveToolbarMatrix = async () => screenshotToolbarOnFailure('active-toolbar', async () => {
+      await page.waitForSelector('#current-plan-status-control');
+      const snapshot = await toolbarSnapshot();
+      assert.equal(snapshot.currentStatusVisible, true, JSON.stringify(snapshot));
+      assert.equal(snapshot.currentStatusDisabled, false, JSON.stringify(snapshot));
+      assert.equal(snapshot.archiveClickable, true, JSON.stringify(snapshot));
+      assert.equal(snapshot.deferClickable, true, JSON.stringify(snapshot));
+      assert.equal(snapshot.restoreVisible, false, JSON.stringify(snapshot));
+      assert.equal(snapshot.statusVisible, false, JSON.stringify(snapshot));
+      assert.equal(snapshot.stateFilter, 'active', JSON.stringify(snapshot));
+      assert.equal(snapshot.navLabel, 'Active plans', JSON.stringify(snapshot));
+      assert.equal(snapshot.navbarHeight >= 80, true, JSON.stringify(snapshot));
+    });
+    const assertDeferredToolbarMatrix = async () => screenshotToolbarOnFailure('deferred-toolbar', async () => {
+      await page.waitForSelector('#resume-plan');
+      const snapshot = await toolbarSnapshot();
+      assert.equal(snapshot.currentStatusVisible, false, JSON.stringify(snapshot));
+      assert.equal(snapshot.resumeClickable, true, JSON.stringify(snapshot));
+      assert.equal(snapshot.archiveClickable, true, JSON.stringify(snapshot));
+      assert.equal(snapshot.restoreVisible, false, JSON.stringify(snapshot));
+      assert.equal(snapshot.statusVisible, true, JSON.stringify(snapshot));
+      assert.equal(snapshot.statusText, 'Deferred', JSON.stringify(snapshot));
+      assert.equal(snapshot.statusRole, 'status', JSON.stringify(snapshot));
+      assert.equal(snapshot.statusAria, 'Status: Deferred', JSON.stringify(snapshot));
+      assert.equal(snapshot.statusCursor, 'default', JSON.stringify(snapshot));
+      assert.equal(snapshot.statusPointerEvents, 'none', JSON.stringify(snapshot));
+      assert.equal(snapshot.statusHitSelf, false, JSON.stringify(snapshot));
+      assert.equal(snapshot.guidance, 'Resume this plan before changing its board status.', JSON.stringify(snapshot));
+      assert.equal(snapshot.stateFilter, 'deferred', JSON.stringify(snapshot));
+      assert.equal(snapshot.navLabel, 'Deferred plans', JSON.stringify(snapshot));
+    });
+    const assertArchivedToolbarStatus = async () => screenshotToolbarOnFailure('archived-toolbar', async () => {
+      await page.waitForFunction(() => document.querySelector<HTMLElement>('#archive-status')?.hidden === false);
+      const snapshot = await toolbarSnapshot();
+      assert.equal(snapshot.currentStatusVisible, false, JSON.stringify(snapshot));
+      assert.equal(snapshot.restoreClickable, true, JSON.stringify(snapshot));
+      assert.equal(snapshot.resumeVisible, false, JSON.stringify(snapshot));
+      assert.equal(snapshot.archiveVisible, false, JSON.stringify(snapshot));
+      assert.equal(snapshot.statusVisible, true, JSON.stringify(snapshot));
+      assert.equal(snapshot.statusText, 'Status: Archived', JSON.stringify(snapshot));
+      assert.equal(snapshot.statusRole, 'status', JSON.stringify(snapshot));
+      assert.equal(snapshot.statusAria, 'Status: Archived', JSON.stringify(snapshot));
+      assert.equal(snapshot.statusCursor, 'default', JSON.stringify(snapshot));
+      assert.equal(snapshot.statusPointerEvents, 'none', JSON.stringify(snapshot));
+      assert.equal(snapshot.statusHitSelf, false, JSON.stringify(snapshot));
+      assert.equal(snapshot.statusWidth > 70, true, JSON.stringify(snapshot));
+      assert.equal(snapshot.guidance, 'Restore this plan before changing its board status.', JSON.stringify(snapshot));
+      assert.equal(snapshot.stateFilter, 'archived', JSON.stringify(snapshot));
+      assert.equal(snapshot.navLabel, 'Archived plans', JSON.stringify(snapshot));
+    });
+
+    const transitionPlan = await registerTinyPlan('toolbar-lifecycle-transition');
+    await page.goto(`${baseUrl}/p/${transitionPlan.planId}`);
+    await assertActiveToolbarMatrix();
+    await page.selectOption('#state-filter-control', 'deferred');
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#plan-list-nav')?.getAttribute('aria-label') === 'Deferred plans');
+    await page.selectOption('#state-filter-control', 'active');
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#plan-list-nav')?.getAttribute('aria-label') === 'Active plans');
+    page.once('dialog', async dialog => {
+      assert.match(dialog.message(), /defer/i);
+      await dialog.accept('Pause from toolbar regression e2e.');
+    });
+    await page.click('#defer-plan');
+    await page.waitForURL(`${baseUrl}/deferred`);
+    await page.goto(`${baseUrl}/p/${transitionPlan.planId}`);
+    await assertDeferredToolbarMatrix();
+    page.once('dialog', async dialog => {
+      assert.match(dialog.message(), /resume/i);
+      await dialog.accept('Resume from toolbar regression e2e.');
+    });
+    await page.click('#resume-plan');
+    await page.waitForURL(`${baseUrl}/`);
+    await page.goto(`${baseUrl}/p/${transitionPlan.planId}`);
+    await assertActiveToolbarMatrix();
+    await page.click('#archive-plan');
+    await page.waitForSelector('#archive-toast:not([hidden])');
+    await assertArchivedToolbarStatus();
+    await page.click('#restore-plan');
+    await page.waitForURL(`${baseUrl}/`);
+    await page.goto(`${baseUrl}/p/${transitionPlan.planId}`);
+    await assertActiveToolbarMatrix();
+
     page.on('dialog', async dialog => {
       archiveDialogs.push(dialog.message());
       await dialog.dismiss();
     });
-    const waitForArchivedToolbarStatus = async () => {
-      await page.waitForFunction(() => {
-        const status = document.querySelector<HTMLElement>('#archive-status');
-        return status?.hidden === false
-          && status.textContent === '🗄'
-          && status.getAttribute('role') === 'status'
-          && status.getAttribute('aria-label') === 'Archived'
-          && status.getAttribute('title') === 'Archived';
-      });
-    };
-    const assertArchivedToolbarStatus = async () => {
-      await waitForArchivedToolbarStatus();
-      const status = page.locator('#archive-status');
-      assert.equal(await status.textContent(), '🗄');
-      assert.equal(await status.getAttribute('role'), 'status');
-      assert.equal(await status.getAttribute('aria-label'), 'Archived');
-      assert.equal(await status.getAttribute('title'), 'Archived');
-    };
 
     await page.goto(`${baseUrl}/?view=all`);
     await page.route(`**/api/plans/${registered.planId}/archive`, route => route.abort('failed'));
@@ -2785,14 +2903,16 @@ try {
     await context.post(`/api/plans/${registered.planId}/unarchive`, { data: {} });
     assert.deepEqual(archiveDialogs, []);
 
-    await page.goto(`${baseUrl}/p/${registered.planId}`);
+    await page.goto(`${baseUrl}/p/${registered.planId}?projectKey=&lifecycle=active`);
     await page.waitForSelector('#archive-plan');
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+O' : 'Control+O');
     await page.waitForSelector('#quick-open-backdrop:not([hidden])');
     assert.equal(await page.locator(`[data-quick-open-result][data-plan-id="${registered.planId}"]`).count(), 1);
     await page.keyboard.press('Escape');
     let releaseStaleNavigator: (() => void) | undefined;
+    let releaseStaleQuickOpen: (() => void) | undefined;
     let heldNavigator = true;
+    let heldQuickOpen = true;
     await page.route('**/api/plans/navigator?**', async route => {
       if (!heldNavigator) {
         await route.continue();
@@ -2803,32 +2923,63 @@ try {
       await new Promise<void>(resolve => { releaseStaleNavigator = resolve; });
       await route.fulfill({ response });
     });
+    await page.route('**/api/plans?**', async route => {
+      if (!heldQuickOpen || !route.request().url().includes('includeArchived=true')) {
+        await route.continue();
+        return;
+      }
+      heldQuickOpen = false;
+      const response = await route.fetch();
+      await new Promise<void>(resolve => { releaseStaleQuickOpen = resolve; });
+      await route.fulfill({ response });
+    });
     await page.reload();
     await page.waitForSelector('#archive-plan');
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+O' : 'Control+O');
     await page.waitForSelector('#quick-open-backdrop:not([hidden])');
+    for (let attempt = 0; attempt < 50 && !releaseStaleQuickOpen; attempt += 1) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    if (!releaseStaleQuickOpen) throw new Error('Quick-open request was not held before archive');
+    await page.keyboard.press('Escape');
     for (let attempt = 0; attempt < 50 && !releaseStaleNavigator; attempt += 1) {
       await new Promise(resolve => setTimeout(resolve, 50));
     }
     if (!releaseStaleNavigator) throw new Error('Navigator request was not held before archive');
-    await page.keyboard.press('Escape');
     await page.click('#archive-plan');
     await page.waitForSelector('#archive-toast:not([hidden])');
     assert.equal(await page.evaluate(() => document.activeElement?.id), 'archive-toast-undo');
     await page.keyboard.press('Tab');
     assert.equal(await page.locator('#archive-toast:not([hidden])').count(), 1);
-    assert.match(page.url(), new RegExp(`/p/${registered.planId}$`));
+    assert.match(page.url(), new RegExp(`/p/${registered.planId}\\?`));
+    assert.match(page.url(), /lifecycle=archived/);
     await assertArchivedToolbarStatus();
     await page.waitForFunction(() => document.querySelector<HTMLElement>('#restore-plan')?.hidden === false);
-    assert.equal(await page.locator(`[data-plan-nav-item][data-plan-id="${registered.planId}"]`).count(), 0);
+    assert.equal(await page.locator(`[data-plan-nav-item][data-plan-id="${registered.planId}"]`).count(), 1);
     const staleNavigatorResponse = page.waitForResponse(response => response.url().includes('/api/plans/navigator') && response.status() === 200);
+    const staleQuickOpenResponse = page.waitForResponse(response => response.url().includes('/api/plans?includeArchived=true') && response.status() === 200);
     releaseStaleNavigator();
+    releaseStaleQuickOpen();
     await staleNavigatorResponse;
+    await staleQuickOpenResponse;
     await page.unroute('**/api/plans/navigator?**');
-    await page.waitForFunction(planId => !document.querySelector(`[data-plan-nav-item][data-plan-id="${planId}"]`), registered.planId);
+    await page.unroute('**/api/plans?**');
+    await page.waitForFunction(planId => Boolean(document.querySelector(`[data-plan-nav-item][data-plan-id="${planId}"]`)), registered.planId);
+    const archivedNavItemText = await page.locator(`[data-plan-nav-item][data-plan-id="${registered.planId}"]`).innerText();
+    assert.match(archivedNavItemText, /Archived ·/);
+    await page.selectOption('#state-filter-control', '');
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#plan-list-nav')?.getAttribute('aria-label') === 'All plans');
+    assert.equal(await page.locator(`[data-plan-nav-item][data-plan-id="${registered.planId}"]`).count(), 1);
+    const allStatesNavItemText = await page.locator(`[data-plan-nav-item][data-plan-id="${registered.planId}"]`).innerText();
+    assert.match(allStatesNavItemText, /Archived ·/);
+    await page.selectOption('#state-filter-control', 'archived');
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#plan-list-nav')?.getAttribute('aria-label') === 'Archived plans');
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+O' : 'Control+O');
     await page.waitForSelector('#quick-open-backdrop:not([hidden])');
-    assert.equal(await page.locator(`[data-quick-open-result][data-plan-id="${registered.planId}"]`).count(), 0);
+    assert.equal(await page.locator(`[data-quick-open-result][data-plan-id="${registered.planId}"]`).count(), 1);
+    const archivedQuickOpenText = await page.locator(`[data-quick-open-result][data-plan-id="${registered.planId}"]`).innerText();
+    assert.match(archivedQuickOpenText, /archived/i);
+    assert.doesNotMatch(archivedQuickOpenText, /active ·/i);
     await page.keyboard.press('Escape');
     await page.evaluate(() => {
       const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;

@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan State Visual Regression Prevention</title>
+  <style>
+    :root{color-scheme:dark;--bg:#07111f;--panel:#0d1728;--panel2:#111d32;--text:#e8f0ff;--muted:#a7b4c9;--line:#263850;--accent:#67e8f9;--good:#86efac;--warn:#fde68a;--bad:#fda4af;--code:#020817}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:1180px;margin:0 auto;padding:40px 24px 80px}section,article{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px;margin:18px 0}h1{font-size:clamp(2rem,5vw,3.3rem);line-height:1.05;margin:0 0 10px}h2{font-size:1.45rem;margin:0 0 12px}h3{font-size:1.1rem;margin:18px 0 8px}.summary{background:linear-gradient(135deg,#10233b,#0b1628)}.meta{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}.pill{border:1px solid var(--line);border-radius:999px;padding:4px 10px;background:var(--panel2);color:var(--muted);font-weight:700;font-size:.9rem}.pill.warn{border-color:#92400e;color:var(--warn)}.pill.good{border-color:#166534;color:var(--good)}a{color:var(--accent)}code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}code{background:var(--code);border:1px solid var(--line);border-radius:6px;padding:.1rem .3rem}pre{background:var(--code);border:1px solid var(--line);border-radius:12px;padding:14px;overflow:auto}.toc{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}.toc a{display:block;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--panel2);text-decoration:none}table{width:100%;border-collapse:collapse;margin:12px 0}th,td{border:1px solid var(--line);padding:10px;vertical-align:top}th{background:var(--panel2);text-align:left}.muted{color:var(--muted)}.danger{color:var(--bad)}.phase{background:#0a1424}.progress-list{list-style:none;padding-left:0}.progress-list li{margin:8px 0}.ui-evidence-grid{display:grid;gap:16px}.ui-capture{border:1px solid var(--line);border-radius:14px;background:#08111f;padding:14px;margin:0}.ui-capture img{display:block;width:100%;height:auto;border:1px solid #2b364d;background:#0f172a}.ui-capture figcaption{margin-top:10px;color:var(--muted);font-size:.95rem}.target-contract{border:1px solid #475569;border-radius:14px;background:#08111f;padding:14px}.target-contract ul{margin-top:8px}.callout{border:1px solid #f59e0b;background:rgba(245,158,11,.12);color:#fde68a;border-radius:12px;padding:12px;margin:12px 0}
+  </style>
+</head>
+<body>
+<main>
+  <header class="summary">
+    <h1>Plan State Visual Regression Prevention</h1>
+    <p class="muted">Investigate the missing plan-state pulldown and confusing archive icon, then harden the product against this class of visual and interaction regression.</p>
+    <div class="meta">
+      <span class="pill good">Status: execution-ready</span>
+      <span class="pill good">Execution readiness: true</span>
+      <span class="pill">UI impact: yes</span>
+      <span class="pill">Linear: no existing issue; user-reported regression</span>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="Table of contents">
+    <a href="#goal">Goal</a>
+    <a href="#decision-attention">Decision Attention</a>
+    <a href="#investigation">Investigation Findings</a>
+    <a href="#current-reality">Current Implementation Reality</a>
+    <a href="#product-intent">Product Intent Alignment</a>
+    <a href="#acceptance">Acceptance Criteria</a>
+    <a href="#bdd">BDD Scenarios</a>
+    <a href="#phases">Phase Plan</a>
+    <a href="#verification">Verification Strategy</a>
+    <a href="#resume">Resume Instructions</a>
+  </nav>
+
+  <section id="goal">
+    <h2>Goal</h2>
+    <p>Restore a clear, usable state-management experience for plan detail pages and add automated UI regression gates so future toolbar/status changes cannot silently remove key affordances or make a non-clickable status look like a broken button.</p>
+  </section>
+
+  <section id="decision-attention">
+    <h2>Decision Attention / Low-confidence Areas</h2>
+    <ul>
+      <li><strong>Locked product decision:</strong> archived and deferred plans keep the existing Restore/Resume-first contract before board-column/status changes. The implementation must not auto-restore a plan merely because a reviewer attempts to change its board status.</li>
+      <li><strong>Required recovery UX:</strong> inactive pages must make the path forward obvious: archived pages show a labelled <q>Archived</q> state, a primary Restore action, and helper copy saying status changes are available after restore; deferred pages do the same with Resume.</li>
+      <li><strong>Regression source is high-confidence:</strong> commit <code>8cee24a</code> intentionally hides <code>#current-plan-status-control</code> for non-active plans, and the screenshot plan <code>plan_5hvCL70FK6wq</code> is currently archived.</li>
+    </ul>
+  </section>
+
+  <section id="why">
+    <h2>Why this plan exists</h2>
+    <p>The current UI presents contradictory cues: the left navigator can show an archived current plan while its filter says <q>Active</q>, the top toolbar shows a round archive-looking glyph that is not clickable, and the board-column pulldown disappears without explaining why. That makes a correct internal lifecycle state feel like a broken visual regression.</p>
+  </section>
+
+  <section id="authority">
+    <h2>Authority and Inputs</h2>
+    <ul>
+      <li>User report and screenshot: <code>/var/folders/02/bf0y1x1n0m977x4wwqvy3sfr0000gn/T/pi-clipboard-49f44b9a-760a-4aaf-8ce0-2f2da0ab9866.png</code>.</li>
+      <li>Repo guidance: <code>AGENTS.md</code>, <code>thoughts/plans/AGENTS.md</code>.</li>
+      <li>Product intent: <code>thoughts/specs/product_intent.md</code>.</li>
+      <li>Implementation files: <code>src/server/app.ts</code>, <code>src/storage/database.ts</code>, <code>src/__tests__/contracts.test.ts</code>, <code>src/test-fixtures/e2e-run.ts</code>.</li>
+      <li>Regression commit: <code>8cee24a Address inactive plan status selector feedback</code>.</li>
+    </ul>
+  </section>
+
+  <section id="investigation">
+    <h2>Investigation Findings</h2>
+    <table>
+      <thead><tr><th>Evidence</th><th>Finding</th><th>Implication</th></tr></thead>
+      <tbody>
+        <tr><td><code>curl /api/plans/plan_5hvCL70FK6wq</code></td><td>The screenshot plan <q>Good Morning — 2026-06-24</q> has <code>lifecycleState: archived</code>, <code>archivedAt: 2026-06-25T21:17:16.131Z</code>, and <code>boardColumnKey: backlog</code>.</td><td>The round archive glyph is currently an archived-state indicator, not the archive button.</td></tr>
+        <tr><td><code>src/server/app.ts currentPlanStatusControl</code></td><td>Commit <code>8cee24a</code> changed the guard from <code>reviewMode === 'collaboration'</code> to <code>reviewMode === 'collaboration' || lifecycleState !== 'active'</code>.</td><td>The pulldown is intentionally omitted for archived/deferred pages.</td></tr>
+        <tr><td><code>src/storage/database.ts setPlanBoardColumn</code></td><td>The server rejects board-column moves for non-active plans with <code>invalid_state</code> and next-action text: restore archived plans or resume deferred plans before changing columns.</td><td>Hiding the selector avoided a server error but removed the user's path forward.</td></tr>
+        <tr><td><code>src/server/app.ts reviewShell</code></td><td>Archived pages render <code>&lt;span id="archive-status" class="archive-status"&gt;🗄&lt;/span&gt;</code> and no <code>#archive-plan</code> button.</td><td>The status span reuses button-like sizing/color, so it looks like a broken toolbar button.</td></tr>
+        <tr><td>Live active toolbar capture</td><td>Active pages also visibly show the restore glyph <code>↩</code> between Archive and Configuration even though <code>#restore-plan</code> is emitted with <code>hidden</code>.</td><td>The button CSS can override hidden-state expectations; regression coverage must assert hidden controls are not visible or hit-testable.</td></tr>
+        <tr><td><code>src/storage/database.ts listPlans</code></td><td><code>currentPlanId</code> is appended even when it does not match lifecycle filters.</td><td>The left nav can say Active while still showing the archived current page, creating contradictory state cues.</td></tr>
+        <tr><td><code>src/__tests__/contracts.test.ts</code></td><td>Existing tests assert that deferred/archived pages do not render <code>#current-plan-status-control</code> and that archived pages lack <code>#archive-plan</code>.</td><td>The regression is encoded as expected behavior; prevention requires changing the test contract, not only CSS.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="current-reality">
+    <h2>Current Implementation Reality</h2>
+    <ul>
+      <li>The product has two state concepts: lifecycle (<code>active</code>, <code>deferred</code>, <code>archived</code>) and board status/column (<code>backlog</code>, <code>in_progress</code>, etc.).</li>
+      <li>Active planning documents can change board status from the top detail toolbar using <code>#current-plan-status-control</code>.</li>
+      <li>Deferred plans can be resumed or archived from the detail toolbar, but their board status selector is hidden.</li>
+      <li>Archived plans can be restored from the detail toolbar, but the archive-state indicator looks like an inactive archive button.</li>
+      <li>Current e2e coverage exercises many interactions, but it does not lock the visible toolbar contract as a user-facing state matrix.</li>
+    </ul>
+  </section>
+
+  <section id="product-intent">
+    <h2>Product Intent Alignment</h2>
+    <p>This plan advances <code>thoughts/specs/product_intent.md</code> by making the plan index/detail state truthful and by ensuring browser UI, API, and tests describe the same lifecycle semantics. It follows the experience principles that routine workflows should not depend on tribal knowledge and every user-visible failure or unavailable action should explain the next safe action.</p>
+  </section>
+
+  <section id="locked-decisions">
+    <h2>Locked Decisions</h2>
+    <ul>
+      <li>Keep the server-side invariant that only active planning documents can move board columns; inactive plans must use Restore/Resume before board-status changes.</li>
+      <li>Do not make non-clickable spans look like icon buttons. Status indicators must be visually and semantically distinct from actions.</li>
+      <li>Automated tests must cover the shipped browser surface, not just returned HTML strings.</li>
+      <li>Visual regression gates should target stable toolbar/navigation regions and pair screenshots with semantic clickability assertions to avoid flaky full-page snapshots.</li>
+    </ul>
+  </section>
+
+  <section id="target-ui">
+    <h2>Target UI Evidence</h2>
+    <p class="callout"><strong>Correction:</strong> this section pairs live Playwright captures of the current shell with narrow target mock captures generated from static <code>#plan-navbar</code> HTML. The target mocks are not a redesign: they keep the current document switcher unselected on detail pages, keep the existing unfilled readiness-text treatment, and change only the lifecycle/status affordances called out in the DOM contract. Implementation must update the real <code>#plan-navbar</code> and prove it with browser tests.</p>
+    <div class="ui-evidence-grid">
+      <figure class="ui-capture" id="real-active-toolbar-capture">
+        <img src="assets/plan-state-visual-regression/active-toolbar-current.png" alt="Live capture of the current active plan toolbar in the review shell">
+        <figcaption>Live capture, active plan, from <code>http://127.0.0.1:4317/p/plan_lEslT6AT3Acf</code>. This is the chrome baseline to preserve: same dark navbar, same action order, same tool-button styling, same current-plan row, same readiness pill, same status select. It also exposes a current bug: the <code>↩</code> restore control is visible on an active plan even though <code>#restore-plan</code> is emitted with <code>hidden</code>; the target state must hide that control.</figcaption>
+      </figure>
+      <figure class="ui-capture" id="real-archived-toolbar-regression-capture">
+        <img src="assets/plan-state-visual-regression/archived-toolbar-current-regression.png" alt="Live capture of the current archived plan toolbar showing the archive icon regression">
+        <figcaption>Live capture, archived plan regression, from <code>http://127.0.0.1:4317/p/plan_5hvCL70FK6wq</code>. This is explicitly the broken current UI, not the target. The bad element is the round/button-sized <code>#archive-status</code> glyph <q>🗄</q> in the action row; it looks like an archive button but is only a status span. The target must replace it with a rectangular/rounded text status pill such as <q>Status: Archived</q> or <q>Archived</q>, with no standalone archive icon.</figcaption>
+      </figure>
+    </div>
+    <div class="ui-evidence-grid" id="target-toolbar-mocks">
+      <figure class="ui-capture" id="target-active-toolbar-mock">
+        <img src="assets/plan-state-visual-regression/target-active-toolbar.png" alt="Target mock for active plan toolbar">
+        <figcaption>Target mock, active plan. Same current shell styling and action density: the detail-page document switcher remains unselected, the readiness label keeps the current unfilled text styling, and the hidden Restore control is not visible, while Defer, Archive, status select, and comment status remain visible.</figcaption>
+      </figure>
+      <figure class="ui-capture" id="target-archived-toolbar-mock">
+        <img src="assets/plan-state-visual-regression/target-archived-toolbar.png" alt="Target mock for archived plan toolbar with archive status pill">
+        <figcaption>Target mock, archived plan. Current shell chrome is preserved: the detail-page document switcher remains unselected and the readiness label keeps the current unfilled text styling. The archive state is the scoped change: a text-first status pill (<q>Status: Archived</q>), not a round archive icon. Restore is the only lifecycle action, and the current-plan row explains that restore is required before changing board status.</figcaption>
+      </figure>
+      <figure class="ui-capture" id="target-deferred-toolbar-mock">
+        <img src="assets/plan-state-visual-regression/target-deferred-toolbar.png" alt="Target mock for deferred plan toolbar with deferred status pill">
+        <figcaption>Target mock, deferred plan. Current shell chrome is preserved: the detail-page document switcher remains unselected and the readiness label keeps the current unfilled text styling. Deferred is the scoped change: a text-first lifecycle pill; Resume and Archive remain distinct actions, and the current-plan row explains that resume is required before changing board status.</figcaption>
+      </figure>
+    </div>
+    <div class="target-contract" id="target-toolbar-dom-contract">
+      <h3>Target toolbar DOM contract, not a redesign</h3>
+      <table>
+        <thead><tr><th>State</th><th>Keep exactly from current shell</th><th>Change required</th><th>Must not happen</th></tr></thead>
+        <tbody>
+          <tr><td>Active</td><td><code>#plan-navbar</code>, <code>#plan-navbar-actions</code>, <code>.tool-button</code> styling, document switcher, pin/download/review/build/defer/archive/config/comments order, <code>#current-plan-bar</code>, readiness pill, and <code>#current-plan-status-control</code>.</td><td>No visual redesign. Keep archive as the existing clickable <code>#archive-plan</code> button and ensure the active-only hidden <code>#restore-plan</code> is not visible or hit-testable.</td><td>Do not move the board-status select out of the current-plan row. Do not show Restore on active plans.</td></tr>
+          <tr><td>Archived</td><td>Same navbar/action-row/current-row chrome, restore action, config action, comments action, current title, readiness pill, and comment-status banner behavior.</td><td>Replace the icon-only round/button-sized <code>#archive-status</code> span with an archive status pill: text-first, wider than an icon button, and labelled <q>Status: Archived</q> or <q>Archived</q>. Add helper copy in the current-plan row: <q>Restore this plan before changing its board status.</q></td><td>Do not show a round archive icon, standalone archive glyph, icon-only archived state, or any non-action that looks like the Archive button. Do not show <code>#current-plan-status-control</code> while archived. Do not auto-restore on status change.</td></tr>
+          <tr><td>Deferred</td><td>Same shell chrome and existing Archive action availability.</td><td>Use a text lifecycle label such as <q>Deferred</q>, keep Resume as the next-step action, and add helper copy in the current-plan row: <q>Resume this plan before changing its board status.</q></td><td>Do not make the deferred status look like a pause icon button. Do not show <code>#current-plan-status-control</code> while deferred.</td></tr>
+        </tbody>
+      </table>
+      <p class="muted">The target mock PNGs above were generated from static HTML using the same current shell selectors, colors, sizing, action order, document-switcher state, unfilled readiness text, and current-plan row structure. They are visual targets for review, but implementation acceptance still comes from the DOM contract and live browser screenshots after the code changes.</p>
+    </div>
+  </section>
+
+  <section id="acceptance">
+    <h2>Acceptance Criteria</h2>
+    <ol>
+      <li id="ac-1">Active planning detail pages visibly expose a board-status selector and an archive action, both keyboard reachable and clickable, and they do not show or hit-test the restore action.</li>
+      <li id="ac-2">Archived planning detail pages do not show a round/button-like archive icon; they show an unmistakable archive status pill, a restore action, and next-step guidance for changing status.</li>
+      <li id="ac-3">Deferred planning detail pages show a deferred label, resume/archive actions, and next-step guidance for changing status after resume.</li>
+      <li id="ac-4">When the current detail page is archived or deferred, navigator lifecycle filters default to that current plan lifecycle instead of showing the page under an unqualified Active filter.</li>
+      <li id="ac-5">E2E tests cover the active/deferred/archived toolbar matrix with semantic assertions for roles, labels, clickability, pointer cursor, disabled state, and expected absence/presence of controls.</li>
+      <li id="ac-6">The e2e fixture enforces a deterministic toolbar regression gate for active/deferred/archived states using DOM, computed-style, hit-target, and geometry assertions; clipped toolbar screenshots are captured only as debug artifacts on failure, not compared with image-diff baselines.</li>
+      <li id="ac-7">Future UI-impacting plans in this repo must include current/target UI evidence and a shipped-surface browser verification step by adding explicit guidance to <code>thoughts/plans/AGENTS.md</code>.</li>
+      <li id="ac-8">Regression coverage must prove both initial render and lifecycle transitions: active → deferred, deferred → active, active → archived, and archived → active restore, with toolbar and navigator assertions after each transition.</li>
+    </ol>
+  </section>
+
+  <section id="bdd">
+    <h2>BDD Scenarios</h2>
+    <article id="bdd-active-status">
+      <h3>Active plan can change board status</h3>
+      <p><strong>Given</strong> an active planning document with Kanban enabled, <strong>when</strong> the reviewer opens its detail page, <strong>then</strong> the toolbar exposes <code>#current-plan-status-control</code>, changing it persists through <code>PUT /api/plans/:id/column</code>, <code>#restore-plan</code> is not visible or hit-testable, and the navigator refreshes without losing the current page.</p>
+    </article>
+    <article id="bdd-archived-guidance">
+      <h3>Archived plan is explanatory, not button-looking</h3>
+      <p><strong>Given</strong> an archived planning document, <strong>when</strong> the reviewer opens its detail page, <strong>then</strong> the toolbar shows an archive status pill and Restore action, no round/button-like archive icon, no standalone archive glyph, and guidance saying Restore is required before status changes.</p>
+    </article>
+    <article id="bdd-deferred-guidance">
+      <h3>Deferred plan guides recovery</h3>
+      <p><strong>Given</strong> a deferred planning document, <strong>when</strong> the reviewer opens its detail page, <strong>then</strong> the toolbar shows Deferred, Resume, and Archive controls, and status-change guidance points to Resume first.</p>
+    </article>
+    <article id="bdd-filter-truth">
+      <h3>Navigator state label stays truthful</h3>
+      <p><strong>Given</strong> the current page is archived or deferred and the request does not explicitly choose another lifecycle filter, <strong>when</strong> the detail page renders, <strong>then</strong> the left navigator selects that current page lifecycle filter so the plan is not presented as part of Active Plans.</p>
+    </article>
+    <article id="bdd-visual-regression">
+      <h3>Visual regression gate catches lost affordances</h3>
+      <p><strong>Given</strong> the e2e fixture creates one active, one deferred, and one archived planning document, <strong>when</strong> the toolbar semantic/geometry/clickability matrix runs, <strong>then</strong> removing the active status selector or making archived status look like an icon button fails before merge, with clipped toolbar screenshots available as failure artifacts for diagnosis.</p>
+    </article>
+    <article id="bdd-lifecycle-transition-regression">
+      <h3>Lifecycle transitions preserve the toolbar contract</h3>
+      <p><strong>Given</strong> an active plan detail page, <strong>when</strong> the fixture defers, resumes, archives, and restores plans through the real browser controls, <strong>then</strong> each resulting page state matches the toolbar matrix, the board-status selector appears only after active restore/resume, and the navigator lifecycle filter follows the current inactive lifecycle before returning to Active.</p>
+    </article>
+  </section>
+
+  <section id="progress">
+    <h2>Progress</h2>
+    <ul class="progress-list">
+      <li><label><input type="checkbox" checked> P1 — Lock toolbar state contract tests</label></li>
+      <li><label><input type="checkbox" checked> P2 — Repair state toolbar UI copy</label></li>
+      <li><label><input type="checkbox" checked> P3 — Add visual regression e2e gate</label></li>
+      <li><label><input type="checkbox" checked> P4 — Align review workflow safeguards</label></li>
+    </ul>
+  </section>
+
+  <section id="phases">
+    <h2>Phase-by-phase Execution Plan</h2>
+
+    <article class="phase" id="phase-p1-contracts">
+      <h3>P1 — Lock toolbar state contract tests</h3>
+      <h4>End State</h4>
+      <p>Contract tests define the intended detail-toolbar matrix before product code changes.</p>
+      <h4>Tests first</h4>
+      <ul><li>Update <code>src/__tests__/contracts.test.ts</code> so active/deferred/archived shell tests assert the target labels, controls, and helper copy.</li><li>Add a failing assertion that archived and deferred current pages default the navigator lifecycle filter to their own lifecycle when no explicit lifecycle filter is requested.</li><li>Add negative contract assertions that inactive pages do not render <code>#current-plan-status-control</code>, do not render a clickable archive-shaped lifecycle status, and do render exactly one next-step control: Restore for archived, Resume plus Archive for deferred.</li><li>Add active-state assertions that <code>#restore-plan</code> remains hidden and is not promoted to a visible toolbar button by CSS.</li></ul>
+      <h4>Expected files</h4><p><code>src/__tests__/contracts.test.ts</code>.</p>
+      <h4>Work</h4><p>Replace assertions that merely require <code>#current-plan-status-control</code> absence with assertions that require a user path forward and distinct action-vs-status semantics.</p>
+      <h4>Open questions / decision dependencies</h4><p>None. The plan keeps the explicit Restore/Resume-first lifecycle contract.</p>
+      <h4>Verify</h4><pre><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></pre>
+    </article>
+
+    <article class="phase" id="phase-p2-ui-repair">
+      <h3>P2 — Repair state toolbar UI copy</h3>
+      <h4>End State</h4>
+      <p>The plan detail page makes lifecycle and board status obvious, with no non-clickable icon masquerading as a button.</p>
+      <h4>Tests first</h4><p>Use the failing P1 tests as the RED gate.</p>
+      <h4>Expected files</h4><p><code>src/server/app.ts</code>; <code>src/storage/database.ts</code> should not need changes unless focused inspection finds the navigator lifecycle default cannot be fixed in the server render path alone.</p>
+      <h4>Work</h4><ul><li>Replace <code>#archive-status</code> icon-only rendering with labelled lifecycle status markup for archived/deferred states.</li><li>For archived plans, render an archive status pill, not a round icon button or standalone archive glyph.</li><li>Keep Restore/Resume/Archive actions visually distinct from lifecycle labels.</li><li>Fix hidden toolbar controls so <code>#restore-plan</code> is not visible or hit-testable on active plans.</li><li>Add inline next-step guidance near the missing status selector location.</li><li>Adjust navigator filter/default rendering so the default lifecycle filter follows the current plan's archived/deferred lifecycle when no explicit lifecycle filter is requested.</li></ul>
+      <h4>Open questions / decision dependencies</h4><p>None. Do not change server lifecycle invariants unless implementation evidence contradicts this plan.</p>
+      <h4>Verify</h4><pre><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code></pre>
+    </article>
+
+    <article class="phase" id="phase-p3-e2e-visual">
+      <h3>P3 — Add visual regression e2e gate</h3>
+      <h4>End State</h4>
+      <p>The browser fixture catches missing plan-state controls, button-like non-actions, and toolbar layout regressions in the real UI.</p>
+      <h4>Tests first</h4><ul><li>Extend <code>src/test-fixtures/e2e-run.ts</code> with a toolbar state matrix for active/deferred/archived plans.</li><li>Assert stable toolbar dimensions plus required visible text/roles before and after lifecycle transitions.</li><li>Exercise real browser transitions for active → deferred, deferred → active, active → archived, and archived → active restore, then rerun the same toolbar matrix after each transition.</li><li>Assert action clickability with <code>elementFromPoint</code>, pointer/cursor checks, and role/name checks; assert lifecycle labels are not hit-testable button-like controls and do not use button cursor styling.</li><li>Assert the archived/deferred navigator lifecycle filter on initial inactive load and after transition, then assert it returns to Active after restore/resume.</li><li>Capture clipped <code>#plan-navbar</code> screenshots only as diagnostic artifacts when a matrix assertion fails.</li></ul>
+      <h4>Expected files</h4><p><code>src/test-fixtures/e2e-run.ts</code>; optionally a small fixture helper in the same file.</p>
+      <h4>Work</h4><p>Use Playwright already present in dev dependencies. Do not add image-diff dependencies, screenshot baselines, or tolerance/update workflows in this plan; prevention is by deterministic DOM, computed-style, geometry, and hit-target assertions.</p>
+      <h4>Open questions / decision dependencies</h4><p>None.</p>
+      <h4>Verify</h4><pre><code>bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js
+bun run test:e2e</code></pre>
+    </article>
+
+    <article class="phase" id="phase-p4-process-safeguards">
+      <h3>P4 — Align review workflow safeguards</h3>
+      <h4>End State</h4>
+      <p>Future UI-impacting changes must carry current/target evidence and shipped-surface regression checks before being considered complete.</p>
+      <h4>Tests first</h4><p>Not applicable for docs-only/process text; verify by inspection and by the P3 shipped-surface gate.</p>
+      <h4>Expected files</h4><p><code>thoughts/plans/AGENTS.md</code>.</p>
+      <h4>Work</h4><ul><li>Add a UI-impact checklist item requiring current/target screenshots or mocks for toolbar/navigation changes.</li><li>Require e2e evidence for visible control addition/removal, not only contract tests.</li><li>Record this regression in the plan Decisions / Deviations Log so future plan reviewers know why the gate exists.</li></ul>
+      <h4>Open questions / decision dependencies</h4><p>None. P4 is in scope because the user explicitly asked how future visual regressions will be prevented.</p>
+      <h4>Verify</h4><pre><code>bun run test
+bun run test:e2e</code></pre>
+    </article>
+  </section>
+
+  <section id="coverage">
+    <h2>Test Coverage Matrix</h2>
+    <table>
+      <thead><tr><th>Acceptance</th><th>BDD</th><th>Test layer</th><th>Command</th></tr></thead>
+      <tbody>
+        <tr><td>AC1</td><td>bdd-active-status</td><td>Contract + Playwright detail page</td><td><code>bun run test</code>, <code>bun run test:e2e</code></td></tr>
+        <tr><td>AC2</td><td>bdd-archived-guidance</td><td>Contract + Playwright toolbar matrix</td><td><code>bun run test:e2e</code></td></tr>
+        <tr><td>AC3</td><td>bdd-deferred-guidance</td><td>Contract + Playwright toolbar matrix</td><td><code>bun run test:e2e</code></td></tr>
+        <tr><td>AC4</td><td>bdd-filter-truth</td><td>Contract + Playwright navigator checks</td><td><code>bun run test</code>, <code>bun run test:e2e</code></td></tr>
+        <tr><td>AC5-AC6</td><td>bdd-visual-regression</td><td>Playwright DOM/computed-style/geometry/hit-target checks; screenshots as failure artifacts only</td><td><code>bun run test:e2e</code></td></tr>
+        <tr><td>AC7</td><td>all</td><td>Plan/process inspection of <code>thoughts/plans/AGENTS.md</code></td><td>Targeted inspection plus final implementation review</td></tr>
+        <tr><td>AC8</td><td>bdd-lifecycle-transition-regression</td><td>Playwright lifecycle transition matrix plus repeated toolbar/navigator assertions</td><td><code>bun run test:e2e</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="verification">
+    <h2>Verification Strategy</h2>
+    <pre><code>bun run build
+bun run test
+bun run test:e2e</code></pre>
+    <p>Because this touches the browser review shell and visible plan controls, final handoff must include e2e evidence from the real browser fixture, not only contract tests.</p>
+  </section>
+
+  <section id="delivery-order">
+    <h2>Delivery Order</h2>
+    <ol><li>Land failing contract expectations.</li><li>Repair UI semantics/copy while preserving Restore/Resume-first lifecycle behavior.</li><li>Add Playwright toolbar matrix.</li><li>Run full gates and scoped implementation review.</li></ol>
+  </section>
+
+  <section id="non-goals">
+    <h2>Non-goals</h2>
+    <ul><li>No redesign of the full review shell or Kanban board.</li><li>No change to queue/comment lifecycle behavior.</li><li>No broad visual snapshot suite for entire rendered plans; this plan targets stable shell controls.</li><li>No screenshot baselines, image-diff dependency, or visual tolerance/update workflow in this implementation.</li></ul>
+  </section>
+
+  <section id="resume">
+    <h2>Resume Instructions</h2>
+    <p>Implementation and pre-PR review are complete. If resuming before merge, verify the working tree, preserve the locked Restore/Resume-first lifecycle decision, and continue with commit, push, PR creation, and PR monitoring.</p>
+  </section>
+
+  <section id="decisions-log">
+    <h2>Decisions / Deviations Log</h2>
+    <table>
+      <thead><tr><th>Date</th><th>Decision / evidence</th><th>Impact</th></tr></thead>
+      <tbody>
+        <tr><td>2026-06-26</td><td>Initial investigation found screenshot plan <code>plan_5hvCL70FK6wq</code> is archived and commit <code>8cee24a</code> intentionally hid the current status selector for inactive plans.</td><td>Plan focuses on explanatory lifecycle UI plus regression gates, not only restoring a select element.</td></tr>
+        <tr><td>2026-06-26</td><td>Browser feedback on <code>#target-ui</code>: <q>Make this more realistic please</q>. Replaced simplified toolbar widgets with action-row/current-row mocks that mirror the shipped review shell and added deferred-state evidence.</td><td>Implementation agents now have a more concrete visual target for active, archived, and deferred toolbar states.</td></tr>
+        <tr><td>2026-06-26</td><td>Resolved execution-readiness product decision: keep the existing Restore/Resume-first lifecycle contract instead of allowing direct board-status changes on inactive plans.</td><td>Plan no longer has an unresolved product question; implementation should focus on explanatory UI and regression gates.</td></tr>
+        <tr><td>2026-06-26</td><td>Resolved readiness review blockers: navigator default target is current plan lifecycle for archived/deferred pages; visual regression prevention uses deterministic DOM/style/geometry/hit-target assertions with screenshots only as failure artifacts; P4 edits <code>thoughts/plans/AGENTS.md</code> directly.</td><td>The plan has one executable target for tests and no unresolved scope choice around visual-regression safeguards.</td></tr>
+        <tr><td>2026-06-26</td><td>Execution-readiness gates cleared: GPT plan review returned <code>PLAN_EXECUTION_READY</code>, GLM plan review returned <code>PLAN_EXECUTION_READY</code>, and product-intent check returned <code>PRODUCT_INTENT_READY</code>.</td><td>Plan can be registered as execution-ready.</td></tr>
+        <tr><td>2026-06-26</td><td>Browser feedback on <code>#target-ui</code>: <q>Make these look actually realistic and match our current design - they don't right now</q>. Replaced the abstract toolbar mocks with review-shell mocks that reuse the shipped <code>#plan-navbar</code> structure, action order, colors, button styling, current-plan row, readiness pill, navigator/content/comments shell context, and select styling.</td><td>Reviewers can now compare the target state against the actual product chrome instead of a stylized approximation.</td></tr>
+        <tr><td>2026-06-26</td><td>Browser feedback on <code>#bdd</code>: <q>Make sure we have solid regression coverage</q>. Added AC8, a lifecycle-transition BDD scenario, negative contract assertions, and Playwright transition-matrix requirements for defer/resume/archive/restore.</td><td>The implementation must prove both static render states and real browser lifecycle transitions, not just one-off markup presence.</td></tr>
+        <tr><td>2026-06-26</td><td>GLM target-UI accuracy review found the active toolbar capture showed a visible <code>↩</code> restore control even though the plan described the active toolbar as a baseline to preserve.</td><td>Updated the plan to treat visible active Restore as another current UI bug and require hidden controls to be neither visible nor hit-testable.</td></tr>
+        <tr><td>2026-06-26</td><td>Browser feedback on archived target evidence: the archived state must not be a round archive button/icon; it should be an archive status pill.</td><td>Clarified that the captured round archive glyph is the broken current UI and locked the target as a text-first archive status pill with no standalone archive glyph.</td></tr>
+        <tr><td>2026-06-26</td><td>Browser feedback requested target UI mocks, not only current-state captures and DOM contract.</td><td>Added generated target toolbar mock PNGs for active, archived, and deferred states using the current shell styling and action order.</td></tr>
+        <tr><td>2026-06-26</td><td>Implemented P1-P4. Contract tests now lock lifecycle toolbar labels, guidance copy, hidden Restore behavior, and inactive navigator defaults. The shipped e2e fixture now runs an active/deferred/archived toolbar matrix across defer/resume/archive/restore transitions using DOM, style, geometry, and hit-target assertions, with clipped navbar screenshots only on assertion failure.</td><td>Verification passed: <code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code>, <code>node dist/test-fixtures/e2e-run.js</code>, <code>bun run test:e2e</code>, and <code>bun run test</code>.</td></tr>
+        <tr><td>2026-06-26</td><td>Scoped and pre-PR review found stale lifecycle metadata gaps after client-side archive: hard-coded navigator nouns, empty/populated navigator caches, stale quick-open responses, archived peers omitted from the archived navigator, and explicit <code>?lifecycle=active</code> pages retaining the active filter.</td><td>Fixed each in scope: navigator noun now comes from review mode, archive transitions reload the archived navigator, quick-open stale responses are generation-invalidated, and local archive forces/syncs <code>lifecycle=archived</code>. E2E now covers stale navigator, stale quick-open, empty-cache, populated-cache, and explicit-query archive paths.</td></tr>
+        <tr><td>2026-06-26</td><td>Pre-PR review gate completed. GPT and GLM both returned <code>CLEAN_FOR_PR</code> after fixes. Review artifact: <code>thoughts/validation/pre-pr-reviews/2026-06-26-fix-plan-status.md</code>.</td><td>Final verification passed: <code>git diff --check</code>, <code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js &amp;&amp; node dist/test-fixtures/e2e-run.js</code>, <code>bun run test:e2e</code>, and <code>bun run test</code>.</td></tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+</body>
+</html>
