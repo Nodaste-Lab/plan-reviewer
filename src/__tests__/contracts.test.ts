@@ -1860,10 +1860,15 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     assert.match(shellClient.body, /navigatorApiUrl/);
     assert.match(shellClient.body, /navigatorLoadGeneration/);
     assert.match(shellClient.body, /navigatorFilterLoadUrl/);
-    assert.match(shellClient.body, /function planItemStatus\(item\)\{ if \(planItemAttention\(item\)\) return 'Needs attention'; if \(planItemComplete\(item\)\) return 'Complete';/);
+    assert.match(shell.body, /data-board-column-labels=/);
+    assert.match(shellClient.body, /const boardColumnLabels = new Map\(\)/);
+    assert.match(shellClient.body, /if\(!key\) return 'Unassigned'/);
+    assert.match(shellClient.body, /if\(boardColumnLabels\.has\(key\)\) return boardColumnLabels\.get\(key\)/);
+    assert.match(shellClient.body, /function planItemStatus\(item\)\{ if \(planItemAttention\(item\)\) return 'Needs attention'; if \(item\?\.plan\?\.lifecycleState === 'archived'\) return 'Archived · ' \+ boardColumnLabelForKey/);
     assert.doesNotMatch(shellClient.body, /if \(item\?\.plan\?\.boardColumnKey\) return item\.plan\.boardColumnKey/);
     assert.doesNotMatch(shellClient.body, /window\.scrollTo\s*=/);
     assert.match(shellClient.body, /function restoreShellScroll\(/);
+    assert.match(shellClient.body, /function scrollToCommentAnchor\([\s\S]*?window\.scrollTo\([\s\S]*?armPostProgrammaticScrollWheelHandoff\(\);[\s\S]*?scheduleMarkerReflow\(\);/);
     assert.doesNotMatch(shellClient.body, /loadQuickOpenItems\(\{ force: true \}\)/);
     assert.doesNotMatch(shellClient.body, /projectKey=\' \+ encodeURIComponent\(projectKey\)/);
     assert.doesNotMatch(shellClient.body, /saveOrganizerField\('\/project'/);

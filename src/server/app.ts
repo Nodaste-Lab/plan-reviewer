@@ -249,8 +249,10 @@ function sortPlansForNavigator(plans: ListedPlan[]): ListedPlan[] {
     || String(a.plan.id).localeCompare(String(b.plan.id)));
 }
 
-function planNavigatorStatus(item: ListedPlan): string {
+function planNavigatorStatus(item: ListedPlan, columns: BoardColumnRecord[] = []): string {
   if (planNeedsAttention(item)) return 'Needs attention';
+  if (item.plan.lifecycleState === 'archived') return `Archived · ${boardColumnLabel(columns, item.plan.boardColumnKey)}`;
+  if (item.plan.lifecycleState === 'deferred') return `Deferred · ${boardColumnLabel(columns, item.plan.boardColumnKey)}`;
   if (planComplete(item)) return 'Complete';
   if (item.plan.reviewMode === 'collaboration') return 'Collaboration';
   if (item.plan.publicationMetadata?.executionReady) return 'Execution ready';
@@ -283,9 +285,9 @@ function reviewShellNavigatorFilterSearch(filters: ReviewShellNavigatorFilters):
   return query ? `?${query}` : '';
 }
 
-function planNavigatorItemHtml(item: ListedPlan, currentPlanId: string, filters = emptyReviewShellNavigatorFilters()): string {
+function planNavigatorItemHtml(item: ListedPlan, currentPlanId: string, filters = emptyReviewShellNavigatorFilters(), columns: BoardColumnRecord[] = []): string {
   const active = item.plan.id === currentPlanId;
-  const status = planNavigatorStatus(item);
+  const status = planNavigatorStatus(item, columns);
   const href = `/p/${encodeURIComponent(String(item.plan.id))}${reviewShellNavigatorFilterSearch(filters)}`;
   return `<a class="plan-nav-item${active ? ' active' : ''}${planNeedsAttention(item) ? ' attention' : ''}" href="${escapeHtml(href)}" data-plan-nav-item data-plan-id="${escapeHtml(item.plan.id)}" aria-current="${active ? 'page' : 'false'}">
     <span class="plan-nav-title">${escapeHtml(displayTitle(item))}</span>
@@ -325,8 +327,8 @@ function filteredReviewShellNavigatorItems(store: PlanReviewStore, currentPlanId
   });
 }
 
-function planNavigatorHtml(plans: ListedPlan[], currentPlanId: string, label = 'plans', filters = emptyReviewShellNavigatorFilters(), filterControls = '', open = true): string {
-  const items = sortPlansForNavigator(plans).map(item => planNavigatorItemHtml(item, currentPlanId, filters)).join('');
+function planNavigatorHtml(plans: ListedPlan[], currentPlanId: string, label = 'plans', filters = emptyReviewShellNavigatorFilters(), filterControls = '', open = true, columns: BoardColumnRecord[] = []): string {
+  const items = sortPlansForNavigator(plans).map(item => planNavigatorItemHtml(item, currentPlanId, filters, columns)).join('');
   const noun = label === 'documents' ? 'documents' : 'plans';
   const stateLabel = filters.state === 'archived' ? 'Archived' : filters.state === 'deferred' ? 'Deferred' : filters.state === '' && reviewShellNavigatorFiltersActive(filters) ? 'All' : 'Active';
   const title = `${stateLabel} ${noun}`;
@@ -731,6 +733,7 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
   const documentKind = isCollaboration ? 'document' : 'plan';
   const readyLabel = isCollaboration ? 'Collaboration mode' : plan.publicationMetadata?.executionReady ? 'Execution ready' : 'Execution not ready';
   const encodedTitleFallback = escapeHtml(encodeClientData(reviewShellTitle(planTitleFallback(plan))));
+  const encodedBoardColumnLabels = escapeHtml(encodeClientData(JSON.stringify(Object.fromEntries(allColumns.map(column => [column.key, column.label])))));
   const reviewButton = isCollaboration ? '' : '<button id="request-execution-review" class="tool-button" type="button" aria-label="Request execution-ready review" title="Request execution-ready review">✓</button>';
   const buildButton = isCollaboration ? '' : '<button id="build-plan" class="tool-button" type="button" aria-label="Build Plan" title="Build Plan">⚒</button>';
   const planNavToggle = `<button id="desktop-plan-nav-toggle" class="tool-button" type="button" aria-controls="plan-list-nav" aria-expanded="${planNavigatorOpen ? 'true' : 'false'}" aria-label="Plan Navigator" title="Plan Navigator">☰</button>`;
@@ -757,10 +760,10 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="stylesheet" href="/client.css?v=${clientAssetVersion}">
-  </head><body${bodyClassAttribute} data-plan-id="${escapedPlanId}" data-review-mode="${escapeHtml(plan.reviewMode)}" data-plan-title-fallback="${encodedTitleFallback}">
+  </head><body${bodyClassAttribute} data-plan-id="${escapedPlanId}" data-review-mode="${escapeHtml(plan.reviewMode)}" data-plan-title-fallback="${encodedTitleFallback}" data-board-column-labels="${encodedBoardColumnLabels}">
     <nav id="plan-navbar" aria-label="Plan actions"><div id="plan-navbar-actions">${navActions}</div><div id="current-plan-bar"><strong id="current-plan-title">${escapedCurrentTitle}</strong><span class="ready-pill ${isCollaboration || plan.publicationMetadata?.executionReady ? 'ready' : 'not-ready'}">${escapeHtml(readyLabel)}</span>${currentStatusControl}${currentStatusGuidance}<span id="comment-status-banner" class="comment-status-banner" hidden></span></div></nav>
     <div id="app">
-      ${planNavigatorHtml(plans, plan.id, isCollaboration ? 'documents' : 'plans', navigatorFilters, navFilterControls, planNavigatorOpen)}
+      ${planNavigatorHtml(plans, plan.id, isCollaboration ? 'documents' : 'plans', navigatorFilters, navFilterControls, planNavigatorOpen, allColumns)}
       <main id="review"><iframe id="plan-frame" sandbox="allow-same-origin allow-popups" src="/render/${escapedPlanId}"></iframe><div id="plan-touch-layer" aria-hidden="true"></div><button id="mobile-comments-toggle" class="comments-toggle" type="button" aria-controls="sidebar" aria-expanded="false">Comments</button><div id="hover-selection-box" class="selection-box hover" hidden></div><div id="active-selection-box" class="selection-box active" hidden></div></main>
       <aside id="sidebar"><div id="comments-tray-handle" aria-hidden="true"></div><h1>Comments</h1><div id="comments-status-filters" aria-label="Comment status summary"></div><div id="sync-warning" hidden></div><section id="plan-notes-panel"><h2>${isCollaboration ? 'Document notes' : 'Plan notes'}</h2><div id="plan-notes"></div><textarea id="plan-note-body" placeholder="${isCollaboration ? 'Add context for agents' : 'Add a plan note for agents'}"></textarea><button id="add-plan-note" type="button">Add note</button></section><div id="deferred-refresh-notice" hidden>Document updated in the background. Finish or cancel this comment to refresh.</div><div id="comments"></div></aside>
     </div>
@@ -831,6 +834,12 @@ try {
   const bytes = Uint8Array.from(atob(document.body.dataset.planTitleFallback || ''), char => char.charCodeAt(0));
   const decodedTitleFallback = new TextDecoder().decode(bytes) || planTitleFallback;
   planTitleFallback = decodedTitleFallback.replace(/\s+·\s+Plan Review$/i, '').trim() || decodedTitleFallback;
+} catch {}
+const boardColumnLabels = new Map();
+try {
+  const bytes = Uint8Array.from(atob(document.body.dataset.boardColumnLabels || ''), char => char.charCodeAt(0));
+  const labels = JSON.parse(new TextDecoder().decode(bytes) || '{}');
+  Object.entries(labels).forEach(([key, label]) => boardColumnLabels.set(key, String(label)));
 } catch {}
 const frame = document.getElementById('plan-frame');
 const planNavbar = document.getElementById('plan-navbar');
@@ -1776,6 +1785,7 @@ function scrollToCommentAnchor(commentId){
   } else {
     const navbarHeight = document.getElementById('plan-navbar')?.getBoundingClientRect().height || 0;
     window.scrollTo({ top: Math.max(0, window.scrollY + frameRect.top + rect.y - navbarHeight - 16), behavior: 'auto' });
+    armPostProgrammaticScrollWheelHandoff();
   }
   scheduleMarkerReflow();
 }
@@ -1800,7 +1810,8 @@ function planItemRatio(item){ return item?.progress?.totalPhases > 0 ? item.prog
 function planItemRank(item){ if (planItemAttention(item)) return 3; if (planItemComplete(item)) return 0; if (item?.plan?.publicationMetadata?.executionReady) return 1; return 2; }
 function planItemTitle(item){ return String(item?.displayTitle || item?.plan?.repoName + ' / ' + item?.plan?.slug); }
 function sortPlanNavItems(items){ return [...items].sort((a,b)=>(Boolean(a?.plan?.pinnedAt)===Boolean(b?.plan?.pinnedAt)?0:a?.plan?.pinnedAt?-1:1)||planItemRank(a)-planItemRank(b)||planItemRatio(b)-planItemRatio(a)||String(b.activityAt||'').localeCompare(String(a.activityAt||''))||planItemTitle(a).localeCompare(planItemTitle(b))||String(a?.plan?.id||'').localeCompare(String(b?.plan?.id||''))); }
-function planItemStatus(item){ if (planItemAttention(item)) return 'Needs attention'; if (planItemComplete(item)) return 'Complete'; if (item?.plan?.reviewMode === 'collaboration') return 'Collaboration'; if (item?.plan?.publicationMetadata?.executionReady) return 'Execution ready'; return 'Execution not ready'; }
+function boardColumnLabelForKey(key){ if(!key) return 'Unassigned'; if(boardColumnLabels.has(key)) return boardColumnLabels.get(key); const option=[statusFilterControl,currentPlanStatusControl].filter(Boolean).flatMap(control=>[...control.options]).find(option=>option.value===key); return option?.textContent?.trim() || key; }
+function planItemStatus(item){ if (planItemAttention(item)) return 'Needs attention'; if (item?.plan?.lifecycleState === 'archived') return 'Archived · ' + boardColumnLabelForKey(item?.plan?.boardColumnKey); if (item?.plan?.lifecycleState === 'deferred') return 'Deferred · ' + boardColumnLabelForKey(item?.plan?.boardColumnKey); if (planItemComplete(item)) return 'Complete'; if (item?.plan?.reviewMode === 'collaboration') return 'Collaboration'; if (item?.plan?.publicationMetadata?.executionReady) return 'Execution ready'; return 'Execution not ready'; }
 function planItemProgress(item){ return item?.progress?.totalPhases ? item.progress.completedPhases + '/' + item.progress.totalPhases : 'No phases'; }
 function navigatorFiltersActive(){
   const urlFilters = urlNavigatorFilters();
