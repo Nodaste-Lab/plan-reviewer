@@ -750,7 +750,7 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
     <div id="app">
       ${planNavigatorHtml(plans, plan.id, isCollaboration ? 'documents' : 'plans', navigatorFilters, navFilterControls, planNavigatorOpen)}
       <main id="review"><iframe id="plan-frame" sandbox="allow-same-origin allow-popups" src="/render/${escapedPlanId}"></iframe><div id="plan-touch-layer" aria-hidden="true"></div><button id="mobile-comments-toggle" class="comments-toggle" type="button" aria-controls="sidebar" aria-expanded="false">Comments</button><div id="hover-selection-box" class="selection-box hover" hidden></div><div id="active-selection-box" class="selection-box active" hidden></div></main>
-      <aside id="sidebar"><h1>Comments</h1><div id="sync-warning" hidden></div><section id="plan-notes-panel"><h2>${isCollaboration ? 'Document notes' : 'Plan notes'}</h2><div id="plan-notes"></div><textarea id="plan-note-body" placeholder="${isCollaboration ? 'Add context for agents' : 'Add a plan note for agents'}"></textarea><button id="add-plan-note" type="button">Add note</button></section><div id="deferred-refresh-notice" hidden>Document updated in the background. Finish or cancel this comment to refresh.</div><div id="comments"></div></aside>
+      <aside id="sidebar"><div id="comments-tray-handle" aria-hidden="true"></div><h1>Comments</h1><div id="comments-status-filters" aria-label="Comment status summary"></div><div id="sync-warning" hidden></div><section id="plan-notes-panel"><h2>${isCollaboration ? 'Document notes' : 'Plan notes'}</h2><div id="plan-notes"></div><textarea id="plan-note-body" placeholder="${isCollaboration ? 'Add context for agents' : 'Add a plan note for agents'}"></textarea><button id="add-plan-note" type="button">Add note</button></section><div id="deferred-refresh-notice" hidden>Document updated in the background. Finish or cancel this comment to refresh.</div><div id="comments"></div></aside>
     </div>
     <div id="archive-toast" role="status" aria-label="Archived plan undo toast" hidden><div><strong id="archive-toast-title"></strong><p id="archive-toast-message"></p></div><button id="archive-toast-undo" type="button">Undo</button></div>
     ${runtimeUpdateIndicatorHtml(updateStatus)}
@@ -764,7 +764,7 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
       </section>
     </div>
     <div id="lightbox" class="lightbox" hidden><header><button id="zoom-out">-</button><button id="zoom-reset">Reset</button><button id="zoom-in">+</button><button id="pan-toggle">Pan</button><button id="close-lightbox">Close</button></header><div id="lightbox-stage" class="lightbox-stage"><img id="lightbox-image" alt=""><div id="image-selection-box" hidden></div></div></div>
-    <div id="composer" hidden><textarea id="comment-body" placeholder="Comment on selection" inputmode="text" enterkeyhint="done" autocapitalize="sentences"></textarea><div id="comment-discard-warning" hidden>Your comment would be lost. Use Cancel to discard it.</div><button id="submit-comment">Submit</button><button id="cancel-comment">Cancel</button></div>
+    <div id="composer" hidden><div id="composer-context" hidden></div><textarea id="comment-body" placeholder="Comment on selection" inputmode="text" enterkeyhint="done" autocapitalize="sentences"></textarea><div id="comment-discard-warning" hidden>Your comment would be lost. Use Cancel to discard it.</div><button id="submit-comment">Submit</button><button id="cancel-comment">Cancel</button></div>
     <script src="/vendor/html2canvas.js"></script>
     <script type="module" src="/client.js?v=${clientAssetVersion}"></script>
   </body></html>`;
@@ -797,12 +797,12 @@ body{--plan-nav-width:260px;--comments-width:48px;--plan-navbar-height:86px;marg
 #review{grid-column:2;position:relative;min-width:0}#sidebar{grid-column:3;grid-row:1;align-self:start;position:sticky;top:var(--plan-navbar-height);height:calc(100vh - var(--plan-navbar-height));box-sizing:border-box;border-left:1px solid #2b364d;padding:0;background:#111827;overflow:hidden}#sidebar>h1,#sidebar>#sync-warning,#sidebar>#plan-notes-panel,#sidebar>#deferred-refresh-notice,#sidebar>#comments{display:none}body.comments-open #sidebar{padding:16px;overflow:auto}body.comments-open #sidebar>h1,body.comments-open #sidebar>#sync-warning,body.comments-open #sidebar>#plan-notes-panel,body.comments-open #sidebar>#deferred-refresh-notice,body.comments-open #sidebar>#comments{display:block}
 #plan-touch-layer{display:none}
 #plan-frame{width:100%;min-height:calc(100vh - var(--plan-navbar-height));border:0;background:white;display:block}.selection-box,.comment-anchor{position:fixed;pointer-events:none;border-radius:6px;transition:left .22s cubic-bezier(.2,0,.2,1),top .22s cubic-bezier(.2,0,.2,1),width .22s cubic-bezier(.2,0,.2,1),height .22s cubic-bezier(.2,0,.2,1),opacity .14s ease}.selection-box{z-index:8;box-sizing:border-box;background:transparent;box-shadow:none}.selection-box.hover{border:2px dotted rgba(56,189,248,.82)}.selection-box.active{z-index:9;border:2px dotted #38bdf8;box-shadow:0 0 0 1px rgba(255,255,255,.72)}.comment-anchor{z-index:7}.comment-anchor.pending{border:2px dotted rgba(192,132,252,.95);background:transparent;box-shadow:0 0 0 3px rgba(168,85,247,.08)}.comment-anchor.claimed{border:2px dotted rgba(234,179,8,.95);background:transparent;box-shadow:0 0 0 3px rgba(234,179,8,.10)}.comment-anchor.acknowledged{border:2px dotted rgba(34,197,94,.95);background:transparent;box-shadow:0 0 0 3px rgba(34,197,94,.10)}.comment-anchor.resolved{border:2px dotted rgba(59,130,246,.9);background:transparent;box-shadow:none}.comment-anchor-label{position:absolute;right:-10px;top:-12px;min-width:24px;height:24px;border-radius:999px;display:grid;place-items:center;padding:0 6px;font-weight:800;font-size:12px;box-shadow:0 8px 18px rgba(0,0,0,.35)}.comment-anchor.pending .comment-anchor-label{background:#a855f7;color:white;border:2px solid #e9d5ff}.comment-anchor.claimed .comment-anchor-label{background:#eab308;color:#1c1206;border:2px solid #fef08a}.comment-anchor.acknowledged .comment-anchor-label{background:#22c55e;color:white;border:2px solid #bbf7d0}.comment-anchor.resolved .comment-anchor-label{background:#3b82f6;color:white;border:2px solid #bfdbfe}.comment-row{border:1px solid #2b364d;padding:10px;margin:8px 0;border-radius:8px;background:#0f172a}.comment-row small{color:#a7b0c0}.marker{position:absolute;z-index:9;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#0ea5e9;color:white;border:2px solid #dbeafe;font-weight:700;box-shadow:0 8px 18px rgba(0,0,0,.35);pointer-events:none}
-#archive-toast{position:fixed;top:12px;right:16px;width:min(520px,calc(100vw - 32px));z-index:65;display:flex;align-items:center;justify-content:space-between;gap:14px;border:1px solid #38bdf8;border-radius:14px;background:rgba(15,23,42,.97);color:#e5e7eb;padding:12px 14px;box-shadow:0 18px 50px rgba(2,6,23,.64)}#archive-toast[hidden]{display:none}#archive-toast strong{color:#f8fafc}#archive-toast p{margin:2px 0 0;color:#a7b0c0;font-size:13px}#archive-toast button{border:2px solid #86efac;border-radius:10px;background:linear-gradient(180deg,#22c55e,#15803d);color:#052e16;padding:10px 18px;font-weight:950;box-shadow:0 0 0 3px rgba(34,197,94,.18),0 10px 24px rgba(21,128,61,.38);cursor:pointer}#archive-toast.error{border-color:#fb7185}#archive-toast.error button{display:none}#sync-warning{border:1px solid #f59e0b;background:rgba(245,158,11,.12);color:#fde68a;border-radius:8px;padding:10px;margin:8px 0 14px;font-size:13px}#deferred-refresh-notice{border:1px solid #38bdf8;background:rgba(56,189,248,.12);color:#bae6fd;border-radius:8px;padding:10px;margin:8px 0 14px;font-size:13px}#composer{position:fixed;right:calc(var(--comments-width) + 20px);top:calc(var(--plan-navbar-height) + 26px);background:#0f172a;border:1px solid #38bdf8;padding:12px;border-radius:8px;z-index:60;box-shadow:0 12px 32px rgba(0,0,0,.4)}#composer.discard-warning{border-color:#ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.22),0 12px 32px rgba(0,0,0,.4)}
-#comment-discard-warning{margin-top:8px;color:#fecaca;font-size:13px;font-weight:700}#composer.discard-warning textarea{border-color:#ef4444}
+#archive-toast{position:fixed;top:12px;right:16px;width:min(520px,calc(100vw - 32px));z-index:65;display:flex;align-items:center;justify-content:space-between;gap:14px;border:1px solid #38bdf8;border-radius:14px;background:rgba(15,23,42,.97);color:#e5e7eb;padding:12px 14px;box-shadow:0 18px 50px rgba(2,6,23,.64)}#archive-toast[hidden]{display:none}#archive-toast strong{color:#f8fafc}#archive-toast p{margin:2px 0 0;color:#a7b0c0;font-size:13px}#archive-toast button{border:2px solid #86efac;border-radius:10px;background:linear-gradient(180deg,#22c55e,#15803d);color:#052e16;padding:10px 18px;font-weight:950;box-shadow:0 0 0 3px rgba(34,197,94,.18),0 10px 24px rgba(21,128,61,.38);cursor:pointer}#archive-toast.error{border-color:#fb7185}#archive-toast.error button{display:none}#comments-tray-handle,#comments-status-filters{display:none}.comment-jump{margin-top:8px;min-height:34px;border:1px solid #475569;border-radius:999px;background:#1e293b;color:#dbeafe;padding:6px 10px;font-weight:800;cursor:pointer}#sync-warning{border:1px solid #f59e0b;background:rgba(245,158,11,.12);color:#fde68a;border-radius:8px;padding:10px;margin:8px 0 14px;font-size:13px}#deferred-refresh-notice{border:1px solid #38bdf8;background:rgba(56,189,248,.12);color:#bae6fd;border-radius:8px;padding:10px;margin:8px 0 14px;font-size:13px}#composer{position:fixed;right:calc(var(--comments-width) + 20px);top:calc(var(--plan-navbar-height) + 26px);background:#0f172a;border:1px solid #38bdf8;padding:12px;border-radius:8px;z-index:60;box-shadow:0 12px 32px rgba(0,0,0,.4)}#composer.discard-warning{border-color:#ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.22),0 12px 32px rgba(0,0,0,.4)}
+#composer-context{max-width:300px;margin:0 0 10px;border-left:3px solid #38bdf8;border-radius:8px;background:rgba(56,189,248,.12);color:#e0f2fe;padding:8px 10px;font-size:13px;line-height:1.35}#comment-discard-warning{margin-top:8px;color:#fecaca;font-size:13px;font-weight:700}#composer.discard-warning textarea{border-color:#ef4444}
 #composer textarea{width:260px;height:90px;background:#020617;color:#e5e7eb;border:1px solid #2b364d;border-radius:6px;padding:8px;display:block;pointer-events:auto;touch-action:manipulation;-webkit-user-select:text;user-select:text}
 #composer button{margin-top:8px;margin-right:8px}#plan-notes-panel{border:1px solid #2b364d;border-radius:10px;background:#0f172a;padding:10px;margin:0 0 14px}#plan-notes-panel h2{font-size:15px;margin:0 0 8px}#plan-notes .note-row{border-top:1px solid #263246;padding:8px 0}#plan-notes .note-row:first-child{border-top:0}#plan-note-body{width:100%;min-height:70px;box-sizing:border-box;background:#020617;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px}#add-plan-note{margin-top:8px;background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px 10px;cursor:pointer}.plan-review-selected{outline:2px dotted #38bdf8!important;box-shadow:none!important}#quick-open-backdrop{position:fixed;inset:0;z-index:70;display:grid;align-items:start;justify-items:center;padding-top:min(12vh,96px);background:rgba(2,6,23,.46)}#quick-open-backdrop[hidden]{display:none}#quick-open-dialog{width:min(680px,calc(100vw - 36px));max-height:min(78vh,720px);display:grid;grid-template-rows:auto auto auto auto minmax(0,1fr);overflow:hidden;border:1px solid #38bdf8;border-radius:16px;background:#0f172a;color:#e5e7eb;box-shadow:0 30px 90px rgba(2,6,23,.68)}.quick-open-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:16px 18px 10px}.quick-open-header h2{margin:0;color:#f8fafc;font-size:18px}.quick-open-header p{margin:4px 0 0;color:#a7b0c0;font-size:13px}.quick-open-shortcut{border:1px solid #475569;border-bottom-color:#64748b;border-radius:7px;background:#111827;color:#dbeafe;padding:2px 8px;font:12px ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:800}#quick-open-input{margin:0 18px 14px;width:calc(100% - 36px);box-sizing:border-box;border:1px solid #475569;border-radius:10px;background:#020617;color:#e5e7eb;padding:12px 14px;font:16px system-ui,sans-serif;outline:none}#quick-open-input:focus{border-color:#38bdf8;box-shadow:0 0 0 3px rgba(56,189,248,.18)}#quick-open-error,#quick-open-empty{margin:0 18px 12px;border-radius:10px;padding:10px 12px;font-size:13px}#quick-open-error{border:1px solid #f59e0b;background:rgba(245,158,11,.12);color:#fde68a}#quick-open-error button{margin-left:8px;border:1px solid #f59e0b;border-radius:6px;background:#1e293b;color:#fde68a;padding:4px 8px;cursor:pointer}#quick-open-empty{border:1px solid #475569;background:#111827;color:#a7b0c0}#quick-open-results{overflow:auto;border-top:1px solid #2b364d}#quick-open-result-list{padding:6px}.quick-open-result{display:grid;gap:3px;width:100%;box-sizing:border-box;text-align:left;border:1px solid transparent;border-radius:10px;background:transparent;color:#cbd5e1;padding:11px 12px;cursor:pointer}.quick-open-result:hover,.quick-open-result.active{border-color:#38bdf8;background:rgba(56,189,248,.14)}.quick-open-result-title{font-weight:850;color:#f8fafc;line-height:1.25}.quick-open-result-meta{font-size:12px;color:#a7b0c0}.lightbox{position:fixed;inset:36px calc(var(--comments-width) + 40px) 36px 36px;background:#020617;border:1px solid #38bdf8;z-index:50;display:grid;grid-template-rows:auto 1fr}.lightbox[hidden]{display:none}.lightbox header{display:flex;gap:8px;padding:10px;border-bottom:1px solid #2b364d}.lightbox img{max-width:100%;max-height:100%;place-self:center;transform-origin:center}.lightbox-stage{display:grid;overflow:hidden;position:relative}#image-selection-box{position:absolute;border:2px solid #38bdf8;background:rgba(56,189,248,.2);pointer-events:none}#mobile-comments-toggle{display:none}
 @media(prefers-reduced-motion:reduce){.selection-box{transition:none}}
-@media(max-width:760px),(pointer:coarse){body{overflow:hidden;--comments-width:0;--plan-navbar-height:88px}#plan-navbar{position:sticky;top:0;z-index:30;min-height:88px;box-sizing:border-box;gap:6px;padding:8px;overflow-x:auto;overscroll-behavior-x:contain}#plan-navbar-actions{justify-content:flex-start;gap:8px}#plan-navbar a,#plan-navbar button{flex:0 0 auto;min-height:40px;padding:8px 10px;font-size:13px;line-height:1.15;white-space:normal}#current-plan-bar{font-size:13px}#request-execution-review{max-width:170px}#build-plan{max-width:120px}#plan-navbar #desktop-plan-nav-toggle,#desktop-comments-toggle{display:none}#app{display:block;min-height:calc(100dvh - var(--plan-navbar-height))}#plan-list-nav{display:none}#review{height:calc(100dvh - var(--plan-navbar-height));overflow-y:auto;overscroll-behavior-y:contain;overflow-x:hidden;-webkit-overflow-scrolling:touch}#plan-frame{width:100%;min-height:calc(100dvh - var(--plan-navbar-height));border:0;display:block;pointer-events:none}#plan-touch-layer{display:block;position:absolute;top:0;left:0;width:100%;min-height:calc(100dvh - var(--plan-navbar-height));z-index:22;background:transparent;touch-action:pan-y;pointer-events:auto}#sidebar{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:24;height:auto;max-height:min(72dvh,620px);box-sizing:border-box;border-left:0;border-top:1px solid #2b364d;border-radius:18px 18px 0 0;padding:12px 16px calc(16px + env(safe-area-inset-bottom));background:#111827;box-shadow:0 -16px 40px rgba(0,0,0,.45);overflow:auto;transform:translateY(100%);transition:transform .18s ease}#sidebar>h1,#sidebar>#sync-warning,#sidebar>#plan-notes-panel,#sidebar>#deferred-refresh-notice,#sidebar>#comments{display:block}body.comments-open #sidebar{transform:translateY(0)}#sidebar h1{position:sticky;top:-12px;margin:0 0 12px;padding:8px 0 10px;background:#111827;font-size:20px;z-index:1}.comment-row{padding:12px;margin:10px 0}.comment-row p{margin:.55rem 0}.comments-empty{margin:0;color:#a7b0c0;font-size:14px}#mobile-comments-toggle{display:flex;position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:25;min-height:44px;align-items:center;gap:6px;border:1px solid #38bdf8;border-radius:999px;background:#075985;color:#e0f2fe;padding:0 14px;font-weight:800;box-shadow:0 12px 28px rgba(0,0,0,.35)}body.comments-open #mobile-comments-toggle{background:#0f172a;border-color:#64748b}#quick-open-backdrop{padding-top:18px;align-items:start}#quick-open-dialog{width:calc(100vw - 24px);max-height:calc(100dvh - 36px)}#composer{left:0;right:0;bottom:0;top:auto;z-index:60;box-sizing:border-box;border-left:0;border-right:0;border-bottom:0;border-radius:18px 18px 0 0;padding:14px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -16px 40px rgba(0,0,0,.48)}#composer textarea{width:100%;height:122px;box-sizing:border-box;font-size:16px}#composer button{min-height:44px;padding:8px 12px}.lightbox{inset:0;z-index:50;border:0}.lightbox header{flex-wrap:wrap}.selection-box{border-radius:4px}.marker{width:28px;height:28px}}
+@media(max-width:760px),(pointer:coarse){body{overflow:hidden;--comments-width:0;--plan-navbar-height:88px}#plan-navbar{position:sticky;top:0;z-index:30;min-height:88px;box-sizing:border-box;gap:6px;padding:8px;overflow-x:auto;overscroll-behavior-x:contain}#plan-navbar-actions{justify-content:flex-start;gap:8px}#plan-navbar a,#plan-navbar button{flex:0 0 auto;min-height:40px;padding:8px 10px;font-size:13px;line-height:1.15;white-space:normal}#current-plan-bar{font-size:13px}#request-execution-review{max-width:170px}#build-plan{max-width:120px}#plan-navbar #desktop-plan-nav-toggle,#desktop-comments-toggle{display:none}#app{display:block;min-height:calc(100dvh - var(--plan-navbar-height))}#plan-list-nav{display:none}#review{height:calc(100dvh - var(--plan-navbar-height));overflow-y:auto;overscroll-behavior-y:contain;overflow-x:hidden;-webkit-overflow-scrolling:touch}#plan-frame{width:100%;min-height:calc(100dvh - var(--plan-navbar-height));border:0;display:block;pointer-events:none}#plan-touch-layer{display:block;position:absolute;top:0;left:0;width:100%;min-height:calc(100dvh - var(--plan-navbar-height));z-index:22;background:transparent;touch-action:pan-y;pointer-events:auto}#sidebar{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:24;height:auto;max-height:min(72dvh,620px);box-sizing:border-box;border-left:0;border-top:1px solid #2b364d;border-radius:18px 18px 0 0;padding:12px 16px calc(16px + env(safe-area-inset-bottom));background:#111827;box-shadow:0 -16px 40px rgba(0,0,0,.45);overflow:auto;transform:translateY(100%);transition:transform .18s ease}#sidebar>h1,#sidebar>#sync-warning,#sidebar>#plan-notes-panel,#sidebar>#deferred-refresh-notice,#sidebar>#comments{display:block}body.comments-open #sidebar{transform:translateY(0)}#comments-tray-handle{display:block;width:44px;height:5px;border-radius:999px;background:#475569;margin:0 auto 10px}#comments-status-filters{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px}.comment-status-chip{border:1px solid #475569;border-radius:999px;background:#0b1220;color:#dbeafe;padding:6px 9px;font-size:12px;font-weight:850}.comment-jump{min-height:44px}.comment-row-header{display:flex;align-items:center;justify-content:space-between;gap:8px}#sidebar h1{position:sticky;top:-12px;margin:0 0 12px;padding:8px 0 10px;background:#111827;font-size:20px;z-index:1}.comment-row{padding:12px;margin:10px 0}.comment-row p{margin:.55rem 0}.comments-empty{margin:0;color:#a7b0c0;font-size:14px}#mobile-comments-toggle{display:flex;position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:25;min-height:44px;align-items:center;gap:6px;border:1px solid #38bdf8;border-radius:999px;background:#075985;color:#e0f2fe;padding:0 14px;font-weight:800;box-shadow:0 12px 28px rgba(0,0,0,.35)}body.comments-open #mobile-comments-toggle{background:#0f172a;border-color:#64748b}#quick-open-backdrop{padding-top:18px;align-items:start}#quick-open-dialog{width:calc(100vw - 24px);max-height:calc(100dvh - 36px)}#composer{left:0;right:0;bottom:0;top:auto;z-index:60;box-sizing:border-box;border-left:0;border-right:0;border-bottom:0;border-radius:18px 18px 0 0;padding:14px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -16px 40px rgba(0,0,0,.48)}#composer-context{max-width:none;font-size:14px}#composer textarea{width:100%;height:122px;box-sizing:border-box;font-size:16px}#composer button{min-height:44px;padding:8px 12px}.lightbox{inset:0;z-index:50;border:0}.lightbox header{flex-wrap:wrap}.selection-box{border-radius:4px}.marker{width:28px;height:28px}}
 ${runtimeUpdateIndicatorStyles()}`;
 
 const clientJs = `
@@ -838,11 +838,13 @@ const planNotes = document.getElementById('plan-notes');
 const planNoteBody = document.getElementById('plan-note-body');
 const addPlanNoteButton = document.getElementById('add-plan-note');
 const composer = document.getElementById('composer');
+const composerContext = document.getElementById('composer-context');
 const body = document.getElementById('comment-body');
 const discardWarning = document.getElementById('comment-discard-warning');
 const submitCommentButton = document.getElementById('submit-comment');
 const cancelCommentButton = document.getElementById('cancel-comment');
 const comments = document.getElementById('comments');
+const commentsStatusFilters = document.getElementById('comments-status-filters');
 const mobileCommentsToggle = document.getElementById('mobile-comments-toggle');
 const desktopPlanNavToggle = document.getElementById('desktop-plan-nav-toggle');
 const desktopCommentsToggle = document.getElementById('desktop-comments-toggle');
@@ -883,6 +885,7 @@ let submitInFlight = false;
 let pendingDeleteError = null;
 let markerCount = 0;
 let markerComments = [];
+let renderedComments = [];
 let markerReflowQueued = false;
 let selectionBoxReflowQueued = false;
 let zoom = 1;
@@ -906,6 +909,7 @@ let deferredPlanRefresh = null;
 let lightboxDragStart = null;
 let lightboxPanStart = null;
 let touchStart = null;
+let wideScrollTouch = null;
 let pointerStart = null;
 let suppressSyntheticClickUntil = 0;
 let washi = null;
@@ -949,7 +953,8 @@ function updateCommentsToggles(){
   const count = Number(mobileCommentsToggle?.dataset.commentCount || desktopCommentsToggle?.dataset.commentCount || '0');
   const open = document.body.classList.contains('comments-open');
   if (mobileCommentsToggle) {
-    mobileCommentsToggle.textContent = open ? 'Close' : count ? 'Comments (' + count + ')' : 'Comments';
+    const statusText = mobileCommentsToggle.dataset.commentStatusText || (count ? 'Comments (' + count + ')' : 'Comments');
+    mobileCommentsToggle.textContent = open ? 'Close comments' : statusText;
     mobileCommentsToggle.setAttribute('aria-expanded', String(open));
   }
   if (desktopCommentsToggle) {
@@ -1030,9 +1035,21 @@ function setSubmitInFlight(value){
   submitInFlight = value;
   if (submitCommentButton) submitCommentButton.disabled = value;
 }
+function updateComposerContext(){
+  if (!composerContext) return;
+  const anchor = pendingAnchor?.anchor || {};
+  const heading = Array.isArray(anchor.headingPath) && anchor.headingPath.length ? anchor.headingPath[anchor.headingPath.length - 1] : '';
+  const quote = String(anchor.textQuote?.exact || anchor.selectedText || anchor.textPreview || '').replace(/\s+/g, ' ').trim();
+  const diagram = anchor.diagram?.elementLabel ? 'Mermaid: ' + anchor.diagram.elementLabel : '';
+  const image = anchor.sourceUrl || anchor.imageAssetId ? 'Image: ' + String(anchor.sourceUrl || anchor.imageAssetId).split('/').pop().slice(0, 120) : '';
+  const context = [heading && 'Section: ' + heading, quote && 'Selected: “' + quote.slice(0, 140) + (quote.length > 140 ? '…' : '') + '”', image, diagram].filter(Boolean).join(' · ');
+  composerContext.textContent = context;
+  composerContext.hidden = !context;
+}
 function showComposer(){
   if (pendingAnchor) ensurePendingCommentMutationId();
   if (isMobileShell()) setCommentsOpen(false);
+  updateComposerContext();
   composer.hidden = false;
   body.focus();
 }
@@ -1507,6 +1524,7 @@ async function refreshPlanFrameContent(nextVersionId, options = {}){
   doc.head.replaceChildren(...[...parsed.head.childNodes].map(node => doc.importNode(node, true)));
   doc.body.replaceChildren(...[...parsed.body.childNodes].map(node => doc.importNode(node, true)));
   await renderMermaidDiagrams();
+  ensureFrameMobileReadabilityStyles(doc);
   ensureFrameTapTargets(doc);
   syncFrameHeight();
   scheduleFrameImageReflows();
@@ -1618,10 +1636,28 @@ function renderPlanNotes(items){
   const rows = items.map(note => '<div class="note-row"><p>'+escapeHtml(note.body)+'</p><small>'+escapeHtml(note.createdBy?.displayName || (isCollaborationMode ? 'Document reviewer' : 'Plan reviewer'))+' · '+escapeHtml(new Date(note.createdAt).toLocaleString())+'</small></div>').join('');
   planNotes.innerHTML = rows || '<p class="comments-empty">No '+documentKind+' notes yet.</p>';
 }
+function renderCommentTraySummary(items){
+  let pending = 0, claimed = 0, acknowledged = 0, resolved = 0;
+  for (const c of items) {
+    if (c.status === 'claimed') claimed += 1;
+    else if (c.status === 'acknowledged') acknowledged += 1;
+    else if (c.status === 'resolved') resolved += 1;
+    else pending += 1;
+  }
+  const total = items.length;
+  const statusText = total === 0 ? 'Comments' : 'Comments (' + total + (pending ? ' · ' + pending + ' pending' : '') + ')';
+  if (mobileCommentsToggle) mobileCommentsToggle.dataset.commentStatusText = statusText;
+  if (commentsStatusFilters) {
+    const chips = [['All', total], ['Pending', pending], ['Claimed', claimed], ['Acked', acknowledged], ['Resolved', resolved]];
+    commentsStatusFilters.innerHTML = chips.map(([label, count]) => '<span class="comment-status-chip">'+escapeHtml(label)+' '+Number(count)+'</span>').join('');
+  }
+}
 function renderComments(items){
+  renderedComments = items;
   renderMarkers(items);
   if (mobileCommentsToggle) mobileCommentsToggle.dataset.commentCount = String(items.length);
   if (desktopCommentsToggle) desktopCommentsToggle.dataset.commentCount = String(items.length);
+  renderCommentTraySummary(items);
   updateCommentsToggles();
   const rows = items.map(c => {
     const response = c.agentResponse || {};
@@ -1634,7 +1670,8 @@ function renderComments(items){
     const canDelete = c.status === 'pending' && !c.claim;
     const deleteError = pendingDeleteError?.commentId === c.id ? '<small class="comment-delete-error" data-delete-error="'+escapeHtml(c.id)+'">'+escapeHtml(pendingDeleteError.message)+'</small>' : '<small class="comment-delete-error" data-delete-error="'+escapeHtml(c.id)+'" hidden></small>';
     const deleteAction = canDelete || pendingDeleteError?.commentId === c.id ? '<p>'+(canDelete ? '<button type="button" data-delete-comment="'+escapeHtml(c.id)+'">Delete</button> ' : '')+deleteError+'</p>' : '';
-    return '<div class="comment-row" data-comment-id="'+escapeHtml(c.id)+'"><strong>#'+c.sequence+' '+escapeHtml(c.status)+'</strong>'+thread+'<small>'+escapeHtml(c.anchorType)+' · '+escapeHtml(c.anchorState)+(metadata ? ' · '+metadata : '')+'</small>'+(context ? '<p><small>Context: '+context+'</small></p>' : '')+(screenshot ? '<p><small>'+screenshot+'</small></p>' : '')+deleteAction+'</div>';
+    const jumpAction = '<button class="comment-jump" type="button" data-jump-comment="'+escapeHtml(c.id)+'" aria-label="Jump to comment #'+escapeHtml(c.sequence)+' anchor">Jump</button>';
+    return '<div class="comment-row" data-comment-id="'+escapeHtml(c.id)+'"><div class="comment-row-header"><strong>#'+c.sequence+' '+escapeHtml(c.status)+'</strong>'+jumpAction+'</div>'+thread+'<small>'+escapeHtml(c.anchorType)+' · '+escapeHtml(c.anchorState)+(metadata ? ' · '+metadata : '')+'</small>'+(context ? '<p><small>Context: '+context+'</small></p>' : '')+(screenshot ? '<p><small>'+screenshot+'</small></p>' : '')+deleteAction+'</div>';
   }).join('');
   comments.innerHTML = rows || '<p class="comments-empty">No comments yet. Tap a '+documentKind+' section to start one.</p>';
   updateCommentStatusBanner(items);
@@ -1689,12 +1726,36 @@ async function deleteComment(commentId, button){
   pendingDeleteError = null;
   await loadMeta();
 }
+function scrollToCommentAnchor(commentId){
+  const comment = renderedComments.find(item => String(item.id) === String(commentId));
+  if (!comment) return;
+  const rect = currentRectForComment(comment);
+  if (!rect) return;
+  const frameRect = frame.getBoundingClientRect();
+  if (isMobileShell()) {
+    const review = document.getElementById('review');
+    if (!review) return;
+    const reviewRect = review.getBoundingClientRect();
+    review.scrollTo({ top: Math.max(0, review.scrollTop + frameRect.top - reviewRect.top + rect.y - 72), behavior: 'auto' });
+  } else {
+    const navbarHeight = document.getElementById('plan-navbar')?.getBoundingClientRect().height || 0;
+    window.scrollTo({ top: Math.max(0, window.scrollY + frameRect.top + rect.y - navbarHeight - 16), behavior: 'auto' });
+  }
+  scheduleMarkerReflow();
+}
 comments.addEventListener('click', event => {
   const target = event.target;
-  const button = target instanceof Element ? target.closest('[data-delete-comment]') : null;
-  if (!button) return;
-  event.preventDefault();
-  deleteComment(button.dataset.deleteComment, button);
+  const deleteButton = target instanceof Element ? target.closest('[data-delete-comment]') : null;
+  if (deleteButton) {
+    event.preventDefault();
+    deleteComment(deleteButton.dataset.deleteComment, deleteButton);
+    return;
+  }
+  const jumpButton = target instanceof Element ? target.closest('[data-jump-comment]') : null;
+  if (jumpButton) {
+    event.preventDefault();
+    scrollToCommentAnchor(jumpButton.dataset.jumpComment);
+  }
 });
 function escapeHtml(value){ return String(value).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])); }
 function planItemComplete(item){ return item?.progress?.totalPhases > 0 && item.progress.completedPhases === item.progress.totalPhases; }
@@ -2002,6 +2063,56 @@ function ensureFrameMermaidStyles(){
   }
   return doc;
 }
+function ensureFrameMobileReadabilityStyles(doc = frame.contentDocument){
+  if (!doc) return null;
+  let style = doc.getElementById('plan-review-mobile-readability-styles');
+  if (!style) {
+    style = doc.createElement('style');
+    style.id = 'plan-review-mobile-readability-styles';
+    style.textContent = '@media(max-width:760px),(pointer:coarse){html,body{width:100%!important;max-width:100%!important;min-width:0!important;overflow-x:hidden!important;box-sizing:border-box!important}body{font-size:16px!important;line-height:1.58!important;overflow-wrap:anywhere!important;word-break:normal!important;-webkit-text-size-adjust:100%!important}body *{box-sizing:border-box}main,article,section,header,footer,nav,aside,div,figure,figcaption,p,ul,ol,li,blockquote{max-width:100%!important;min-width:0!important}main,article,section{overflow-x:hidden!important}p,li,dd,dt,figcaption{font-size:max(1rem,16px)!important;line-height:1.58!important}h1{font-size:clamp(1.85rem,9vw,2.8rem)!important}h2{font-size:clamp(1.45rem,7vw,2.05rem)!important}h3{font-size:clamp(1.18rem,5.8vw,1.55rem)!important}img,video,canvas{max-width:100%!important;height:auto!important}svg{height:auto!important}table,pre,.plan-mermaid-rendered,.plan-mermaid-error,figure[data-plan-wide]{display:block!important}table,pre,.plan-mermaid-rendered,.plan-mermaid-error,figure[data-plan-wide],.plan-review-wide-scroll{max-width:100%!important;overflow-x:auto!important;overflow-y:visible!important;-webkit-overflow-scrolling:touch!important;overscroll-behavior-x:contain!important;border-inline-end:1px solid rgba(56,189,248,.55)!important;box-shadow:inset -18px 0 18px -18px rgba(56,189,248,.95)!important}.plan-review-wide-scroll>img,.plan-review-wide-scroll>picture>img{max-width:none!important;width:auto!important}table{width:max-content!important;min-width:100%!important;border-collapse:collapse!important}th,td{white-space:normal!important;overflow-wrap:anywhere!important;min-width:10rem!important}pre{white-space:pre!important}pre code{white-space:inherit!important;overflow-wrap:normal!important;word-break:normal!important}code{white-space:pre-wrap!important;overflow-wrap:anywhere!important}.plan-mermaid-rendered svg{max-width:none!important;width:max-content!important;min-width:min(46rem,180vw)!important}.grid,.cards,.card-grid,.mock-wall,.split-stage,[style*="grid-template-columns"]{grid-template-columns:minmax(0,1fr)!important}.toc{grid-template-columns:minmax(0,1fr)!important}}';
+  }
+  (doc.head || doc.documentElement).appendChild(style);
+  ensureFrameWideScrollAffordances(doc);
+  return doc;
+}
+function ensureFrameWideScrollAffordances(doc = frame.contentDocument){
+  if (!doc) return;
+  const win = frame.contentWindow;
+  if (!win) return;
+  const candidates = doc.body ? [...doc.body.querySelectorAll('main,article,section,div,figure,table,pre,.plan-mermaid-rendered,.plan-mermaid-error')] : [];
+  const restoreMediaWidth = media => {
+    if (!(media instanceof win.HTMLElement)) return;
+    if (media.dataset.planReviewOriginalMinWidth !== undefined) {
+      media.style.minWidth = media.dataset.planReviewOriginalMinWidth;
+      delete media.dataset.planReviewOriginalMinWidth;
+    } else if (media.dataset.planReviewWideMedia === 'true') {
+      media.style.minWidth = '';
+    }
+    delete media.dataset.planReviewWideMedia;
+  };
+  for (const element of candidates) {
+    if (!(element instanceof win.HTMLElement)) continue;
+    const media = element.matches('figure') ? element.querySelector('img,picture > img') : null;
+    if (!isMobileShell()) {
+      element.classList.remove('plan-review-wide-scroll');
+      restoreMediaWidth(media);
+      continue;
+    }
+    const mediaWidth = media instanceof win.HTMLImageElement ? Number(media.getAttribute('width') || media.naturalWidth || 0) : 0;
+    const availableWidth = Math.min(
+      element.clientWidth || Number.POSITIVE_INFINITY,
+      doc.documentElement?.clientWidth || Number.POSITIVE_INFINITY,
+      doc.body?.clientWidth || Number.POSITIVE_INFINITY
+    );
+    if (media instanceof win.HTMLElement) {
+      if (media.dataset.planReviewOriginalMinWidth === undefined) media.dataset.planReviewOriginalMinWidth = media.style.minWidth;
+      media.dataset.planReviewWideMedia = 'true';
+      media.style.minWidth = mediaWidth > availableWidth + 1 ? mediaWidth + 'px' : '';
+    }
+    if (element.scrollWidth > element.clientWidth + 1 || mediaWidth > availableWidth + 1) element.classList.add('plan-review-wide-scroll');
+    else element.classList.remove('plan-review-wide-scroll');
+  }
+}
 function ensureFrameTapTargets(doc = frame.contentDocument){
   if (!doc) return;
   let style = doc.getElementById('plan-review-tap-target-styles');
@@ -2114,6 +2225,7 @@ function syncFrameHeight(){
   }
 }
 function reflowAfterContentChange(){
+  ensureFrameWideScrollAffordances();
   syncFrameHeight();
   scheduleMarkerReflow();
 }
@@ -2537,6 +2649,28 @@ function frameTouchPoint(event){
   const rect = frame.getBoundingClientRect();
   return { x: point.clientX - rect.left, y: point.clientY - rect.top };
 }
+function frameHorizontalScrollRegionFromPoint(point){
+  const doc = frame.contentDocument;
+  if (!doc || !point) return null;
+  const target = doc.elementFromPoint(point.x, point.y);
+  const region = target?.closest?.('table,pre,.plan-mermaid-rendered,.plan-mermaid-error,figure[data-plan-wide],.plan-review-wide-scroll');
+  if (!region || typeof region.scrollWidth !== 'number' || typeof region.clientWidth !== 'number') return null;
+  return region.scrollWidth > region.clientWidth + 1 ? region : null;
+}
+function startWideScrollTouch(point){
+  const region = frameHorizontalScrollRegionFromPoint(point);
+  wideScrollTouch = region && point ? { element: region, startX: point.x, startY: point.y, startScrollLeft: region.scrollLeft, active: false } : null;
+}
+function updateWideScrollTouch(point){
+  if (!wideScrollTouch || !point) return false;
+  const dx = point.x - wideScrollTouch.startX;
+  const dy = point.y - wideScrollTouch.startY;
+  if (!wideScrollTouch.active && (Math.abs(dx) < 8 || Math.abs(dx) <= Math.abs(dy))) return false;
+  wideScrollTouch.active = true;
+  wideScrollTouch.element.scrollLeft = wideScrollTouch.startScrollLeft - dx;
+  return true;
+}
+function clearWideScrollTouch(){ wideScrollTouch = null; }
 function touchPoint(event){
   const point = eventPoint(event);
   return point ? { x: point.clientX, y: point.clientY } : null;
@@ -2632,6 +2766,7 @@ function clearPendingSelection(){
   setSubmitInFlight(false);
   body.value = '';
   clearDiscardWarning();
+  if (composerContext) { composerContext.textContent = ''; composerContext.hidden = true; }
   composer.hidden = true;
   lightbox.hidden = true;
   imageSelectionBox.hidden = true;
@@ -2859,7 +2994,7 @@ function attachFrameListeners(){
   frame.contentWindow?.addEventListener('scroll', scheduleMarkerReflow);
   frame.contentWindow?.addEventListener('resize', scheduleMarkerReflow);
 }
-frame.addEventListener('load', () => { frameListenersAttached = false; attachFrameListeners(); void renderMermaidDiagrams().finally(() => { mountWashiOverlay(); syncFrameHeight(); redrawMarkers(); }); });
+frame.addEventListener('load', () => { frameListenersAttached = false; attachFrameListeners(); void renderMermaidDiagrams().finally(() => { ensureFrameMobileReadabilityStyles(); mountWashiOverlay(); syncFrameHeight(); redrawMarkers(); }); });
 frame.addEventListener('touchstart', event => {
   const point = frameTouchPoint(event);
   touchStart = point ? { ...point, moved: false } : null;
@@ -2893,19 +3028,22 @@ frame.addEventListener('click', event => {
 planTouchLayer?.addEventListener('touchstart', event => {
   const point = frameTouchPoint(event);
   touchStart = point ? { ...point, moved: false } : null;
-  debugTouch('layer-touchstart', { point });
+  startWideScrollTouch(point);
+  debugTouch('layer-touchstart', { point, wideScroll: Boolean(wideScrollTouch) });
 }, passiveTouchCapture);
 planTouchLayer?.addEventListener('touchmove', event => {
   if (!touchStart) return;
   const point = frameTouchPoint(event);
-  if (touchMovedToPoint(touchStart, point)) touchStart.moved = true;
-  debugTouch('layer-touchmove', { point, moved: Boolean(touchStart?.moved) });
+  if (updateWideScrollTouch(point)) touchStart.moved = true;
+  else if (touchMovedToPoint(touchStart, point)) touchStart.moved = true;
+  debugTouch('layer-touchmove', { point, moved: Boolean(touchStart?.moved), wideScroll: Boolean(wideScrollTouch?.active) });
 }, passiveTouchCapture);
 planTouchLayer?.addEventListener('touchend', event => {
   const point = frameTouchPoint(event);
   const start = touchStart;
-  const moved = touchMovedToPoint(start, point);
+  const moved = touchMovedToPoint(start, point) || Boolean(wideScrollTouch?.active);
   touchStart = null;
+  clearWideScrollTouch();
   debugTouch('layer-touchend', { point, start, moved });
   if (moved) return;
   if (openComposerFromFramePoint(point, 'layer-open', event)) suppressSyntheticClickUntil = Date.now() + 700;
@@ -2918,13 +3056,19 @@ planTouchLayer?.addEventListener('click', event => {
     event.stopPropagation();
   }
 }, true);
-// No custom wheel handler: #review is the native scroll container, so wheel and
-// trackpad scrolling over the overlay are handled natively, preserving iPadOS
-// momentum/inertia. preventDefault + manual scrollBy would opt out of the native
-// scroller and make trackpad scrolling stop abruptly. Marker reflow is driven by
-// the #review scroll listener below.
+planTouchLayer?.addEventListener('wheel', event => {
+  const point = frameTouchPoint(event);
+  const region = frameHorizontalScrollRegionFromPoint(point);
+  if (!region || Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
+  region.scrollLeft += event.deltaX;
+  event.preventDefault();
+  event.stopPropagation();
+}, { passive: false });
+// Vertical wheel/trackpad scrolling stays native on #review. Horizontal deltas
+// that start over iframe-local wide regions are proxied above because the mobile
+// overlay intentionally keeps the iframe from receiving pointer input.
 document.getElementById('review')?.addEventListener('scroll', scheduleMarkerReflow, { passive: true });
-window.addEventListener('resize', () => { updatePlanNavbarHeight(); syncFrameHeight(); scheduleMarkerReflow(); });
+window.addEventListener('resize', () => { updatePlanNavbarHeight(); ensureFrameWideScrollAffordances(); syncFrameHeight(); scheduleMarkerReflow(); });
 window.addEventListener('scroll', scheduleMarkerReflow, { passive: true });
 const nativeWindowScrollTo = window.scrollTo.bind(window);
 // WebKit can swallow the first immediate wheel after a desktop shell scrollTo;
@@ -2940,7 +3084,7 @@ window.scrollTo = (...args) => {
   requestAnimationFrame(() => nativeWindowScrollTo(...args));
 };
 
-if (frame.contentDocument && frame.contentDocument.readyState !== 'loading') setTimeout(() => { attachFrameListeners(); void renderMermaidDiagrams().finally(() => { mountWashiOverlay(); syncFrameHeight(); redrawMarkers(); }); }, 0);
+if (frame.contentDocument && frame.contentDocument.readyState !== 'loading') setTimeout(() => { attachFrameListeners(); void renderMermaidDiagrams().finally(() => { ensureFrameMobileReadabilityStyles(); mountWashiOverlay(); syncFrameHeight(); redrawMarkers(); }); }, 0);
 document.getElementById('close-lightbox').addEventListener('click', () => { lightbox.hidden = true; });
 document.getElementById('zoom-in').addEventListener('click', () => { zoom = Math.min(4, zoom + .25); applyImageTransform(); });
 document.getElementById('zoom-out').addEventListener('click', () => { zoom = Math.max(.5, zoom - .25); applyImageTransform(); });

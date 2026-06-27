@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mobile Review Readability and UX Plan</title>
+  <style>
+    :root{
+      color-scheme:dark;
+      --bg:#07101f;
+      --panel:#0f172a;
+      --panel-2:#111827;
+      --ink:#e5e7eb;
+      --muted:#a7b0c0;
+      --line:#2b364d;
+      --line-strong:#475569;
+      --accent:#38bdf8;
+      --accent-2:#a78bfa;
+      --good:#22c55e;
+      --warn:#f59e0b;
+      --bad:#fb7185;
+      --phone:#050816;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:radial-gradient(circle at top left,rgba(56,189,248,.14),transparent 34rem),var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.58}
+    main{width:min(1180px,100%);margin:0 auto;padding:32px clamp(16px,3vw,42px) 80px}
+    h1,h2,h3{line-height:1.15;color:#f8fafc} h1{font-size:clamp(2rem,5vw,4.6rem);letter-spacing:-.05em;margin:.2rem 0 1rem} h2{font-size:clamp(1.45rem,3vw,2.3rem);margin:0 0 1rem} h3{font-size:1.08rem;margin:1.2rem 0 .5rem}
+    p{margin:.45rem 0 1rem}.muted{color:var(--muted)} a{color:#7dd3fc} code{background:#020617;color:#dbeafe;border:1px solid #1e293b;border-radius:5px;padding:.12rem .32rem} pre{background:#020617;border:1px solid var(--line);border-radius:12px;padding:14px;overflow:auto;white-space:pre-wrap}
+    section{margin:22px 0;padding:22px;border:1px solid var(--line);border-radius:18px;background:linear-gradient(180deg,rgba(15,23,42,.96),rgba(15,23,42,.78))}
+    .hero{border:0;background:transparent;padding:8px 0 18px}.status-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;border:1px solid var(--line-strong);background:#0b1220;color:#cbd5e1;padding:4px 10px;font-size:.82rem;font-weight:800}.pill.warn{border-color:rgba(245,158,11,.75);color:#fde68a;background:rgba(120,53,15,.35)}.pill.good{border-color:rgba(34,197,94,.72);color:#bbf7d0;background:rgba(22,101,52,.28)}.pill.ui{border-color:rgba(56,189,248,.72);color:#bae6fd;background:rgba(14,116,144,.26)}
+    .toc{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}.toc div{border:1px solid #253248;border-radius:14px;background:#08111f;padding:14px}.toc strong{display:block;margin-bottom:6px;color:#f8fafc}.toc a{display:block;padding:3px 0;color:#bae6fd;text-decoration:none}.toc a:hover{text-decoration:underline}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}.card{border:1px solid #253248;border-radius:14px;background:#0b1220;padding:16px}.card h3{margin-top:0}.attention{border-color:rgba(245,158,11,.55);background:linear-gradient(180deg,rgba(245,158,11,.12),rgba(15,23,42,.86))}.attention strong{color:#fde68a}
+    .progress-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}.progress-list li{display:flex;gap:10px;align-items:flex-start;border:1px solid #253248;border-radius:12px;background:#08111f;padding:10px}.progress-list input{margin-top:.25rem;inline-size:18px;block-size:18px}
+    table{width:100%;border-collapse:collapse;margin:10px 0} th,td{border-bottom:1px solid var(--line);padding:10px;text-align:left;vertical-align:top} th{color:#f8fafc;background:#0b1220} td{color:#cbd5e1}
+    .mock-wall{display:grid;grid-template-columns:1fr;gap:22px;align-items:start}.mock{width:100%;border:1px solid #334155;border-radius:28px;background:linear-gradient(180deg,#0b1020,#020617);padding:12px;box-shadow:0 24px 80px rgba(0,0,0,.34)}.phone{min-height:620px;border:1px solid #1f2a44;border-radius:22px;background:var(--phone);overflow:hidden;display:grid;grid-template-rows:auto 1fr auto}.phone-top{display:flex;gap:6px;align-items:center;padding:10px;border-bottom:1px solid #1e293b;background:#0f172a}.dot{width:8px;height:8px;border-radius:50%;background:#64748b}.phone-title{margin-left:6px;font-size:12px;color:#cbd5e1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.phone-content{padding:14px;overflow:hidden}.mini-toolbar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}.mini-button{border:1px solid #334155;border-radius:999px;background:#111827;color:#dbeafe;padding:5px 8px;font-size:11px;font-weight:800}.reader-card{background:#f8fafc;color:#0f172a;border-radius:16px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}.reader-card h4{margin:0 0 8px;font-size:20px;line-height:1.08;color:#0f172a}.reader-card p{font-size:15px;line-height:1.55;color:#253248}.wide-chip{display:block;border:1px dashed #94a3b8;border-radius:10px;background:#e2e8f0;color:#0f172a;padding:10px;margin:12px 0;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.comment-pin{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:999px;background:#a855f7;color:white;font-weight:900;box-shadow:0 0 0 3px rgba(168,85,247,.22)}.phone-bottom{padding:10px 14px calc(10px + env(safe-area-inset-bottom));border-top:1px solid #1e293b;background:rgba(15,23,42,.96)}.bottom-action{width:100%;border:1px solid #38bdf8;border-radius:999px;background:#075985;color:#e0f2fe;padding:11px 14px;font-weight:900;text-align:center}.sheet{align-self:end;background:#111827;border-top:1px solid #334155;border-radius:20px 20px 0 0;padding:14px;box-shadow:0 -18px 42px rgba(0,0,0,.44)}.sheet-handle{width:42px;height:4px;border-radius:999px;background:#475569;margin:0 auto 12px}.comment-row-mock{border:1px solid #263246;border-radius:12px;background:#0b1220;padding:10px;margin:8px 0}.comment-row-mock strong{display:flex;justify-content:space-between;color:#f8fafc}.quote{border-left:3px solid #38bdf8;background:#082f49;color:#e0f2fe;border-radius:8px;padding:10px;margin:10px 0;font-size:13px}.textarea-mock{min-height:112px;border:1px solid #475569;border-radius:14px;background:#020617;color:#94a3b8;padding:12px;font-size:15px}.split-stage{display:grid;grid-template-columns:1fr 1fr;gap:12px}.before{opacity:.78}.before .phone{background:#111827}.before .phone-content{padding:8px}.before .reader-card{transform:scale(.86);transform-origin:top left;width:116%;border-radius:10px}.callout{border-left:3px solid var(--accent);padding-left:12px;color:#cbd5e1}
+    .phase{border-color:#334155}.phase h2{display:flex;gap:10px;align-items:center}.phase .phase-id{font-size:.82rem;border:1px solid #475569;border-radius:999px;padding:3px 8px;color:#bae6fd;background:#082f49;letter-spacing:.04em}
+    @media(max-width:720px){main{padding:22px 12px 60px}section{padding:16px;border-radius:14px}.split-stage{grid-template-columns:1fr}.mock{border-radius:18px;padding:8px}.phone{min-height:560px}th,td{display:block;width:100%}tr{display:block;border-bottom:1px solid var(--line)}}
+  </style>
+</head>
+<body>
+<main>
+  <section class="hero" id="top">
+    <div class="status-row">
+      <span class="pill good">Status: execution-ready</span>
+      <span class="pill ui">UI impact: yes</span>
+      <span class="pill">No Linear issue — direct reviewer/operator request</span>
+      <span class="pill">Plan path: <code>thoughts/plans/mobile-review-readability-ux.html</code></span>
+    </div>
+    <h1>Mobile Review Readability and UX</h1>
+    <p class="muted">Make plan reviews readable and commentable on phones without weakening the existing desktop review shell, queue-backed comment lifecycle, or source-linked plan artifact model.</p>
+  </section>
+
+  <nav class="toc" id="toc" aria-label="Table of contents">
+    <div><strong>Overview</strong><a href="#goal">Goal</a><a href="#decision-attention">Decision Attention</a><a href="#solution-narrative">Solution narrative</a><a href="#authority-inputs">Authority and inputs</a><a href="#current-reality">Current implementation reality</a></div>
+    <div><strong>UX</strong><a href="#target-mocks">Target mobile mocks</a><a href="#product-intent">Product intent alignment</a><a href="#locked-decisions">Locked decisions</a><a href="#acceptance-criteria">Acceptance criteria</a><a href="#bdd-scenarios">BDD scenarios</a></div>
+    <div><strong>Execution</strong><a href="#progress">Progress</a><a href="#phase-p1-tests">P1 tests</a><a href="#phase-p2-reader">P2 reader layer</a><a href="#phase-p3-shell">P3 shell UX</a><a href="#phase-p4-annotation">P4 annotation UX</a><a href="#phase-p5-docs">P5 docs and gates</a></div>
+    <div><strong>Delivery</strong><a href="#test-coverage-matrix">Test coverage matrix</a><a href="#verification-strategy">Verification strategy</a><a href="#delivery-order">Delivery order</a><a href="#non-goals">Non-goals</a><a href="#resume-instructions">Resume instructions</a></div>
+  </nav>
+
+  <section id="goal">
+    <h2>Goal</h2>
+    <p>Reviewers on a phone should be able to open a plan review URL, read the plan without pinch-zooming or horizontal panning for normal prose, understand comment status, open comments as an intentional tray, and leave a precise comment on text, DOM blocks, images, or diagrams with native-feeling touch behavior.</p>
+  </section>
+
+  <section id="decision-attention" class="attention">
+    <h2>Decision Attention / Low-confidence Areas</h2>
+    <p><strong>No product decision required.</strong> Browser feedback requested the execution-ready review for this plan. The defaults are locked for this implementation slice: reading-first mobile shell, bottom comments tray, bottom-sheet composer, and contained overflow for genuinely wide content.</p>
+    <ul>
+      <li id="attention-1"><strong>Mobile navigation default locked:</strong> hide the desktop plan navigator on phones and rely on index/quick-open/comment controls for this slice. A dedicated mobile navigator drawer is a future follow-up, not required to make reviews readable.</li>
+      <li id="attention-2"><strong>Wide content policy locked:</strong> normal prose/tables/code/images should fit the viewport; genuinely wide diagrams and tables get an obvious horizontal scroll affordance rather than being scaled to illegibility.</li>
+      <li id="attention-3"><strong>Composer flow locked:</strong> keep the current mobile bottom-sheet composer position and add selection/quote context, keyboard-safe controls, and stronger dismissal protection.</li>
+    </ul>
+  </section>
+
+  <section id="solution-narrative">
+    <h2>Solution narrative</h2>
+    <p>Implement a mobile reviewer mode that treats the plan as a readable document first, then layers review actions around it. The parent shell keeps the current native scroll and transparent touch overlay, but the rendered iframe receives a mobile readability stylesheet after plan content loads. The shell chrome collapses into compact controls, comments become a bottom tray, and the composer becomes a keyboard-safe bottom sheet with selection context.</p>
+    <p class="callout">The implementation should not edit plan source files or require authors to manually make every historical plan responsive. The viewer owns the mobile adaptation while the plan HTML remains the authoritative source.</p>
+  </section>
+
+  <section id="authority-inputs">
+    <h2>Authority and inputs</h2>
+    <ul>
+      <li>User request: “our plan viewer is not responsive to viewing on mobile… make reviews on mobile readable and improve ux.”</li>
+      <li>Repo guidance: <code>AGENTS.md</code> requires reviewed HTML plans, product-intent alignment, e2e gates for UI/comment-shell work, and no product code edits during planning.</li>
+      <li>Product intent: <code>thoughts/specs/product_intent.md</code> says the simplest reviewer workflow must work without extra setup, browser comments must be durable, and browser interactions/rendered markers need e2e coverage when changed.</li>
+      <li>Observed source: <code>src/server/app.ts</code> review shell markup/CSS/JS; <code>src/render/render.ts</code> sanitized iframe render; <code>src/test-fixtures/e2e-run.ts</code> existing mobile/touch e2e coverage.</li>
+    </ul>
+  </section>
+
+  <section id="current-reality">
+    <h2>Current implementation reality</h2>
+    <div class="grid">
+      <article class="card" id="reality-shell">
+        <h3>Review shell already has a mobile mode</h3>
+        <p><code>clientCss</code> in <code>src/server/app.ts</code> activates at <code>@media(max-width:760px),(pointer:coarse)</code>. It hides the plan navigator, makes <code>#review</code> the native scroll container, uses <code>#plan-touch-layer</code> as the tap surface, and turns comments into a bottom sheet.</p>
+      </article>
+      <article class="card" id="reality-iframe">
+        <h3>Rendered plan content is not normalized for mobile readability</h3>
+        <p>The iframe loads arbitrary sanitized plan HTML from <code>/render/:planId</code>. Plan-authored CSS remains active, and the viewer does not currently inject a general mobile reader stylesheet for prose, tables, code blocks, figures, mermaid output, or historical plan layouts.</p>
+      </article>
+      <article class="card" id="reality-tests">
+        <h3>Mobile tests protect touch mechanics, not reading quality</h3>
+        <p><code>src/test-fixtures/e2e-run.ts</code> already asserts native mobile scrolling, tap-layer behavior, link handling, text/image annotation, mobile comments toggle, and tablet/coarse-pointer behavior. It does not assert that typical plan content is readable without horizontal overflow or pinch zoom.</p>
+      </article>
+      <article class="card" id="reality-risk">
+        <h3>Risk is CSS collision and marker drift</h3>
+        <p>Any viewer-injected mobile stylesheet must be scoped to mobile/coarse-pointer mode, appended after plan CSS, and re-run after live source-sync iframe refreshes so comment anchors, selection boxes, mermaid rendering, images, and text wrapping stay aligned.</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="target-mocks">
+    <h2>Target mobile mocks</h2>
+    <p class="muted">These full-width mocks define the intended product shape, not final pixel-perfect styling. They prioritize annotation detail in the browser reviewer over compact gallery layout.</p>
+    <div class="mock-wall">
+      <figure class="mock" id="mock-reading-mode">
+        <div class="phone" role="img" aria-label="Mock of mobile reading mode with compact toolbar and readable plan card">
+          <div class="phone-top"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="phone-title">Mobile Review Readability</span></div>
+          <div class="phone-content">
+            <div class="mini-toolbar"><span class="mini-button">Index</span><span class="mini-button">Open</span><span class="mini-button">3 comments</span><span class="mini-button">Ready: no</span></div>
+            <div class="reader-card">
+              <h4>Decision Attention / Low-confidence Areas</h4>
+              <p>Readable prose uses the phone viewport, comfortable line length, and wrapping code snippets. No pinch-zoom is needed for normal plan sections.</p>
+              <span class="wide-chip">Wide table available — swipe inside this block →</span>
+              <p><span class="comment-pin">2</span> Markers stay aligned after source refresh, rotation, and comment tray open/close.</p>
+            </div>
+          </div>
+          <div class="phone-bottom"><div class="bottom-action">Comments (3)</div></div>
+        </div>
+        <figcaption><strong>Mock A — Reading-first plan view.</strong> Compact chrome, readable iframe content, markers visible where the reviewer is reading, and wide content contained with an explicit swipe affordance.</figcaption>
+      </figure>
+
+      <figure class="mock" id="mock-comment-tray">
+        <div class="phone" role="img" aria-label="Mock of mobile comments bottom tray">
+          <div class="phone-top"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="phone-title">Comments tray</span></div>
+          <div class="phone-content">
+            <div class="reader-card"><h4>Phase P2 — reader layer</h4><p>The selected section remains visible behind the comments tray.</p><p><span class="comment-pin">1</span> Pending comment marker.</p></div>
+          </div>
+          <div class="sheet">
+            <div class="sheet-handle"></div>
+            <div class="mini-toolbar"><span class="mini-button">All</span><span class="mini-button">Pending 1</span><span class="mini-button">Claimed 1</span><span class="mini-button">Resolved 1</span></div>
+            <div class="comment-row-mock"><strong>#1 Pending <span>↗</span></strong><p class="muted">“The wide table is hard to read.”</p></div>
+            <div class="comment-row-mock"><strong>#2 Claimed <span>↗</span></strong><p class="muted">“Check the composer position.”</p></div>
+          </div>
+        </div>
+        <figcaption><strong>Mock B — Comments as an activity tray.</strong> The tray is intentional, filterable, and keeps jump-to-anchor affordances so reading and triage are not separate modes.</figcaption>
+      </figure>
+
+      <figure class="mock" id="mock-composer">
+        <div class="phone" role="img" aria-label="Mock of mobile annotation composer bottom sheet">
+          <div class="phone-top"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="phone-title">Add comment</span></div>
+          <div class="phone-content">
+            <div class="reader-card"><h4>Acceptance Criteria</h4><p style="outline:2px dotted #38bdf8;border-radius:8px;padding:6px">A phone reviewer can open, read, select, and submit without zooming.</p></div>
+          </div>
+          <div class="sheet">
+            <div class="sheet-handle"></div>
+            <div class="quote">Selected in Acceptance Criteria: “open, read, select, and submit without zooming”</div>
+            <div class="textarea-mock">Add a reviewer note…</div>
+            <div class="mini-toolbar"><span class="mini-button">Cancel</span><span class="mini-button">Submit comment</span></div>
+          </div>
+        </div>
+        <figcaption><strong>Mock C — Keyboard-safe composer.</strong> The composer shows selection context, supports a large touch target, and avoids tiny floating popovers on phones.</figcaption>
+      </figure>
+    </div>
+
+    <h3 id="mock-before-after">Current vs target shape</h3>
+    <div class="split-stage">
+      <figure class="mock before" id="mock-current-mobile">
+        <div class="phone"><div class="phone-top"><span class="phone-title">Current pain</span></div><div class="phone-content"><div class="reader-card"><h4>Desktop plan shrunk into phone</h4><p>Dense tables, code, and authored grids can overflow or shrink; controls compete with reading space.</p><span class="wide-chip">A very long code/table row extends beyond the viewport without useful guidance...</span></div></div></div>
+        <figcaption>Current risk: touch plumbing exists, but plan content and chrome can still feel desktop-first.</figcaption>
+      </figure>
+      <figure class="mock" id="mock-target-mobile">
+        <div class="phone"><div class="phone-top"><span class="phone-title">Target</span></div><div class="phone-content"><div class="reader-card"><h4>Mobile reader with review actions</h4><p>Readable text, contained overflow, bottom tray comments, and composer context are first-class.</p><span class="wide-chip">Swipe this contained table/code block →</span></div></div><div class="phone-bottom"><div class="bottom-action">Review actions</div></div></div>
+        <figcaption>Target: mobile review is not a smaller desktop; it is a reading surface with review controls around it.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="progress">
+    <h2>Progress</h2>
+    <p class="muted">Only implementation phases use checkboxes. Implementation, verification, and pre-PR rereview are complete.</p>
+    <ol class="progress-list">
+      <li id="progress-p1"><input type="checkbox" checked disabled aria-label="P1 complete"> P1 — Add mobile readability and UX regression tests</li>
+      <li id="progress-p2"><input type="checkbox" checked disabled aria-label="P2 complete"> P2 — Inject mobile reader layer for rendered plans</li>
+      <li id="progress-p3"><input type="checkbox" checked disabled aria-label="P3 complete"> P3 — Refine mobile shell chrome and comments tray</li>
+      <li id="progress-p4"><input type="checkbox" checked disabled aria-label="P4 complete"> P4 — Improve mobile annotation composer and marker alignment</li>
+      <li id="progress-p5"><input type="checkbox" checked disabled aria-label="P5 complete"> P5 — Document behavior and run final gates</li>
+    </ol>
+  </section>
+
+  <section id="resume-instructions">
+    <h2>Resume instructions</h2>
+    <p>Read this plan fully, inspect <code>git status --short</code>, then start at the first unchecked item in <a href="#progress">Progress</a>. Implement phases sequentially. Do not change queue/comment lifecycle semantics or plan source-authoring requirements. Preserve <code>dist/</code> as generated output from <code>src/</code>. If mobile browser reality disproves a mock decision, record the deviation here and stop for reviewer/product feedback if the change affects the target UX.</p>
+  </section>
+
+  <section id="product-intent">
+    <h2>Product intent alignment</h2>
+    <ul>
+      <li><strong>Reviewer job-to-be-done:</strong> advances “open a local plan, select the exact section/image/text, leave a comment” by making that flow usable on phones.</li>
+      <li><strong>Golden path:</strong> opening a review URL on mobile should work without extra setup, desktop mode, pinch zoom, or chat-side screenshots.</li>
+      <li><strong>Browser shell owns interactivity:</strong> the viewer adapts the sanitized render and shell controls; plan-authored scripts/forms remain unsupported.</li>
+      <li><strong>Quality bar:</strong> browser comment interactions and rendered markers remain covered by e2e tests; no queue or source-sync semantics change.</li>
+      <li><strong>Safe failure:</strong> if a plan contains genuinely wide content, the viewer contains it with a visible local scroll affordance instead of clipping or globally forcing tiny text.</li>
+    </ul>
+  </section>
+
+  <section id="locked-decisions">
+    <h2>Locked decisions</h2>
+    <ol>
+      <li id="decision-1"><strong>Viewer owns mobile adaptation.</strong> Do not require authors to rewrite every plan; inject/readjust in the review shell/rendered iframe for mobile and coarse-pointer contexts.</li>
+      <li id="decision-2"><strong>Preserve native scroll.</strong> Keep <code>#review</code> as the native mobile scroll container and keep <code>#plan-touch-layer</code> as the tap surface; do not reintroduce JS scroll emulation.</li>
+      <li id="decision-3"><strong>Desktop stays stable.</strong> Existing desktop navigator/comments/sidebar behavior should not materially change except for shared bug fixes and reduced-motion/accessibility improvements.</li>
+      <li id="decision-4"><strong>Comments are a tray on phones.</strong> The mobile comments panel should behave like an activity tray with filters/counts and jump-to-anchor behavior, not a permanent sidebar.</li>
+      <li id="decision-5"><strong>Composer remains a bottom sheet.</strong> Keep the current mobile bottom-sheet position and add keyboard-safe controls plus selection/quote context.</li>
+      <li id="decision-6"><strong>No lifecycle/API expansion.</strong> Comment queue, ack/resolve/release semantics, registration, and source-sync metadata remain unchanged.</li>
+    </ol>
+  </section>
+
+  <section id="acceptance-criteria">
+    <h2>Acceptance criteria</h2>
+    <ol>
+      <li id="ac-1">At phone viewport widths, normal plan prose, headings, lists, figures, and mocks are readable without pinch-zooming and without page-level horizontal scroll.</li>
+      <li id="ac-2">Tables, pre/code blocks, mermaid diagrams, and intentionally wide figures are contained in local horizontal scroll regions with an obvious visual affordance.</li>
+      <li id="ac-3">The review shell chrome leaves most of the viewport for reading; desktop-only navigator controls are hidden or accessible through compact mobile controls.</li>
+      <li id="ac-4">The comments tray opens and closes with a 44px minimum touch target, shows comment count/status context, and does not permanently obscure the selected plan content.</li>
+      <li id="ac-5">A reviewer can tap a DOM/text/image/diagram target on mobile, see the selected region, open a bottom-sheet composer with selection context, type with the on-screen keyboard, submit, and see the new comment in the tray.</li>
+      <li id="ac-6">Existing desktop review behavior, source-sync refresh behavior, marker rendering, lightbox, and queue-backed comments remain intact.</li>
+      <li id="ac-7">Coarse-pointer tablets activate the mobile touch/overlay behavior even when their width exceeds the phone breakpoint.</li>
+      <li id="ac-8">Automated e2e covers representative mobile readability cases and touch review flows, including rotation/resizing and a source-sync iframe refresh after mobile styles are applied.</li>
+    </ol>
+  </section>
+
+  <section id="bdd-scenarios">
+    <h2>BDD scenarios</h2>
+    <article id="bdd-readable-plan" class="card"><h3>BDD-1: Open and read on phone</h3><p><strong>Given</strong> a registered plan with prose, a table, a code block, an image, and a mermaid diagram, <strong>when</strong> a reviewer opens the review URL on a 390px-wide phone viewport, <strong>then</strong> the shell has no page-level horizontal overflow, normal prose is legible, and wide blocks are scrollable inside their own regions.</p></article>
+    <article id="bdd-comment-tray" class="card"><h3>BDD-2: Comments tray supports triage</h3><p><strong>Given</strong> a plan has pending, claimed, acknowledged, and resolved comments, <strong>when</strong> the reviewer opens the mobile comments control, <strong>then</strong> the bottom tray shows counts/status filters and each row can jump to its anchored plan target without losing native scroll.</p></article>
+    <article id="bdd-mobile-composer" class="card"><h3>BDD-3: Mobile composer preserves context</h3><p><strong>Given</strong> a reviewer taps a text or DOM target, <strong>when</strong> the composer opens, <strong>then</strong> the selected region remains highlighted, the composer shows section/quote context, the text area is keyboard-safe, and submit creates exactly one comment.</p></article>
+    <article id="bdd-wide-content" class="card"><h3>BDD-4: Wide content is recoverable, not hidden</h3><p><strong>Given</strong> a table row or code line cannot wrap without destroying meaning, <strong>when</strong> it renders on mobile, <strong>then</strong> the content remains available through local horizontal scroll and a visible affordance indicates it can be swiped.</p></article>
+    <article id="bdd-source-refresh" class="card"><h3>BDD-5: Source sync keeps mobile styles and anchors</h3><p><strong>Given</strong> the plan source refreshes while a phone reviewer is reading, <strong>when</strong> the iframe content is replaced safely, <strong>then</strong> the mobile readability stylesheet is re-applied and markers/selection boxes reflow to the new content height.</p></article>
+    <article id="bdd-desktop-parity" class="card"><h3>BDD-6: Desktop parity is preserved</h3><p><strong>Given</strong> a desktop reviewer opens the same plan, <strong>when</strong> they use the navigator, sidebar, comments, image lightbox, and action buttons, <strong>then</strong> those behaviors match the current desktop flow except for intentional shared accessibility improvements.</p></article>
+  </section>
+
+  <section id="test-coverage-matrix">
+    <h2>Test coverage matrix</h2>
+    <table>
+      <thead><tr><th>Acceptance / BDD</th><th>Test layer</th><th>Planned files</th><th>Evidence</th></tr></thead>
+      <tbody>
+        <tr><td>AC1, AC2, BDD-1, BDD-4</td><td>Playwright fixture e2e</td><td><code>src/test-fixtures/e2e-run.ts</code></td><td>Mobile viewport asserts no root horizontal overflow, readable computed widths/font sizes, contained overflow for table/pre/diagram fixtures.</td></tr>
+        <tr><td>AC3, AC4, BDD-2</td><td>Playwright fixture e2e + source inspection</td><td><code>src/server/app.ts</code>, <code>src/test-fixtures/e2e-run.ts</code></td><td>Mobile chrome visibility/touch target assertions; tray opens/closes and preserves scroll/anchor jump.</td></tr>
+        <tr><td>AC5, BDD-3</td><td>Existing mobile touch e2e extended</td><td><code>src/server/app.ts</code>, <code>src/test-fixtures/e2e-run.ts</code></td><td>DOM/text/image/diagram comment creation through bottom-sheet composer with exactly-one persisted comment.</td></tr>
+        <tr><td>AC6, BDD-5, BDD-6</td><td>Regression e2e + contract tests</td><td><code>src/__tests__/contracts.test.ts</code> only if public shell contract changes; otherwise e2e</td><td>Desktop parity checks; source-sync refresh re-applies mobile style and preserves markers.</td></tr>
+        <tr><td>AC7</td><td>Existing tablet/coarse-pointer e2e extended</td><td><code>src/test-fixtures/e2e-run.ts</code></td><td>Coarse-pointer tablet still activates overlay/mobile behavior independent of width.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="phase-p1-tests" class="phase">
+    <h2><span class="phase-id">P1</span> Add mobile readability and UX regression tests</h2>
+    <h3>End State</h3>
+    <p>Failing e2e coverage captures the current mobile readability/UX gaps before product code changes.</p>
+    <h3>Tests first</h3>
+    <p>Add RED assertions in <code>src/test-fixtures/e2e-run.ts</code> for a representative mobile plan fixture containing long prose, a dense table, code/pre, mermaid, image, status banner, existing comments, and source-sync refresh. Use existing mobile/touch fixture structure around lines that already test <code>#plan-touch-layer</code>, <code>#review</code> native scroll, mobile comments toggle, and touch annotation.</p>
+    <h3>Expected files</h3>
+    <ul><li><code>src/test-fixtures/e2e-run.ts</code></li></ul>
+    <h3>Work</h3>
+    <ul>
+      <li>Create a mobile-readability fixture plan inside e2e with intentionally hard content: long unbroken code, table columns, wide mermaid, figure, and nested grids.</li>
+      <li>Assert no root/page horizontal overflow at 390×844 and 486×902 mobile viewports.</li>
+      <li>Assert wide regions are locally scrollable and visibly marked; normal prose wraps within viewport.</li>
+      <li>Assert initial comments tray/composer mocks fail against current behavior where needed.</li>
+    </ul>
+    <h3>Open questions / decision dependencies</h3>
+    <p>None for test creation. The mobile UX defaults in this plan are locked for implementation; future reviewer preferences should be logged as follow-up work unless they expose a testability blocker.</p>
+    <h3>Verify</h3>
+    <pre><code>bun run build
+node dist/test-fixtures/e2e-run.js # expected RED after P1; record the new mobile-readability assertion failures</code></pre>
+  </section>
+
+  <section id="phase-p2-reader" class="phase">
+    <h2><span class="phase-id">P2</span> Inject mobile reader layer for rendered plans</h2>
+    <h3>End State</h3>
+    <p>The rendered plan iframe becomes phone-readable by default while preserving plan-authored layout on desktop.</p>
+    <h3>Tests first</h3>
+    <p>Use P1 RED assertions for no root overflow, readable text, contained table/pre/diagram overflow, and source-refresh reapplication.</p>
+    <h3>Expected files</h3>
+    <ul><li><code>src/server/app.ts</code></li><li><code>src/test-fixtures/e2e-run.ts</code></li></ul>
+    <h3>Work</h3>
+    <ul>
+      <li>Add a small <code>ensureFrameMobileReadabilityStyles(doc)</code> helper called after iframe load, in-place refresh, mermaid rendering, and source-sync refresh.</li>
+      <li>Scope rules to <code>@media(max-width:760px),(pointer:coarse)</code> and append after plan-authored styles so mobile overrides win only when needed.</li>
+      <li>Normalize iframe body/root width, remove common min-width overflow, enforce readable font-size/line-height for body/prose, wrap long text, and constrain images/figures to viewport.</li>
+      <li>Wrap or style tables, pre/code, mermaid wrappers, and wide figures as local overflow regions with an affordance such as subtle edge fade/border and <code>overflow-x:auto</code>.</li>
+      <li>Re-run <code>syncFrameHeight()</code> and marker reflow after the reader stylesheet and image/mermaid layout settle.</li>
+    </ul>
+    <h3>Open questions / decision dependencies</h3>
+    <p>None if the wide-content policy in <a href="#decision-attention">Decision Attention</a> is accepted.</p>
+    <h3>Verify</h3>
+    <pre><code>bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js</code></pre>
+  </section>
+
+  <section id="phase-p3-shell" class="phase">
+    <h2><span class="phase-id">P3</span> Refine mobile shell chrome and comments tray</h2>
+    <h3>End State</h3>
+    <p>The phone shell prioritizes reading and exposes comments/status through compact, accessible mobile controls.</p>
+    <h3>Tests first</h3>
+    <p>Extend P1 e2e tests to assert touch target sizes, tray count/status text, open/close behavior, jump-to-comment behavior, and viewport preservation after tray open/close.</p>
+    <h3>Expected files</h3>
+    <ul><li><code>src/server/app.ts</code></li><li><code>src/test-fixtures/e2e-run.ts</code></li></ul>
+    <h3>Work</h3>
+    <ul>
+      <li>Refine mobile toolbar ordering: keep index/open/status/comment controls visible, hide or collapse desktop-only controls that consume reading space.</li>
+      <li>Make <code>#mobile-comments-toggle</code> report concise count/status text and remain safe-area aware.</li>
+      <li>Turn the sidebar into a clearer tray with handle, status filter chips, comment count, and jump-to-anchor affordances while keeping plan notes distinct from reviewer comments.</li>
+      <li>Ensure opening/closing the tray triggers marker/selection reflow but preserves the reviewer’s scroll position.</li>
+    </ul>
+    <h3>Open questions / decision dependencies</h3>
+    <p>None. The reading-first default hides the desktop plan navigator on phones for this slice; a mobile navigator drawer is an out-of-scope follow-up unless implementation finds quick-open/index controls unusable.</p>
+    <h3>Verify</h3>
+    <pre><code>bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js</code></pre>
+  </section>
+
+  <section id="phase-p4-annotation" class="phase">
+    <h2><span class="phase-id">P4</span> Improve mobile annotation composer and marker alignment</h2>
+    <h3>End State</h3>
+    <p>Mobile reviewers can create precise comments through a keyboard-safe composer with visible selection context and stable markers.</p>
+    <h3>Tests first</h3>
+    <p>Extend existing mobile text/image annotation tests to require bottom-sheet composer context, input focus, safe-area/keyboard-friendly sizing, exactly-one comment creation, and marker alignment after rotation and comment state changes.</p>
+    <h3>Expected files</h3>
+    <ul><li><code>src/server/app.ts</code></li><li><code>src/test-fixtures/e2e-run.ts</code></li></ul>
+    <h3>Work</h3>
+    <ul>
+      <li>Keep the existing phone bottom-sheet composer positioning and add heading path or selected quote preview so tests target the real missing context/keyboard-safety gap.</li>
+      <li>Keep submit/cancel buttons at least 44px high and prevent accidental dismissal while input contains text.</li>
+      <li>Confirm DOM/text/image/mermaid anchors use the same coordinate path after the reader stylesheet changes.</li>
+      <li>Update marker/selection reflow triggers for orientation change, tray transition, composer open/close, iframe refresh, and image/mermaid decode.</li>
+    </ul>
+    <h3>Open questions / decision dependencies</h3>
+    <p>None if the bottom-sheet composer mock is accepted.</p>
+    <h3>Verify</h3>
+    <pre><code>bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js</code></pre>
+  </section>
+
+  <section id="phase-p5-docs" class="phase">
+    <h2><span class="phase-id">P5</span> Document behavior and run final gates</h2>
+    <h3>End State</h3>
+    <p>Mobile reviewer behavior is documented where operators/reviewers expect it, and full repo verification passes.</p>
+    <h3>Tests first</h3>
+    <p>No new RED tests unless P1–P4 reveal a public contract change that belongs in contract tests. This phase uses full verification and documentation inspection.</p>
+    <h3>Expected files</h3>
+    <ul><li><code>README.md</code> if mobile review guidance is currently documented there</li><li><code>src/test-fixtures/e2e-run.ts</code> only for final fixture adjustments</li></ul>
+    <h3>Work</h3>
+    <ul>
+      <li>Update reviewer/operator docs to state mobile review is supported, including readable plans, comments tray, and touch annotation expectations.</li>
+      <li>Record any final design deviations from this plan in the Decisions / Deviations Log.</li>
+      <li>Run full UI gates and fix regressions without broadening scope.</li>
+    </ul>
+    <h3>Open questions / decision dependencies</h3>
+    <p>None.</p>
+    <h3>Verify</h3>
+    <pre><code>bun run build
+bun run test
+bun run test:e2e</code></pre>
+  </section>
+
+  <section id="verification-strategy">
+    <h2>Verification strategy</h2>
+    <ul>
+      <li><strong>Primary evidence:</strong> <code>bun run test:e2e</code> must prove mobile readability and touch review flows on phone and coarse-pointer tablet contexts.</li>
+      <li><strong>Regression evidence:</strong> <code>bun run test</code> keeps CLI/API/render contracts stable.</li>
+      <li><strong>Manual visual gate:</strong> open this plan and one historically dense plan on a phone-sized viewport and confirm mocks/prose/tables/comments/composer match the target shape.</li>
+      <li><strong>Review gate:</strong> run scoped implementation review before final handoff because this touches browser shell layout, iframe styling, and comment creation UX.</li>
+    </ul>
+  </section>
+
+  <section id="delivery-order">
+    <h2>Delivery order</h2>
+    <p>P1 defines failing evidence. P2 fixes core readability. P3 makes mobile comments usable. P4 tightens annotation creation and marker stability. P5 documents behavior and runs final gates. Do not merge shell/chrome polish before the reader layer because readable content is the primary user outcome.</p>
+  </section>
+
+  <section id="non-goals">
+    <h2>Non-goals</h2>
+    <ul>
+      <li>No rewrite of the plan authoring contract or requirement that plan authors use a new CSS framework.</li>
+      <li>No queue, ack, release, resolve, source-sync, or registration semantics changes.</li>
+      <li>No public authentication/security changes for the unauthenticated local MVP.</li>
+      <li>No replacement of iframe rendering with a full document editor.</li>
+      <li>No desktop redesign beyond preserving parity and avoiding shared regressions.</li>
+      <li>No plan-authored JavaScript, active embeds, or form interactivity support.</li>
+    </ul>
+  </section>
+
+  <section id="decisions-deviations-log">
+    <h2>Decisions / Deviations Log</h2>
+    <table>
+      <thead><tr><th>Date</th><th>Decision / deviation</th><th>Evidence</th></tr></thead>
+      <tbody>
+        <tr><td>2026-06-26</td><td>Initial plan created as browser-review draft, not execution-ready.</td><td>User requested a plan and mocks; repo workflow requires browser review and independent gates before execution-ready metadata.</td></tr>
+        <tr><td>2026-06-26</td><td>Scoped solution to mobile review readability/UX, not queue/source-sync semantics.</td><td>Product intent identifies browser review/commenting as the user job; current code already has queue-backed reliability and mobile touch plumbing that should not be disturbed.</td></tr>
+        <tr><td>2026-06-26</td><td>Integrated first execution-ready review blockers: status changed from browser-review draft to execution-ready candidate; Decision Attention now locks product defaults; P1 verify now explicitly records expected RED evidence; mocks changed to a full-width vertical stack; P4 now targets missing composer context rather than replacing an already-bottom-sheet mobile composer.</td><td>GPT and GLM plan reviews both returned <code>PLAN_NEEDS_REVISION</code> with those blockers. Source inspection confirms mobile <code>#composer</code> already uses bottom-sheet positioning in <code>src/server/app.ts</code>.</td></tr>
+        <tr><td>2026-06-26</td><td>Marked plan execution-ready after independent re-review.</td><td>GPT and GLM re-reviews both returned <code>PLAN_EXECUTION_READY</code> after the material readiness revisions.</td></tr>
+        <tr><td>2026-06-26</td><td>Implemented P1–P5 in one scoped pass: e2e mobile readability fixture, injected mobile reader stylesheet, comments tray summary/jump affordances, composer context, README guidance, and progress updates.</td><td><code>bun run build</code> passed after dependency install; <code>bun run test</code> passed; <code>node dist/test-fixtures/e2e-run.js</code> passed after fixing test isolation and tray assertion issues.</td></tr>
+        <tr><td>2026-06-26</td><td>Integrated scoped GPT review findings: mobile image composer now has image context, comment jump buttons have per-comment accessible labels, and e2e covers both.</td><td>GPT scoped review returned <code>FIX_IN_SCOPE_FINDINGS</code>; GLM returned <code>PASS_SCOPED</code>. Targeted build and targeted e2e passed after fixes.</td></tr>
+        <tr><td>2026-06-26</td><td>Integrated pre-PR GPT blocker: iframe-wide table/code/Mermaid regions now receive proxied horizontal touch scrolling through the mobile overlay while preserving native vertical <code>#review</code> scrolling.</td><td>Pre-PR GPT review returned <code>FINDINGS_TO_RESOLVE</code> for unreachable local horizontal scroll regions. Added e2e coverage that swipes table, code, and Mermaid regions and asserts <code>scrollLeft</code> changes. Targeted e2e, full e2e, and unit tests pass after the fix; GPT and GLM rereviews both returned <code>CLEAN_FOR_PR</code>.</td></tr>
+        <tr><td>2026-06-26</td><td>Integrated late GLM review finding: custom stylesheet-defined wide grids now receive the same local scroll affordance as known wide regions instead of being clipped by mobile overflow containment.</td><td>Late GLM pre-PR review found a valid <code>.feature-grid</code> counterexample. Added dynamic wide-region detection for rendered iframe elements and e2e coverage for a non-whitelisted custom grid touch swipe.</td></tr>
+        <tr><td>2026-06-26</td><td>Integrated PR Codex review feedback: horizontal wheel/trackpad deltas over mobile wide regions now scroll the iframe-local region, and plan-authored wide figures are preserved as local scrollers rather than scaled down.</td><td>Codex PR review found valid P2 gaps after the updated commits: wheel input bypassed the touch proxy, image figures without <code>data-plan-wide</code> could be capped before dynamic wide detection, and mobile-only inline image sizing needed cleanup after resizing back to desktop. Added wheel proxy handling, supported wide image-figure width preservation/restoration, and fixture assertions for wheel scrolling, wide image-figure touch scrolling, and resize cleanup.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="review-record">
+    <h2>Review record</h2>
+    <table>
+      <thead><tr><th>Gate</th><th>Status</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Browser comments</td><td>Processed</td><td>Browser action comment <code>cmt_k2UgkJblqkUi</code> requested the <code>plan-reviewer-execution-ready</code> workflow for this plan.</td></tr>
+        <tr><td>PM/product-intent review</td><td>Ready after revision</td><td>Plan aligns with product intent by improving the simplest reviewer workflow and now locks the mobile UX defaults needed for implementation.</td></tr>
+        <tr><td>GPT plan review</td><td>PLAN_NEEDS_REVISION — integrated</td><td>Blockers were stale non-ready status/gates, unclear expected-RED P1 verify, and low-confidence decisions conflicting with locked decisions. All were integrated in this revision.</td></tr>
+        <tr><td>GLM plan review</td><td>PLAN_NEEDS_REVISION — integrated</td><td>Blockers were stale non-ready status/gates, non-full-width mocks, and P4 claiming to replace composer positioning that already exists. All were integrated in this revision.</td></tr>
+        <tr><td>GPT plan re-review</td><td>PLAN_EXECUTION_READY</td><td>No blockers or product questions after revisions. Material risk coverage satisfied across P1–P5.</td></tr>
+        <tr><td>GLM plan re-review</td><td>PLAN_EXECUTION_READY</td><td>No blockers or product questions after revisions. Confirmed progress/phase mapping, locked decisions, full-width mocks, P1 RED evidence, and composer reality alignment.</td></tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+</body>
+</html>
