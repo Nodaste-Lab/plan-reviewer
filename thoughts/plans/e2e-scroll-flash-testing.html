@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Review Shell Flash and Scroll Regression Plan</title>
+  <style>
+    :root { color-scheme: dark; --bg:#070b14; --panel:#0f172a; --panel2:#111827; --text:#e5e7eb; --muted:#a7b0c0; --border:#2b364d; --accent:#38bdf8; --accent2:#7dd3fc; --warn:#f59e0b; --bad:#fb7185; --good:#22c55e; --code:#020617; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:radial-gradient(circle at top left, rgba(56,189,248,.12), transparent 34rem), var(--bg); color:var(--text); font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height:1.6; }
+    a { color:var(--accent2); }
+    code, pre { font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    pre { overflow:auto; background:var(--code); border:1px solid var(--border); border-radius:12px; padding:14px; }
+    .layout { display:grid; grid-template-columns:minmax(220px,280px) minmax(0,1fr); gap:24px; max-width:1320px; margin:0 auto; padding:24px; }
+    .toc { position:sticky; top:16px; max-height:calc(100vh - 32px); overflow:auto; align-self:start; border:1px solid var(--border); border-radius:18px; background:rgba(15,23,42,.92); padding:16px; }
+    .toc h2 { margin:0 0 10px; font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+    .toc a { display:block; padding:7px 8px; border-radius:8px; color:#cbd5e1; text-decoration:none; font-size:14px; }
+    .toc a:hover { background:rgba(56,189,248,.12); color:#e0f2fe; }
+    header, section, article { border:1px solid var(--border); border-radius:18px; background:rgba(15,23,42,.86); padding:22px; margin-bottom:18px; box-shadow:0 18px 48px rgba(2,6,23,.22); }
+    header { background:linear-gradient(135deg, rgba(14,165,233,.18), rgba(15,23,42,.9)); }
+    h1, h2, h3, h4 { color:#f8fafc; line-height:1.2; }
+    h1 { margin:0 0 10px; font-size:clamp(2rem,5vw,3.2rem); }
+    h2 { margin-top:0; font-size:1.45rem; }
+    h3 { margin-bottom:.3rem; font-size:1.08rem; }
+    table { width:100%; border-collapse:collapse; margin:12px 0; }
+    th, td { border:1px solid var(--border); padding:10px; vertical-align:top; text-align:left; }
+    th { background:#111827; color:#f8fafc; }
+    .meta { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+    .pill { display:inline-flex; align-items:center; gap:6px; border:1px solid #334155; border-radius:999px; background:#0b1220; color:#dbeafe; padding:5px 10px; font-size:13px; font-weight:800; }
+    .warn { border-color:rgba(245,158,11,.7); color:#fde68a; }
+    .bad { border-color:rgba(251,113,133,.7); color:#fecaca; }
+    .good { border-color:rgba(34,197,94,.55); color:#dcfce7; }
+    .muted { color:var(--muted); }
+    .callout { border-left:4px solid var(--accent); padding:12px 14px; background:rgba(56,189,248,.08); border-radius:10px; }
+    .bug { border-left:4px solid var(--bad); background:rgba(251,113,133,.07); }
+    .phase { border-color:#334155; }
+    .progress-list { list-style:none; padding:0; }
+    .progress-list li { margin:8px 0; padding:10px; border:1px solid #263246; border-radius:10px; background:#0b1220; }
+    .progress-list input { transform:translateY(1px); margin-right:8px; }
+    figure { margin:14px 0; border:1px solid var(--border); border-radius:14px; background:#0b1220; padding:12px; }
+    figcaption { color:var(--muted); font-size:13px; margin-top:8px; }
+    img, video { width:100%; max-width:100%; border-radius:10px; border:1px solid #263246; background:#020617; }
+    .asset-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; }
+    @media (max-width:860px) { .layout { grid-template-columns:1fr; padding:14px; } .toc { position:static; max-height:none; } }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <nav class="toc" aria-label="Plan sections">
+      <h2>Sections</h2>
+      <a href="#status">Status</a>
+      <a href="#goal">Goal</a>
+      <a href="#solution">Solution narrative</a>
+      <a href="#authority">Authority &amp; inputs</a>
+      <a href="#inventory">Bug inventory</a>
+      <a href="#evidence">Playwright evidence</a>
+      <a href="#current-reality">Current implementation reality</a>
+      <a href="#product-intent">Product intent alignment</a>
+      <a href="#progress">Progress</a>
+      <a href="#locked-decisions">Locked decisions</a>
+      <a href="#acceptance">Acceptance criteria</a>
+      <a href="#bdd">BDD scenarios</a>
+      <a href="#test-matrix">Test coverage matrix</a>
+      <a href="#phases">Phases</a>
+      <a href="#verification">Verification strategy</a>
+      <a href="#non-goals">Non-goals</a>
+      <a href="#resume">Resume instructions</a>
+      <a href="#decisions">Decisions / Deviations</a>
+    </nav>
+
+    <main>
+      <header id="title">
+        <h1>Review Shell Flash and Scroll Regression Plan</h1>
+        <p class="muted">Plan after exploratory UI testing of the plan-reviewer shell: every major shell button, plan-to-plan navigation, comments, navigator refresh, desktop/WebKit wheel scrolling, and mobile/coarse scroll ownership.</p>
+        <div class="meta" aria-label="Plan metadata">
+          <span class="pill good">Status: execution-ready</span>
+          <span class="pill good">Execution ready: true</span>
+          <span class="pill">Linear issue: none; direct user report</span>
+          <span class="pill">Surface: /p/:planId review shell plus index/archive/deferred/configuration controls</span>
+          <span class="pill">Created: 2026-06-26</span>
+        </div>
+      </header>
+
+      <section id="status">
+        <h2>Status</h2>
+        <p>This is an investigation-backed execution-ready fix plan. No product code was changed while producing it. The copied-database test service ran on <code>127.0.0.1:4318</code>, using a backup of <code>~/.plan-reviewer/plan-reviewer.sqlite</code>. Playwright artifacts are attached under <code>thoughts/plans/assets/e2e-scroll-flash-testing/</code>.</p>
+        <p>GPT and GLM readiness reviews cleared this plan after clarifying the WebKit first-wheel oracle and adding the control-inventory smoke test to P1. The highest-confidence bugs are the navigator flash and the immediate WebKit first-wheel gap.</p>
+      </section>
+
+      <section id="goal">
+        <h2>Goal</h2>
+        <p>Make plan-reviewer feel stable while reading and reviewing plans: no navigator content flash after switching plans, no first-scroll no-op/bump in the rendered plan area, and no untested scroll-blocking paths on adjacent UI surfaces. Lock these behaviors with e2e coverage so regressions fail before release.</p>
+      </section>
+
+      <section id="solution">
+        <h2>Solution narrative</h2>
+        <p>There are two root causes to address. First, the left navigator is rendered twice with different display logic: server first paint uses human readiness/progress labels, then the async client refresh rewrites the same items with raw Kanban column keys. That produces the visible flash. Second, WebKit can still lose the first tiny wheel/trackpad input when it follows a pending or freshly scheduled shell scroll. Existing tests wait for the programmatic scroll to settle, so they miss the user path where input arrives immediately.</p>
+        <p>The fix should create one source of truth for navigator display fields and add explicit e2e tests for visual stability across the async refresh. For scrolling, add a red WebKit reproduction that wheels immediately after the shell performs any programmatic scroll/restore, then replace the global <code>window.scrollTo</code> monkeypatch with narrowly scoped, deterministic scroll restoration that cannot leave a pending rAF scroll competing with real user input.</p>
+      </section>
+
+      <section id="authority">
+        <h2>Authority and inputs</h2>
+        <ul>
+          <li>User report: left navigator flashes to a different state and back when clicking plans; first scroll can bump/no-op and only the second scroll moves.</li>
+          <li><code>thoughts/specs/product_intent.md</code>: browser review must be simple, reliable, and covered by e2e when interactions change.</li>
+          <li><code>AGENTS.md</code> and <code>thoughts/plans/AGENTS.md</code>: non-trivial plan-reviewer work is materialized as HTML and registered for review before implementation.</li>
+          <li><code>src/server/app.ts</code>: review shell rendering, navigator refresh, iframe/touch-layer scroll handling, and action buttons all live in this file.</li>
+          <li><code>src/test-fixtures/e2e-run.ts</code>: existing e2e already covers review-shell scrolling and includes a WebKit small-wheel check, but it waits for programmatic scroll settlement before wheeling.</li>
+          <li>Existing completed plan <code>thoughts/plans/fix-bump-scroll-behavior.html</code>: prior work made mobile/coarse scroll native and passive; this plan preserves that decision and adds the missing all-UI/user-timing coverage.</li>
+        </ul>
+      </section>
+
+      <section id="inventory">
+        <h2>Bug inventory</h2>
+        <table>
+          <thead><tr><th>ID</th><th>Observed behavior</th><th>Reproduction</th><th>Likely cause</th><th>Fix direction</th></tr></thead>
+          <tbody>
+            <tr id="bug-nav-flash"><td>BUG-1</td><td>Left navigator flashes from human labels such as <code>Complete</code> / <code>Execution not ready</code> to raw column keys such as <code>backlog</code> / <code>in_progress</code> about 700-1100ms after plan load or plan-to-plan navigation.</td><td><code>nav-flash.json</code> captures three plan loads. The first paint and +120ms state match, then the async mutation rewrites labels at +762ms to +802ms.</td><td>Server <code>planNavigatorStatus()</code> and client <code>planItemStatus()</code> implement different semantics. The async <code>loadPlanNavigator()</code> refresh re-renders server HTML with client-only status logic.</td><td>Expose normalized navigator display fields from the API or share one renderer/status-label map. Add an e2e stability assertion that nav item text and active item do not change across async refresh unless backing data actually changes.</td></tr>
+            <tr id="bug-webkit-first-wheel"><td>BUG-2</td><td>A first tiny WebKit wheel/trackpad input can be consumed by pending shell scroll state instead of applying its delta; the next wheel moves normally.</td><td><code>webkit-small-wheel.json</code>: after <code>window.scrollTo(0,240)</code>, immediate state is still <code>0</code>; the first wheel lands at <code>240</code> without a wheel event; the second wheel lands at <code>252</code>. Waiting for scroll settlement before wheeling avoids the bug.</td><td>The shell currently wraps desktop <code>window.scrollTo</code> in <code>requestAnimationFrame</code>. If real input arrives before the rAF scroll runs, user input competes with queued programmatic scroll and feels like a bump/no-op. The existing e2e waits for settlement and therefore misses this timing.</td><td>Add a failing WebKit test that wheels immediately after a shell scroll/restore. Replace the global monkeypatch with explicit scroll-restoration helpers that do not leave pending global scroll work between navigation/refresh and user input.</td></tr>
+            <tr id="bug-sibling-touch"><td>BUG-3</td><td>Adjacent index/archive/deferred surfaces still have older archive-toast <code>touchstart</code> dismissal listeners that are not explicitly passive.</td><td>Static inspection of generated scripts in <code>src/server/app.ts</code>; this matches the prior discovery note that sibling surfaces were out of scope for the previous review-shell-only scroll fix.</td><td>The prior scroll plan intentionally scoped passive touch hardening to <code>/p/:planId</code>. The rest of the UI still has touch listeners that can put mobile browsers on a scroll-blocking path.</td><td>Fold index, archive, deferred, and Kanban toast-dismiss touch listeners into this all-UI scroll hardening plan. Add a contract/e2e listener-options guard across those pages.</td></tr>
+            <tr id="bug-button-coverage"><td>BUG-4</td><td>The shell has many controls spread across hidden modals/panels; current e2e exercises important paths, but no single canary enumerates visible controls and proves each major button path remains non-reloading unless intended.</td><td><code>button-inventory.json</code> enumerated index, archive, deferred, configuration, and review-shell controls and clicked the main shell actions: nav toggle, comments, pin/unpin, comment create/cancel/submit, plan note, execution-review request, build request, status select, archive/undo, defer, configuration saves.</td><td>Coverage is behavior-specific rather than inventory-driven; hidden controls and repeated archive cards make manual audits easy to miss.</td><td>Add a maintained Playwright inventory smoke test that records visible controls per surface, clicks one representative for repeated list actions, and asserts no unexpected navigation/reload/flash.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="evidence">
+        <h2>Playwright evidence</h2>
+        <p><strong>Correction:</strong> the raw Playwright JSON, trace zip, and webm files are repo artifacts, but the plan-review browser only publishes image assets from a plan. The previous clickable artifact links were not viewable in the browser. This section now inlines the evidence needed for review.</p>
+        <p class="muted">Raw files remain in the worktree at <code>thoughts/plans/assets/e2e-scroll-flash-testing/</code> for agents running locally.</p>
+
+        <article id="evidence-nav-flash-inline">
+          <h3>Navigator flash reproduction</h3>
+          <p>The same navigator items render with human labels on first paint, then mutate to raw Kanban keys after the client refresh. This is the left-nav flash the user reported.</p>
+          <table id="evidence-nav-flash-table">
+            <thead><tr><th>Plan load</th><th>First paint / +120ms</th><th>Async refresh (+~1s)</th><th>Mutation timing</th></tr></thead>
+            <tbody>
+              <tr><td><code>plan_rGnl4OwFqVT_</code><br>Run Plan Command Surface Cleanup</td><td>Run Plan Command Surface Cleanup: Complete<br>GLM Review Prompt Reliability Plan: Execution not ready<br>Byzantine Generals And Adversarial Gardening: Needs attention</td><td>Run Plan Command Surface Cleanup: backlog<br>GLM Review Prompt Reliability Plan: in_progress<br>Byzantine Generals And Adversarial Gardening: Needs attention</td><td>install @ 88ms<br>mutation @ 802ms</td></tr>
+              <tr><td><code>plan_p0eVnoHb2FZh</code><br>GLM Review Prompt Reliability Plan</td><td>Run Plan Command Surface Cleanup: Complete<br>GLM Review Prompt Reliability Plan: Execution not ready<br>Byzantine Generals And Adversarial Gardening: Needs attention</td><td>Run Plan Command Surface Cleanup: backlog<br>GLM Review Prompt Reliability Plan: in_progress<br>Byzantine Generals And Adversarial Gardening: Needs attention</td><td>install @ 53ms<br>mutation @ 762ms</td></tr>
+              <tr><td><code>plan_KJirz2Aa_V7N</code><br>Space Readiness — Gap Remediation &amp; Phase Integration Plan</td><td>NOD-1086 Suspend Auth Recovery Plan: Execution ready<br>NOD-1075 Clerk-only audit ratchet fix: Execution ready<br>Account Attach Key Repair: Execution ready</td><td>NOD-1086 Suspend Auth Recovery Plan: done<br>NOD-1075 Clerk-only audit ratchet fix: done<br>Account Attach Key Repair: backlog</td><td>install @ 91ms<br>mutation @ 817ms</td></tr>
+            </tbody>
+          </table>
+        </article>
+
+        <article id="evidence-webkit-wheel-inline">
+          <h3>WebKit first-wheel bump reproduction</h3>
+          <p>When a small wheel happens immediately after a shell <code>window.scrollTo(0,240)</code>, the first user input lands the queued programmatic scroll instead of applying the wheel delta. The second wheel applies the delta. Waiting for scroll settlement hides the bug, which explains why prior tests were green.</p>
+          <table id="evidence-webkit-wheel-table">
+            <thead><tr><th>Step</th><th>window.scrollY</th><th>Hit target</th><th>Wheel events recorded</th><th>Implication</th></tr></thead>
+            <tbody>
+              <tr><td>immediate after scrollTo</td><td>0</td><td><code>plan-frame</code></td><td>0</td><td>Queued scroll has not landed yet.</td></tr>
+              <tr><td>after first small wheel immediate</td><td>240</td><td><code>plan-frame</code></td><td>0</td><td>First user wheel lands queued scroll, not wheel delta.</td></tr>
+              <tr><td>after second small wheel immediate</td><td>252</td><td><code>plan-frame</code></td><td>1</td><td>Second wheel finally applies +12 delta.</td></tr>
+              <tr><td>after waited scrollTo</td><td>240</td><td><code>plan-frame</code></td><td>1</td><td>Waiting avoids the race; this is why old tests were green.</td></tr>
+              <tr><td>after first small wheel waited</td><td>252</td><td><code>plan-frame</code></td><td>2</td><td>Normal once the shell scroll has settled.</td></tr>
+              <tr><td>after second small wheel waited</td><td>264</td><td><code>plan-frame</code></td><td>3</td><td>Normal same-direction follow-up.</td></tr>
+            </tbody>
+          </table>
+        </article>
+
+        <article id="evidence-mobile-scroll-inline">
+          <h3>Mobile/coarse scroll owner check</h3>
+          <p>Synthetic mobile/coarse scroll moved <code>#review</code> and left both <code>window.scrollY</code> and iframe internal scroll at zero. That points the remaining first-scroll problem at desktop/WebKit timing and sibling touch paths, not at the current mobile review-shell scroll owner.</p>
+          <table id="evidence-mobile-scroll-table">
+            <thead><tr><th>Step</th><th>windowY</th><th><code>#review</code> scrollTop</th><th>iframe scrollY</th><th>Touch layer y</th></tr></thead>
+            <tbody>
+              <tr><td>initial</td><td>0</td><td>0</td><td>0</td><td>179</td></tr>
+              <tr><td>synth scroll down 1:before</td><td>0</td><td>0</td><td>0</td><td>179</td></tr>
+              <tr><td>synth scroll down 1:after</td><td>0</td><td>501</td><td>0</td><td>-322</td></tr>
+              <tr><td>synth scroll down 2:after</td><td>0</td><td>1003</td><td>0</td><td>-824</td></tr>
+              <tr><td>synth reverse up 1:after</td><td>0</td><td>499</td><td>0</td><td>-320</td></tr>
+              <tr><td>synth reverse up 2:after</td><td>0</td><td>0</td><td>0</td><td>179</td></tr>
+            </tbody>
+          </table>
+        </article>
+
+        <article id="evidence-button-inventory-inline">
+          <h3>Representative button inventory</h3>
+          <p>The exploratory script enumerated index, archive, deferred, configuration, and review-shell controls. It clicked representative action paths rather than mutating every repeated archive/deferred card from the copied production database.</p>
+          <table id="evidence-button-click-table">
+            <thead><tr><th>Representative action</th><th>Result</th><th>URL behavior</th><th>Class behavior</th></tr></thead>
+            <tbody>
+              <tr><td>toggle nav closed</td><td>OK</td><td><code>/p/plan_rGnl4OwFqVT_ → /p/plan_rGnl4OwFqVT_</code></td><td><code>plan-nav-collapsed → (none)</code></td></tr>
+              <tr><td>toggle nav open</td><td>OK</td><td><code>/p/plan_rGnl4OwFqVT_ → /p/plan_rGnl4OwFqVT_</code></td><td><code>(none) → plan-nav-collapsed</code></td></tr>
+              <tr><td>open comments</td><td>OK</td><td><code>/p/plan_rGnl4OwFqVT_ → /p/plan_rGnl4OwFqVT_</code></td><td><code>plan-nav-collapsed → plan-nav-collapsed comments-open</code></td></tr>
+              <tr><td>close comments</td><td>OK</td><td><code>/p/plan_rGnl4OwFqVT_ → /p/plan_rGnl4OwFqVT_</code></td><td><code>plan-nav-collapsed comments-open → plan-nav-collapsed</code></td></tr>
+              <tr><td>pin plan / unpin plan</td><td>OK</td><td><code>/p/plan_rGnl4OwFqVT_ → /p/plan_rGnl4OwFqVT_</code></td><td><code>plan-nav-collapsed → plan-nav-collapsed</code></td></tr>
+              <tr><td>open composer by clicking rendered plan</td><td>OK</td><td><code>n/a</code></td><td><code>n/a</code></td></tr>
+              <tr><td>cancel draft comment</td><td>OK</td><td><code>/p/plan_rGnl4OwFqVT_ → /p/plan_rGnl4OwFqVT_</code></td><td><code>plan-nav-collapsed → plan-nav-collapsed</code></td></tr>
+              <tr><td>submit comment</td><td>OK</td><td><code>/p/plan_rGnl4OwFqVT_ → /p/plan_rGnl4OwFqVT_</code></td><td><code>plan-nav-collapsed → plan-nav-collapsed</code></td></tr>
+              <tr><td>add plan note</td><td>OK</td><td><code>/p/plan_rGnl4OwFqVT_ → /p/plan_rGnl4OwFqVT_</code></td><td><code>plan-nav-collapsed comments-open → plan-nav-collapsed comments-open</code></td></tr>
+              <tr><td>request execution review</td><td>OK</td><td><code>/p/plan_rGnl4OwFqVT_ → /p/plan_rGnl4OwFqVT_</code></td><td><code>plan-nav-collapsed comments-open → plan-nav-collapsed comments-open</code></td></tr>
+              <tr><td>request build plan</td><td>OK</td><td><code>/p/plan_rGnl4OwFqVT_ → /p/plan_rGnl4OwFqVT_</code></td><td><code>plan-nav-collapsed comments-open → plan-nav-collapsed comments-open</code></td></tr>
+              <tr><td>quick open search scroll</td><td>OK</td><td><code>n/a</code></td><td><code>n/a</code></td></tr>
+              <tr><td>current plan status select roundtrip</td><td>OK</td><td><code>n/a</code></td><td><code>n/a</code></td></tr>
+              <tr><td>archive plan / undo archive</td><td>OK</td><td><code>/p/plan_rGnl4OwFqVT_ → /p/plan_rGnl4OwFqVT_</code></td><td><code>comments-open preserved, then closed after undo</code></td></tr>
+              <tr><td>defer plan</td><td>OK</td><td><code>/p/plan_rGnl4OwFqVT_ → /p/plan_rGnl4OwFqVT_</code></td><td><code>plan-nav-collapsed → plan-nav-collapsed</code></td></tr>
+              <tr><td>save update checks / save configuration</td><td>OK</td><td><code>/configuration → /configuration</code></td><td><code>(none) → (none)</code></td></tr>
+              <tr><td>quick-open retry, resume plan, index archive/undo</td><td>not visible in the sampled state</td><td><code>n/a</code></td><td><code>n/a</code></td></tr>
+            </tbody>
+          </table>
+        </article>
+      </section>
+
+      <section id="current-reality">
+        <h2>Current implementation reality</h2>
+        <ul>
+          <li>The server-rendered navigator uses <code>planNavigatorStatus()</code>, which prioritizes sync attention, completion, collaboration, and execution readiness. It does not display board column keys for active plans.</li>
+          <li>The client re-render uses <code>planItemStatus()</code>, which displays <code>boardColumnKey</code> before completion/execution readiness for active plans. That makes the async refresh visibly disagree with first paint.</li>
+          <li>The review shell currently has passive touch observers for the main plan/touch-layer path and mobile/coarse synthetic scroll behaves correctly in Chromium/WebKit diagnostics.</li>
+          <li>The desktop shell wraps <code>window.scrollTo</code> globally in <code>requestAnimationFrame</code>. That is a broad primitive override and is exactly the kind of hidden scroll state that can race real input.</li>
+          <li>Index/archive/deferred generated scripts still include older <code>touchstart</code> dismissal listeners outside the previous review-shell scroll fix scope.</li>
+        </ul>
+      </section>
+
+      <section id="product-intent">
+        <h2>Product intent alignment</h2>
+        <p>This plan cites <code>thoughts/specs/product_intent.md</code>. It supports the product intent that a reviewer can open a plan, read it, annotate it, and hand work to agents without fighting the UI. Scroll and navigator stability are part of the golden path, not polish: a reviewer spends most of the session reading, switching plans, and leaving comments.</p>
+        <ul>
+          <li><strong>Simple browser review:</strong> plan navigation and scrolling should feel native and deterministic.</li>
+          <li><strong>Safe defaults:</strong> no hidden global scroll monkeypatch should compete with user input.</li>
+          <li><strong>Regression strategy:</strong> user-reported interaction regressions become Playwright e2e tests with artifacts and clear failure messages.</li>
+          <li><strong>Operator experience:</strong> the fix should reduce visual churn and make failures obvious to developers before they reach the browser review workflow.</li>
+        </ul>
+      </section>
+
+      <section id="progress">
+        <h2>Progress</h2>
+        <ul class="progress-list">
+          <li id="progress-investigate"><label><input type="checkbox" checked disabled> Investigation, copied-DB test instance, and Playwright artifacts captured</label></li>
+          <li id="progress-plan"><label><input type="checkbox" checked disabled> Browser-review plan registered and execution-ready comments processed</label></li>
+          <li id="progress-p1"><label><input type="checkbox" checked disabled> P1 — Add red regression tests</label></li>
+          <li id="progress-p2"><label><input type="checkbox" checked disabled> P2 — Fix navigator display source of truth</label></li>
+          <li id="progress-p3"><label><input type="checkbox" checked disabled> P3 — Fix first-scroll handoff and sibling touch listeners</label></li>
+          <li id="progress-p4"><label><input type="checkbox" checked disabled> P4 — Full e2e verification and review</label></li>
+        </ul>
+      </section>
+
+      <section id="locked-decisions">
+        <h2>Locked decisions</h2>
+        <ul>
+          <li id="decision-native-scroll"><strong>Keep native scrolling.</strong> Do not reintroduce manual wheel/touch <code>scrollBy</code> emulation.</li>
+          <li id="decision-one-nav-source"><strong>One navigator display source.</strong> First paint and async refresh must use the same display semantics.</li>
+          <li id="decision-no-global-scroll-patch"><strong>Avoid global primitive overrides.</strong> Do not globally replace <code>window.scrollTo</code>; use named helpers at the call sites that need scroll preservation.</li>
+          <li id="decision-visible-controls"><strong>Test representative UI controls.</strong> Repeated list buttons can be sampled, but every distinct visible control type should be inventoried and covered.</li>
+          <li id="decision-artifacts"><strong>Keep evidence attached.</strong> Repro JSON, traces, and recordings remain linked from the plan until the tests are merged.</li>
+        </ul>
+      </section>
+
+      <section id="acceptance">
+        <h2>Acceptance criteria</h2>
+        <ol>
+          <li id="ac-nav-stable">Plan navigator text, active item, and item order remain stable from first paint through async navigator refresh when the backing data did not change.</li>
+          <li id="ac-no-raw-keys">Human labels are shown consistently: no raw <code>backlog</code>, <code>in_progress</code>, or <code>done</code> keys appear in the review-shell navigator when column labels are configured.</li>
+          <li id="ac-first-wheel">In WebKit, the first wheel/trackpad input after shell navigation or programmatic scroll restoration moves the native scroll owner by the input delta; a second input is not required.</li>
+          <li id="ac-scroll-owner">Desktop wheel input scrolls the window/document and keeps iframe internal scroll at <code>0</code>; mobile/coarse input scrolls <code>#review</code> and keeps window/iframe internal scroll at <code>0</code>.</li>
+          <li id="ac-touch-passive">Touch observers that only dismiss UI or observe taps are explicitly passive on review, index, archive, deferred, and Kanban surfaces.</li>
+          <li id="ac-comments">Comment create, cancel, submit, plan note, execution review request, build request, archive/undo, defer/resume, pin/unpin, comments toggle, navigator toggle, current-status change, quick-open, and configuration saves continue to work without unexpected reloads or visual flash.</li>
+        </ol>
+      </section>
+
+      <section id="bdd">
+        <h2>BDD scenarios</h2>
+        <article id="bdd-nav-refresh">
+          <h3>BDD-1 — Navigator refresh does not flash</h3>
+          <p><strong>Given</strong> a plan is loaded with the navigator open, <strong>when</strong> the async navigator refresh completes, <strong>then</strong> each visible item keeps the same human status label and the active item remains highlighted without a transient raw-column state.</p>
+        </article>
+        <article id="bdd-plan-switch">
+          <h3>BDD-2 — Plan-to-plan click stays visually stable</h3>
+          <p><strong>Given</strong> the reviewer clicks another plan in the left navigator, <strong>when</strong> the destination plan first paints and the client refreshes navigator data, <strong>then</strong> the navigator does not flash to different labels or ordering unless server data changed during the click.</p>
+        </article>
+        <article id="bdd-webkit-wheel">
+          <h3>BDD-3 — First WebKit wheel after scroll restoration moves</h3>
+          <p><strong>Given</strong> the desktop shell has just restored or set scroll position, <strong>when</strong> the reviewer immediately performs one small wheel input over the rendered plan, <strong>then</strong> the native scroll owner moves beyond the restored position and the iframe internal scroll remains zero.</p>
+        </article>
+        <article id="bdd-mobile-scroll">
+          <h3>BDD-4 — Mobile/coarse scroll remains native</h3>
+          <p><strong>Given</strong> a mobile/coarse review shell with the touch layer over a long plan, <strong>when</strong> the reviewer scrolls down and reverses up, <strong>then</strong> <code>#review.scrollTop</code> changes on the first gesture in each direction, the composer stays closed, and iframe/window scroll remain zero.</p>
+        </article>
+        <article id="bdd-controls">
+          <h3>BDD-5 — Representative controls do not regress</h3>
+          <p><strong>Given</strong> the copied database contains active, deferred, archived, and configurable plans, <strong>when</strong> the e2e control inventory clicks each distinct visible control type, <strong>then</strong> expected controls mutate in place or navigate intentionally, and no unexpected reload/flash is recorded.</p>
+        </article>
+      </section>
+
+      <section id="test-matrix">
+        <h2>Test coverage matrix</h2>
+        <table>
+          <thead><tr><th>Acceptance</th><th>Test layer</th><th>Coverage to add/update</th><th>Command</th></tr></thead>
+          <tbody>
+            <tr id="matrix-nav"><td>AC-1, AC-2</td><td>Playwright fixture</td><td>Add a nav refresh stability test in <code>src/test-fixtures/e2e-run.ts</code>: capture first-paint navigator labels, wait for <code>/api/plans/navigator</code>, observe DOM mutations for 1.2s, and assert labels/classes/order are stable and no raw column keys appear.</td><td><code>bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js</code></td></tr>
+            <tr id="matrix-webkit"><td>AC-3, AC-4</td><td>Playwright WebKit</td><td>Extend the existing WebKit wheel test with an immediate-wheel variant that does not wait for <code>window.scrollY</code> after a shell scroll/restore. The red assertion must prove the first wheel moves beyond the restored target position, not merely beyond the pre-wheel value, because the buggy path can false-green by landing only the queued restore.</td><td><code>bun run test:e2e</code></td></tr>
+            <tr id="matrix-touch"><td>AC-5</td><td>Contract plus Playwright instrumentation</td><td>Record <code>touchstart</code>/<code>touchmove</code> listener options across review, index, archive, deferred, and Kanban surfaces; fail on non-passive observer-only listeners.</td><td><code>bun run build &amp;&amp; node --test dist/__tests__/contracts.test.js</code>; <code>bun run test:e2e</code></td></tr>
+            <tr id="matrix-controls"><td>AC-6</td><td>Playwright fixture</td><td>Add a maintained representative control inventory smoke test based on <code>button-inventory.json</code>, using test-created plans instead of mutating every copied production row.</td><td><code>bun run test:e2e</code></td></tr>
+            <tr id="matrix-fixtures"><td>All</td><td>Fixture smoke</td><td>Run seeded comments and listener harness because comment creation and action buttons enqueue comments/notes.</td><td><code>bun run test:fixtures -- --scenario seeded-comment-stream</code><br><code>bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated</code></td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="phases">
+        <h2>Phase-by-phase execution plan</h2>
+        <article id="phase-p1" class="phase">
+          <h3>Phase P1 — Add red regression tests</h3>
+          <h4>End State</h4>
+          <p>Current code fails at least one new test for navigator refresh stability or immediate WebKit first-wheel behavior without weakening existing scroll/comment tests.</p>
+          <h4>Tests first</h4>
+          <ul>
+            <li>Add the nav stability assertion using the same timing from <code>nav-flash.json</code>.</li>
+            <li>Add the immediate WebKit first-wheel variant using the same timing from <code>webkit-small-wheel.json</code>; assert movement beyond the intended restored target so <code>0 → 240</code> does not pass when the expected first-wheel result is <code>&gt; 240</code>.</li>
+            <li>Add or update passive-listener instrumentation for sibling surfaces if it can be made deterministic.</li>
+            <li>Add the representative control-inventory smoke test from AC-6 so the button coverage promise is part of the RED/GREEN phase rather than only final verification.</li>
+          </ul>
+          <h4>Expected files</h4>
+          <ul><li><code>src/test-fixtures/e2e-run.ts</code></li><li><code>src/__tests__/contracts.test.ts</code> if a text/contract guard is cleaner for passive sibling listeners</li></ul>
+          <h4>Work</h4>
+          <p>Keep this phase test-only. Use test-created or copied fixture plans where possible; do not depend on the local production database.</p>
+          <h4>Verify</h4>
+          <pre><code>bun run build && node dist/test-fixtures/e2e-run.js</code></pre>
+        </article>
+
+        <article id="phase-p2" class="phase">
+          <h3>Phase P2 — Fix navigator display source of truth</h3>
+          <h4>End State</h4>
+          <p>The initial server navigator and async client navigator render identical human labels and ordering for the same data.</p>
+          <h4>Tests first</h4>
+          <p>Use the failing P1 nav stability test.</p>
+          <h4>Expected files</h4>
+          <ul><li><code>src/server/app.ts</code></li><li>Optional store/API type files if normalized display fields are added to <code>/api/plans/navigator</code></li></ul>
+          <h4>Work</h4>
+          <ul>
+            <li>Prefer returning normalized navigator display fields from <code>/api/plans/navigator</code>: title, status label, status class/readiness, progress label, modified label/source, attention flag, href metadata.</li>
+            <li>If keeping client rendering, pass the board column label map into <code>clientJs</code> and align <code>planItemStatus()</code> with <code>planNavigatorStatus()</code>.</li>
+            <li>Ensure filtering still uses stable keys, while display uses labels.</li>
+          </ul>
+          <h4>Verify</h4>
+          <pre><code>bun run build && node dist/test-fixtures/e2e-run.js</code></pre>
+        </article>
+
+        <article id="phase-p3" class="phase">
+          <h3>Phase P3 — Fix first-scroll handoff and sibling touch listeners</h3>
+          <h4>End State</h4>
+          <p>No pending global scroll work can consume the first real WebKit wheel/trackpad input, and non-review-shell touch observers are passive where they do not cancel defaults.</p>
+          <h4>Tests first</h4>
+          <p>Use the failing P1 WebKit and passive-listener tests.</p>
+          <h4>Expected files</h4>
+          <ul><li><code>src/server/app.ts</code></li></ul>
+          <h4>Work</h4>
+          <ul>
+            <li>Remove the global <code>window.scrollTo</code> override.</li>
+            <li>Replace it with explicit helper(s) at the scroll-preservation call sites that need WebKit timing control, with no queued rAF scroll left after navigation/refresh settles.</li>
+            <li>Audit <code>refreshPlanFrameContent()</code>, fragment-link navigation, and frame-height sync for unnecessary desktop scroll restoration.</li>
+            <li>Update index/archive/deferred/Kanban archive-toast touch dismiss listeners to use passive options.</li>
+          </ul>
+          <h4>Verify</h4>
+          <pre><code>bun run build && node dist/test-fixtures/e2e-run.js</code></pre>
+        </article>
+
+        <article id="phase-p4" class="phase">
+          <h3>Phase P4 — Full verification and implementation review</h3>
+          <h4>End State</h4>
+          <p>All targeted regressions are green, broad e2e gates pass, and a scoped implementation review finds no P1/P2/P3 issues.</p>
+          <h4>Tests first</h4>
+          <p>No new tests unless P2/P3 reveal an unguarded root cause.</p>
+          <h4>Expected files</h4>
+          <ul><li><code>thoughts/plans/e2e-scroll-flash-testing.html</code> progress update</li><li><code>thoughts/discoveries/e2e-scroll-flash-testing.md</code> if implementation deviates from this plan</li></ul>
+          <h4>Work</h4>
+          <p>Run a scoped code review and update this plan's progress, evidence, and decisions log before final handoff.</p>
+          <h4>Verify</h4>
+          <pre><code>bun run build
+bun run test
+bun run test:e2e
+bun run test:fixtures -- --scenario seeded-comment-stream
+bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated</code></pre>
+        </article>
+      </section>
+
+      <section id="verification">
+        <h2>Verification strategy</h2>
+        <p>Use the smallest failing tests first, then run the full gates because this touches the browser shell, comments, and queue-adjacent action buttons. The final proof must include WebKit because Chromium masks the first-wheel timing issue.</p>
+      </section>
+
+      <section id="non-goals">
+        <h2>Non-goals</h2>
+        <ul>
+          <li>No visual redesign of the review shell, Kanban board, or comment system.</li>
+          <li>No migration away from iframe-rendered plan content.</li>
+          <li>No custom scroll physics or JavaScript wheel/touch emulation.</li>
+          <li>No changes to queue semantics, comment lifecycle, source sync, or database schema unless needed only to expose normalized navigator display fields.</li>
+        </ul>
+      </section>
+
+      <section id="resume">
+        <h2>Resume instructions</h2>
+        <p>Implementation is validation-complete locally. Final run-plan state: scoped GPT/GLM implementation reviews passed, pre-PR GPT/GLM gate passed, a narrow post-Kanban GPT/GLM follow-up review passed, and final verification passed after the Kanban context-menu open-time scroll fix.</p>
+      </section>
+
+      <section id="decisions">
+        <h2>Decisions / Deviations Log</h2>
+        <article id="decision-2026-06-26-investigation">
+          <h3>2026-06-26 — Investigation found two primary root causes</h3>
+          <p>Navigator flash is a display-source mismatch between first paint and async client refresh. First-scroll bump is still reproducible in WebKit when input follows a pending/fresh shell scroll immediately; existing tests wait for scroll settlement and miss that path.</p>
+        </article>
+        <article id="decision-2026-06-26-no-code">
+          <h3>2026-06-26 — No product code changed during investigation</h3>
+          <p>The only files added for this step are the HTML plan and evidence assets under <code>thoughts/plans/</code>.</p>
+        </article>
+        <article id="decision-2026-06-26-readiness-cleared">
+          <h3>2026-06-26 — Execution-readiness review cleared</h3>
+          <p>Independent GPT and GLM readiness reviews both returned <code>PLAN_EXECUTION_READY</code>. Optional clarifications were integrated for the WebKit first-wheel false-green oracle and P1 control-inventory coverage before re-registering with <code>--execution-ready true</code>.</p>
+        </article>
+        <article id="decision-2026-06-26-implementation-complete">
+          <h3>2026-06-26 — Implementation, verification, and pre-PR review completed</h3>
+          <p>Implemented navigator label parity, explicit scroll restoration with a scoped wheel-handoff layer, passive sibling-surface touch listeners, Kanban menu internal/open-time scroll preservation, and regression coverage. Verification passed with <code>bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js</code>, <code>bun run test</code>, <code>bun run test:e2e</code>, <code>bun run test:fixtures -- --scenario seeded-comment-stream</code>, and <code>bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated</code>. Scoped GPT/GLM review, the Pi pre-PR GPT/GLM gate, and the narrow post-Kanban GPT/GLM follow-up review all reached clean verdicts; durable artifact: <code>thoughts/validation/pre-pr-reviews/2026-06-26-e2e-scroll-flash-testing.md</code>.</p>
+        </article>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

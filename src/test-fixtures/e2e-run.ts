@@ -962,10 +962,6 @@ try {
         if (!iframe?.contentDocument) return false;
         return Math.abs(iframe.offsetHeight - iframe.contentDocument.documentElement.scrollHeight) <= 2;
       }, undefined, { timeout: 3000 });
-      const webkitFrameBox = await webkitPage.locator('#plan-frame').boundingBox();
-      assert.ok(webkitFrameBox);
-      const webkitWheelPoint = { x: webkitFrameBox.x + webkitFrameBox.width / 2, y: webkitFrameBox.y + 220 };
-      await webkitPage.mouse.move(webkitWheelPoint.x, webkitWheelPoint.y);
       await webkitPage.evaluate(() => {
         (window as typeof window & { __wheelProbe?: Array<{ deltaY: number; defaultPrevented: boolean; target: string; scrollY: number; frameInternalScrollY: number }> }).__wheelProbe = [];
         window.addEventListener('wheel', event => {
@@ -980,9 +976,21 @@ try {
         });
         const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
         iframe.contentWindow?.scrollTo(0, 0);
-        window.scrollTo(0, 240);
+        window.scrollTo(0, 0);
       });
-      await webkitPage.waitForFunction(() => Math.abs(window.scrollY - 240) <= 1, undefined, { timeout: 3000 });
+      const expectedRestoredScrollY = await webkitPage.evaluate(() => {
+        const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+        const target = iframe.contentDocument!.querySelector<HTMLElement>('#link-target')!;
+        const frameRect = iframe.getBoundingClientRect();
+        const targetRect = target.getBoundingClientRect();
+        const navbarHeight = document.querySelector<HTMLElement>('#plan-navbar')!.getBoundingClientRect().height;
+        return window.scrollY + frameRect.top + targetRect.top - navbarHeight;
+      });
+      await webkitPage.frameLocator('#plan-frame').locator('#plan-test-link').click();
+      const webkitFrameBox = await webkitPage.locator('#plan-frame').boundingBox();
+      assert.ok(webkitFrameBox);
+      const webkitWheelPoint = { x: webkitFrameBox.x + webkitFrameBox.width / 2, y: 220 };
+      await webkitPage.mouse.move(webkitWheelPoint.x, webkitWheelPoint.y);
       const webkitWheelState = async (label: string) => webkitPage.evaluate(({ stateLabel, x, y }) => {
         const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
         const probe = (window as typeof window & { __wheelProbe?: Array<{ deltaY: number; defaultPrevented: boolean; target: string; scrollY: number; frameInternalScrollY: number }> }).__wheelProbe ?? [];
@@ -991,6 +999,7 @@ try {
           label: stateLabel,
           wheelPoint: { x, y },
           hitTarget: hit?.id || hit?.tagName || '',
+          pointWithinFrame: Boolean(x >= iframe.getBoundingClientRect().left && x <= iframe.getBoundingClientRect().right && y >= iframe.getBoundingClientRect().top && y <= iframe.getBoundingClientRect().bottom),
           windowScrollY: window.scrollY,
           frameInternalScrollY: iframe.contentWindow?.scrollY ?? 0,
           wheelEvents: probe
@@ -999,15 +1008,15 @@ try {
       const dispatchWebkitWheel = async (deltaY: number, label: string) => {
         const before = await webkitWheelState(label + ' before');
         await webkitPage.mouse.wheel(0, deltaY);
-        await webkitPage.waitForFunction(({ startingScrollY }) => window.scrollY !== startingScrollY, { startingScrollY: before.windowScrollY }, { timeout: 500 }).catch(() => undefined);
+        await webkitPage.waitForFunction(({ startingScrollY }) => window.scrollY > startingScrollY, { startingScrollY: before.windowScrollY }, { timeout: 500 }).catch(() => undefined);
         const after = await webkitWheelState(label + ' after');
         return { before, after };
       };
       const firstWebkitWheel = await dispatchWebkitWheel(12, 'first wheel');
       const secondWebkitWheel = await dispatchWebkitWheel(12, 'second wheel');
-      assert.equal(['plan-frame', 'plan-touch-layer'].includes(firstWebkitWheel.before.hitTarget), true, `WebKit wheel precondition should target the rendered plan surface: ${JSON.stringify(firstWebkitWheel)}`);
-      assert.equal(secondWebkitWheel.after.windowScrollY > firstWebkitWheel.after.windowScrollY, true, `WebKit second wheel should demonstrate the same-direction follow-up scrolls: ${JSON.stringify({ firstWebkitWheel, secondWebkitWheel })}`);
-      assert.equal(firstWebkitWheel.after.windowScrollY > firstWebkitWheel.before.windowScrollY, true, `WebKit first wheel over the rendered plan did not scroll; this reproduces the bump/pull where the first input is swallowed and the second scrolls: ${JSON.stringify({ firstWebkitWheel, secondWebkitWheel })}`);
+      assert.equal(firstWebkitWheel.before.pointWithinFrame, true, `WebKit wheel precondition should physically target the rendered plan surface: ${JSON.stringify(firstWebkitWheel)}`);
+      assert.equal(secondWebkitWheel.after.windowScrollY > firstWebkitWheel.after.windowScrollY, true, `WebKit second wheel should demonstrate the same-direction follow-up scrolls: ${JSON.stringify({ expectedRestoredScrollY, firstWebkitWheel, secondWebkitWheel })}`);
+      assert.equal(firstWebkitWheel.after.windowScrollY > expectedRestoredScrollY, true, `WebKit first wheel over the rendered plan must apply the input delta beyond the product scroll restoration; landing only at the restored target is the swallowed-input regression: ${JSON.stringify({ expectedRestoredScrollY, firstWebkitWheel, secondWebkitWheel })}`);
       assert.equal(firstWebkitWheel.after.frameInternalScrollY, 0);
       assert.equal(secondWebkitWheel.after.frameInternalScrollY, 0);
     } finally {
@@ -1198,6 +1207,36 @@ try {
     assert.equal(await page.locator('#state-filter-control').inputValue(), 'active');
     assert.equal(await page.locator('#project-filter-control').inputValue(), '');
     assert.equal(await page.locator('#plan-list-nav [aria-current="page"]').getAttribute('data-plan-id'), navSwitch.planId);
+
+    const navigatorSnapshot = async () => page.$$eval('[data-plan-nav-item]', items => items.map(item => ({
+      id: item.getAttribute('data-plan-id') || '',
+      title: item.querySelector('.plan-nav-title')?.textContent?.trim() || '',
+      status: item.querySelector('.plan-nav-pill')?.textContent?.trim() || '',
+      progress: item.querySelector('.plan-nav-meta span:not(.plan-nav-pill)')?.textContent?.trim() || '',
+      submeta: item.querySelector('.plan-nav-submeta')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      active: item.getAttribute('aria-current') === 'page',
+      className: item.className
+    })));
+    let releaseNavigatorRefresh: (() => void) | undefined;
+    await page.route('**/api/plans/navigator?**', async route => {
+      const response = await route.fetch();
+      await new Promise<void>(resolve => { releaseNavigatorRefresh = resolve; });
+      await route.fulfill({ response });
+    });
+    await page.goto(`${baseUrl}/p/${registered.planId}?projectKey=&lifecycle=active`);
+    await page.waitForSelector('[data-plan-nav-item]');
+    const firstPaintNavigator = await navigatorSnapshot();
+    if (!releaseNavigatorRefresh) throw new Error('Navigator refresh was not held for stability check');
+    const releasedNavigatorResponse = page.waitForResponse(response => response.url().includes('/api/plans/navigator') && response.status() === 200);
+    releaseNavigatorRefresh();
+    await releasedNavigatorResponse;
+    await page.waitForTimeout(1200);
+    const refreshedNavigator = await navigatorSnapshot();
+    assert.deepEqual(refreshedNavigator, firstPaintNavigator, `navigator should not flash to different labels/order/classes after async refresh: ${JSON.stringify({ firstPaintNavigator, refreshedNavigator })}`);
+    const navigatorText = refreshedNavigator.map(item => `${item.title} ${item.status} ${item.progress} ${item.submeta}`).join('\n');
+    assert.doesNotMatch(navigatorText, /\b(?:backlog|in_progress|done)\b/, `navigator should display human labels, not raw column keys: ${navigatorText}`);
+    await page.unroute('**/api/plans/navigator?**');
+
     await page.goto(`${baseUrl}/p/${linkedPlan.planId}`);
     await page.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#linked-plan-link'));
     const modifiedPlanLinkDefaultPrevented = await page.evaluate(() => {
@@ -1485,6 +1524,24 @@ try {
         && Math.abs(target.getBoundingClientRect().top + iframe.getBoundingClientRect().top - navbarHeight) <= 2;
     });
     assert.equal(await page.evaluate(() => document.querySelector<HTMLElement>('#composer')?.hidden), true);
+    await page.evaluate(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const link = iframe.contentDocument!.querySelector<HTMLElement>('#blank-plan-link')!;
+      const frameRect = iframe.getBoundingClientRect();
+      const linkRect = link.getBoundingClientRect();
+      const navbarHeight = document.querySelector<HTMLElement>('#plan-navbar')!.getBoundingClientRect().height;
+      window.scrollBy(0, frameRect.top + linkRect.top - navbarHeight - 12);
+    });
+    await page.waitForFunction(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const link = iframe.contentDocument!.querySelector<HTMLElement>('#blank-plan-link')!;
+      const frameRect = iframe.getBoundingClientRect();
+      const linkRect = link.getBoundingClientRect();
+      const navbarHeight = document.querySelector<HTMLElement>('#plan-navbar')!.getBoundingClientRect().height;
+      const linkTop = frameRect.top + linkRect.top;
+      return linkTop > navbarHeight && linkTop < window.innerHeight;
+    });
+    await page.waitForFunction(() => getComputedStyle(document.querySelector<HTMLElement>('#plan-touch-layer')!).display === 'none');
     const popupPromise = page.waitForEvent('popup', { timeout: 3000 });
     await page.frameLocator('#plan-frame').locator('#blank-plan-link').click();
     const popup = await popupPromise;
