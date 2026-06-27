@@ -1361,8 +1361,11 @@ test('registration instruction helper builds canonical agent-next guidance and r
   assert.match(instructions.processingLoop.join('\n'), /do not blindly loop successful claim commands/);
   assert.match(instructions.processingLoop.join('\n'), /Before implementation starts/);
   assert.match(instructions.processingLoop.join('\n'), /plan-review lifecycle set plan_abc active --url <registration service URL>/);
+  assert.match(instructions.processingLoop.join('\n'), /When board columns are applicable/);
   assert.match(instructions.processingLoop.join('\n'), /plan-review columns list --json --url <registration service URL>/);
   assert.match(instructions.processingLoop.join('\n'), /plan-review column set plan_abc in_progress --url <registration service URL>/);
+  assert.match(instructions.processingLoop.join('\n'), /Kanban is disabled or the document type does not support board columns, skip only the column alignment/);
+  assert.match(instructions.processingLoop.join('\n'), /If columns are applicable but the in-progress column is missing or ambiguous/);
   assert.match(instructions.processingLoop.join('\n'), /source sync or re-register/);
   assert.match(instructions.processingLoop.join('\n'), /plan-review ack <commentId> --claim <claimId> --summary/);
   assert.match(instructions.processingLoop.join('\n'), /Resolve only after a successful ack/);
@@ -1398,8 +1401,10 @@ test('registration API returns agent instructions additively across registration
     assert.match(snapshotData.agentInstructions.nextAction, /Drain pending comments/);
     assert.match(snapshotData.agentInstructions.nextAction, /Before implementation/);
     assert.match(snapshotData.agentInstructions.processingLoop.join('\n'), /plan-review lifecycle set .* active --url http:\/\/localhost:80/);
+    assert.match(snapshotData.agentInstructions.processingLoop.join('\n'), /When board columns are applicable/);
     assert.match(snapshotData.agentInstructions.processingLoop.join('\n'), /plan-review columns list --json --url http:\/\/localhost:80/);
     assert.match(snapshotData.agentInstructions.processingLoop.join('\n'), /plan-review column set .* in_progress --url http:\/\/localhost:80/);
+    assert.match(snapshotData.agentInstructions.processingLoop.join('\n'), /skip only the column alignment/);
     assert.equal(snapshotData.agentInstructions.serviceUrlRequired, true);
     assert.match(snapshotData.agentInstructions.serviceUrlInstruction, /debug-only/);
     assert.match(snapshotData.agentInstructions.preferredCommand, /agent next .* --wait --json --url http:\/\/localhost:80/);
