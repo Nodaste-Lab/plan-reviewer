@@ -44,6 +44,25 @@ try {
   });
   assert.equal(register.ok(), true);
   const registered = (await register.json()).data as { planId: string; versionId: string };
+  const mobileReadabilityHtml = `<!doctype html><html><head><title>Mobile Readability E2E</title><style>body{min-width:980px;margin:0;font-family:system-ui,sans-serif}.cards{display:grid;grid-template-columns:360px 360px 360px;gap:18px}.card{border:1px solid #94a3b8;padding:16px}table{min-width:920px}pre{width:940px}.wide-figure{width:880px}</style></head><body><main><section id="mobile-readable-section"><h1>Mobile readability fixture</h1><p id="mobile-readable-prose">${'Readable mobile prose should wrap inside the phone viewport without requiring pinch zoom or page-level horizontal panning. '.repeat(7)}</p><div class="cards"><article class="card"><h2>One</h2><p>Card content one.</p></article><article class="card"><h2>Two</h2><p>Card content two.</p></article><article class="card"><h2>Three</h2><p>Card content three.</p></article></div><table id="mobile-wide-table"><tr><th>Column Alpha</th><th>Column Beta</th><th>Column Gamma</th><th>Column Delta</th><th>Column Epsilon</th></tr><tr><td>Long but meaningful table value one</td><td>Long but meaningful table value two</td><td>Long but meaningful table value three</td><td>Long but meaningful table value four</td><td>Long but meaningful table value five</td></tr></table><pre id="mobile-wide-code"><code>const intentionallyLongLine = '${'abcdef0123456789'.repeat(18)}';</code></pre><pre class="mermaid">flowchart LR\n  A[Start] --> B[Validate mobile reader styles]\n  B --> C[Keep wide diagrams locally scrollable]\n  C --> D[Done]</pre><figure id="mobile-wide-figure" class="wide-figure"><img src="./diagram.png" alt="wide fixture image" width="880" height="180"><figcaption>Wide fixture figure</figcaption></figure><p id="mobile-refresh-marker">refresh v1</p></section></main></body></html>`;
+  const mobileReadabilityRegister = await context.post('/api/plans/register', {
+    data: {
+      repoKey: 'e2e-mobile-readability-repo',
+      repoName: 'e2e-mobile-readability',
+      rootPath: '/tmp/e2e-mobile-readability',
+      branch: 'main',
+      commitSha: 'e2e-mobile-readability-v1',
+      planPath: 'thoughts/plans/mobile-readability-e2e.html',
+      slug: 'mobile-readability-e2e',
+      html: mobileReadabilityHtml,
+      fileHash: sha256(mobileReadabilityHtml),
+      publicationMetadata: { worktreePath: '/tmp/e2e-mobile-readability', branch: 'main', linearIssue: 'NOD-E2E', executionReady: false, executionReadyBasis: 'agent-review-results' },
+      assets: [{ sourceUrl: './diagram.png', absolutePath: '/tmp/e2e-mobile-readability/diagram.png', bytesBase64: imageBytesBase64 }],
+      updateMode: 'upsert'
+    }
+  });
+  assert.equal(mobileReadabilityRegister.ok(), true);
+  const mobileReadabilityPlan = (await mobileReadabilityRegister.json()).data as { planId: string; versionId: string };
   const missingSourcePath = path.join(os.tmpdir(), `plan-review-e2e-missing-${process.pid}.html`);
   fs.rmSync(missingSourcePath, { force: true });
   const missingSourceRegister = await context.post('/api/plans/register', {
@@ -148,6 +167,10 @@ try {
   assert.match(clientCssText, /#review\{height:calc\(100dvh - var\(--plan-navbar-height\)\);overflow-y:auto;[^}]*-webkit-overflow-scrolling:touch\}/);
   assert.match(clientCssText, /#plan-frame\{width:100%;min-height:calc\(100dvh - var\(--plan-navbar-height\)\);border:0;display:block;pointer-events:none\}/);
   assert.match(clientCssText, /#plan-touch-layer\{display:block;[^}]*touch-action:pan-y;pointer-events:auto\}/);
+  assert.match(clientCssText, /#comments-tray-handle/);
+  assert.match(clientCssText, /#composer-context/);
+  assert.match(clientJsText, /ensureFrameMobileReadabilityStyles/);
+  assert.match(clientJsText, /plan-review-mobile-readability-styles/);
   // The old JS scroll-emulation must stay gone (it produced janky non-native scroll).
   assert.doesNotMatch(clientJsText, /touchScrollStart\.scrollY \+ touchScrollStart\.clientY - raw\.clientY/);
   assert.doesNotMatch(clientJsText, /frame\.contentWindow\.scrollBy/);
@@ -554,7 +577,7 @@ try {
     assert.match(await page.locator('.kanban-context-menu').innerText(), /Mark plan done/);
     assert.match(await page.locator('.kanban-context-menu').innerText(), /Defer plan/);
     assert.match(await page.locator('.kanban-context-menu').innerText(), /Archive plan/);
-    await page.setViewportSize({ width: 760, height: 180 });
+    await page.setViewportSize({ width: 900, height: 180 });
     await openKanbanContextMenu(moveMenuPlan.planId);
     assert.equal(await page.locator('.kanban-context-menu').evaluate(menu => menu.scrollHeight > menu.clientHeight), true);
     await page.locator('.kanban-context-menu').evaluate(menu => {
@@ -766,7 +789,7 @@ try {
     assert.equal(menuBox.x + menuBox.width <= 760, true);
     assert.equal(menuBox.y + menuBox.height <= 520, true);
     await page.setViewportSize({ width: 1280, height: 720 });
-    for (const plan of [moveMenuPlan, markDonePlan, failurePlan, rapidPlan, stalePlan, hiddenStalePlan, deferCancelPlan, deferFailurePlan, archiveFailurePlan, archivePlan]) {
+    for (const plan of [moveMenuPlan, markDonePlan, failurePlan, rapidPlan, stalePlan, hiddenStalePlan, deferCancelPlan, deferFailurePlan, archiveFailurePlan, archivePlan, mobileReadabilityPlan]) {
       assert.equal((await context.post(`/api/plans/${plan.planId}/archive`)).ok(), true);
     }
     assert.equal((await context.post(`/api/plans/${deferPlan.planId}/resume`, { data: { note: 'Clean up Kanban context menu e2e plan.' } })).ok(), true);
@@ -2264,6 +2287,125 @@ try {
     await page.click('#cancel-comment');
     await page.waitForFunction(() => document.querySelector<HTMLElement>('#composer')?.hidden === true);
 
+    const readabilityContext = await browser.newContext({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+    try {
+      const readabilityPage = await readabilityContext.newPage();
+      await readabilityPage.goto(`${baseUrl}/p/${mobileReadabilityPlan.planId}`);
+      await readabilityPage.waitForFunction(() => Boolean(document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#mobile-readable-section')));
+      await readabilityPage.waitForFunction(() => Boolean(document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('.plan-mermaid-rendered')));
+      const mobileReadabilityState = await readabilityPage.evaluate(() => {
+        const frame = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+        const doc = frame.contentDocument!;
+        const root = doc.documentElement;
+        const body = doc.body;
+        const prose = doc.querySelector<HTMLElement>('#mobile-readable-prose')!;
+        const table = doc.querySelector<HTMLElement>('#mobile-wide-table')!;
+        const code = doc.querySelector<HTMLElement>('#mobile-wide-code')!;
+        const mermaid = doc.querySelector<HTMLElement>('.plan-mermaid-rendered')!;
+        const cards = doc.querySelector<HTMLElement>('.cards')!;
+        const frameWidth = frame.getBoundingClientRect().width;
+        const wideRegionState = (element: HTMLElement) => {
+          const style = getComputedStyle(element);
+          return {
+            locallyScrollable: element.scrollWidth > element.clientWidth,
+            overflowX: style.overflowX,
+            affordance: style.boxShadow !== 'none' || style.borderInlineEndWidth !== '0px'
+          };
+        };
+        return {
+          styleInjected: Boolean(doc.getElementById('plan-review-mobile-readability-styles')),
+          noRootHorizontalOverflow: root.scrollWidth <= root.clientWidth + 1 && body.scrollWidth <= body.clientWidth + 1,
+          bodyMinWidth: getComputedStyle(body).minWidth,
+          proseFontSize: Number.parseFloat(getComputedStyle(prose).fontSize),
+          proseFitsFrame: prose.getBoundingClientRect().width <= frameWidth,
+          cardsSingleColumn: getComputedStyle(cards).gridTemplateColumns.split(' ').length === 1,
+          table: wideRegionState(table),
+          code: wideRegionState(code),
+          mermaid: wideRegionState(mermaid)
+        };
+      });
+      assert.deepEqual(mobileReadabilityState, {
+        styleInjected: true,
+        noRootHorizontalOverflow: true,
+        bodyMinWidth: '0px',
+        proseFontSize: 16,
+        proseFitsFrame: true,
+        cardsSingleColumn: true,
+        table: { locallyScrollable: true, overflowX: 'auto', affordance: true },
+        code: { locallyScrollable: true, overflowX: 'auto', affordance: true },
+        mermaid: { locallyScrollable: true, overflowX: 'auto', affordance: true }
+      });
+      const readabilityCdp = await readabilityContext.newCDPSession(readabilityPage);
+      const assertHorizontalTouchScroll = async (selector: string) => {
+        await readabilityPage.evaluate((targetSelector) => {
+          const review = document.querySelector<HTMLElement>('#review')!;
+          const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+          const target = iframe.contentDocument!.querySelector<HTMLElement>(targetSelector)!;
+          const reviewRect = review.getBoundingClientRect();
+          const frameRect = iframe.getBoundingClientRect();
+          const targetRect = target.getBoundingClientRect();
+          target.scrollLeft = 0;
+          review.scrollTo(0, review.scrollTop + frameRect.top - reviewRect.top + targetRect.top - 140);
+        }, selector);
+        await readabilityPage.waitForFunction((targetSelector) => {
+          const review = document.querySelector<HTMLElement>('#review')!;
+          const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+          const target = iframe.contentDocument!.querySelector<HTMLElement>(targetSelector)!;
+          const targetTop = iframe.getBoundingClientRect().top + target.getBoundingClientRect().top;
+          const reviewRect = review.getBoundingClientRect();
+          return targetTop > reviewRect.top + 40 && targetTop < reviewRect.bottom - 40;
+        }, selector, { timeout: 3000 });
+        const box = await readabilityPage.frameLocator('#plan-frame').locator(selector).boundingBox();
+        assert.ok(box);
+        const startX = Math.min(360, box.x + box.width - 28);
+        const endX = Math.max(28, box.x + 28);
+        const y = Math.max(120, Math.min(760, box.y + Math.min(42, box.height / 2)));
+        await readabilityCdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: startX, y }] });
+        for (let step = 1; step <= 10; step += 1) {
+          await readabilityCdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: startX + ((endX - startX) * step) / 10, y }] });
+          await readabilityPage.waitForTimeout(8);
+        }
+        await readabilityCdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        await readabilityPage.waitForFunction((targetSelector) => {
+          const target = document.querySelector<HTMLIFrameElement>('#plan-frame')!.contentDocument!.querySelector<HTMLElement>(targetSelector)!;
+          return target.scrollLeft > 20;
+        }, selector, { timeout: 3000 });
+      };
+      await assertHorizontalTouchScroll('#mobile-wide-table');
+      await assertHorizontalTouchScroll('#mobile-wide-code');
+      await assertHorizontalTouchScroll('.plan-mermaid-rendered');
+      assert.equal(await readabilityPage.evaluate(() => document.querySelector<HTMLElement>('#composer')?.hidden), true);
+      const mobileReadabilityHtmlV2 = mobileReadabilityHtml.replace('refresh v1', 'refresh v2');
+      const mobileReadabilityUpdate = await context.post('/api/plans/register', {
+        data: {
+          repoKey: 'e2e-mobile-readability-repo',
+          repoName: 'e2e-mobile-readability',
+          rootPath: '/tmp/e2e-mobile-readability',
+          branch: 'main',
+          commitSha: 'e2e-mobile-readability-v2',
+          planPath: 'thoughts/plans/mobile-readability-e2e.html',
+          slug: 'mobile-readability-e2e',
+          html: mobileReadabilityHtmlV2,
+          fileHash: sha256(mobileReadabilityHtmlV2),
+          publicationMetadata: { worktreePath: '/tmp/e2e-mobile-readability', branch: 'main', linearIssue: 'NOD-E2E', executionReady: false, executionReadyBasis: 'agent-review-results' },
+          assets: [{ sourceUrl: './diagram.png', absolutePath: '/tmp/e2e-mobile-readability/diagram.png', bytesBase64: imageBytesBase64 }],
+          updateMode: 'upsert'
+        }
+      });
+      assert.equal(mobileReadabilityUpdate.ok(), true);
+      await readabilityPage.waitForFunction(() => {
+        const doc = document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument;
+        return Boolean(doc?.body.textContent?.includes('refresh v2') && doc.getElementById('plan-review-mobile-readability-styles'));
+      }, undefined, { timeout: 10000 });
+      await readabilityPage.setViewportSize({ width: 486, height: 902 });
+      await readabilityPage.waitForFunction(() => {
+        const doc = document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument;
+        return Boolean(doc && doc.documentElement.scrollWidth <= doc.documentElement.clientWidth + 1 && doc.body.scrollWidth <= doc.body.clientWidth + 1);
+      }, undefined, { timeout: 3000 });
+    } finally {
+      await readabilityContext.close();
+    }
+
     const configuredMobileDefault = await context.put('/api/configuration', {
       data: {
         showPlanNavigatorByDefault: false,
@@ -2589,10 +2731,39 @@ try {
     await page.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#text-target'));
     assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector<HTMLElement>('#desktop-plan-nav-toggle')!).display), 'none');
     assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector<HTMLElement>('#plan-list-nav')!).display), 'none');
+    const beforeTrayScrollTop = await page.evaluate(() => document.querySelector<HTMLElement>('#review')!.scrollTop);
+    assert.match(String(await page.locator('#mobile-comments-toggle').innerText()), /Comments \(\d+/);
     await page.click('#mobile-comments-toggle');
     await page.waitForFunction(() => document.body.classList.contains('comments-open'));
     assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector<HTMLElement>('#plan-notes-panel')!).display !== 'none'), true);
     assert.match(await page.locator('#plan-notes-panel').innerText(), /Mobile plan note remains visible/);
+    const trayState = await page.evaluate(expectedScrollTop => {
+      const toggle = document.querySelector<HTMLElement>('#mobile-comments-toggle')!;
+      const handle = document.querySelector<HTMLElement>('#comments-tray-handle')!;
+      const filters = document.querySelector<HTMLElement>('#comments-status-filters')!;
+      const jump = document.querySelector<HTMLElement>('.comment-jump')!;
+      const toggleRect = toggle.getBoundingClientRect();
+      const jumpRect = jump.getBoundingClientRect();
+      return {
+        expanded: toggle.getAttribute('aria-expanded'),
+        toggleHeight: toggleRect.height,
+        handleVisible: getComputedStyle(handle).display !== 'none' && handle.getBoundingClientRect().width >= 40,
+        filtersText: filters.textContent || '',
+        jumpHeight: jumpRect.height,
+        jumpLabel: jump.getAttribute('aria-label') || '',
+        scrollPreserved: document.querySelector<HTMLElement>('#review')!.scrollTop === expectedScrollTop
+      };
+    }, beforeTrayScrollTop);
+    assert.equal(trayState.expanded, 'true');
+    assert.equal(trayState.toggleHeight >= 44, true);
+    assert.equal(trayState.handleVisible, true);
+    assert.match(trayState.filtersText, /All \d+/);
+    assert.match(trayState.filtersText, /Pending \d+/);
+    assert.equal(trayState.jumpHeight >= 44, true);
+    assert.match(trayState.jumpLabel, /Jump to comment #\d+ anchor/);
+    assert.equal(trayState.scrollPreserved, true);
+    await page.locator('.comment-jump').first().click();
+    await page.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelectorAll('.comment-anchor').length);
     await page.click('#mobile-comments-toggle');
     await page.waitForFunction(() => !document.body.classList.contains('comments-open'));
     await page.evaluate(() => {
@@ -2614,6 +2785,10 @@ try {
       target.dispatchEvent(end);
     });
     await page.waitForFunction(() => document.querySelector<HTMLElement>('#composer')?.hidden === false);
+    await page.waitForFunction(() => {
+      const context = document.querySelector<HTMLElement>('#composer-context');
+      return Boolean(context && !context.hidden && /Text annotation|Selected:/.test(context.textContent || ''));
+    });
     await page.waitForFunction(() => {
       const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
       const selection = iframe.contentDocument!.getSelection()!;
@@ -2679,6 +2854,9 @@ try {
     await page.fill('#comment-body', 'Mobile touch annotation comment');
     await page.click('#submit-comment');
     await page.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('Mobile touch annotation comment'));
+    const mobileTouchCommentCount = await context.get(`/api/plans/${registered.planId}/comments`);
+    assert.equal(mobileTouchCommentCount.ok(), true);
+    assert.equal(((await mobileTouchCommentCount.json()).data.comments as Array<{ body: string }>).filter(comment => comment.body === 'Mobile touch annotation comment').length, 1);
     assert.equal(await page.evaluate(() => document.body.classList.contains('comments-open')), true);
     await page.click('#mobile-comments-toggle');
     await page.evaluate(() => {
@@ -2696,6 +2874,10 @@ try {
       target.dispatchEvent(end);
     });
     await page.waitForSelector('#lightbox:not([hidden])');
+    await page.waitForFunction(() => {
+      const context = document.querySelector<HTMLElement>('#composer-context');
+      return Boolean(context && !context.hidden && /Image:|diagram\.png|image annotation/.test(context.textContent || ''));
+    });
     assert.equal(await page.evaluate(() => {
       const controls = [...document.querySelectorAll<HTMLElement>('#comment-body,#submit-comment')];
       return controls.every(control => {
