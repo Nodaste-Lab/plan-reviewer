@@ -2615,8 +2615,12 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     assert.match(kanban.body, /data-column-is-done="false"/);
     assert.match(kanban.body, /data-done-column-key="done"/);
     assert.match(kanban.body, /data-column-count/);
-    assert.match(kanban.body, /class="kanban-card" draggable="true" tabindex="0" aria-label="Card actions for/);
-    assert.match(kanban.body, /data-plan-id="[^"]+" data-plan-title="[^"]+" data-column="backlog"/);
+    assert.match(kanban.body, /class="kanban-card" draggable="true" tabindex="0" aria-label="Open plan /);
+    assert.match(kanban.body, /data-plan-id="[^"]+" data-plan-title="[^"]+" data-plan-url="\/p\/[^"]+" data-column="backlog"/);
+    assert.doesNotMatch(kanban.body, /Details \/ Open/);
+    assert.doesNotMatch(kanban.body, /card-detail-link/);
+    assert.match(kanban.body, /cardOpenSuppressedUntil=Date\.now\(\)\+800/);
+    assert.match(kanban.body, /if\(kanbanMenu\)\{closeKanbanMenu\(\);return;\}/);
     assert.match(kanban.body, /kanban-context-menu/);
     assert.match(kanban.body, /role','menu'/);
     assert.match(kanban.body, /menuitemradio/);
