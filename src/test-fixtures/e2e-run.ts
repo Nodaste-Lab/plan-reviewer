@@ -579,6 +579,10 @@ try {
 
     const moveMenuPlan = await registerTinyPlan('kanban-menu-move');
     await openKanbanContextMenu(moveMenuPlan.planId);
+    await page.locator(`[data-plan-id="${moveMenuPlan.planId}"] .card-summary`).click();
+    await page.waitForSelector('.kanban-context-menu', { state: 'detached' });
+    assert.equal(page.url(), `${baseUrl}/`);
+    await openKanbanContextMenu(moveMenuPlan.planId);
     assert.equal(await page.locator('.kanban-context-menu').getAttribute('role'), 'menu');
     assert.equal(await page.locator('.kanban-context-menu button[role="menuitemradio"]').count(), 4);
     assert.match(await page.locator('.kanban-context-menu').innerText(), /Backlog/);

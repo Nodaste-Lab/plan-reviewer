@@ -2620,6 +2620,7 @@ test('organization APIs persist columns, pins, projects, and lifecycle metadata'
     assert.doesNotMatch(kanban.body, /Details \/ Open/);
     assert.doesNotMatch(kanban.body, /card-detail-link/);
     assert.match(kanban.body, /cardOpenSuppressedUntil=Date\.now\(\)\+800/);
+    assert.match(kanban.body, /if\(kanbanMenu\)\{closeKanbanMenu\(\);return;\}/);
     assert.match(kanban.body, /kanban-context-menu/);
     assert.match(kanban.body, /role','menu'/);
     assert.match(kanban.body, /menuitemradio/);
