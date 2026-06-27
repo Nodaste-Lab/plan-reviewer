@@ -4928,6 +4928,9 @@ test('CLI register prints required watcher instructions and preserves JSON paylo
     assert.match(human.stdout, /REQUIRED NEXT ACTION:/);
     assert.match(human.stdout, /Before draining or listening for comments/);
     assert.match(human.stdout, /Then drain pending comments with agent next --no-wait/);
+    assert.match(human.stdout, /Activate plan before queue commands:/);
+    assert.match(human.stdout, /plan-review lifecycle set plan_cli_ active --url http:\/\/127\.0\.0\.1:\d+/);
+    assert.ok(human.stdout.indexOf('Activate plan before queue commands:') < human.stdout.indexOf('Drain pending comments:'));
     assert.match(human.stdout, /Drain pending comments:/);
     assert.match(human.stdout, /plan-review agent next plan_cli_ --no-wait --json --url http:\/\/127\.0\.0\.1:\d+/);
     assert.match(human.stdout, /Primary listener command:/);
