@@ -1336,8 +1336,11 @@ test('registration instruction helper builds canonical agent-next guidance and r
   assert.equal(instructions.type, 'plan-review.registration.instructions.v1');
   assert.equal(instructions.required, true);
   assert.match(instructions.summary, /queue-backed agent next/);
+  assert.match(instructions.summary, /align reviewer status/);
   assert.match(instructions.nextAction, /Drain pending comments/);
   assert.match(instructions.nextAction, /process and ack it before starting another listener/);
+  assert.match(instructions.nextAction, /Before implementation/);
+  assert.match(instructions.nextAction, /active\/in_progress/);
   assert.equal(instructions.serviceUrlRequired, true);
   assert.match(instructions.serviceUrlInstruction, /optional watch command is debug-only/);
   assert.equal(instructions.reviewUrl, '/p/plan_abc');
@@ -1356,6 +1359,11 @@ test('registration instruction helper builds canonical agent-next guidance and r
   assert.match(instructions.processingLoop.join('\n'), /commentId and claimId/);
   assert.match(instructions.processingLoop.join('\n'), /exits successfully after exactly one claim/);
   assert.match(instructions.processingLoop.join('\n'), /do not blindly loop successful claim commands/);
+  assert.match(instructions.processingLoop.join('\n'), /Before implementation starts/);
+  assert.match(instructions.processingLoop.join('\n'), /plan-review lifecycle set plan_abc active --url <registration service URL>/);
+  assert.match(instructions.processingLoop.join('\n'), /plan-review columns list --json --url <registration service URL>/);
+  assert.match(instructions.processingLoop.join('\n'), /plan-review column set plan_abc in_progress --url <registration service URL>/);
+  assert.match(instructions.processingLoop.join('\n'), /source sync or re-register/);
   assert.match(instructions.processingLoop.join('\n'), /plan-review ack <commentId> --claim <claimId> --summary/);
   assert.match(instructions.processingLoop.join('\n'), /Resolve only after a successful ack/);
   assert.match(instructions.processingLoop.join('\n'), /plan-review pr link plan_abc --url <github-pr-url> --service-url <registration service URL> --json/);
@@ -1386,7 +1394,12 @@ test('registration API returns agent instructions additively across registration
     assert.equal(snapshotData.agentInstructions.type, 'plan-review.registration.instructions.v1');
     assert.equal(snapshotData.agentInstructions.required, true);
     assert.match(snapshotData.agentInstructions.summary, /queue-backed agent next/);
+    assert.match(snapshotData.agentInstructions.summary, /align reviewer status/);
     assert.match(snapshotData.agentInstructions.nextAction, /Drain pending comments/);
+    assert.match(snapshotData.agentInstructions.nextAction, /Before implementation/);
+    assert.match(snapshotData.agentInstructions.processingLoop.join('\n'), /plan-review lifecycle set .* active --url http:\/\/localhost:80/);
+    assert.match(snapshotData.agentInstructions.processingLoop.join('\n'), /plan-review columns list --json --url http:\/\/localhost:80/);
+    assert.match(snapshotData.agentInstructions.processingLoop.join('\n'), /plan-review column set .* in_progress --url http:\/\/localhost:80/);
     assert.equal(snapshotData.agentInstructions.serviceUrlRequired, true);
     assert.match(snapshotData.agentInstructions.serviceUrlInstruction, /debug-only/);
     assert.match(snapshotData.agentInstructions.preferredCommand, /agent next .* --wait --json --url http:\/\/localhost:80/);
