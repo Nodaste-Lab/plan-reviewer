@@ -15,19 +15,20 @@ relink_formula() {
 }
 
 verify_keg_metadata() {
+  local mode="${1:-strict}"
   local opt_path
   opt_path="$(brew --prefix "$formula")"
   cellar_path="$(realpath "$opt_path")"
   if [[ "$cellar_path" != */Cellar/plan-reviewer/HEAD-* ]]; then
-    echo "ERROR: expected a Homebrew HEAD Cellar path, got: $cellar_path" >&2
+    [[ "$mode" == "strict" ]] && echo "ERROR: expected a Homebrew HEAD Cellar path, got: $cellar_path" >&2
     return 1
   fi
   if [[ ! -f "$cellar_path/INSTALL_RECEIPT.json" ]]; then
-    echo "ERROR: missing Homebrew INSTALL_RECEIPT.json in $cellar_path" >&2
+    [[ "$mode" == "strict" ]] && echo "ERROR: missing Homebrew INSTALL_RECEIPT.json in $cellar_path" >&2
     return 1
   fi
   if [[ ! -f "$cellar_path/.brew/plan-reviewer.rb" ]]; then
-    echo "ERROR: missing Homebrew formula metadata in $cellar_path/.brew" >&2
+    [[ "$mode" == "strict" ]] && echo "ERROR: missing Homebrew formula metadata in $cellar_path/.brew" >&2
     return 1
   fi
 }
@@ -63,7 +64,7 @@ fi
 relink_formula
 
 echo "==> Verifying Homebrew keg metadata"
-if ! verify_keg_metadata; then
+if ! verify_keg_metadata repairable; then
   echo "==> Keg metadata incomplete; reinstalling the existing Homebrew formula options"
   brew reinstall "$formula"
   relink_formula

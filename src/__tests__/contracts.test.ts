@@ -5604,6 +5604,7 @@ test('Homebrew HEAD deploy guard preserves service-manageable keg metadata', () 
   assert.match(script, /brew reinstall "\$formula"/);
   assert.match(script, /brew unlink "\$service"/);
   assert.match(script, /brew link --overwrite "\$formula"/);
+  assert.match(script, /verify_keg_metadata repairable/);
   assert.match(script, /Keg metadata incomplete; reinstalling the existing Homebrew formula options/);
   assert.match(script, /Verifying repaired Homebrew keg metadata/);
   assert.match(script, /brew services restart "\$service"/);
