@@ -2958,6 +2958,13 @@ try {
     await page.waitForFunction(planId => Boolean(document.querySelector(`[data-plan-nav-item][data-plan-id="${planId}"]`)), registered.planId);
     const archivedNavItemText = await page.locator(`[data-plan-nav-item][data-plan-id="${registered.planId}"]`).innerText();
     assert.match(archivedNavItemText, /Archived ·/);
+    await page.selectOption('#state-filter-control', '');
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#plan-list-nav')?.getAttribute('aria-label') === 'All plans');
+    assert.equal(await page.locator(`[data-plan-nav-item][data-plan-id="${registered.planId}"]`).count(), 1);
+    const allStatesNavItemText = await page.locator(`[data-plan-nav-item][data-plan-id="${registered.planId}"]`).innerText();
+    assert.match(allStatesNavItemText, /Archived ·/);
+    await page.selectOption('#state-filter-control', 'archived');
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#plan-list-nav')?.getAttribute('aria-label') === 'Archived plans');
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+O' : 'Control+O');
     await page.waitForSelector('#quick-open-backdrop:not([hidden])');
     assert.equal(await page.locator(`[data-quick-open-result][data-plan-id="${registered.planId}"]`).count(), 1);

@@ -1150,7 +1150,7 @@ function mergePlanIntoItems(items, updatedPlan){
 }
 function activeNavigatorItems(items){
   const filters = currentNavigatorFilters();
-  return localPlanArchived && filters.state !== 'archived' ? items.filter(item => String(item?.plan?.id || '') !== String(planId)) : items;
+  return localPlanArchived && filters.state === 'active' ? items.filter(item => String(item?.plan?.id || '') !== String(planId)) : items;
 }
 function removeCurrentPlanFromRenderedNavigator(){
   planListItems?.querySelector('[data-plan-id="'+CSS.escape(String(planId))+'"]')?.remove();
