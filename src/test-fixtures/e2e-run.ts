@@ -19,7 +19,7 @@ try {
   const slowImageBytes = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="120" height="180"><rect width="120" height="180" fill="#38bdf8"/></svg>');
   const slowImageBytesBase64 = slowImageBytes.toString('base64');
   const slowImageAssetPath = `/assets/${sha256(slowImageBytes)}`;
-  const html = `<!doctype html><html><head><title>E2E Plan</title></head><body><main><div style="height:240px"></div><section id="dom-annotation"><h1>DOM annotation</h1><p>Plan index target.</p></section><section id="link-annotation"><h2>Link annotation</h2><p id="link-comment-target"><span id="link-adjacent-text">Commentable text before</span> <a id="plan-test-link" href="#link-target">fragment link</a> <span>after link.</span></p><p><a id="blank-plan-link" href="${baseUrl}/favicon.svg" target="_blank">Open asset in new tab</a></p><p><label id="wrapping-control-label"><input id="wrapped-control" type="checkbox"> <span id="wrapped-control-label-text">Toggle wrapped control</span></label></p><div id="link-target" style="margin-top:20px">Link target</div></section><section id="text-annotation"><h2>Text annotation</h2><p id="text-target">Text range context target for reviewer selection.</p></section><figure><img src="./diagram.png" alt="image annotation" width="120" height="90"></figure><p id="width-sensitive-reflow">${'Width-sensitive desktop shell transition content wraps across many lines. '.repeat(80)}</p><p><a id="empty-fragment-link" href="#">Back to top</a></p><div style="height:1200px"></div></main></body></html>`;
+  const html = `<!doctype html><html><head><title>E2E Plan</title></head><body><main><div style="height:240px"></div><section id="dom-annotation"><h1>DOM annotation</h1><p>Plan index target.</p></section><section id="link-annotation"><h2>Link annotation</h2><p id="link-comment-target"><span id="link-adjacent-text">Commentable text before</span> <a id="plan-test-link" href="#link-target">fragment link</a> <span>after link.</span></p><p><a id="blank-plan-link" href="${baseUrl}/favicon.svg" target="_blank">Open asset in new tab</a></p><p><label id="wrapping-control-label"><input id="wrapped-control" type="checkbox"> <span id="wrapped-control-label-text">Toggle wrapped control</span></label></p><div id="link-target" style="margin-top:20px">Link target</div></section><section id="text-annotation"><h2>Text annotation</h2><p id="text-target">Text range context target for reviewer selection.</p></section><figure><img src="./diagram.png" alt="image annotation" width="120" height="90"></figure><p id="width-sensitive-reflow">${'Width-sensitive desktop shell transition content wraps across many lines. '.repeat(80)}</p><p><a id="empty-fragment-link" href="#">Back to top</a></p><div style="height:1200px"></div><div id="fractional-height-scroll-leak" style="height:0.25px"></div></main></body></html>`;
   const register = await context.post('/api/plans/register', {
     data: {
       repoKey: 'e2e-repo',
@@ -895,6 +895,20 @@ try {
       };
     });
     assert.deepEqual(desktopScrollSurfaceBefore, { outerScrollable: true, frameSizedToContent: true, frameInternalScrollY: 0 });
+    const fractionalFrameOverflow = await page.evaluate(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const doc = iframe.contentDocument!;
+      return {
+        frameHeight: iframe.getBoundingClientRect().height,
+        documentRectHeight: doc.documentElement.getBoundingClientRect().height,
+        bodyRectHeight: doc.body.getBoundingClientRect().height,
+        documentScrollHeight: doc.documentElement.scrollHeight,
+        bodyScrollHeight: doc.body.scrollHeight,
+        innerHeight: iframe.contentWindow?.innerHeight ?? 0,
+        overflow: doc.documentElement.getBoundingClientRect().height - iframe.getBoundingClientRect().height
+      };
+    });
+    assert.equal(fractionalFrameOverflow.overflow <= 0, true, `Desktop rendered plan iframe height must cover fractional rendered document height; physical wheel input latches to subpixel iframe overflow and swallows first-direction events before parent window scrolls: ${JSON.stringify(fractionalFrameOverflow)}`);
     const desktopStickyColumnHeights = await page.evaluate(() => {
       const navbarBox = document.querySelector<HTMLElement>('#plan-navbar')!.getBoundingClientRect();
       const navBox = document.querySelector<HTMLElement>('#plan-list-nav')!.getBoundingClientRect();
@@ -957,9 +971,34 @@ try {
     const desktopFrameBox = await page.locator('#plan-frame').boundingBox();
     assert.ok(desktopFrameBox);
     await page.mouse.move(desktopFrameBox.x + desktopFrameBox.width / 2, desktopFrameBox.y + 220);
+    const desktopWheelBefore = await page.evaluate(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const doc = iframe.contentDocument!;
+      return {
+        windowScrollY: window.scrollY,
+        frameInternalScrollY: iframe.contentWindow?.scrollY ?? 0,
+        frameHeight: iframe.getBoundingClientRect().height,
+        documentRectHeight: doc.documentElement.getBoundingClientRect().height,
+        documentScrollHeight: doc.documentElement.scrollHeight,
+        innerHeight: iframe.contentWindow?.innerHeight ?? 0
+      };
+    });
     await page.mouse.wheel(0, 420);
-    await page.waitForFunction(() => window.scrollY > 0);
-    assert.equal(await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollY), 0);
+    await page.waitForFunction(() => window.scrollY > 0, undefined, { timeout: 1000 }).catch(() => undefined);
+    const desktopWheelAfter = await page.evaluate(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const doc = iframe.contentDocument!;
+      return {
+        windowScrollY: window.scrollY,
+        frameInternalScrollY: iframe.contentWindow?.scrollY ?? 0,
+        frameHeight: iframe.getBoundingClientRect().height,
+        documentRectHeight: doc.documentElement.getBoundingClientRect().height,
+        documentScrollHeight: doc.documentElement.scrollHeight,
+        innerHeight: iframe.contentWindow?.innerHeight ?? 0
+      };
+    });
+    assert.equal(desktopWheelAfter.windowScrollY > 0, true, `Chromium first wheel over the rendered plan should move parent scroll immediately: ${JSON.stringify({ desktopWheelBefore, desktopWheelAfter })}`);
+    assert.equal(desktopWheelAfter.frameInternalScrollY, 0);
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.waitForFunction(() => window.scrollY === 0);
 
@@ -1006,25 +1045,37 @@ try {
       assert.ok(webkitFrameBox);
       const webkitWheelPoint = { x: webkitFrameBox.x + webkitFrameBox.width / 2, y: 220 };
       await webkitPage.mouse.move(webkitWheelPoint.x, webkitWheelPoint.y);
-      const webkitWheelState = async (label: string) => webkitPage.evaluate(({ stateLabel, x, y }) => {
+      const webkitWheelState = async (label: string, point = webkitWheelPoint) => webkitPage.evaluate(({ stateLabel, x, y }) => {
         const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+        const nav = document.querySelector<HTMLElement>('#plan-list-nav')!;
+        const touchLayer = document.querySelector<HTMLElement>('#plan-touch-layer');
         const probe = (window as typeof window & { __wheelProbe?: Array<{ deltaY: number; defaultPrevented: boolean; target: string; scrollY: number; frameInternalScrollY: number }> }).__wheelProbe ?? [];
         const hit = document.elementFromPoint(x, y) as HTMLElement | null;
+        const layerStyle = touchLayer ? getComputedStyle(touchLayer) : null;
         return {
           label: stateLabel,
           wheelPoint: { x, y },
           hitTarget: hit?.id || hit?.tagName || '',
+          touchLayerDisplay: layerStyle?.display || '',
+          touchLayerPointerEvents: layerStyle?.pointerEvents || '',
           pointWithinFrame: Boolean(x >= iframe.getBoundingClientRect().left && x <= iframe.getBoundingClientRect().right && y >= iframe.getBoundingClientRect().top && y <= iframe.getBoundingClientRect().bottom),
+          pointWithinNav: Boolean(x >= nav.getBoundingClientRect().left && x <= nav.getBoundingClientRect().right && y >= nav.getBoundingClientRect().top && y <= nav.getBoundingClientRect().bottom),
           windowScrollY: window.scrollY,
+          navScrollTop: nav.scrollTop,
           frameInternalScrollY: iframe.contentWindow?.scrollY ?? 0,
           wheelEvents: probe
         };
-      }, { stateLabel: label, ...webkitWheelPoint });
-      const dispatchWebkitWheel = async (deltaY: number, label: string) => {
-        const before = await webkitWheelState(label + ' before');
+      }, { stateLabel: label, ...point });
+      const dispatchWebkitWheel = async (deltaY: number, label: string, point = webkitWheelPoint, owner: 'window' | 'nav' = 'window') => {
+        const before = await webkitWheelState(label + ' before', point);
+        await webkitPage.mouse.move(point.x, point.y);
         await webkitPage.mouse.wheel(0, deltaY);
-        await webkitPage.waitForFunction(({ startingScrollY }) => window.scrollY > startingScrollY, { startingScrollY: before.windowScrollY }, { timeout: 500 }).catch(() => undefined);
-        const after = await webkitWheelState(label + ' after');
+        await webkitPage.waitForFunction(({ startingValue, direction, scrollOwner }) => {
+          const nav = document.querySelector<HTMLElement>('#plan-list-nav')!;
+          const currentValue = scrollOwner === 'nav' ? nav.scrollTop : window.scrollY;
+          return direction > 0 ? currentValue > startingValue : currentValue < startingValue;
+        }, { startingValue: owner === 'nav' ? before.navScrollTop : before.windowScrollY, direction: Math.sign(deltaY), scrollOwner: owner }, { timeout: 500 }).catch(() => undefined);
+        const after = await webkitWheelState(label + ' after', point);
         return { before, after };
       };
       const firstWebkitWheel = await dispatchWebkitWheel(12, 'first wheel');
@@ -1034,6 +1085,30 @@ try {
       assert.equal(firstWebkitWheel.after.windowScrollY > expectedRestoredScrollY, true, `WebKit first wheel over the rendered plan must apply the input delta beyond the product scroll restoration; landing only at the restored target is the swallowed-input regression: ${JSON.stringify({ expectedRestoredScrollY, firstWebkitWheel, secondWebkitWheel })}`);
       assert.equal(firstWebkitWheel.after.frameInternalScrollY, 0);
       assert.equal(secondWebkitWheel.after.frameInternalScrollY, 0);
+      const firstReverseWebkitWheel = await dispatchWebkitWheel(-12, 'first reverse wheel');
+      const secondReverseWebkitWheel = await dispatchWebkitWheel(-12, 'second reverse wheel');
+      assert.equal(firstReverseWebkitWheel.before.pointWithinFrame, true, `WebKit reverse wheel precondition should target the rendered plan surface: ${JSON.stringify(firstReverseWebkitWheel)}`);
+      assert.equal(firstReverseWebkitWheel.after.windowScrollY < firstReverseWebkitWheel.before.windowScrollY, true, `WebKit first reversed wheel over the rendered plan must move immediately; requiring a second reversed wheel is the direction-change swallowed-input regression: ${JSON.stringify({ firstWebkitWheel, secondWebkitWheel, firstReverseWebkitWheel, secondReverseWebkitWheel })}`);
+      assert.equal(secondReverseWebkitWheel.after.windowScrollY < firstReverseWebkitWheel.after.windowScrollY, true, `WebKit second reversed wheel should continue moving in the reversed direction: ${JSON.stringify({ firstReverseWebkitWheel, secondReverseWebkitWheel })}`);
+      assert.equal(firstReverseWebkitWheel.after.frameInternalScrollY, 0);
+      assert.equal(secondReverseWebkitWheel.after.frameInternalScrollY, 0);
+      const webkitNavWheelPoint = await webkitPage.evaluate(async () => {
+        document.body.classList.remove('plan-nav-collapsed');
+        const nav = document.querySelector<HTMLElement>('#plan-list-nav')!;
+        nav.inert = false;
+        nav.setAttribute('aria-hidden', 'false');
+        nav.scrollTop = 0;
+        window.scrollTo(0, 0);
+        await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+        await new Promise(resolve => setTimeout(resolve, 280));
+        const target = nav.querySelector<HTMLElement>('[data-plan-nav-item], a') || nav;
+        const rect = target.getBoundingClientRect();
+        return { x: rect.left + rect.width / 2, y: rect.top + Math.max(8, Math.min(rect.height / 2, 80)) };
+      });
+      const navWebkitWheel = await dispatchWebkitWheel(12, 'left navigator first wheel', webkitNavWheelPoint, 'window');
+      assert.equal(navWebkitWheel.before.pointWithinNav, true, `WebKit navigator control precondition should target the left navigator: ${JSON.stringify(navWebkitWheel)}`);
+      assert.equal(navWebkitWheel.before.pointWithinFrame, false, `WebKit navigator control precondition must not target the rendered plan surface: ${JSON.stringify(navWebkitWheel)}`);
+      assert.equal(navWebkitWheel.after.navScrollTop > navWebkitWheel.before.navScrollTop || navWebkitWheel.after.windowScrollY > navWebkitWheel.before.windowScrollY, true, `WebKit first wheel over the left navigator should scroll immediately, proving the swallowed-input regression is specific to the rendered-plan surface: ${JSON.stringify({ navWebkitWheel, firstWebkitWheel, firstReverseWebkitWheel })}`);
     } finally {
       await webkitBrowser.close();
     }

@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan Surface First-Wheel Scroll Block Plan</title>
+  <style>
+    :root{color-scheme:dark;--bg:#070b14;--panel:#0f172a;--panel2:#111827;--text:#e5e7eb;--muted:#a7b0c0;--border:#2b364d;--accent:#38bdf8;--accent2:#7dd3fc;--warn:#f59e0b;--bad:#fb7185;--good:#22c55e;--code:#020617}
+    *{box-sizing:border-box} html{scroll-behavior:smooth} body{margin:0;background:radial-gradient(circle at top left,rgba(56,189,248,.12),transparent 34rem),var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.6} a{color:var(--accent2)} code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace} pre{overflow:auto;background:var(--code);border:1px solid var(--border);border-radius:12px;padding:14px} .page{width:min(1440px,100%);margin:0 auto;padding:24px clamp(14px,3vw,44px)} header,section,article{border:1px solid var(--border);border-radius:18px;background:rgba(15,23,42,.86);padding:22px;margin-bottom:18px;box-shadow:0 18px 48px rgba(2,6,23,.22)} header{background:linear-gradient(135deg,rgba(14,165,233,.18),rgba(15,23,42,.9))} h1,h2,h3,h4{color:#f8fafc;line-height:1.2} h1{margin:0 0 10px;font-size:clamp(2rem,5vw,3.2rem)} h2{margin-top:0;font-size:1.45rem} h3{margin-bottom:.3rem;font-size:1.08rem} table{width:100%;border-collapse:collapse;margin:12px 0} th,td{border:1px solid var(--border);padding:10px;vertical-align:top;text-align:left} th{background:#111827;color:#f8fafc}.meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}.pill{display:inline-flex;align-items:center;gap:6px;border:1px solid #334155;border-radius:999px;background:#0b1220;color:#dbeafe;padding:5px 10px;font-size:13px;font-weight:800}.warn{border-color:rgba(245,158,11,.7);color:#fde68a}.bad{border-color:rgba(251,113,133,.7);color:#fecaca}.good{border-color:rgba(34,197,94,.55);color:#dcfce7}.muted{color:var(--muted)}.toc{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;border:1px solid var(--border);border-radius:18px;background:rgba(15,23,42,.9);padding:16px;margin:18px 0}.toc h2{grid-column:1/-1;margin:0 0 4px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}.toc a{display:block;padding:7px 8px;border-radius:8px;color:#cbd5e1;text-decoration:none;font-size:14px}.toc a:hover{background:rgba(56,189,248,.12);color:#e0f2fe}.callout{border-left:4px solid var(--accent);padding:12px 14px;background:rgba(56,189,248,.08);border-radius:10px}.bug{border-left-color:var(--bad);background:rgba(251,113,133,.07)}.progress-list{list-style:none;padding:0}.progress-list li{margin:8px 0;padding:10px;border:1px solid #263246;border-radius:10px;background:#0b1220}.progress-list input{transform:translateY(1px);margin-right:8px}.phase{border-color:#334155}.mock{display:grid;grid-template-columns:minmax(190px,260px) minmax(0,1fr);gap:10px;border:1px solid #334155;border-radius:14px;background:#0b1220;padding:12px}.mock div{border:1px solid #263246;border-radius:10px;padding:12px;background:#111827}.overlay{outline:2px dashed #fb7185;outline-offset:-8px;background:linear-gradient(135deg,rgba(251,113,133,.14),rgba(17,24,39,.9))!important}.ok{outline:2px dashed #22c55e;outline-offset:-8px}@media(max-width:760px){.page{padding:14px}.mock{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header id="title">
+      <h1>Plan Surface First-Wheel Scroll Block Plan</h1>
+      <p class="muted">Fix the cursor-location-specific scroll bump in the plan-reviewer review shell: first wheel/trackpad input over the rendered plan can be swallowed, while the same input over the left navigator works.</p>
+      <div class="meta" aria-label="Plan metadata">
+        <span class="pill good">Status: implemented locally</span>
+        <span class="pill good">Execution ready: completed</span>
+        <span class="pill">Linear issue: none; direct user regression report</span>
+        <span class="pill">Surface: <code>/p/:planId</code> review shell desktop scroll</span>
+        <span class="pill">Created: 2026-06-27</span>
+      </div>
+    </header>
+
+    <nav id="toc" class="toc" aria-label="Table of contents">
+      <h2>Contents</h2>
+      <div><a href="#goal">Goal</a><a href="#decision-attention">Decision attention</a><a href="#why">Why this exists</a><a href="#authority">Authority and inputs</a></div>
+      <div><a href="#current-reality">Current implementation reality</a><a href="#cursor-difference">Why cursor position matters</a><a href="#target-state">Target state</a><a href="#product-intent">Product intent alignment</a></div>
+      <div><a href="#progress">Progress</a><a href="#locked-decisions">Locked decisions</a><a href="#acceptance">Acceptance criteria</a><a href="#bdd">BDD scenarios</a></div>
+      <div><a href="#test-matrix">Test coverage matrix</a><a href="#phases">Phases</a><a href="#verification">Verification strategy</a><a href="#resume">Resume instructions</a><a href="#decisions">Decisions log</a></div>
+    </nav>
+
+    <section id="goal">
+      <h2>Goal</h2>
+      <p>Make the first scroll input work identically whether the cursor is over the rendered plan or over the left plan navigator. The fix must preserve native browser scrolling, keep iframe internal scroll at zero on desktop, and keep the mobile/coarse pointer touch-layer behavior that already scrolls <code>#review</code> natively.</p>
+    </section>
+
+    <section id="decision-attention">
+      <h2>Decision Attention / Low-confidence Areas</h2>
+      <p><strong>No product decision required.</strong> The intended behavior is clear: a reading surface must never require a sacrificial first scroll. Native capture proved the cursor-location difference comes from wheel events targeting the rendered-plan iframe, which had a fractional internal scroll range; the left navigator is parent-page DOM and does not enter that iframe scroll-latching path. Playwright synthetic wheel coverage remains a guard, but the decisive regression contract is that iframe sizing must round up fractional rendered document height rather than relying only on integer <code>scrollHeight</code>.</p>
+    </section>
+
+    <section id="why">
+      <h2>Why this plan exists</h2>
+      <p>This is the fifth scroll regression pass. Prior tests proved pieces of the behavior, but they did not isolate the cursor-location and direction-change matrix the user just described: first wheel over the plan fails once, continued same-direction wheels work, changing direction requires another sacrificial first wheel, and first wheel over the left navigator does not show the reset. This plan makes that matrix the primary regression contract and records installed-service smoke as a release/deploy follow-up, not a pre-PR source gate.</p>
+    </section>
+
+    <section id="authority">
+      <h2>Authority and inputs</h2>
+      <ul>
+        <li>User report, 2026-06-27: in plan view, cursor over rendered plan, first scroll in a direction stops/bumps; next scroll works; cursor over left nav does not do this.</li>
+        <li><code>AGENTS.md</code>: plan-reviewer UI/comment-shell work requires HTML planning, browser registration, <code>bun run test:e2e</code>, and source/test parity.</li>
+        <li><code>thoughts/specs/product_intent.md</code>: reviewers must be able to read and annotate plans without fragile UI behavior; browser comment interactions require e2e coverage.</li>
+        <li><code>src/server/app.ts</code>: <code>#plan-frame</code>, <code>#plan-touch-layer</code>, <code>scrollShellToFrameTarget()</code>, <code>restoreShellScroll()</code>, and <code>armPostProgrammaticScrollWheelHandoff()</code>.</li>
+        <li><code>src/test-fixtures/e2e-run.ts</code>: expanded WebKit and Chromium first-wheel coverage now asserts plan-surface direction reversal, left-nav control behavior, and fractional rendered-height iframe sizing.</li>
+        <li>Historical plan <code>thoughts/plans/e2e-scroll-flash-testing.html</code>: prior fix introduced a scoped wheel-handoff layer after programmatic scroll; native capture for this regression proved the active failure was fractional iframe overflow while the touch layer was inactive.</li>
+      </ul>
+    </section>
+
+    <section id="current-reality">
+      <h2>Current implementation reality</h2>
+      <ul>
+        <li>Desktop review shell scroll owner is the outer window/document. The iframe content is same-origin and kept from accumulating internal vertical scroll; tests assert iframe <code>contentWindow.scrollY === 0</code>.</li>
+        <li>The left navigator is normal parent-page DOM in <code>#plan-list-nav</code>. It is sticky and independently scrollable, and it is never covered by the plan touch layer.</li>
+        <li>The rendered plan area is an iframe plus an absolutely positioned sibling <code>#plan-touch-layer</code>. On desktop the layer is normally hidden, but <code>armPostProgrammaticScrollWheelHandoff()</code> temporarily sets <code>display:block</code> and <code>pointer-events:auto</code> for 120ms after <code>restoreShellScroll()</code>.</li>
+        <li>The temporary layer has a <code>wheel</code> handler that only proxies horizontal deltas over wide iframe-local regions. For vertical wheel deltas it returns without preventing default or manually scrolling.</li>
+        <li>A window capture listener clears the handoff layer on the first wheel/pointer/mouse event, but that happens after the browser has already hit-tested the event against the layer.</li>
+      </ul>
+    </section>
+
+    <section id="cursor-difference">
+      <h2>Why behavior differs by cursor position</h2>
+      <div class="callout bug">
+        <p><strong>Confirmed root cause:</strong> the rendered plan crosses an iframe boundary that the left navigator does not. Native capture showed wheel events delivered inside the iframe while the desktop touch layer was inactive. Because the iframe was sized from integer <code>scrollHeight</code> while rendered content extended by a fractional amount, the iframe had a tiny internal scroll range; WebKit/Brave latched the first physical wheel events to that iframe before chaining to parent window scroll.</p>
+      </div>
+      <div class="mock" role="img" aria-label="Cursor position comparison mock">
+        <div class="ok"><strong>Cursor over left navigator</strong><br><span class="muted">Wheel target is navigator/window parent-page DOM. No iframe scroll latch. First input scrolls.</span></div>
+        <div class="overlay"><strong>Cursor over rendered plan</strong><br><span class="muted">Wheel target enters the iframe. A fractional internal iframe scroll range can swallow first-direction input before parent scrolling chains.</span></div>
+      </div>
+      <p>This explains why the bug feels directional and one-shot: it is not a persistent broken scroll state. It is the first event of a newly latched wheel sequence over the rendered-plan boundary being consumed before native parent scrolling receives the delta. Continued same-direction scrolling stays latched and works; reversing direction starts a new latch and repeats the loss.</p>
+      <p><strong>Captured repro update:</strong> physical trackpad input on <code>Security-Critical Remediation Inventory and Execution Plan</code> produced wheel events inside the iframe, not the parent page. The touch layer was <code>display:none</code> and <code>pointer-events:none</code> throughout. The iframe reported a fractional internal scroll position (<code>0.5</code>) and parent <code>window.scrollY</code> stayed unchanged for the first 20–24 wheel events of each new direction before chaining to the parent. Evidence summary: <code>thoughts/validation/scroll-block/repro-iframe-fractional-wheel-summary.json</code>.</p>
+    </section>
+
+    <section id="target-state">
+      <h2>Target state</h2>
+      <p>On desktop, vertical wheel/trackpad input over the plan must remain native from the browser's perspective. The iframe must have no vertical internal scroll range, including subpixel/fractional range, so wheel latching chains directly to the parent window on the first event in either direction. The desktop touch layer must remain inactive for normal vertical scrolling; the captured bug was not caused by that layer, so this implementation leaves the existing overlay handoff alone and instead removes the fractional iframe scroll range.</p>
+    </section>
+
+    <section id="product-intent">
+      <h2>Product intent alignment</h2>
+      <p>This plan advances the product intent that browser review is the golden path. Reviewers spend most of the session reading plans; a first-scroll bump undermines trust more than a missing advanced feature. The plan keeps the system's safe default as native browser scroll, avoids custom scroll physics, and adds regression tests centered on the exact human workflow rather than internal helper behavior.</p>
+    </section>
+
+    <section id="progress">
+      <h2>Progress</h2>
+      <ul class="progress-list">
+        <li id="progress-p1"><label><input type="checkbox" checked disabled> P1 — Capture native iframe-latching diagnostics</label></li>
+        <li id="progress-p2"><label><input type="checkbox" checked disabled> P2 — Add fractional-height regression guard</label></li>
+        <li id="progress-p3"><label><input type="checkbox" checked disabled> P3 — Round iframe sizing to rendered height</label></li>
+        <li id="progress-p4"><label><input type="checkbox" checked disabled> P4 — Run contract and e2e verification</label></li>
+      </ul>
+    </section>
+
+    <section id="resume">
+      <h2>Resume instructions</h2>
+      <p>Read this full plan, then execute the first unchecked Progress item. Preserve unrelated local changes currently present in <code>~/code/plan-reviewer</code>. Do not edit generated <code>dist/</code> directly. Product code changes should start only after browser comments and readiness review are handled or the user explicitly asks for direct execution.</p>
+    </section>
+
+    <section id="locked-decisions">
+      <h2>Locked decisions</h2>
+      <ul>
+        <li id="decision-native-scroll"><strong>Native scroll only.</strong> Do not reintroduce JavaScript vertical wheel/touch scroll emulation.</li>
+        <li id="decision-cursor-matrix"><strong>Cursor-location parity is required.</strong> Tests must compare first scroll over the plan and over the left navigator in the same scenario.</li>
+        <li id="decision-no-desktop-vertical-overlay"><strong>No desktop vertical wheel swallowing.</strong> The plan touch layer may remain for mobile/coarse tap handling and for the existing short post-programmatic handoff window, but it must not prevent/default-swallow vertical wheel input; the first vertical wheel must move parent scroll and leave iframe internal scroll at zero.</li>
+        <li id="decision-webkit-required"><strong>WebKit is required.</strong> Chromium alone is not acceptable because prior evidence showed Chromium masks this class of bug.</li>
+        <li id="decision-installed-smoke"><strong>Installed service smoke is release/deploy validation.</strong> The pre-PR source gate is contract/e2e plus native repro evidence. Homebrew-served smoke remains tracked by <code>scripts/record-current-viewer-wheel.sh</code> and this validation record for the next deploy/release check.</li>
+      </ul>
+    </section>
+
+    <section id="acceptance">
+      <h2>Acceptance criteria</h2>
+      <ol>
+        <li id="ac-first-plan-wheel">After a fragment link click, comment jump, render refresh, or same-session direction reversal, the first small WebKit wheel over the rendered plan changes the desktop native scroll owner in the requested direction; a second wheel is not required.</li>
+        <li id="ac-cursor-parity">The same first-wheel scenario passes with the cursor over <code>#plan-list-nav</code> and over the rendered plan surface; neither path records a swallowed first input.</li>
+        <li id="ac-layer-hit-test">On desktop, normal vertical wheel input over the rendered plan is not swallowed: the existing short post-programmatic handoff layer may appear, but it must not prevent the first vertical wheel from moving parent scroll or leave iframe internal scroll nonzero.</li>
+        <li id="ac-scroll-owner">Desktop vertical wheel scrolls <code>window</code> and leaves iframe internal scroll at <code>0</code>; mobile/coarse touch scrolls <code>#review</code> and leaves window/iframe internal scroll at <code>0</code>.</li>
+        <li id="ac-wide-horizontal">Horizontal wheel/gesture behavior for iframe-local wide regions such as tables, code blocks, figures, and Mermaid diagrams still works where currently supported.</li>
+        <li id="ac-comments-intact">Click/tap to open the composer, text selection adoption, fragment-link navigation, comment jumps, live render refresh, and marker reflow continue to work.</li>
+        <li id="ac-installed">Release/deploy follow-up: the installed Homebrew service at <code>127.0.0.1:4317</code> should be smoke-checked with <code>scripts/record-current-viewer-wheel.sh</code> before promoting the fixed client.</li>
+      </ol>
+    </section>
+
+    <section id="bdd">
+      <h2>BDD scenarios</h2>
+      <article id="bdd-plan-first-wheel">
+        <h3>BDD-1 — First wheel over plan works</h3>
+        <p><strong>Given</strong> a desktop WebKit review shell just navigated a rendered-plan fragment link or just changed wheel direction, <strong>when</strong> the pointer is over the rendered plan and the user sends one small wheel delta, <strong>then</strong> the window scroll position moves by the input in that direction and iframe internal scroll remains zero.</p>
+      </article>
+      <article id="bdd-nav-first-wheel">
+        <h3>BDD-2 — First wheel over navigator works</h3>
+        <p><strong>Given</strong> the same post-navigation state, <strong>when</strong> the pointer is over the left navigator and the user sends one small wheel delta, <strong>then</strong> the navigator/window scroll behavior is not blocked and no plan touch-layer target is observed.</p>
+      </article>
+      <article id="bdd-overlay-cleared-before-hit-test">
+        <h3>BDD-3 — Rendered iframe has no fractional vertical scroll range</h3>
+        <p><strong>Given</strong> a desktop rendered plan whose content has fractional layout height, <strong>when</strong> the shell sizes <code>#plan-frame</code>, <strong>then</strong> the frame height is rounded up to cover the rendered document rect and iframe internal scroll remains zero during vertical wheel input.</p>
+      </article>
+      <article id="bdd-mobile-preserved">
+        <h3>BDD-4 — Mobile/coarse touch behavior remains native</h3>
+        <p><strong>Given</strong> a mobile/coarse review shell with the touch layer over a long plan, <strong>when</strong> the reviewer finger-scrolls down and reverses up, <strong>then</strong> <code>#review.scrollTop</code> changes on the first gesture in each direction and the composer stays closed.</p>
+      </article>
+      <article id="bdd-wide-horizontal">
+        <h3>BDD-5 — Wide content remains locally scrollable</h3>
+        <p><strong>Given</strong> a wide table or code block inside the rendered plan, <strong>when</strong> the user performs a horizontal wheel/gesture over that region, <strong>then</strong> the wide region scrolls horizontally without blocking vertical document scroll elsewhere.</p>
+      </article>
+      <article id="bdd-installed-service">
+        <h3>BDD-6 — Release/deploy installed reviewer smoke</h3>
+        <p><strong>Given</strong> a future Homebrew deploy/release of this fix, <strong>when</strong> a fixture plan is registered through the installed CLI, <strong>then</strong> <code>scripts/record-current-viewer-wheel.sh</code> can be used to confirm the same cursor-location first-wheel behavior against <code>http://127.0.0.1:4317/p/&lt;planId&gt;</code>. This is tracked as deploy validation, not a source pre-PR blocker.</p>
+      </article>
+    </section>
+
+    <section id="test-matrix">
+      <h2>Test coverage matrix</h2>
+      <table>
+        <thead><tr><th>Acceptance</th><th>Layer</th><th>Planned coverage</th><th>Command</th></tr></thead>
+        <tbody>
+          <tr id="matrix-webkit-cursor"><td>AC-1, AC-2, AC-3</td><td>Native macOS wheel reproduction plus Playwright/WebKit guard</td><td>Native capture records the physical cursor-location and direction-change failure against a real viewer. Automated e2e keeps the regression guard by asserting fractional iframe sizing, immediate first-wheel movement over the plan, reversed-direction movement, and left-nav control behavior.</td><td><code>bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js</code><br><code>TARGET=&lt;tab-id&gt; scripts/record-current-viewer-wheel.sh start|stop</code></td></tr>
+          <tr id="matrix-scroll-owner"><td>AC-4</td><td>Existing e2e expanded</td><td>Keep desktop window-scroll assertions and mobile/coarse <code>#review</code> touch assertions; add failure messages that include hit target and touch-layer display/pointer-events state.</td><td><code>bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js</code></td></tr>
+          <tr id="matrix-horizontal"><td>AC-5</td><td>Mobile/readability e2e</td><td>Retain wide-table/code/figure horizontal scroll tests and add a desktop horizontal wide-region check only if the implementation changes that path.</td><td><code>bun run test:e2e</code></td></tr>
+          <tr id="matrix-comment-flow"><td>AC-6</td><td>Browser e2e plus contract tests</td><td>Run existing composer, fragment link, comment jump, live refresh, marker reflow, and queue-action button assertions unchanged.</td><td><code>bun run test</code><br><code>bun run test:e2e</code></td></tr>
+          <tr id="matrix-installed"><td>AC-7</td><td>Release/deploy smoke follow-up</td><td>Before promoting a Homebrew-served build, register a fixture HTML plan with the installed CLI and use the passive recorder against port 4317. Save JSON output under <code>thoughts/validation/scroll-block/</code> or attach it to the release validation record.</td><td><code>TARGET=&lt;tab-id&gt; scripts/record-current-viewer-wheel.sh start|stop</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="phases">
+      <h2>Phase-by-phase execution plan</h2>
+      <article id="phase-p1" class="phase">
+        <h3>P1 — Capture native-input cursor-location evidence</h3>
+        <h4>End State</h4>
+        <p>Native macOS trackpad reproduction is captured and summarized. Evidence shows physical wheel events entered the iframe while the touch layer was inactive; parent scroll stayed unchanged for the first 20–24 events in each new direction while the iframe consumed a fractional internal scroll range.</p>
+        <h4>Tests first</h4>
+        <p>Keep <code>scripts/record-current-viewer-wheel.sh</code> as the passive CDP recorder for physical-input smoke checks. Store the captured run summary at <code>thoughts/validation/scroll-block/repro-iframe-fractional-wheel-summary.json</code>.</p>
+        <h4>Expected files</h4>
+        <ul><li><code>scripts/record-current-viewer-wheel.sh</code></li><li><code>thoughts/validation/scroll-block/repro-iframe-fractional-wheel-summary.json</code></li><li><code>src/test-fixtures/e2e-run.ts</code></li></ul>
+        <h4>Work</h4>
+        <p>No product-code work in this phase. Add diagnostics to the assertion payload: hit target, touch-layer computed display, touch-layer pointer-events, window scrollY before/after, iframe scrollY before/after, and whether any wheel event was default-prevented.</p>
+        <h4>Open questions / decision dependencies</h4>
+        <p>None.</p>
+        <h4>Verify</h4>
+        <pre><code>cd ~/code/plan-reviewer
+bun run build && node dist/test-fixtures/e2e-run.js</code></pre>
+      </article>
+
+      <article id="phase-p2" class="phase">
+        <h3>P2 — Fix fractional iframe sizing</h3>
+        <h4>End State</h4>
+        <p>Desktop vertical wheel input over the rendered plan cannot latch to a subpixel iframe scroll range because the iframe height covers the fractional rendered document height.</p>
+        <h4>Tests first</h4>
+        <p>Add a contract assertion that <code>syncFrameHeight()</code> uses <code>Math.ceil(Math.max(... getBoundingClientRect().height ...))</code>, plus e2e coverage for fractional rendered plan content and immediate plan/nav first-wheel behavior.</p>
+        <h4>Expected files</h4>
+        <ul><li><code>src/server/app.ts</code></li><li><code>src/__tests__/contracts.test.ts</code></li><li><code>src/test-fixtures/e2e-run.ts</code></li></ul>
+        <h4>Work</h4>
+        <ul>
+          <li>Update <code>syncFrameHeight()</code> to compute height from integer scroll heights and fractional rendered rect heights.</li>
+          <li>Round the selected height up with <code>Math.ceil()</code> before applying <code>frame.style.height</code>.</li>
+          <li>Preserve mobile/coarse touch-layer sizing by reusing the same rounded height for <code>#plan-touch-layer</code> only on mobile shells.</li>
+        </ul>
+        <h4>Open questions / decision dependencies</h4>
+        <p>None.</p>
+        <h4>Verify</h4>
+        <pre><code>cd ~/code/plan-reviewer
+bun run build && node dist/test-fixtures/e2e-run.js</code></pre>
+      </article>
+
+      <article id="phase-p3" class="phase">
+        <h3>P3 — Preserve mobile and horizontal-scroll contracts</h3>
+        <h4>End State</h4>
+        <p>The scroll fix is narrow: it does not break mobile/coarse touch scrolling, tap-to-comment, fragment links, or horizontal scrolling for wide rendered content.</p>
+        <h4>Tests first</h4>
+        <p>Use existing mobile/readability and comment-flow tests. Add only targeted coverage if P2 changes the wide-region wheel path.</p>
+        <h4>Expected files</h4>
+        <ul><li><code>src/server/app.ts</code></li><li><code>src/test-fixtures/e2e-run.ts</code> if a horizontal desktop assertion is needed</li></ul>
+        <h4>Work</h4>
+        <ul>
+          <li>Confirm mobile media query still displays <code>#plan-touch-layer</code> with <code>touch-action:pan-y</code> and <code>pointer-events:auto</code>.</li>
+          <li>Confirm desktop normal state leaves the layer hidden or pointer-inert.</li>
+          <li>Keep horizontal wide-region behavior scoped to actual wide elements and avoid vertical preventDefault.</li>
+        </ul>
+        <h4>Open questions / decision dependencies</h4>
+        <p>None.</p>
+        <h4>Verify</h4>
+        <pre><code>cd ~/code/plan-reviewer
+bun run test
+bun run test:e2e</code></pre>
+      </article>
+
+      <article id="phase-p4" class="phase">
+        <h3>P4 — Source verification and deploy-smoke tracking</h3>
+        <h4>End State</h4>
+        <p>The local source and built dist show the fixed behavior. Physical repro evidence is saved, and installed-service smoke is tracked as release/deploy validation rather than a source pre-PR blocker.</p>
+        <h4>Tests first</h4>
+        <p>No new source tests unless P2/P3 reveal a missed shipped-surface gap. The source gate is contract plus e2e verification; installed-service smoke is a follow-up for the deploy/release path.</p>
+        <h4>Expected files</h4>
+        <ul><li><code>thoughts/plans/plan-surface-first-wheel-scroll-block.html</code> progress update</li><li><code>thoughts/validation/scroll-block/repro-iframe-fractional-wheel-summary.json</code> native repro evidence</li><li><code>scripts/record-current-viewer-wheel.sh</code> release/deploy smoke recorder</li></ul>
+        <h4>Work</h4>
+        <ul>
+          <li>Run full source verification.</li>
+          <li>Keep the passive recorder script available for future installed-service smoke without restarting Brave or creating new debug prompts.</li>
+          <li>Record the installed-service smoke deferral in the pre-PR validation artifact with tracking destination.</li>
+          <li>Run scoped implementation review and the required pre-PR GPT/GLM review gate if creating a PR.</li>
+        </ul>
+        <h4>Open questions / decision dependencies</h4>
+        <p>None.</p>
+        <h4>Verify</h4>
+        <pre><code>cd ~/code/plan-reviewer
+bun run build
+bun run test
+bun run test:e2e
+bun run test:fixtures -- --scenario seeded-comment-stream
+bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated</code></pre>
+      </article>
+    </section>
+
+    <section id="verification">
+      <h2>Verification strategy</h2>
+      <p>The regression strategy is deliberately stricter than prior passes:</p>
+      <ol>
+        <li><strong>Native repro first:</strong> capture the cursor-location plus direction-change first-wheel matrix with physical macOS trackpad input. The captured run is saved in <code>thoughts/validation/scroll-block/repro-iframe-fractional-wheel-summary.json</code>.</li>
+        <li><strong>Target the cause:</strong> assert iframe height covers fractional rendered document height and iframe internal scroll remains zero for vertical wheel input.</li>
+        <li><strong>Prove the first event:</strong> assert the first wheel moves; do not accept tests that pass only because a second wheel moves.</li>
+        <li><strong>Keep old protections:</strong> run existing mobile/coarse, horizontal wide-region, fragment-link, composer, marker, and source-refresh coverage.</li>
+        <li><strong>Release/deploy follow-up:</strong> repeat the passive native-input recorder against the installed service before promoting a Homebrew-served build.</li>
+      </ol>
+    </section>
+
+    <section id="delivery-order">
+      <h2>Delivery order</h2>
+      <ol>
+        <li>Capture native-input cursor-location evidence, then keep the Playwright WebKit cursor-location matrix as a guard.</li>
+        <li>Round iframe sizing up to the fractional rendered document height.</li>
+        <li>Run and preserve mobile/horizontal/comment-flow coverage.</li>
+        <li>Track installed-service first-wheel smoke as release/deploy validation using the passive recorder.</li>
+        <li>Run scoped review and only then mark the source gate complete.</li>
+      </ol>
+    </section>
+
+    <section id="non-goals">
+      <h2>Non-goals</h2>
+      <ul>
+        <li>No redesign of the review shell, navigator, comments tray, or plan rendering model.</li>
+        <li>No custom vertical scroll physics.</li>
+        <li>No queue/comment lifecycle changes.</li>
+        <li>No migration away from iframe-rendered plan content.</li>
+        <li>No broad rewrite of the e2e fixture beyond the focused cursor-location and installed-service probes.</li>
+      </ul>
+    </section>
+
+    <section id="decisions">
+      <h2>Decisions / Deviations Log</h2>
+      <article id="decision-2026-06-27-created">
+        <h3>2026-06-27 — Plan created from cursor-location report</h3>
+        <p>Initial evidence pointed at the temporary desktop <code>#plan-touch-layer</code> enabled by <code>armPostProgrammaticScrollWheelHandoff()</code>. The user's follow-up direction-change report broadens the suspected root cause to WebKit scroll-latching at the rendered-plan iframe/layer boundary. The initial plan required a WebKit RED test comparing cursor over rendered plan vs cursor over left navigator, including direction reversals, before changing product code. 2026-06-27 update: Orca Computer Use identified the live Brave plan viewer and the rendered-plan/left-nav geometry, but Orca's synthetic scroll did not move Brave; CDP wheel input and the added Playwright WebKit direction matrix both moved immediately and the full e2e fixture passed. Therefore the RED gate must use native macOS wheel/trackpad-like input against the current viewer before changing product code, because Playwright synthetic wheel does not reproduce the user's current failure.</p>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

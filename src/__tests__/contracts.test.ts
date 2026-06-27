@@ -1843,6 +1843,7 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     assert.match(shellClient.body, /frame\.contentDocument.*keydown/s);
     assert.match(shellClient.body, /setPlanNavOpen\(open\)/);
     assert.match(shellClient.body, /updatePlanNavbarHeight/);
+    assert.match(shellClient.body, /function syncFrameHeight\(\)[\s\S]*Math\.ceil\(Math\.max\([\s\S]*getBoundingClientRect\(\)\.height/, 'syncFrameHeight must size the iframe from fractional rendered rect height, not only integer scrollHeight; otherwise physical wheel input can latch to subpixel iframe overflow before parent scrolling');
     assert.match(shellClient.body, /ResizeObserver\(updatePlanNavbarHeight\)/);
     assert.match(shellClient.body, /planListNav\.inert = !open/);
     assert.match(shellClient.body, /planNavStateCookieName = 'plan_review_plan_nav'/);
