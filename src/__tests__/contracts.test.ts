@@ -1860,6 +1860,10 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     assert.match(shellClient.body, /navigatorApiUrl/);
     assert.match(shellClient.body, /navigatorLoadGeneration/);
     assert.match(shellClient.body, /navigatorFilterLoadUrl/);
+    assert.match(shellClient.body, /function planItemStatus\(item\)\{ if \(planItemAttention\(item\)\) return 'Needs attention'; if \(planItemComplete\(item\)\) return 'Complete';/);
+    assert.doesNotMatch(shellClient.body, /if \(item\?\.plan\?\.boardColumnKey\) return item\.plan\.boardColumnKey/);
+    assert.doesNotMatch(shellClient.body, /window\.scrollTo\s*=/);
+    assert.match(shellClient.body, /function restoreShellScroll\(/);
     assert.doesNotMatch(shellClient.body, /loadQuickOpenItems\(\{ force: true \}\)/);
     assert.doesNotMatch(shellClient.body, /projectKey=\' \+ encodeURIComponent\(projectKey\)/);
     assert.doesNotMatch(shellClient.body, /saveOrganizerField\('\/project'/);
@@ -1875,6 +1879,13 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     assert.deepEqual(positions.map(position => position >= 0), [true, true, true]);
     assert.deepEqual([...positions].sort((a, b) => a - b), positions);
     assert.match(shell.body, /aria-current="page"/);
+
+    const indexPage = await app.inject({ method: 'GET', url: '/?view=all' });
+    assert.match(indexPage.body, /type==='scroll'\|\|type==='touchstart'\?\{passive:true\}:true/);
+    const deferredPage = await app.inject({ method: 'GET', url: '/deferred' });
+    assert.match(deferredPage.body, /type==='scroll'\|\|type==='touchstart'\?\{passive:true\}:true/);
+    const kanbanPage = await app.inject({ method: 'GET', url: '/' });
+    assert.match(kanbanPage.body, /type==='scroll'\|\|type==='touchstart'\?\{passive:true\}:true/);
   } finally {
     await app.close();
   }

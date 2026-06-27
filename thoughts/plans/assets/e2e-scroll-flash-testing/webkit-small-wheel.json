@@ -1,0 +1,103 @@
+[
+  {
+    "label": "immediate after scrollTo",
+    "t": 795,
+    "hit": "plan-frame",
+    "windowY": 0,
+    "frameY": 0,
+    "wheelEvents": []
+  },
+  {
+    "label": "after first small wheel immediate",
+    "t": 932,
+    "hit": "plan-frame",
+    "windowY": 240,
+    "frameY": 0,
+    "wheelEvents": []
+  },
+  {
+    "label": "after second small wheel immediate",
+    "t": 1055,
+    "hit": "plan-frame",
+    "windowY": 252,
+    "frameY": 0,
+    "wheelEvents": [
+      {
+        "deltaY": 12,
+        "defaultPrevented": false,
+        "target": "plan-frame",
+        "scrollY": 252,
+        "frameY": 0
+      }
+    ]
+  },
+  {
+    "label": "after waited scrollTo",
+    "t": 4060,
+    "hit": "plan-frame",
+    "windowY": 240,
+    "frameY": 0,
+    "wheelEvents": [
+      {
+        "deltaY": 12,
+        "defaultPrevented": false,
+        "target": "plan-frame",
+        "scrollY": 252,
+        "frameY": 0
+      }
+    ]
+  },
+  {
+    "label": "after first small wheel waited",
+    "t": 4199,
+    "hit": "plan-frame",
+    "windowY": 252,
+    "frameY": 0,
+    "wheelEvents": [
+      {
+        "deltaY": 12,
+        "defaultPrevented": false,
+        "target": "plan-frame",
+        "scrollY": 252,
+        "frameY": 0
+      },
+      {
+        "deltaY": 12,
+        "defaultPrevented": false,
+        "target": "plan-frame",
+        "scrollY": 252,
+        "frameY": 0
+      }
+    ]
+  },
+  {
+    "label": "after second small wheel waited",
+    "t": 4322,
+    "hit": "plan-frame",
+    "windowY": 264,
+    "frameY": 0,
+    "wheelEvents": [
+      {
+        "deltaY": 12,
+        "defaultPrevented": false,
+        "target": "plan-frame",
+        "scrollY": 252,
+        "frameY": 0
+      },
+      {
+        "deltaY": 12,
+        "defaultPrevented": false,
+        "target": "plan-frame",
+        "scrollY": 252,
+        "frameY": 0
+      },
+      {
+        "deltaY": 12,
+        "defaultPrevented": false,
+        "target": "plan-frame",
+        "scrollY": 264,
+        "frameY": 0
+      }
+    ]
+  }
+]

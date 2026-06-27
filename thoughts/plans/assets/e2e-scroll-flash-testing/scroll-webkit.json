@@ -1,0 +1,146 @@
+[
+  {
+    "label": "after programmatic scrollTo",
+    "t": 1229,
+    "url": "http://127.0.0.1:4318/p/plan_9riRP0xHk9oc",
+    "scroll": {
+      "windowY": 260,
+      "windowH": 18578,
+      "reviewTop": 0,
+      "reviewH": 18481,
+      "reviewClient": 18481,
+      "frameY": 0,
+      "frameH": 18481,
+      "frameDocH": 18481
+    },
+    "hit": "plan-frame"
+  },
+  {
+    "label": "first wheel down:before",
+    "t": 1230,
+    "url": "http://127.0.0.1:4318/p/plan_9riRP0xHk9oc",
+    "scroll": {
+      "windowY": 260,
+      "windowH": 18578,
+      "reviewTop": 0,
+      "reviewH": 18481,
+      "reviewClient": 18481,
+      "frameY": 0,
+      "frameH": 18481,
+      "frameDocH": 18481
+    },
+    "hit": "plan-frame"
+  },
+  {
+    "label": "first wheel down:after",
+    "t": 1494,
+    "url": "http://127.0.0.1:4318/p/plan_9riRP0xHk9oc",
+    "scroll": {
+      "windowY": 420,
+      "windowH": 18578,
+      "reviewTop": 0,
+      "reviewH": 18481,
+      "reviewClient": 18481,
+      "frameY": 0,
+      "frameH": 18481,
+      "frameDocH": 18481
+    },
+    "hit": "plan-frame"
+  },
+  {
+    "label": "second wheel down:before",
+    "t": 1495,
+    "url": "http://127.0.0.1:4318/p/plan_9riRP0xHk9oc",
+    "scroll": {
+      "windowY": 420,
+      "windowH": 18578,
+      "reviewTop": 0,
+      "reviewH": 18481,
+      "reviewClient": 18481,
+      "frameY": 0,
+      "frameH": 18481,
+      "frameDocH": 18481
+    },
+    "hit": "plan-frame"
+  },
+  {
+    "label": "second wheel down:after",
+    "t": 1762,
+    "url": "http://127.0.0.1:4318/p/plan_9riRP0xHk9oc",
+    "scroll": {
+      "windowY": 580,
+      "windowH": 18578,
+      "reviewTop": 0,
+      "reviewH": 18481,
+      "reviewClient": 18481,
+      "frameY": 0,
+      "frameH": 18481,
+      "frameDocH": 18481
+    },
+    "hit": "plan-frame"
+  },
+  {
+    "label": "first reverse up:before",
+    "t": 1763,
+    "url": "http://127.0.0.1:4318/p/plan_9riRP0xHk9oc",
+    "scroll": {
+      "windowY": 580,
+      "windowH": 18578,
+      "reviewTop": 0,
+      "reviewH": 18481,
+      "reviewClient": 18481,
+      "frameY": 0,
+      "frameH": 18481,
+      "frameDocH": 18481
+    },
+    "hit": "plan-frame"
+  },
+  {
+    "label": "first reverse up:after",
+    "t": 2029,
+    "url": "http://127.0.0.1:4318/p/plan_9riRP0xHk9oc",
+    "scroll": {
+      "windowY": 420,
+      "windowH": 18578,
+      "reviewTop": 0,
+      "reviewH": 18481,
+      "reviewClient": 18481,
+      "frameY": 0,
+      "frameH": 18481,
+      "frameDocH": 18481
+    },
+    "hit": "plan-frame"
+  },
+  {
+    "label": "second reverse up:before",
+    "t": 2030,
+    "url": "http://127.0.0.1:4318/p/plan_9riRP0xHk9oc",
+    "scroll": {
+      "windowY": 420,
+      "windowH": 18578,
+      "reviewTop": 0,
+      "reviewH": 18481,
+      "reviewClient": 18481,
+      "frameY": 0,
+      "frameH": 18481,
+      "frameDocH": 18481
+    },
+    "hit": "plan-frame"
+  },
+  {
+    "label": "second reverse up:after",
+    "t": 2293,
+    "url": "http://127.0.0.1:4318/p/plan_9riRP0xHk9oc",
+    "scroll": {
+      "windowY": 260,
+      "windowH": 18578,
+      "reviewTop": 0,
+      "reviewH": 18481,
+      "reviewClient": 18481,
+      "frameY": 0,
+      "frameH": 18481,
+      "frameDocH": 18481
+    },
+    "hit": "plan-frame"
+  }
+]

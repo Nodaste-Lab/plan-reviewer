@@ -1,0 +1,1047 @@
+[
+  {
+    "label": "first-paint plan_rGnl4OwFqVT_",
+    "t": 106,
+    "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+    "title": "Run Plan Command Surface Cleanup",
+    "bodyClass": "",
+    "filters": {
+      "project": "ai-configs",
+      "state": "active",
+      "status": ""
+    },
+    "navCount": 3,
+    "first": [
+      {
+        "id": "plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "active": true,
+        "status": "Complete",
+        "text": "Run Plan Command Surface Cleanup Complete5/5 pending 3 · updated 2026-06-26T22:02:48.870Z"
+      },
+      {
+        "id": "plan_p0eVnoHb2FZh",
+        "title": "GLM Review Prompt Reliability Plan",
+        "active": false,
+        "status": "Execution not ready",
+        "text": "GLM Review Prompt Reliability Plan Execution not readyNo phases pending 1 · updated 2026-06-26T22:06:03.936Z"
+      },
+      {
+        "id": "plan_CSR2UvJnWNp7",
+        "title": "Byzantine Generals And Adversarial Gardening",
+        "active": false,
+        "status": "Needs attention",
+        "text": "Byzantine Generals And Adversarial Gardening Needs attention0/6 pending 0 · updated 2026-06-18T23:58:57.403Z"
+      }
+    ],
+    "active": {
+      "id": "plan_rGnl4OwFqVT_",
+      "title": "Run Plan Command Surface Cleanup",
+      "active": true,
+      "status": "Complete",
+      "text": "Run Plan Command Surface Cleanup Complete5/5 pending 3 · updated 2026-06-26T22:02:48.870Z"
+    },
+    "scroll": {
+      "windowY": 0,
+      "reviewTop": 0,
+      "reviewH": 15452,
+      "frameY": 0,
+      "frameH": 15452,
+      "frameDocH": 15452
+    }
+  },
+  {
+    "label": "+120ms plan_rGnl4OwFqVT_",
+    "t": 235,
+    "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+    "title": "Run Plan Command Surface Cleanup",
+    "bodyClass": "",
+    "filters": {
+      "project": "ai-configs",
+      "state": "active",
+      "status": ""
+    },
+    "navCount": 3,
+    "first": [
+      {
+        "id": "plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "active": true,
+        "status": "Complete",
+        "text": "Run Plan Command Surface Cleanup Complete5/5 pending 3 · updated 2026-06-26T22:02:48.870Z"
+      },
+      {
+        "id": "plan_p0eVnoHb2FZh",
+        "title": "GLM Review Prompt Reliability Plan",
+        "active": false,
+        "status": "Execution not ready",
+        "text": "GLM Review Prompt Reliability Plan Execution not readyNo phases pending 1 · updated 2026-06-26T22:06:03.936Z"
+      },
+      {
+        "id": "plan_CSR2UvJnWNp7",
+        "title": "Byzantine Generals And Adversarial Gardening",
+        "active": false,
+        "status": "Needs attention",
+        "text": "Byzantine Generals And Adversarial Gardening Needs attention0/6 pending 0 · updated 2026-06-18T23:58:57.403Z"
+      }
+    ],
+    "active": {
+      "id": "plan_rGnl4OwFqVT_",
+      "title": "Run Plan Command Surface Cleanup",
+      "active": true,
+      "status": "Complete",
+      "text": "Run Plan Command Surface Cleanup Complete5/5 pending 3 · updated 2026-06-26T22:02:48.870Z"
+    },
+    "scroll": {
+      "windowY": 0,
+      "reviewTop": 0,
+      "reviewH": 15452,
+      "frameY": 0,
+      "frameH": 15452,
+      "frameDocH": 15452
+    }
+  },
+  {
+    "label": "+1070ms plan_rGnl4OwFqVT_",
+    "t": 1195,
+    "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+    "title": "Run Plan Command Surface Cleanup",
+    "bodyClass": "",
+    "filters": {
+      "project": "ai-configs",
+      "state": "active",
+      "status": ""
+    },
+    "navCount": 3,
+    "first": [
+      {
+        "id": "plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "active": true,
+        "status": "backlog",
+        "text": "Run Plan Command Surface Cleanupbacklog5/5pending 3 · updated 2026-06-26T22:02:48.870Z"
+      },
+      {
+        "id": "plan_p0eVnoHb2FZh",
+        "title": "GLM Review Prompt Reliability Plan",
+        "active": false,
+        "status": "in_progress",
+        "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T22:06:03.936Z"
+      },
+      {
+        "id": "plan_CSR2UvJnWNp7",
+        "title": "Byzantine Generals And Adversarial Gardening",
+        "active": false,
+        "status": "Needs attention",
+        "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+      }
+    ],
+    "active": {
+      "id": "plan_rGnl4OwFqVT_",
+      "title": "Run Plan Command Surface Cleanup",
+      "active": true,
+      "status": "backlog",
+      "text": "Run Plan Command Surface Cleanupbacklog5/5pending 3 · updated 2026-06-26T22:02:48.870Z"
+    },
+    "scroll": {
+      "windowY": 0,
+      "reviewTop": 0,
+      "reviewH": 15452,
+      "frameY": 0,
+      "frameH": 15452,
+      "frameDocH": 15452
+    }
+  },
+  {
+    "label": "mutations plan_rGnl4OwFqVT_",
+    "mutations": [
+      {
+        "t": 88,
+        "reason": "install",
+        "count": 3,
+        "first": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "active": true
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "active": false
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "active": false
+          }
+        ],
+        "active": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "active": true
+        },
+        "text": "Run Plan Command Surface Cleanup Complete5/5 pending 3 · updated 2026-06-26T22:02:48.870Z GLM Review Prompt Reliability Plan Execution not readyNo phases pending 1 · updated 2026-06-26T22:06:03.936Z Byzantine Generals An"
+      },
+      {
+        "t": 802,
+        "reason": "mutation",
+        "count": 3,
+        "first": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "active": true
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "active": false
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "active": false
+          }
+        ],
+        "active": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "active": true
+        },
+        "text": "Run Plan Command Surface Cleanupbacklog5/5pending 3 · updated 2026-06-26T22:02:48.870ZGLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T22:06:03.936ZByzantine Generals And Adversarial G"
+      }
+    ]
+  },
+  {
+    "label": "first-paint plan_p0eVnoHb2FZh",
+    "t": 59,
+    "url": "http://127.0.0.1:4318/p/plan_p0eVnoHb2FZh",
+    "title": "GLM Review Prompt Reliability Plan",
+    "bodyClass": "",
+    "filters": {
+      "project": "ai-configs",
+      "state": "active",
+      "status": ""
+    },
+    "navCount": 3,
+    "first": [
+      {
+        "id": "plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "active": false,
+        "status": "Complete",
+        "text": "Run Plan Command Surface Cleanup Complete5/5 pending 3 · updated 2026-06-26T22:02:48.870Z"
+      },
+      {
+        "id": "plan_p0eVnoHb2FZh",
+        "title": "GLM Review Prompt Reliability Plan",
+        "active": true,
+        "status": "Execution not ready",
+        "text": "GLM Review Prompt Reliability Plan Execution not readyNo phases pending 1 · updated 2026-06-26T22:06:03.936Z"
+      },
+      {
+        "id": "plan_CSR2UvJnWNp7",
+        "title": "Byzantine Generals And Adversarial Gardening",
+        "active": false,
+        "status": "Needs attention",
+        "text": "Byzantine Generals And Adversarial Gardening Needs attention0/6 pending 0 · updated 2026-06-18T23:58:57.403Z"
+      }
+    ],
+    "active": {
+      "id": "plan_p0eVnoHb2FZh",
+      "title": "GLM Review Prompt Reliability Plan",
+      "active": true,
+      "status": "Execution not ready",
+      "text": "GLM Review Prompt Reliability Plan Execution not readyNo phases pending 1 · updated 2026-06-26T22:06:03.936Z"
+    },
+    "scroll": {
+      "windowY": 0,
+      "reviewTop": 0,
+      "reviewH": 11473,
+      "frameY": 0,
+      "frameH": 11473,
+      "frameDocH": 11473
+    }
+  },
+  {
+    "label": "+120ms plan_p0eVnoHb2FZh",
+    "t": 186,
+    "url": "http://127.0.0.1:4318/p/plan_p0eVnoHb2FZh",
+    "title": "GLM Review Prompt Reliability Plan",
+    "bodyClass": "",
+    "filters": {
+      "project": "ai-configs",
+      "state": "active",
+      "status": ""
+    },
+    "navCount": 3,
+    "first": [
+      {
+        "id": "plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "active": false,
+        "status": "Complete",
+        "text": "Run Plan Command Surface Cleanup Complete5/5 pending 3 · updated 2026-06-26T22:02:48.870Z"
+      },
+      {
+        "id": "plan_p0eVnoHb2FZh",
+        "title": "GLM Review Prompt Reliability Plan",
+        "active": true,
+        "status": "Execution not ready",
+        "text": "GLM Review Prompt Reliability Plan Execution not readyNo phases pending 1 · updated 2026-06-26T22:06:03.936Z"
+      },
+      {
+        "id": "plan_CSR2UvJnWNp7",
+        "title": "Byzantine Generals And Adversarial Gardening",
+        "active": false,
+        "status": "Needs attention",
+        "text": "Byzantine Generals And Adversarial Gardening Needs attention0/6 pending 0 · updated 2026-06-18T23:58:57.403Z"
+      }
+    ],
+    "active": {
+      "id": "plan_p0eVnoHb2FZh",
+      "title": "GLM Review Prompt Reliability Plan",
+      "active": true,
+      "status": "Execution not ready",
+      "text": "GLM Review Prompt Reliability Plan Execution not readyNo phases pending 1 · updated 2026-06-26T22:06:03.936Z"
+    },
+    "scroll": {
+      "windowY": 0,
+      "reviewTop": 0,
+      "reviewH": 11473,
+      "frameY": 0,
+      "frameH": 11473,
+      "frameDocH": 11473
+    }
+  },
+  {
+    "label": "+1070ms plan_p0eVnoHb2FZh",
+    "t": 1144,
+    "url": "http://127.0.0.1:4318/p/plan_p0eVnoHb2FZh",
+    "title": "GLM Review Prompt Reliability Plan",
+    "bodyClass": "",
+    "filters": {
+      "project": "ai-configs",
+      "state": "active",
+      "status": ""
+    },
+    "navCount": 3,
+    "first": [
+      {
+        "id": "plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "active": false,
+        "status": "backlog",
+        "text": "Run Plan Command Surface Cleanupbacklog5/5pending 3 · updated 2026-06-26T22:02:48.870Z"
+      },
+      {
+        "id": "plan_p0eVnoHb2FZh",
+        "title": "GLM Review Prompt Reliability Plan",
+        "active": true,
+        "status": "in_progress",
+        "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T22:06:03.936Z"
+      },
+      {
+        "id": "plan_CSR2UvJnWNp7",
+        "title": "Byzantine Generals And Adversarial Gardening",
+        "active": false,
+        "status": "Needs attention",
+        "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+      }
+    ],
+    "active": {
+      "id": "plan_p0eVnoHb2FZh",
+      "title": "GLM Review Prompt Reliability Plan",
+      "active": true,
+      "status": "in_progress",
+      "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T22:06:03.936Z"
+    },
+    "scroll": {
+      "windowY": 0,
+      "reviewTop": 0,
+      "reviewH": 11473,
+      "frameY": 0,
+      "frameH": 11473,
+      "frameDocH": 11473
+    }
+  },
+  {
+    "label": "mutations plan_p0eVnoHb2FZh",
+    "mutations": [
+      {
+        "t": 53,
+        "reason": "install",
+        "count": 3,
+        "first": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "active": false
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "active": true
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "active": false
+          }
+        ],
+        "active": {
+          "id": "plan_p0eVnoHb2FZh",
+          "title": "GLM Review Prompt Reliability Plan",
+          "active": true
+        },
+        "text": "Run Plan Command Surface Cleanup Complete5/5 pending 3 · updated 2026-06-26T22:02:48.870Z GLM Review Prompt Reliability Plan Execution not readyNo phases pending 1 · updated 2026-06-26T22:06:03.936Z Byzantine Generals An"
+      },
+      {
+        "t": 762,
+        "reason": "mutation",
+        "count": 3,
+        "first": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "active": false
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "active": true
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "active": false
+          }
+        ],
+        "active": {
+          "id": "plan_p0eVnoHb2FZh",
+          "title": "GLM Review Prompt Reliability Plan",
+          "active": true
+        },
+        "text": "Run Plan Command Surface Cleanupbacklog5/5pending 3 · updated 2026-06-26T22:02:48.870ZGLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T22:06:03.936ZByzantine Generals And Adversarial G"
+      }
+    ]
+  },
+  {
+    "label": "first-paint plan_KJirz2Aa_V7N",
+    "t": 102,
+    "url": "http://127.0.0.1:4318/p/plan_KJirz2Aa_V7N",
+    "title": "Space Readiness — Gap Remediation & Phase Integration Plan",
+    "bodyClass": "",
+    "filters": {
+      "project": "heddle",
+      "state": "active",
+      "status": ""
+    },
+    "navCount": 16,
+    "first": [
+      {
+        "id": "plan_ZzvaT96pJ2l8",
+        "title": "NOD-1086 Suspend Auth Recovery Plan",
+        "active": false,
+        "status": "Execution ready",
+        "text": "NOD-1086 Suspend Auth Recovery Plan Execution readyNo phases pending 0 · updated 2026-06-26T14:45:16.292Z"
+      },
+      {
+        "id": "plan_DyUxLut7h_4g",
+        "title": "NOD-1075 Clerk-only audit ratchet fix",
+        "active": false,
+        "status": "Execution ready",
+        "text": "NOD-1075 Clerk-only audit ratchet fix Execution readyNo phases pending 0 · updated 2026-06-25T20:48:39.470Z"
+      },
+      {
+        "id": "plan_tFUZQabxMbRf",
+        "title": "Account Attach Key Repair",
+        "active": false,
+        "status": "Execution ready",
+        "text": "Account Attach Key Repair Execution readyNo phases pending 1 · updated 2026-06-15T22:50:24.475Z"
+      },
+      {
+        "id": "plan_T0YWst_ERgp3",
+        "title": "NOD-1084 Centralized Account Identity Resolution Plan",
+        "active": false,
+        "status": "Execution ready",
+        "text": "NOD-1084 Centralized Account Identity Resolution Plan Execution readyNo phases pending 0 · updated 2026-06-26T19:52:47.057Z"
+      },
+      {
+        "id": "plan_uo0suY9to3sg",
+        "title": "Personal → Private Terminology Cleanup",
+        "active": false,
+        "status": "Execution not ready",
+        "text": "Personal → Private Terminology Cleanup Execution not readyNo phases pending 0 · updated 2026-06-26T13:33:51.408Z"
+      }
+    ],
+    "active": {
+      "id": "plan_KJirz2Aa_V7N",
+      "title": "Space Readiness — Gap Remediation & Phase Integration Plan",
+      "active": true,
+      "status": "Needs attention",
+      "text": "Space Readiness — Gap Remediation & Phase Integration Plan Needs attention2/6 pending 0 · updated 2026-06-16T22:41:33.866Z"
+    },
+    "scroll": {
+      "windowY": 0,
+      "reviewTop": 0,
+      "reviewH": 842,
+      "frameY": 0,
+      "frameH": 842,
+      "frameDocH": 13839
+    }
+  },
+  {
+    "label": "+120ms plan_KJirz2Aa_V7N",
+    "t": 243,
+    "url": "http://127.0.0.1:4318/p/plan_KJirz2Aa_V7N",
+    "title": "Space Readiness — Gap Remediation & Phase Integration Plan",
+    "bodyClass": "",
+    "filters": {
+      "project": "heddle",
+      "state": "active",
+      "status": ""
+    },
+    "navCount": 16,
+    "first": [
+      {
+        "id": "plan_ZzvaT96pJ2l8",
+        "title": "NOD-1086 Suspend Auth Recovery Plan",
+        "active": false,
+        "status": "Execution ready",
+        "text": "NOD-1086 Suspend Auth Recovery Plan Execution readyNo phases pending 0 · updated 2026-06-26T14:45:16.292Z"
+      },
+      {
+        "id": "plan_DyUxLut7h_4g",
+        "title": "NOD-1075 Clerk-only audit ratchet fix",
+        "active": false,
+        "status": "Execution ready",
+        "text": "NOD-1075 Clerk-only audit ratchet fix Execution readyNo phases pending 0 · updated 2026-06-25T20:48:39.470Z"
+      },
+      {
+        "id": "plan_tFUZQabxMbRf",
+        "title": "Account Attach Key Repair",
+        "active": false,
+        "status": "Execution ready",
+        "text": "Account Attach Key Repair Execution readyNo phases pending 1 · updated 2026-06-15T22:50:24.475Z"
+      },
+      {
+        "id": "plan_T0YWst_ERgp3",
+        "title": "NOD-1084 Centralized Account Identity Resolution Plan",
+        "active": false,
+        "status": "Execution ready",
+        "text": "NOD-1084 Centralized Account Identity Resolution Plan Execution readyNo phases pending 0 · updated 2026-06-26T19:52:47.057Z"
+      },
+      {
+        "id": "plan_uo0suY9to3sg",
+        "title": "Personal → Private Terminology Cleanup",
+        "active": false,
+        "status": "Execution not ready",
+        "text": "Personal → Private Terminology Cleanup Execution not readyNo phases pending 0 · updated 2026-06-26T13:33:51.408Z"
+      }
+    ],
+    "active": {
+      "id": "plan_KJirz2Aa_V7N",
+      "title": "Space Readiness — Gap Remediation & Phase Integration Plan",
+      "active": true,
+      "status": "Needs attention",
+      "text": "Space Readiness — Gap Remediation & Phase Integration Plan Needs attention2/6 pending 0 · updated 2026-06-16T22:41:33.866Z"
+    },
+    "scroll": {
+      "windowY": 0,
+      "reviewTop": 0,
+      "reviewH": 14010,
+      "frameY": 0,
+      "frameH": 14010,
+      "frameDocH": 14010
+    }
+  },
+  {
+    "label": "+1070ms plan_KJirz2Aa_V7N",
+    "t": 1207,
+    "url": "http://127.0.0.1:4318/p/plan_KJirz2Aa_V7N",
+    "title": "Space Readiness — Gap Remediation & Phase Integration Plan",
+    "bodyClass": "",
+    "filters": {
+      "project": "heddle",
+      "state": "active",
+      "status": ""
+    },
+    "navCount": 16,
+    "first": [
+      {
+        "id": "plan_ZzvaT96pJ2l8",
+        "title": "NOD-1086 Suspend Auth Recovery Plan",
+        "active": false,
+        "status": "done",
+        "text": "NOD-1086 Suspend Auth Recovery PlandoneNo phasespending 0 · updated 2026-06-26T14:45:16.292Z"
+      },
+      {
+        "id": "plan_DyUxLut7h_4g",
+        "title": "NOD-1075 Clerk-only audit ratchet fix",
+        "active": false,
+        "status": "done",
+        "text": "NOD-1075 Clerk-only audit ratchet fixdoneNo phasespending 0 · updated 2026-06-25T20:48:39.470Z"
+      },
+      {
+        "id": "plan_tFUZQabxMbRf",
+        "title": "Account Attach Key Repair",
+        "active": false,
+        "status": "backlog",
+        "text": "Account Attach Key RepairbacklogNo phasespending 1 · updated 2026-06-15T22:50:24.475Z"
+      },
+      {
+        "id": "plan_T0YWst_ERgp3",
+        "title": "NOD-1084 Centralized Account Identity Resolution Plan",
+        "active": false,
+        "status": "in_progress",
+        "text": "NOD-1084 Centralized Account Identity Resolution Planin_progressNo phasespending 0 · updated 2026-06-26T19:52:47.057Z"
+      },
+      {
+        "id": "plan_uo0suY9to3sg",
+        "title": "Personal → Private Terminology Cleanup",
+        "active": false,
+        "status": "in_progress",
+        "text": "Personal → Private Terminology Cleanupin_progressNo phasespending 0 · updated 2026-06-26T13:33:51.408Z"
+      }
+    ],
+    "active": {
+      "id": "plan_KJirz2Aa_V7N",
+      "title": "Space Readiness — Gap Remediation & Phase Integration Plan",
+      "active": true,
+      "status": "Needs attention",
+      "text": "Space Readiness — Gap Remediation & Phase Integration PlanNeeds attention2/6pending 0 · updated 2026-06-16T22:41:33.866Z"
+    },
+    "scroll": {
+      "windowY": 0,
+      "reviewTop": 0,
+      "reviewH": 14010,
+      "frameY": 0,
+      "frameH": 14010,
+      "frameDocH": 14010
+    }
+  },
+  {
+    "label": "mutations plan_KJirz2Aa_V7N",
+    "mutations": [
+      {
+        "t": 91,
+        "reason": "install",
+        "count": 16,
+        "first": [
+          {
+            "id": "plan_ZzvaT96pJ2l8",
+            "title": "NOD-1086 Suspend Auth Recovery Plan",
+            "active": false
+          },
+          {
+            "id": "plan_DyUxLut7h_4g",
+            "title": "NOD-1075 Clerk-only audit ratchet fix",
+            "active": false
+          },
+          {
+            "id": "plan_tFUZQabxMbRf",
+            "title": "Account Attach Key Repair",
+            "active": false
+          },
+          {
+            "id": "plan_T0YWst_ERgp3",
+            "title": "NOD-1084 Centralized Account Identity Resolution Plan",
+            "active": false
+          },
+          {
+            "id": "plan_uo0suY9to3sg",
+            "title": "Personal → Private Terminology Cleanup",
+            "active": false
+          }
+        ],
+        "active": {
+          "id": "plan_KJirz2Aa_V7N",
+          "title": "Space Readiness — Gap Remediation & Phase Integration Plan",
+          "active": true
+        },
+        "text": "NOD-1086 Suspend Auth Recovery Plan Execution readyNo phases pending 0 · updated 2026-06-26T14:45:16.292Z NOD-1075 Clerk-only audit ratchet fix Execution readyNo phases pending 0 · updated 2026-06-25T20:48:39.470Z Accoun"
+      },
+      {
+        "t": 817,
+        "reason": "mutation",
+        "count": 16,
+        "first": [
+          {
+            "id": "plan_ZzvaT96pJ2l8",
+            "title": "NOD-1086 Suspend Auth Recovery Plan",
+            "active": false
+          },
+          {
+            "id": "plan_DyUxLut7h_4g",
+            "title": "NOD-1075 Clerk-only audit ratchet fix",
+            "active": false
+          },
+          {
+            "id": "plan_tFUZQabxMbRf",
+            "title": "Account Attach Key Repair",
+            "active": false
+          },
+          {
+            "id": "plan_T0YWst_ERgp3",
+            "title": "NOD-1084 Centralized Account Identity Resolution Plan",
+            "active": false
+          },
+          {
+            "id": "plan_uo0suY9to3sg",
+            "title": "Personal → Private Terminology Cleanup",
+            "active": false
+          }
+        ],
+        "active": {
+          "id": "plan_KJirz2Aa_V7N",
+          "title": "Space Readiness — Gap Remediation & Phase Integration Plan",
+          "active": true
+        },
+        "text": "NOD-1086 Suspend Auth Recovery PlandoneNo phasespending 0 · updated 2026-06-26T14:45:16.292ZNOD-1075 Clerk-only audit ratchet fixdoneNo phasespending 0 · updated 2026-06-25T20:48:39.470ZAccount Attach Key RepairbacklogNo"
+      }
+    ]
+  },
+  {
+    "label": "all-projects first-paint",
+    "t": 99,
+    "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_?projectKey=&lifecycle=active",
+    "title": "Run Plan Command Surface Cleanup",
+    "bodyClass": "",
+    "filters": {
+      "project": "",
+      "state": "active",
+      "status": ""
+    },
+    "navCount": 31,
+    "first": [
+      {
+        "id": "plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "active": true,
+        "status": "Complete",
+        "text": "Run Plan Command Surface Cleanup Complete5/5 pending 3 · updated 2026-06-26T22:02:48.870Z"
+      },
+      {
+        "id": "plan_ZzvaT96pJ2l8",
+        "title": "NOD-1086 Suspend Auth Recovery Plan",
+        "active": false,
+        "status": "Execution ready",
+        "text": "NOD-1086 Suspend Auth Recovery Plan Execution readyNo phases pending 0 · updated 2026-06-26T14:45:16.292Z"
+      },
+      {
+        "id": "plan_DyUxLut7h_4g",
+        "title": "NOD-1075 Clerk-only audit ratchet fix",
+        "active": false,
+        "status": "Execution ready",
+        "text": "NOD-1075 Clerk-only audit ratchet fix Execution readyNo phases pending 0 · updated 2026-06-25T20:48:39.470Z"
+      },
+      {
+        "id": "plan_tFUZQabxMbRf",
+        "title": "Account Attach Key Repair",
+        "active": false,
+        "status": "Execution ready",
+        "text": "Account Attach Key Repair Execution readyNo phases pending 1 · updated 2026-06-15T22:50:24.475Z"
+      },
+      {
+        "id": "plan_T0YWst_ERgp3",
+        "title": "NOD-1084 Centralized Account Identity Resolution Plan",
+        "active": false,
+        "status": "Execution ready",
+        "text": "NOD-1084 Centralized Account Identity Resolution Plan Execution readyNo phases pending 0 · updated 2026-06-26T19:52:47.057Z"
+      }
+    ],
+    "active": {
+      "id": "plan_rGnl4OwFqVT_",
+      "title": "Run Plan Command Surface Cleanup",
+      "active": true,
+      "status": "Complete",
+      "text": "Run Plan Command Surface Cleanup Complete5/5 pending 3 · updated 2026-06-26T22:02:48.870Z"
+    },
+    "scroll": {
+      "windowY": 0,
+      "reviewTop": 0,
+      "reviewH": 15452,
+      "frameY": 0,
+      "frameH": 15452,
+      "frameDocH": 15452
+    }
+  },
+  {
+    "label": "all-projects hydrated",
+    "t": 1109,
+    "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_?projectKey=&lifecycle=active",
+    "title": "Run Plan Command Surface Cleanup",
+    "bodyClass": "",
+    "filters": {
+      "project": "",
+      "state": "active",
+      "status": ""
+    },
+    "navCount": 31,
+    "first": [
+      {
+        "id": "plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "active": true,
+        "status": "backlog",
+        "text": "Run Plan Command Surface Cleanupbacklog5/5pending 3 · updated 2026-06-26T22:02:48.870Z"
+      },
+      {
+        "id": "plan_ZzvaT96pJ2l8",
+        "title": "NOD-1086 Suspend Auth Recovery Plan",
+        "active": false,
+        "status": "done",
+        "text": "NOD-1086 Suspend Auth Recovery PlandoneNo phasespending 0 · updated 2026-06-26T14:45:16.292Z"
+      },
+      {
+        "id": "plan_DyUxLut7h_4g",
+        "title": "NOD-1075 Clerk-only audit ratchet fix",
+        "active": false,
+        "status": "done",
+        "text": "NOD-1075 Clerk-only audit ratchet fixdoneNo phasespending 0 · updated 2026-06-25T20:48:39.470Z"
+      },
+      {
+        "id": "plan_tFUZQabxMbRf",
+        "title": "Account Attach Key Repair",
+        "active": false,
+        "status": "backlog",
+        "text": "Account Attach Key RepairbacklogNo phasespending 1 · updated 2026-06-15T22:50:24.475Z"
+      },
+      {
+        "id": "plan_T0YWst_ERgp3",
+        "title": "NOD-1084 Centralized Account Identity Resolution Plan",
+        "active": false,
+        "status": "in_progress",
+        "text": "NOD-1084 Centralized Account Identity Resolution Planin_progressNo phasespending 0 · updated 2026-06-26T19:52:47.057Z"
+      }
+    ],
+    "active": {
+      "id": "plan_rGnl4OwFqVT_",
+      "title": "Run Plan Command Surface Cleanup",
+      "active": true,
+      "status": "backlog",
+      "text": "Run Plan Command Surface Cleanupbacklog5/5pending 3 · updated 2026-06-26T22:02:48.870Z"
+    },
+    "scroll": {
+      "windowY": 0,
+      "reviewTop": 0,
+      "reviewH": 15452,
+      "frameY": 0,
+      "frameH": 15452,
+      "frameDocH": 15452
+    }
+  },
+  {
+    "label": "after cross click first-paint-ish",
+    "t": 113,
+    "url": "http://127.0.0.1:4318/p/plan_KJirz2Aa_V7N?projectKey=&lifecycle=active",
+    "title": "Space Readiness — Gap Remediation & Phase Integration Plan",
+    "bodyClass": "",
+    "filters": {
+      "project": "",
+      "state": "active",
+      "status": ""
+    },
+    "navCount": 31,
+    "first": [
+      {
+        "id": "plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "active": false,
+        "status": "Complete",
+        "text": "Run Plan Command Surface Cleanup Complete5/5 pending 3 · updated 2026-06-26T22:02:48.870Z"
+      },
+      {
+        "id": "plan_ZzvaT96pJ2l8",
+        "title": "NOD-1086 Suspend Auth Recovery Plan",
+        "active": false,
+        "status": "Execution ready",
+        "text": "NOD-1086 Suspend Auth Recovery Plan Execution readyNo phases pending 0 · updated 2026-06-26T14:45:16.292Z"
+      },
+      {
+        "id": "plan_DyUxLut7h_4g",
+        "title": "NOD-1075 Clerk-only audit ratchet fix",
+        "active": false,
+        "status": "Execution ready",
+        "text": "NOD-1075 Clerk-only audit ratchet fix Execution readyNo phases pending 0 · updated 2026-06-25T20:48:39.470Z"
+      },
+      {
+        "id": "plan_tFUZQabxMbRf",
+        "title": "Account Attach Key Repair",
+        "active": false,
+        "status": "Execution ready",
+        "text": "Account Attach Key Repair Execution readyNo phases pending 1 · updated 2026-06-15T22:50:24.475Z"
+      },
+      {
+        "id": "plan_T0YWst_ERgp3",
+        "title": "NOD-1084 Centralized Account Identity Resolution Plan",
+        "active": false,
+        "status": "Execution ready",
+        "text": "NOD-1084 Centralized Account Identity Resolution Plan Execution readyNo phases pending 0 · updated 2026-06-26T19:52:47.057Z"
+      }
+    ],
+    "active": {
+      "id": "plan_KJirz2Aa_V7N",
+      "title": "Space Readiness — Gap Remediation & Phase Integration Plan",
+      "active": true,
+      "status": "Needs attention",
+      "text": "Space Readiness — Gap Remediation & Phase Integration Plan Needs attention2/6 pending 0 · updated 2026-06-16T22:41:33.866Z"
+    },
+    "scroll": {
+      "windowY": 0,
+      "reviewTop": 0,
+      "reviewH": 842,
+      "frameY": 0,
+      "frameH": 842,
+      "frameDocH": 13839
+    }
+  },
+  {
+    "label": "after cross click hydrated",
+    "t": 1135,
+    "url": "http://127.0.0.1:4318/p/plan_KJirz2Aa_V7N?projectKey=&lifecycle=active",
+    "title": "Space Readiness — Gap Remediation & Phase Integration Plan",
+    "bodyClass": "",
+    "filters": {
+      "project": "",
+      "state": "active",
+      "status": ""
+    },
+    "navCount": 31,
+    "first": [
+      {
+        "id": "plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "active": false,
+        "status": "backlog",
+        "text": "Run Plan Command Surface Cleanupbacklog5/5pending 3 · updated 2026-06-26T22:02:48.870Z"
+      },
+      {
+        "id": "plan_ZzvaT96pJ2l8",
+        "title": "NOD-1086 Suspend Auth Recovery Plan",
+        "active": false,
+        "status": "done",
+        "text": "NOD-1086 Suspend Auth Recovery PlandoneNo phasespending 0 · updated 2026-06-26T14:45:16.292Z"
+      },
+      {
+        "id": "plan_DyUxLut7h_4g",
+        "title": "NOD-1075 Clerk-only audit ratchet fix",
+        "active": false,
+        "status": "done",
+        "text": "NOD-1075 Clerk-only audit ratchet fixdoneNo phasespending 0 · updated 2026-06-25T20:48:39.470Z"
+      },
+      {
+        "id": "plan_tFUZQabxMbRf",
+        "title": "Account Attach Key Repair",
+        "active": false,
+        "status": "backlog",
+        "text": "Account Attach Key RepairbacklogNo phasespending 1 · updated 2026-06-15T22:50:24.475Z"
+      },
+      {
+        "id": "plan_T0YWst_ERgp3",
+        "title": "NOD-1084 Centralized Account Identity Resolution Plan",
+        "active": false,
+        "status": "in_progress",
+        "text": "NOD-1084 Centralized Account Identity Resolution Planin_progressNo phasespending 0 · updated 2026-06-26T19:52:47.057Z"
+      }
+    ],
+    "active": {
+      "id": "plan_KJirz2Aa_V7N",
+      "title": "Space Readiness — Gap Remediation & Phase Integration Plan",
+      "active": true,
+      "status": "Needs attention",
+      "text": "Space Readiness — Gap Remediation & Phase Integration PlanNeeds attention2/6pending 0 · updated 2026-06-16T22:41:33.866Z"
+    },
+    "scroll": {
+      "windowY": 0,
+      "reviewTop": 0,
+      "reviewH": 14010,
+      "frameY": 0,
+      "frameH": 14010,
+      "frameDocH": 14010
+    }
+  },
+  {
+    "label": "mutations after cross click",
+    "mutations": [
+      {
+        "t": 108,
+        "reason": "install",
+        "count": 31,
+        "first": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "active": false
+          },
+          {
+            "id": "plan_ZzvaT96pJ2l8",
+            "title": "NOD-1086 Suspend Auth Recovery Plan",
+            "active": false
+          },
+          {
+            "id": "plan_DyUxLut7h_4g",
+            "title": "NOD-1075 Clerk-only audit ratchet fix",
+            "active": false
+          },
+          {
+            "id": "plan_tFUZQabxMbRf",
+            "title": "Account Attach Key Repair",
+            "active": false
+          },
+          {
+            "id": "plan_T0YWst_ERgp3",
+            "title": "NOD-1084 Centralized Account Identity Resolution Plan",
+            "active": false
+          }
+        ],
+        "active": {
+          "id": "plan_KJirz2Aa_V7N",
+          "title": "Space Readiness — Gap Remediation & Phase Integration Plan",
+          "active": true
+        },
+        "text": "Run Plan Command Surface Cleanup Complete5/5 pending 3 · updated 2026-06-26T22:02:48.870Z NOD-1086 Suspend Auth Recovery Plan Execution readyNo phases pending 0 · updated 2026-06-26T14:45:16.292Z NOD-1075 Clerk-only audi"
+      },
+      {
+        "t": 854,
+        "reason": "mutation",
+        "count": 31,
+        "first": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "active": false
+          },
+          {
+            "id": "plan_ZzvaT96pJ2l8",
+            "title": "NOD-1086 Suspend Auth Recovery Plan",
+            "active": false
+          },
+          {
+            "id": "plan_DyUxLut7h_4g",
+            "title": "NOD-1075 Clerk-only audit ratchet fix",
+            "active": false
+          },
+          {
+            "id": "plan_tFUZQabxMbRf",
+            "title": "Account Attach Key Repair",
+            "active": false
+          },
+          {
+            "id": "plan_T0YWst_ERgp3",
+            "title": "NOD-1084 Centralized Account Identity Resolution Plan",
+            "active": false
+          }
+        ],
+        "active": {
+          "id": "plan_KJirz2Aa_V7N",
+          "title": "Space Readiness — Gap Remediation & Phase Integration Plan",
+          "active": true
+        },
+        "text": "Run Plan Command Surface Cleanupbacklog5/5pending 3 · updated 2026-06-26T22:02:48.870ZNOD-1086 Suspend Auth Recovery PlandoneNo phasespending 0 · updated 2026-06-26T14:45:16.292ZNOD-1075 Clerk-only audit ratchet fixdoneN"
+      }
+    ]
+  }
+]

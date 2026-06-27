@@ -1,0 +1,427 @@
+[
+  {
+    "label": "initial",
+    "t": 1056,
+    "bodyClass": "plan-nav-collapsed",
+    "scroll": {
+      "winY": 0,
+      "reviewTop": 0,
+      "reviewH": 37201,
+      "reviewClient": 665,
+      "frameY": 0,
+      "frameH": 37201,
+      "frameDocH": 37201
+    },
+    "layer": {
+      "display": "block",
+      "touchAction": "pan-y",
+      "rect": {
+        "x": 0,
+        "y": 179,
+        "w": 390,
+        "h": 37201
+      }
+    },
+    "composerHidden": true
+  },
+  {
+    "label": "synth scroll down 1:before",
+    "t": 1058,
+    "bodyClass": "plan-nav-collapsed",
+    "scroll": {
+      "winY": 0,
+      "reviewTop": 0,
+      "reviewH": 37201,
+      "reviewClient": 665,
+      "frameY": 0,
+      "frameH": 37201,
+      "frameDocH": 37201
+    },
+    "layer": {
+      "display": "block",
+      "touchAction": "pan-y",
+      "rect": {
+        "x": 0,
+        "y": 179,
+        "w": 390,
+        "h": 37201
+      }
+    },
+    "composerHidden": true
+  },
+  {
+    "label": "synth scroll down 1:after",
+    "t": 2367,
+    "bodyClass": "plan-nav-collapsed",
+    "scroll": {
+      "winY": 0,
+      "reviewTop": 501,
+      "reviewH": 37201,
+      "reviewClient": 665,
+      "frameY": 0,
+      "frameH": 37201,
+      "frameDocH": 37201
+    },
+    "layer": {
+      "display": "block",
+      "touchAction": "pan-y",
+      "rect": {
+        "x": 0,
+        "y": -322,
+        "w": 390,
+        "h": 37201
+      }
+    },
+    "composerHidden": true
+  },
+  {
+    "label": "synth scroll down 2:before",
+    "t": 2368,
+    "bodyClass": "plan-nav-collapsed",
+    "scroll": {
+      "winY": 0,
+      "reviewTop": 501,
+      "reviewH": 37201,
+      "reviewClient": 665,
+      "frameY": 0,
+      "frameH": 37201,
+      "frameDocH": 37201
+    },
+    "layer": {
+      "display": "block",
+      "touchAction": "pan-y",
+      "rect": {
+        "x": 0,
+        "y": -322,
+        "w": 390,
+        "h": 37201
+      }
+    },
+    "composerHidden": true
+  },
+  {
+    "label": "synth scroll down 2:after",
+    "t": 3648,
+    "bodyClass": "plan-nav-collapsed",
+    "scroll": {
+      "winY": 0,
+      "reviewTop": 1003,
+      "reviewH": 37201,
+      "reviewClient": 665,
+      "frameY": 0,
+      "frameH": 37201,
+      "frameDocH": 37201
+    },
+    "layer": {
+      "display": "block",
+      "touchAction": "pan-y",
+      "rect": {
+        "x": 0,
+        "y": -824,
+        "w": 390,
+        "h": 37201
+      }
+    },
+    "composerHidden": true
+  },
+  {
+    "label": "synth reverse up 1:before",
+    "t": 3649,
+    "bodyClass": "plan-nav-collapsed",
+    "scroll": {
+      "winY": 0,
+      "reviewTop": 1003,
+      "reviewH": 37201,
+      "reviewClient": 665,
+      "frameY": 0,
+      "frameH": 37201,
+      "frameDocH": 37201
+    },
+    "layer": {
+      "display": "block",
+      "touchAction": "pan-y",
+      "rect": {
+        "x": 0,
+        "y": -824,
+        "w": 390,
+        "h": 37201
+      }
+    },
+    "composerHidden": true
+  },
+  {
+    "label": "synth reverse up 1:after",
+    "t": 4932,
+    "bodyClass": "plan-nav-collapsed",
+    "scroll": {
+      "winY": 0,
+      "reviewTop": 499,
+      "reviewH": 37201,
+      "reviewClient": 665,
+      "frameY": 0,
+      "frameH": 37201,
+      "frameDocH": 37201
+    },
+    "layer": {
+      "display": "block",
+      "touchAction": "pan-y",
+      "rect": {
+        "x": 0,
+        "y": -320,
+        "w": 390,
+        "h": 37201
+      }
+    },
+    "composerHidden": true
+  },
+  {
+    "label": "synth reverse up 2:before",
+    "t": 4932,
+    "bodyClass": "plan-nav-collapsed",
+    "scroll": {
+      "winY": 0,
+      "reviewTop": 499,
+      "reviewH": 37201,
+      "reviewClient": 665,
+      "frameY": 0,
+      "frameH": 37201,
+      "frameDocH": 37201
+    },
+    "layer": {
+      "display": "block",
+      "touchAction": "pan-y",
+      "rect": {
+        "x": 0,
+        "y": -320,
+        "w": 390,
+        "h": 37201
+      }
+    },
+    "composerHidden": true
+  },
+  {
+    "label": "synth reverse up 2:after",
+    "t": 6215,
+    "bodyClass": "plan-nav-collapsed",
+    "scroll": {
+      "winY": 0,
+      "reviewTop": 0,
+      "reviewH": 37201,
+      "reviewClient": 665,
+      "frameY": 0,
+      "frameH": 37201,
+      "frameDocH": 37201
+    },
+    "layer": {
+      "display": "block",
+      "touchAction": "pan-y",
+      "rect": {
+        "x": 0,
+        "y": 179,
+        "w": 390,
+        "h": 37201
+      }
+    },
+    "composerHidden": true
+  },
+  {
+    "label": "raw drag up/down-content 1:before",
+    "t": 6216,
+    "bodyClass": "plan-nav-collapsed",
+    "scroll": {
+      "winY": 0,
+      "reviewTop": 0,
+      "reviewH": 37201,
+      "reviewClient": 665,
+      "frameY": 0,
+      "frameH": 37201,
+      "frameDocH": 37201
+    },
+    "layer": {
+      "display": "block",
+      "touchAction": "pan-y",
+      "rect": {
+        "x": 0,
+        "y": 179,
+        "w": 390,
+        "h": 37201
+      }
+    },
+    "composerHidden": true
+  },
+  {
+    "label": "raw drag up/down-content 1:after",
+    "t": 7032,
+    "bodyClass": "plan-nav-collapsed",
+    "scroll": {
+      "winY": 0,
+      "reviewTop": 610,
+      "reviewH": 37201,
+      "reviewClient": 665,
+      "frameY": 0,
+      "frameH": 37201,
+      "frameDocH": 37201
+    },
+    "layer": {
+      "display": "block",
+      "touchAction": "pan-y",
+      "rect": {
+        "x": 0,
+        "y": -431,
+        "w": 390,
+        "h": 37201
+      }
+    },
+    "composerHidden": true
+  },
+  {
+    "label": "raw drag up/down-content 2:before",
+    "t": 7033,
+    "bodyClass": "plan-nav-collapsed",
+    "scroll": {
+      "winY": 0,
+      "reviewTop": 610,
+      "reviewH": 37201,
+      "reviewClient": 665,
+      "frameY": 0,
+      "frameH": 37201,
+      "frameDocH": 37201
+    },
+    "layer": {
+      "display": "block",
+      "touchAction": "pan-y",
+      "rect": {
+        "x": 0,
+        "y": -431,
+        "w": 390,
+        "h": 37201
+      }
+    },
+    "composerHidden": true
+  },
+  {
+    "label": "raw drag up/down-content 2:after",
+    "t": 7835,
+    "bodyClass": "plan-nav-collapsed",
+    "scroll": {
+      "winY": 0,
+      "reviewTop": 1277,
+      "reviewH": 37201,
+      "reviewClient": 665,
+      "frameY": 0,
+      "frameH": 37201,
+      "frameDocH": 37201
+    },
+    "layer": {
+      "display": "block",
+      "touchAction": "pan-y",
+      "rect": {
+        "x": 0,
+        "y": -1098,
+        "w": 390,
+        "h": 37201
+      }
+    },
+    "composerHidden": true
+  },
+  {
+    "label": "raw reverse down/up-content 1:before",
+    "t": 7836,
+    "bodyClass": "plan-nav-collapsed",
+    "scroll": {
+      "winY": 0,
+      "reviewTop": 1277,
+      "reviewH": 37201,
+      "reviewClient": 665,
+      "frameY": 0,
+      "frameH": 37201,
+      "frameDocH": 37201
+    },
+    "layer": {
+      "display": "block",
+      "touchAction": "pan-y",
+      "rect": {
+        "x": 0,
+        "y": -1098,
+        "w": 390,
+        "h": 37201
+      }
+    },
+    "composerHidden": true
+  },
+  {
+    "label": "raw reverse down/up-content 1:after",
+    "t": 8664,
+    "bodyClass": "plan-nav-collapsed",
+    "scroll": {
+      "winY": 0,
+      "reviewTop": 672,
+      "reviewH": 37201,
+      "reviewClient": 665,
+      "frameY": 0,
+      "frameH": 37201,
+      "frameDocH": 37201
+    },
+    "layer": {
+      "display": "block",
+      "touchAction": "pan-y",
+      "rect": {
+        "x": 0,
+        "y": -493,
+        "w": 390,
+        "h": 37201
+      }
+    },
+    "composerHidden": true
+  },
+  {
+    "label": "raw reverse down/up-content 2:before",
+    "t": 8665,
+    "bodyClass": "plan-nav-collapsed",
+    "scroll": {
+      "winY": 0,
+      "reviewTop": 672,
+      "reviewH": 37201,
+      "reviewClient": 665,
+      "frameY": 0,
+      "frameH": 37201,
+      "frameDocH": 37201
+    },
+    "layer": {
+      "display": "block",
+      "touchAction": "pan-y",
+      "rect": {
+        "x": 0,
+        "y": -493,
+        "w": 390,
+        "h": 37201
+      }
+    },
+    "composerHidden": true
+  },
+  {
+    "label": "raw reverse down/up-content 2:after",
+    "t": 9551,
+    "bodyClass": "plan-nav-collapsed",
+    "scroll": {
+      "winY": 0,
+      "reviewTop": 287,
+      "reviewH": 37201,
+      "reviewClient": 665,
+      "frameY": 0,
+      "frameH": 37201,
+      "frameDocH": 37201
+    },
+    "layer": {
+      "display": "block",
+      "touchAction": "pan-y",
+      "rect": {
+        "x": 0,
+        "y": -108,
+        "w": 390,
+        "h": 37201
+      }
+    },
+    "composerHidden": true
+  }
+]

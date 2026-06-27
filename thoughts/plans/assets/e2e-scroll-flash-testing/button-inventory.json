@@ -1,0 +1,5159 @@
+{
+  "pages": [
+    {
+      "path": "/",
+      "buttons": [
+        {
+          "tag": "A",
+          "id": "",
+          "text": "⚙",
+          "aria": "Configuration",
+          "title": "Configuration",
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary topbar-icon-action\" href=\"/configuration\" aria-label=\"Configuration\" title=\"Configuration\">⚙<"
+        }
+      ]
+    },
+    {
+      "path": "/archive",
+      "buttons": [
+        {
+          "tag": "A",
+          "id": "",
+          "text": "⏸",
+          "aria": "Deferred (4)",
+          "title": "Deferred (4)",
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary topbar-icon-action\" href=\"/deferred\" aria-label=\"Deferred (4)\" title=\"Deferred (4)\">⏸</a>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "⚙",
+          "aria": "Configuration",
+          "title": "Configuration",
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary topbar-icon-action\" href=\"/configuration\" aria-label=\"Configuration\" title=\"Configuration\">⚙<"
+        },
+        {
+          "tag": "INPUT",
+          "id": "q",
+          "text": "",
+          "aria": "Filter archived plans",
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "#q"
+        },
+        {
+          "tag": "SELECT",
+          "id": "repo",
+          "text": "All reposPersonal-Writingadn-claude-configsagent-of-empiresai-configsdoctesc-smokeheddlehermes-agentlive-smokenod-symphonyplan-reviewerplanssimtmpworkspace",
+          "aria": "Filter by repo",
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "#repo"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_5tZyu41eVACp\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_5tZyu41eVACp\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_BD4YcO1OEhlK\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_BD4YcO1OEhlK\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_kL7h2zMp1IkL\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_kL7h2zMp1IkL\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_u33Vlem5nel_\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_u33Vlem5nel_\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_Qc1MhOTwFr4r\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_Qc1MhOTwFr4r\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_f8eUncotzoF3\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_f8eUncotzoF3\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_dWKfqT86zmbJ\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_dWKfqT86zmbJ\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_Jd5keqhGxeeR\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_Jd5keqhGxeeR\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_abEGZDLZ1ArP\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_abEGZDLZ1ArP\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_WvTKyuJEO8G7\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_WvTKyuJEO8G7\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_5hvCL70FK6wq\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_5hvCL70FK6wq\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_4vLs1YkuyhIy\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_4vLs1YkuyhIy\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_ZKHlvXNsvuBd\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_ZKHlvXNsvuBd\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_QuTUFJ-K9f1L\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_QuTUFJ-K9f1L\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_N7bSTuVT2KJN\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_N7bSTuVT2KJN\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_gN3a9SHzaAaX\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_gN3a9SHzaAaX\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_W8vXh3jpHBsV\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_W8vXh3jpHBsV\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_CCJjHdrDtUhk\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_CCJjHdrDtUhk\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_jdyZxy0wAMX1\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_jdyZxy0wAMX1\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_-4mawteUh0Nb\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_-4mawteUh0Nb\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_fIHMfUltrsm1\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_fIHMfUltrsm1\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_iZb0yZSMFELZ\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_iZb0yZSMFELZ\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_Wxc79cDk4RaV\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_Wxc79cDk4RaV\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_WTrrd4oanwCe\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_WTrrd4oanwCe\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_7YfBxyUDBdj-\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_7YfBxyUDBdj-\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_sjEAGmvtS6zr\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_sjEAGmvtS6zr\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_YXWUdjBxmHC7\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_YXWUdjBxmHC7\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_7K44LkB5bjIP\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_7K44LkB5bjIP\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_20CS-TpK--yh\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_20CS-TpK--yh\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_TIWkiryDcwko\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_TIWkiryDcwko\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_3R9KWEY7PX8X\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_3R9KWEY7PX8X\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_cpb5QBK3zD55\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_cpb5QBK3zD55\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_owkQcAHUJqh2\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_owkQcAHUJqh2\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_YWpAMTkkgVIj\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_YWpAMTkkgVIj\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_t8NY6kJqqwRe\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_t8NY6kJqqwRe\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_sI3GgYrZ3OJ7\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_sI3GgYrZ3OJ7\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_6T6fKx7-qEbs\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_6T6fKx7-qEbs\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_6qoBiulYsTrv\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_6qoBiulYsTrv\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_Iz6SpwxdrQDG\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_Iz6SpwxdrQDG\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_p2Xwsix9hkC5\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_p2Xwsix9hkC5\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_44p8PRxsNetI\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_44p8PRxsNetI\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_WaQCxUAVxNQn\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_WaQCxUAVxNQn\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_WIslJDbVvK4x\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_WIslJDbVvK4x\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_taFVjjca53gu\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_taFVjjca53gu\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_hYboiDK41Sdw\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_hYboiDK41Sdw\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_Msl1CPTmlNkG\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_Msl1CPTmlNkG\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_g_Hz76WZ7lNd\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_g_Hz76WZ7lNd\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_XoeVbQECXAzf\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_XoeVbQECXAzf\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_N_GnRbDi9tt9\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_N_GnRbDi9tt9\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_-z9i6RL2ptRw\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_-z9i6RL2ptRw\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_LITg-VlPwjza\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_LITg-VlPwjza\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_6vqrQCTrskmy\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_6vqrQCTrskmy\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_cVRMtw3EmXJI\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_cVRMtw3EmXJI\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_LDWgduQCfHbn\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_LDWgduQCfHbn\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_vGHGcWJ5kH0X\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_vGHGcWJ5kH0X\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_hEg7pch-C1lc\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_hEg7pch-C1lc\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_LBrOWmMpWNSX\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_LBrOWmMpWNSX\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_DWv5kZbwfj2K\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_DWv5kZbwfj2K\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_V3Q-awa0N04U\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_V3Q-awa0N04U\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_rX7whjmHt9d6\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_rX7whjmHt9d6\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_m_TKp9lzss58\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_m_TKp9lzss58\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_IUOnvL4lUQQh\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_IUOnvL4lUQQh\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_bOzfI-9T1EUm\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_bOzfI-9T1EUm\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_Pq6bn5RWpvKJ\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_Pq6bn5RWpvKJ\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_7NnSTVonnh6B\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_7NnSTVonnh6B\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_rNISH37dDz4b\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_rNISH37dDz4b\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_TewSEvfxbjjy\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_TewSEvfxbjjy\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_wTfQ9XUEg2fU\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_wTfQ9XUEg2fU\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_lFoSOsVny5fO\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_lFoSOsVny5fO\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_cFg7oWbswKfR\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_cFg7oWbswKfR\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_b1kaLRyZoyuN\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_b1kaLRyZoyuN\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_9KE-gldDvF5o\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_9KE-gldDvF5o\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan__3uaVkbVGGEs\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan__3uaVkbVGGEs\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_WXOjqrIm0Ure\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_WXOjqrIm0Ure\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_s9isiHlC9CHJ\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_s9isiHlC9CHJ\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_vn8Hy9UiA3tL\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_vn8Hy9UiA3tL\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_Cd8AGvylTYan\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_Cd8AGvylTYan\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_n2pwqDDBrVd_\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_n2pwqDDBrVd_\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_fcT7cQgv7xGT\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_fcT7cQgv7xGT\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_wJ2yfnxaFFxh\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_wJ2yfnxaFFxh\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_YkSF4RepbqKV\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_YkSF4RepbqKV\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_deJIbl2slbm0\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_deJIbl2slbm0\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_FqoBgKG3wl9w\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_FqoBgKG3wl9w\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_GPPly9CBhX8q\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_GPPly9CBhX8q\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_aAi2-qRr7e2b\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_aAi2-qRr7e2b\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_B5PFLQI3rjxw\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_B5PFLQI3rjxw\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_nZGrKrQPuWGV\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_nZGrKrQPuWGV\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_DBGYQI1vGYtx\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_DBGYQI1vGYtx\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_eElv577iQI0e\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_eElv577iQI0e\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_x2VggMtkSSZe\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_x2VggMtkSSZe\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_e2W5UAoosTIm\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_e2W5UAoosTIm\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_vC2z-et6rgYm\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_vC2z-et6rgYm\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_gDNJ28hZvZyK\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_gDNJ28hZvZyK\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_NogAg3yxHonb\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_NogAg3yxHonb\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_0W1yJOKtyLfY\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_0W1yJOKtyLfY\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_aMCLKr3KviZb\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_aMCLKr3KviZb\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_HlAna8GE17Y7\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_HlAna8GE17Y7\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_XjKFKKToG2Nt\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_XjKFKKToG2Nt\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_D5WLtQh-EWoy\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_D5WLtQh-EWoy\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_IaMGo5PfI90N\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_IaMGo5PfI90N\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_SFV1CW_Lsioe\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_SFV1CW_Lsioe\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_7_5SIRjMguKg\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_7_5SIRjMguKg\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_GnhvxEpXMQdq\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_GnhvxEpXMQdq\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_NiRkfLCR5zbR\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_NiRkfLCR5zbR\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_FMDuBd9vKPmx\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_FMDuBd9vKPmx\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_O8rH7z4h_tpb\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_O8rH7z4h_tpb\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_nKqIc1cP-vxS\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_nKqIc1cP-vxS\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_Y8Rc5LS0bmuY\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_Y8Rc5LS0bmuY\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_g8mlSj4jtMIo\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_g8mlSj4jtMIo\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_eAHJqAwGLeOc\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_eAHJqAwGLeOc\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_o1obc7G4CNNt\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_o1obc7G4CNNt\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_mTZU_KzaI2Id\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_mTZU_KzaI2Id\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_c6XZW90z5luh\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_c6XZW90z5luh\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_3CjgNOxkRKIM\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_3CjgNOxkRKIM\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_SriK7Eb2lObh\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_SriK7Eb2lObh\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_rFHQfRqDzI8e\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_rFHQfRqDzI8e\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_BfNPVZ1oSdRf\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_BfNPVZ1oSdRf\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_3t7RKp0eYyKG\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_3t7RKp0eYyKG\">Restore</button>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "Open",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary\" href=\"/p/plan_7Lck9RxTiuNE\">Open</a>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Restore",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-restore-plan=\"plan_7Lck9RxTiuNE\">Restore</button>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "clear-filters",
+          "text": "Clear filters",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "#clear-filters"
+        }
+      ]
+    },
+    {
+      "path": "/deferred",
+      "buttons": [
+        {
+          "tag": "A",
+          "id": "",
+          "text": "🗄",
+          "aria": "Archived (119)",
+          "title": "Archived (119)",
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary topbar-icon-action\" href=\"/archive\" aria-label=\"Archived (119)\" title=\"Archived (119)\">🗄</a>"
+        },
+        {
+          "tag": "A",
+          "id": "",
+          "text": "⚙",
+          "aria": "Configuration",
+          "title": "Configuration",
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary topbar-icon-action\" href=\"/configuration\" aria-label=\"Configuration\" title=\"Configuration\">⚙<"
+        },
+        {
+          "tag": "INPUT",
+          "id": "q",
+          "text": "",
+          "aria": "Filter deferred plans",
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "#q"
+        },
+        {
+          "tag": "SELECT",
+          "id": "repo",
+          "text": "All reposgranola-cliheddleplan-reviewer",
+          "aria": "Filter by repo",
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "#repo"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Resume",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-resume-plan=\"plan_UGXWvQeyTYiG\">Resume</button>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Archive",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"archive-plan\" type=\"button\" data-archive-plan=\"plan_UGXWvQeyTYiG\">Archive</button>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Resume",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-resume-plan=\"plan_w2CWcwNpsVKq\">Resume</button>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Archive",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"archive-plan\" type=\"button\" data-archive-plan=\"plan_w2CWcwNpsVKq\">Archive</button>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Resume",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-resume-plan=\"plan_dSkqmP-sXod7\">Resume</button>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Archive",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"archive-plan\" type=\"button\" data-archive-plan=\"plan_dSkqmP-sXod7\">Archive</button>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Resume",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"restore-plan\" type=\"button\" data-resume-plan=\"plan_wBdZlGRP3iYx\">Resume</button>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "",
+          "text": "Archive",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<button class=\"archive-plan\" type=\"button\" data-archive-plan=\"plan_wBdZlGRP3iYx\">Archive</button>"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "clear-filters",
+          "text": "Clear filters",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "#clear-filters"
+        }
+      ]
+    },
+    {
+      "path": "/configuration",
+      "buttons": [
+        {
+          "tag": "A",
+          "id": "",
+          "text": "⚙",
+          "aria": "Configuration",
+          "title": "Configuration",
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<a class=\"nav-link primary topbar-icon-action\" href=\"/configuration\" aria-label=\"Configuration\" title=\"Configuration\">⚙<"
+        },
+        {
+          "tag": "INPUT",
+          "id": "show-plan-navigator-default",
+          "text": "",
+          "aria": null,
+          "title": null,
+          "type": "checkbox",
+          "hidden": false,
+          "disabled": false,
+          "selector": "#show-plan-navigator-default"
+        },
+        {
+          "tag": "INPUT",
+          "id": "show-comments-default",
+          "text": "",
+          "aria": null,
+          "title": null,
+          "type": "checkbox",
+          "hidden": false,
+          "disabled": false,
+          "selector": "#show-comments-default"
+        },
+        {
+          "tag": "INPUT",
+          "id": "execution-ready-skill-name",
+          "text": "",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "#execution-ready-skill-name"
+        },
+        {
+          "tag": "INPUT",
+          "id": "build-plan-skill-name",
+          "text": "",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "#build-plan-skill-name"
+        },
+        {
+          "tag": "INPUT",
+          "id": "kanban-enabled",
+          "text": "",
+          "aria": null,
+          "title": null,
+          "type": "checkbox",
+          "hidden": false,
+          "disabled": false,
+          "selector": "#kanban-enabled"
+        },
+        {
+          "tag": "INPUT",
+          "id": "update-checks-enabled",
+          "text": "",
+          "aria": null,
+          "title": null,
+          "type": "checkbox",
+          "hidden": false,
+          "disabled": false,
+          "selector": "#update-checks-enabled"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "save-update-checks",
+          "text": "Save update checks",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "#save-update-checks"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "save-configuration",
+          "text": "Save configuration",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "#save-configuration"
+        },
+        {
+          "tag": "INPUT",
+          "id": "",
+          "text": "",
+          "aria": "Label for backlog",
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<input class=\"configuration-input\" data-column-label=\"\" aria-label=\"Label for backlog\" value=\"Backlog\">"
+        },
+        {
+          "tag": "INPUT",
+          "id": "",
+          "text": "",
+          "aria": null,
+          "title": null,
+          "type": "checkbox",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<input type=\"checkbox\" data-column-hidden=\"\">"
+        },
+        {
+          "tag": "INPUT",
+          "id": "",
+          "text": "",
+          "aria": "Label for planning",
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<input class=\"configuration-input\" data-column-label=\"\" aria-label=\"Label for planning\" value=\"Planning\">"
+        },
+        {
+          "tag": "INPUT",
+          "id": "",
+          "text": "",
+          "aria": null,
+          "title": null,
+          "type": "checkbox",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<input type=\"checkbox\" data-column-hidden=\"\">"
+        },
+        {
+          "tag": "INPUT",
+          "id": "",
+          "text": "",
+          "aria": "Label for in_progress",
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<input class=\"configuration-input\" data-column-label=\"\" aria-label=\"Label for in_progress\" value=\"In Progress\">"
+        },
+        {
+          "tag": "INPUT",
+          "id": "",
+          "text": "",
+          "aria": null,
+          "title": null,
+          "type": "checkbox",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<input type=\"checkbox\" data-column-hidden=\"\">"
+        },
+        {
+          "tag": "INPUT",
+          "id": "",
+          "text": "",
+          "aria": "Label for done",
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "<input class=\"configuration-input\" data-column-label=\"\" aria-label=\"Label for done\" value=\"Done\">"
+        },
+        {
+          "tag": "INPUT",
+          "id": "",
+          "text": "",
+          "aria": null,
+          "title": null,
+          "type": "checkbox",
+          "hidden": false,
+          "disabled": false,
+          "selector": "<input type=\"checkbox\" data-column-hidden=\"\" checked=\"\">"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "save-columns",
+          "text": "Save columns",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "#save-columns"
+        }
+      ]
+    },
+    {
+      "path": "/p/plan_rGnl4OwFqVT_",
+      "buttons": [
+        {
+          "tag": "BUTTON",
+          "id": "desktop-plan-nav-toggle",
+          "text": "☰",
+          "aria": "Plan Navigator",
+          "title": "Plan Navigator",
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "#desktop-plan-nav-toggle"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "pin-plan",
+          "text": "☆",
+          "aria": "Pin plan",
+          "title": "Pin plan",
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "#pin-plan"
+        },
+        {
+          "tag": "A",
+          "id": "download-raw-plan",
+          "text": "⬇",
+          "aria": "Download raw plan",
+          "title": "Download raw plan HTML; ZIP includes required assets.",
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "#download-raw-plan"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "request-execution-review",
+          "text": "✓",
+          "aria": "Request execution-ready review",
+          "title": "Request execution-ready review",
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "#request-execution-review"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "build-plan",
+          "text": "⚒",
+          "aria": "Build Plan",
+          "title": "Build Plan",
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "#build-plan"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "defer-plan",
+          "text": "⏸",
+          "aria": "Defer plan",
+          "title": "Defer plan",
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "#defer-plan"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "archive-plan",
+          "text": "🗄",
+          "aria": "Archive plan",
+          "title": "Archive plan",
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "#archive-plan"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "restore-plan",
+          "text": "↩",
+          "aria": "Restore plan",
+          "title": "Restore plan",
+          "type": "button",
+          "hidden": true,
+          "disabled": false,
+          "selector": "#restore-plan"
+        },
+        {
+          "tag": "A",
+          "id": "configuration-link",
+          "text": "⚙",
+          "aria": "Configuration",
+          "title": "Configuration",
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "#configuration-link"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "desktop-comments-toggle",
+          "text": "💬 1",
+          "aria": "Open comments",
+          "title": "Comments",
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "#desktop-comments-toggle"
+        },
+        {
+          "tag": "SELECT",
+          "id": "current-plan-status-control",
+          "text": "BacklogPlanningIn ProgressDone",
+          "aria": "Current plan status",
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "#current-plan-status-control"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "plan-list-retry",
+          "text": "Retry",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": true,
+          "disabled": false,
+          "selector": "#plan-list-retry"
+        },
+        {
+          "tag": "SELECT",
+          "id": "project-filter-control",
+          "text": "All projectsadn_vaultadn-claude-configsagent-of-empiresai-configsdoctesc-smokegranola-cliheddlehermes-agenthttps://github.com/Nodaste-Lab/heddle.gitlive-smokenod-symphonyplan-reviewerplansscroll-repro-diagnosticscroll-repro-synthsimtmpwheel-reproworkspace",
+          "aria": "Filter navigator by project",
+          "title": null,
+          "type": null,
+          "hidden": true,
+          "disabled": false,
+          "selector": "#project-filter-control"
+        },
+        {
+          "tag": "SELECT",
+          "id": "state-filter-control",
+          "text": "All statesActiveDeferredArchived",
+          "aria": "Filter navigator by state",
+          "title": null,
+          "type": null,
+          "hidden": true,
+          "disabled": false,
+          "selector": "#state-filter-control"
+        },
+        {
+          "tag": "SELECT",
+          "id": "status-filter-control",
+          "text": "All statusesBacklogPlanningIn Progress",
+          "aria": "Filter navigator by status",
+          "title": null,
+          "type": null,
+          "hidden": true,
+          "disabled": false,
+          "selector": "#status-filter-control"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "mobile-comments-toggle",
+          "text": "Comments (1)",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": true,
+          "disabled": false,
+          "selector": "#mobile-comments-toggle"
+        },
+        {
+          "tag": "TEXTAREA",
+          "id": "plan-note-body",
+          "text": "",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "#plan-note-body"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "add-plan-note",
+          "text": "Add note",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "#add-plan-note"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "archive-toast-undo",
+          "text": "Undo",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "#archive-toast-undo"
+        },
+        {
+          "tag": "INPUT",
+          "id": "quick-open-input",
+          "text": "",
+          "aria": null,
+          "title": null,
+          "type": "search",
+          "hidden": false,
+          "disabled": false,
+          "selector": "#quick-open-input"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "quick-open-retry",
+          "text": "Retry",
+          "aria": null,
+          "title": null,
+          "type": "button",
+          "hidden": false,
+          "disabled": false,
+          "selector": "#quick-open-retry"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "zoom-out",
+          "text": "-",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "#zoom-out"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "zoom-reset",
+          "text": "Reset",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "#zoom-reset"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "zoom-in",
+          "text": "+",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "#zoom-in"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "pan-toggle",
+          "text": "Pan",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "#pan-toggle"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "close-lightbox",
+          "text": "Close",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "#close-lightbox"
+        },
+        {
+          "tag": "TEXTAREA",
+          "id": "comment-body",
+          "text": "",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "#comment-body"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "submit-comment",
+          "text": "Submit",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "#submit-comment"
+        },
+        {
+          "tag": "BUTTON",
+          "id": "cancel-comment",
+          "text": "Cancel",
+          "aria": null,
+          "title": null,
+          "type": null,
+          "hidden": false,
+          "disabled": false,
+          "selector": "#cancel-comment"
+        }
+      ]
+    }
+  ],
+  "clicks": [
+    {
+      "label": "toggle nav closed",
+      "selector": "#desktop-plan-nav-toggle",
+      "before": {
+        "label": "toggle nav closed:before",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 14307,
+          "reviewScrollHeight": 14307,
+          "frameY": 0,
+          "frameHeight": 14307,
+          "frameDocHeight": 14307
+        },
+        "composerHidden": true,
+        "commentsOpen": false
+      },
+      "after": {
+        "label": "toggle nav closed:after",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 15452,
+          "reviewScrollHeight": 15452,
+          "frameY": 0,
+          "frameHeight": 15452,
+          "frameDocHeight": 15452
+        },
+        "composerHidden": true,
+        "commentsOpen": false
+      }
+    },
+    {
+      "label": "toggle nav open",
+      "selector": "#desktop-plan-nav-toggle",
+      "before": {
+        "label": "toggle nav open:before",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 15452,
+          "reviewScrollHeight": 15452,
+          "frameY": 0,
+          "frameHeight": 15452,
+          "frameDocHeight": 15452
+        },
+        "composerHidden": true,
+        "commentsOpen": false
+      },
+      "after": {
+        "label": "toggle nav open:after",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 15452,
+          "reviewScrollHeight": 15452,
+          "frameY": 0,
+          "frameHeight": 15452,
+          "frameDocHeight": 15452
+        },
+        "composerHidden": true,
+        "commentsOpen": false
+      }
+    },
+    {
+      "label": "open comments",
+      "selector": "#desktop-comments-toggle",
+      "before": {
+        "label": "open comments:before",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 15452,
+          "reviewScrollHeight": 15452,
+          "frameY": 0,
+          "frameHeight": 15452,
+          "frameDocHeight": 15452
+        },
+        "composerHidden": true,
+        "commentsOpen": false
+      },
+      "after": {
+        "label": "open comments:after",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed comments-open",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 15613,
+          "reviewScrollHeight": 15613,
+          "frameY": 0,
+          "frameHeight": 15613,
+          "frameDocHeight": 15613
+        },
+        "composerHidden": true,
+        "commentsOpen": true
+      }
+    },
+    {
+      "label": "close comments",
+      "selector": "#desktop-comments-toggle",
+      "before": {
+        "label": "close comments:before",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed comments-open",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 15613,
+          "reviewScrollHeight": 15613,
+          "frameY": 0,
+          "frameHeight": 15613,
+          "frameDocHeight": 15613
+        },
+        "composerHidden": true,
+        "commentsOpen": true
+      },
+      "after": {
+        "label": "close comments:after",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 15613,
+          "reviewScrollHeight": 15613,
+          "frameY": 0,
+          "frameHeight": 15613,
+          "frameDocHeight": 15613
+        },
+        "composerHidden": true,
+        "commentsOpen": false
+      }
+    },
+    {
+      "label": "pin plan",
+      "selector": "#pin-plan",
+      "before": {
+        "label": "pin plan:before",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 15613,
+          "reviewScrollHeight": 15613,
+          "frameY": 0,
+          "frameHeight": 15613,
+          "frameDocHeight": 15613
+        },
+        "composerHidden": true,
+        "commentsOpen": false
+      },
+      "after": {
+        "label": "pin plan:after",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 15613,
+          "reviewScrollHeight": 15613,
+          "frameY": 0,
+          "frameHeight": 15613,
+          "frameDocHeight": 15613
+        },
+        "composerHidden": true,
+        "commentsOpen": false
+      }
+    },
+    {
+      "label": "unpin plan",
+      "selector": "#pin-plan",
+      "before": {
+        "label": "unpin plan:before",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 15613,
+          "reviewScrollHeight": 15613,
+          "frameY": 0,
+          "frameHeight": 15613,
+          "frameDocHeight": 15613
+        },
+        "composerHidden": true,
+        "commentsOpen": false
+      },
+      "after": {
+        "label": "unpin plan:after",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 15613,
+          "reviewScrollHeight": 15613,
+          "frameY": 0,
+          "frameHeight": 15613,
+          "frameDocHeight": 15613
+        },
+        "composerHidden": true,
+        "commentsOpen": false
+      }
+    },
+    {
+      "label": "open composer by clicking rendered plan",
+      "after": {
+        "label": "composer-open",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 15613,
+          "reviewScrollHeight": 15613,
+          "frameY": 0,
+          "frameHeight": 15613,
+          "frameDocHeight": 15613
+        },
+        "composerHidden": false,
+        "commentsOpen": false
+      }
+    },
+    {
+      "label": "cancel draft comment",
+      "selector": "#cancel-comment",
+      "before": {
+        "label": "cancel draft comment:before",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 15613,
+          "reviewScrollHeight": 15613,
+          "frameY": 0,
+          "frameHeight": 15613,
+          "frameDocHeight": 15613
+        },
+        "composerHidden": false,
+        "commentsOpen": false
+      },
+      "after": {
+        "label": "cancel draft comment:after",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 15613,
+          "reviewScrollHeight": 15613,
+          "frameY": 0,
+          "frameHeight": 15613,
+          "frameDocHeight": 15613
+        },
+        "composerHidden": true,
+        "commentsOpen": false
+      }
+    },
+    {
+      "label": "submit comment",
+      "selector": "#submit-comment",
+      "before": {
+        "label": "submit comment:before",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 0 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 15613,
+          "reviewScrollHeight": 15613,
+          "frameY": 0,
+          "frameHeight": 15613,
+          "frameDocHeight": 15613
+        },
+        "composerHidden": false,
+        "commentsOpen": false
+      },
+      "after": {
+        "label": "submit comment:after",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 1 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 1 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 15613,
+          "reviewScrollHeight": 15613,
+          "frameY": 0,
+          "frameHeight": 15613,
+          "frameDocHeight": 15613
+        },
+        "composerHidden": true,
+        "commentsOpen": false
+      }
+    },
+    {
+      "label": "add plan note",
+      "selector": "#add-plan-note",
+      "before": {
+        "label": "add plan note:before",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed comments-open",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 1 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 1 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 15613,
+          "reviewScrollHeight": 15613,
+          "frameY": 0,
+          "frameHeight": 15613,
+          "frameDocHeight": 15613
+        },
+        "composerHidden": true,
+        "commentsOpen": true
+      },
+      "after": {
+        "label": "add plan note:after",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed comments-open",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 1 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 1 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 15613,
+          "reviewScrollHeight": 15613,
+          "frameY": 0,
+          "frameHeight": 15613,
+          "frameDocHeight": 15613
+        },
+        "composerHidden": true,
+        "commentsOpen": true
+      }
+    },
+    {
+      "label": "request execution review",
+      "selector": "#request-execution-review",
+      "before": {
+        "label": "request execution review:before",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed comments-open",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 1 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 1 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 15613,
+          "reviewScrollHeight": 15613,
+          "frameY": 0,
+          "frameHeight": 15613,
+          "frameDocHeight": 15613
+        },
+        "composerHidden": true,
+        "commentsOpen": true
+      },
+      "after": {
+        "label": "request execution review:after",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed comments-open",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 2 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 2 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 15613,
+          "reviewScrollHeight": 15613,
+          "frameY": 0,
+          "frameHeight": 15613,
+          "frameDocHeight": 15613
+        },
+        "composerHidden": true,
+        "commentsOpen": true
+      }
+    },
+    {
+      "label": "request build plan",
+      "selector": "#build-plan",
+      "before": {
+        "label": "request build plan:before",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed comments-open",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 2 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 2 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 15613,
+          "reviewScrollHeight": 15613,
+          "frameY": 0,
+          "frameHeight": 15613,
+          "frameDocHeight": 15613
+        },
+        "composerHidden": true,
+        "commentsOpen": true
+      },
+      "after": {
+        "label": "request build plan:after",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed comments-open",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 3 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 3 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 15613,
+          "reviewScrollHeight": 15613,
+          "frameY": 0,
+          "frameHeight": 15613,
+          "frameDocHeight": 15613
+        },
+        "composerHidden": true,
+        "commentsOpen": true
+      }
+    },
+    {
+      "label": "quick open search scroll",
+      "after": {
+        "label": "quick-open",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed comments-open",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 3 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 3 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 15613,
+          "reviewScrollHeight": 15613,
+          "frameY": 0,
+          "frameHeight": 15613,
+          "frameDocHeight": 15613
+        },
+        "composerHidden": true,
+        "commentsOpen": true
+      }
+    },
+    {
+      "label": "quick open retry",
+      "selector": "#quick-open-retry",
+      "skipped": "not visible"
+    },
+    {
+      "label": "current plan status select roundtrip",
+      "after": {
+        "label": "status-roundtrip",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed comments-open",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 3 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 3 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 15613,
+          "reviewScrollHeight": 15613,
+          "frameY": 0,
+          "frameHeight": 15613,
+          "frameDocHeight": 15613
+        },
+        "composerHidden": true,
+        "commentsOpen": true
+      }
+    },
+    {
+      "label": "archive plan",
+      "selector": "#archive-plan",
+      "before": {
+        "label": "archive plan:before",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed comments-open",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 3 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 3 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 15613,
+          "reviewScrollHeight": 15613,
+          "frameY": 0,
+          "frameHeight": 15613,
+          "frameDocHeight": 15613
+        },
+        "composerHidden": true,
+        "commentsOpen": true
+      },
+      "after": {
+        "label": "archive plan:after",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed comments-open",
+        "navCount": 2,
+        "navFirst": [
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 15613,
+          "reviewScrollHeight": 15613,
+          "frameY": 0,
+          "frameHeight": 15613,
+          "frameDocHeight": 15613
+        },
+        "composerHidden": true,
+        "commentsOpen": true
+      }
+    },
+    {
+      "label": "undo archive",
+      "selector": "#archive-toast-undo",
+      "before": {
+        "label": "undo archive:before",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed comments-open",
+        "navCount": 2,
+        "navFirst": [
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 15613,
+          "reviewScrollHeight": 15613,
+          "frameY": 0,
+          "frameHeight": 15613,
+          "frameDocHeight": 15613
+        },
+        "composerHidden": true,
+        "commentsOpen": true
+      },
+      "after": {
+        "label": "undo archive:after",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 3 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 3 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 14307,
+          "reviewScrollHeight": 14307,
+          "frameY": 0,
+          "frameHeight": 14307,
+          "frameDocHeight": 14307
+        },
+        "composerHidden": true,
+        "commentsOpen": false
+      }
+    },
+    {
+      "label": "defer plan",
+      "selector": "#defer-plan",
+      "before": {
+        "label": "defer plan:before",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 3 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 3 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 14307,
+          "reviewScrollHeight": 14307,
+          "frameY": 0,
+          "frameHeight": 14307,
+          "frameDocHeight": 14307
+        },
+        "composerHidden": true,
+        "commentsOpen": false
+      },
+      "after": {
+        "label": "defer plan:after",
+        "url": "http://127.0.0.1:4318/p/plan_rGnl4OwFqVT_",
+        "title": "Run Plan Command Surface Cleanup",
+        "bodyClass": "plan-nav-collapsed",
+        "navCount": 3,
+        "navFirst": [
+          {
+            "id": "plan_rGnl4OwFqVT_",
+            "title": "Run Plan Command Surface Cleanup",
+            "status": "backlog",
+            "active": true,
+            "text": "Run Plan Command Surface Cleanupbacklog4/5pending 3 · updated 2026-06-26T22:01:41.289Z"
+          },
+          {
+            "id": "plan_p0eVnoHb2FZh",
+            "title": "GLM Review Prompt Reliability Plan",
+            "status": "in_progress",
+            "active": false,
+            "text": "GLM Review Prompt Reliability Planin_progressNo phasespending 1 · updated 2026-06-26T21:59:44.572Z"
+          },
+          {
+            "id": "plan_CSR2UvJnWNp7",
+            "title": "Byzantine Generals And Adversarial Gardening",
+            "status": "Needs attention",
+            "active": false,
+            "text": "Byzantine Generals And Adversarial GardeningNeeds attention0/6pending 0 · updated 2026-06-18T23:58:57.403Z"
+          }
+        ],
+        "activeNav": {
+          "id": "plan_rGnl4OwFqVT_",
+          "title": "Run Plan Command Surface Cleanup",
+          "status": "backlog",
+          "active": true,
+          "text": "Run Plan Command Surface Cleanupbacklog4/5pending 3 · updated 2026-06-26T22:01:41.289Z"
+        },
+        "filters": {
+          "project": "ai-configs",
+          "state": "active",
+          "status": ""
+        },
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": 0,
+          "reviewClient": 14307,
+          "reviewScrollHeight": 14307,
+          "frameY": 0,
+          "frameHeight": 14307,
+          "frameDocHeight": 14307
+        },
+        "composerHidden": true,
+        "commentsOpen": false
+      }
+    },
+    {
+      "label": "resume plan",
+      "selector": "#resume-plan",
+      "skipped": "not visible"
+    },
+    {
+      "label": "save update checks",
+      "selector": "#save-update-checks",
+      "before": {
+        "label": "save update checks:before",
+        "url": "http://127.0.0.1:4318/configuration",
+        "title": "Configuration",
+        "bodyClass": "",
+        "navCount": 0,
+        "navFirst": [],
+        "filters": {},
+        "scroll": {
+          "windowY": 0,
+          "reviewTop": null,
+          "reviewClient": null,
+          "reviewScrollHeight": null,
+          "frameY": null,
+          "frameHeight": null,
+          "frameDocHeight": null
+        },
+        "commentsOpen": false
+      },
+      "after": {
+        "label": "save update checks:after",
+        "url": "http://127.0.0.1:4318/configuration",
+        "title": "Configuration",
+        "bodyClass": "",
+        "navCount": 0,
+        "navFirst": [],
+        "filters": {},
+        "scroll": {
+          "windowY": 574,
+          "reviewTop": null,
+          "reviewClient": null,
+          "reviewScrollHeight": null,
+          "frameY": null,
+          "frameHeight": null,
+          "frameDocHeight": null
+        },
+        "commentsOpen": false
+      }
+    },
+    {
+      "label": "save configuration",
+      "selector": "#save-configuration",
+      "before": {
+        "label": "save configuration:before",
+        "url": "http://127.0.0.1:4318/configuration",
+        "title": "Configuration",
+        "bodyClass": "",
+        "navCount": 0,
+        "navFirst": [],
+        "filters": {},
+        "scroll": {
+          "windowY": 574,
+          "reviewTop": null,
+          "reviewClient": null,
+          "reviewScrollHeight": null,
+          "frameY": null,
+          "frameHeight": null,
+          "frameDocHeight": null
+        },
+        "commentsOpen": false
+      },
+      "after": {
+        "label": "save configuration:after",
+        "url": "http://127.0.0.1:4318/configuration",
+        "title": "Configuration",
+        "bodyClass": "",
+        "navCount": 0,
+        "navFirst": [],
+        "filters": {},
+        "scroll": {
+          "windowY": 574,
+          "reviewTop": null,
+          "reviewClient": null,
+          "reviewScrollHeight": null,
+          "frameY": null,
+          "frameHeight": null,
+          "frameDocHeight": null
+        },
+        "commentsOpen": false
+      }
+    },
+    {
+      "label": "index archive first card",
+      "selector": ".plan-card [data-archive-plan]",
+      "skipped": "not visible"
+    },
+    {
+      "label": "index undo archive",
+      "selector": ".archive-toast button",
+      "skipped": "not visible"
+    }
+  ]
+}
