@@ -1706,6 +1706,8 @@ test('deferred lifecycle hides plans from active index and preserves agent-visib
     const deferredShell = await app.inject({ method: 'GET', url: `/p/${planId}` });
     assert.match(deferredShell.body, /id="resume-plan"/);
     assert.match(deferredShell.body, /id="archive-plan"/);
+    assert.match(deferredShell.body, /id="archive-status"[^>]*aria-label="Status: Deferred"[^>]*>Deferred<\/span>/);
+    assert.match(deferredShell.body, /Resume this plan before changing its board status\./);
     assert.doesNotMatch(deferredShell.body, /id="defer-plan"/);
     assert.doesNotMatch(deferredShell.body, /id="current-plan-status-control"/);
 
@@ -2045,6 +2047,24 @@ test('review shell defaults navigator filters to active current project', async 
     assert.match(archivedNavHtml, /Alpha archived default/);
     assert.doesNotMatch(archivedNavHtml, /Alpha peer default/);
     assert.doesNotMatch(archivedNavHtml, /Beta active default/);
+
+    const defaultArchivedShell = await app.inject({ method: 'GET', url: `/p/${archivedId}` });
+    assert.equal(defaultArchivedShell.statusCode, 200, defaultArchivedShell.body);
+    assert.match(defaultArchivedShell.body, /<aside id="plan-list-nav" aria-label="Archived plans"/);
+    assert.match(defaultArchivedShell.body, /<option value="archived" selected>Archived<\/option>/);
+    const defaultArchivedNavHtml = defaultArchivedShell.body.slice(defaultArchivedShell.body.indexOf('id="plan-list-nav"'), defaultArchivedShell.body.indexOf('<main id="review"'));
+    assert.match(defaultArchivedNavHtml, /Alpha archived default/);
+    assert.doesNotMatch(defaultArchivedNavHtml, /Alpha current default/);
+    assert.match(defaultArchivedShell.body, /Restore this plan before changing its board status\./);
+
+    const defaultDeferredShell = await app.inject({ method: 'GET', url: `/p/${deferredId}` });
+    assert.equal(defaultDeferredShell.statusCode, 200, defaultDeferredShell.body);
+    assert.match(defaultDeferredShell.body, /<aside id="plan-list-nav" aria-label="Deferred plans"/);
+    assert.match(defaultDeferredShell.body, /<option value="deferred" selected>Deferred<\/option>/);
+    const defaultDeferredNavHtml = defaultDeferredShell.body.slice(defaultDeferredShell.body.indexOf('id="plan-list-nav"'), defaultDeferredShell.body.indexOf('<main id="review"'));
+    assert.match(defaultDeferredNavHtml, /Alpha deferred default/);
+    assert.doesNotMatch(defaultDeferredNavHtml, /Alpha current default/);
+    assert.match(defaultDeferredShell.body, /Resume this plan before changing its board status\./);
   } finally {
     await app.close();
   }
@@ -2400,7 +2420,7 @@ test('empty archive page is quiet and archived shell shows restore state', async
   }
 });
 
-test('review shell toolbar actions stay icon-only with tooltips across lifecycle states', async () => {
+test('review shell toolbar distinguishes actions from lifecycle status across states', async () => {
   const app = createApp({ dbPath: tempDbPath('toolbar-icons') });
   try {
     const registered = await app.inject({ method: 'POST', url: '/api/plans/register', payload: sampleRegisterPayload() });
@@ -2416,36 +2436,48 @@ test('review shell toolbar actions stay icon-only with tooltips across lifecycle
     assertIconOnlyControl(activeShell.body, 'build-plan', 'Build Plan', '⚒');
     assertIconOnlyControl(activeShell.body, 'defer-plan', 'Defer plan', '⏸');
     assertIconOnlyControl(activeShell.body, 'archive-plan', 'Archive plan', '🗄');
-    assertIconOnlyControl(activeShell.body, 'restore-plan', 'Restore plan', '↩');
     assertIconOnlyControl(activeShell.body, 'configuration-link', 'Configuration', '⚙');
     assertIconOnlyControl(activeShell.body, 'desktop-comments-toggle', 'Open comments', '💬', 'Comments');
+    const activeRestore = elementById(activeShell.body, 'restore-plan');
+    assert.match(activeRestore, /\bhidden\b/);
     const activeArchiveStatus = elementById(activeShell.body, 'archive-status');
     assert.match(activeArchiveStatus, /\bhidden\b/);
     assert.equal(elementText(activeArchiveStatus), '');
     const css = await app.inject({ method: 'GET', url: '/client.css' });
     assert.equal(css.statusCode, 200, css.body);
-    assert.match(css.body, /#archive-status\[hidden\]\{display:none\}/);
+    assert.match(css.body, /#plan-navbar \[hidden\]\{display:none!important\}/);
+    assert.match(css.body, /\.lifecycle-status\{[^}]*cursor:default;pointer-events:none/);
+    assert.doesNotMatch(css.body, /#archive-status\{[^}]*min-width:38px/);
 
     const deferred = await app.inject({ method: 'POST', url: `/api/plans/${planId}/defer`, payload: { note: 'Waiting on review.' } });
     assert.equal(deferred.statusCode, 200, deferred.body);
     const deferredShell = await app.inject({ method: 'GET', url: `/p/${planId}` });
     assert.equal(deferredShell.statusCode, 200, deferredShell.body);
-    assertIconOnlyControl(deferredShell.body, 'archive-status', 'Deferred', '⏸');
-    assert.match(elementById(deferredShell.body, 'archive-status'), /\brole="status"/);
+    const deferredStatus = elementById(deferredShell.body, 'archive-status');
+    assert.match(deferredStatus, /\bclass="lifecycle-status deferred"/);
+    assert.match(deferredStatus, /\brole="status"/);
+    assert.match(deferredStatus, /\baria-label="Status: Deferred"/);
+    assert.equal(elementText(deferredStatus), 'Deferred');
+    assert.match(deferredShell.body, /Resume this plan before changing its board status\./);
     assertIconOnlyControl(deferredShell.body, 'resume-plan', 'Resume plan', '▶');
     assertIconOnlyControl(deferredShell.body, 'archive-plan', 'Archive plan', '🗄');
-    assertIconOnlyControl(deferredShell.body, 'restore-plan', 'Restore plan', '↩');
+    assert.match(elementById(deferredShell.body, 'restore-plan'), /\bhidden\b/);
     assert.doesNotMatch(deferredShell.body, /id="current-plan-status-control"/);
 
     const archived = await app.inject({ method: 'POST', url: `/api/plans/${planId}/archive` });
     assert.equal(archived.statusCode, 200, archived.body);
     const archivedShell = await app.inject({ method: 'GET', url: `/p/${planId}` });
     assert.equal(archivedShell.statusCode, 200, archivedShell.body);
-    assertIconOnlyControl(archivedShell.body, 'archive-status', 'Archived', '🗄');
-    assert.match(elementById(archivedShell.body, 'archive-status'), /\brole="status"/);
+    const archivedStatus = elementById(archivedShell.body, 'archive-status');
+    assert.match(archivedStatus, /\bclass="lifecycle-status archived"/);
+    assert.match(archivedStatus, /\brole="status"/);
+    assert.match(archivedStatus, /\baria-label="Status: Archived"/);
+    assert.equal(elementText(archivedStatus), 'Status:Archived');
+    assert.match(archivedShell.body, /Restore this plan before changing its board status\./);
     assertIconOnlyControl(archivedShell.body, 'restore-plan', 'Restore plan', '↩');
     assert.doesNotMatch(archivedShell.body, /id="archive-plan"/);
     assert.doesNotMatch(archivedShell.body, /id="current-plan-status-control"/);
+    assert.doesNotMatch(archivedShell.body, />🗄<\/span>/);
   } finally {
     await app.close();
   }
