@@ -623,6 +623,17 @@ function safeActionPlanPath(planPath: string): string {
   return parsed.data;
 }
 
+function actionCommentSourcePath(plan: Pick<PlanRecord, 'planPath' | 'sourcePath' | 'rootPath'>): string {
+  if (plan.sourcePath?.toLowerCase().endsWith('.markdoc')) {
+    if (plan.rootPath) {
+      const relative = path.relative(plan.rootPath, plan.sourcePath);
+      if (relative && !relative.startsWith('..') && !path.isAbsolute(relative)) return relative;
+    }
+    return plan.sourcePath;
+  }
+  return plan.planPath;
+}
+
 function executionReviewRequestBody(planPath: string, skillName = defaultAppConfiguration.executionReadySkillName): string {
   return `Use the ${skillName} skill for this plan.\nPlan path: ${safeActionPlanPath(planPath)}`;
 }
@@ -648,8 +659,8 @@ function boardColumnsConfigurationSectionHtml(columns: BoardColumnRecord[], plan
 }
 
 function configurationHtml(configuration: AppConfiguration, columns: BoardColumnRecord[], planCounts: Map<string, number>, updateConfig: UpdateCheckConfig, cachedStatus: UpdateStatus | undefined): string {
-  const executionPreview = executionReviewRequestBody('thoughts/plans/example.html', configuration.executionReadySkillName);
-  const buildPreview = buildPlanRequestBody('thoughts/plans/example.html', configuration.buildPlanSkillName);
+  const executionPreview = executionReviewRequestBody('thoughts/plans/example.markdoc', configuration.executionReadySkillName);
+  const buildPreview = buildPlanRequestBody('thoughts/plans/example.markdoc', configuration.buildPlanSkillName);
   const updateChecked = updateConfig.enabled ? ' checked' : '';
   const updateStatusText = cachedStatus ? `${cachedStatus.status} · checked ${cachedStatus.checkedAt}` : 'No cached update status yet.';
   return `<!doctype html><html><head><meta charset="utf-8"><title>Configuration</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"><style>${baseIndexStyles()}${organizationIndexStyles()}</style></head><body><main class="configuration-page"><div class="topbar">${documentViewSwitcher(undefined, configuration.kanbanEnabled)}<div class="plan-actions">${configurationGearAction()}</div></div><div class="page-header"><div><h1>Configuration</h1><p class="muted">Service-local settings for the review shell, action buttons, and Kanban board.</p></div></div><div id="organizer-error" class="organizer-error" hidden></div><div class="configuration-layout"><nav class="configuration-nav" aria-label="Configuration sections"><a href="#review-shell-defaults">Review shell defaults</a><a href="#action-button-skills">Action button skills</a><a href="#kanban-availability">Kanban availability</a><a href="#update-checks-settings">Update checks</a><a href="#kanban-columns">Board columns</a></nav><div><section id="review-shell-defaults" class="configuration-section"><h2>Review shell defaults</h2><p class="muted">Choose which side panels are open by default when entering a plan.</p><div class="configuration-grid"><label for="show-plan-navigator-default">Show plan navigator by default</label><input id="show-plan-navigator-default" type="checkbox"${checked(configuration.showPlanNavigatorByDefault)}><label for="show-comments-default">Show comments by default</label><input id="show-comments-default" type="checkbox"${checked(configuration.showCommentsByDefault)}></div></section><section id="action-button-skills" class="configuration-section"><h2>Action button skills</h2><p class="muted">These skill names are inserted into fixed, single-line-safe action comments. Prompt body shape is not configurable.</p><div class="configuration-grid"><label for="execution-ready-skill-name">Review execution ready skill</label><input id="execution-ready-skill-name" class="configuration-input" value="${escapeHtml(configuration.executionReadySkillName)}" aria-describedby="execution-ready-preview"><label for="build-plan-skill-name">Build Plan skill</label><input id="build-plan-skill-name" class="configuration-input" value="${escapeHtml(configuration.buildPlanSkillName)}" aria-describedby="build-plan-preview"></div><h3>Preview</h3><pre id="execution-ready-preview" class="configuration-preview"><code>${escapeHtml(executionPreview)}</code></pre><pre id="build-plan-preview" class="configuration-preview"><code>${escapeHtml(buildPreview)}</code></pre></section><section id="kanban-availability" class="configuration-section"><h2>Kanban availability</h2><p class="muted">Disabling Kanban hides board navigation and movement controls without deleting columns or plan assignments.</p><div class="configuration-grid"><label for="kanban-enabled">Enable Kanban board</label><input id="kanban-enabled" type="checkbox"${checked(configuration.kanbanEnabled)}></div></section><section id="update-checks-settings" class="configuration-section"><h2>Update checks</h2><p class="muted">Automatic checks fetch only public Homebrew/GitHub metadata. They never send plan data and never apply updates.</p><div class="configuration-grid"><label for="update-checks-enabled">Enable automatic update checks</label><input id="update-checks-enabled" type="checkbox"${updateChecked}><span class="row-label">Cached status</span><span id="update-checks-status">${escapeHtml(updateStatusText)}</span><span class="row-label">Manual check</span><code>plan-review update check --json</code></div><div class="columns-save"><button id="save-update-checks" class="nav-link primary" type="button">Save update checks</button><span id="update-checks-message" class="columns-message"></span></div></section><div class="configuration-save"><button id="save-configuration" class="nav-link primary" type="button">Save configuration</button><span id="configuration-message" class="configuration-message"></span></div>${boardColumnsConfigurationSectionHtml(columns, planCounts)}</div></div><script>
@@ -3853,7 +3864,7 @@ export function createApp(options: AppOptions): FastifyInstance {
         codexDelivery: store.getDeliveryTarget(plan.id, 'codex'),
         hermesDelivery: store.getDeliveryTarget(plan.id, 'hermes'),
         renderedWithWarnings: rendered.warnings,
-        agentInstructions: buildRegistrationAgentInstructions({ planId: result.planId, reviewUrl: result.reviewUrl, serviceUrl: requestServiceUrl(request, deliveryConfig.serviceUrl) })
+        agentInstructions: buildRegistrationAgentInstructions({ planId: result.planId, reviewUrl: result.reviewUrl, serviceUrl: requestServiceUrl(request, deliveryConfig.serviceUrl), planPath: plan.planPath, sourcePath: plan.sourcePath })
       });
     } catch (error) {
       sendError(reply, error);
@@ -4213,7 +4224,7 @@ export function createApp(options: AppOptions): FastifyInstance {
       const configuration = store.getConfiguration();
       const result = store.createComment(plan.id, {
         versionId: version.id,
-        body: executionReviewRequestBody(plan.planPath, configuration.executionReadySkillName),
+        body: executionReviewRequestBody(actionCommentSourcePath(plan), configuration.executionReadySkillName),
         anchorType: 'dom',
         anchor: {
           cssSelector: 'body',
@@ -4241,7 +4252,7 @@ export function createApp(options: AppOptions): FastifyInstance {
       const configuration = store.getConfiguration();
       const result = store.createComment(plan.id, {
         versionId: version.id,
-        body: buildPlanRequestBody(plan.planPath, configuration.buildPlanSkillName),
+        body: buildPlanRequestBody(actionCommentSourcePath(plan), configuration.buildPlanSkillName),
         anchorType: 'dom',
         anchor: {
           cssSelector: 'body',

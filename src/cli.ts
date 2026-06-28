@@ -135,10 +135,21 @@ function registrationInstructionsOutput(data: RegisterResponse, serviceUrl: stri
   if (!data.agentInstructions) return `Watch command: ${data.watchCommand} --url ${serviceUrl}\n`;
   const renderedCommands = renderRegistrationInstructionCommands(data.agentInstructions, serviceUrl);
   const processingLoop = data.agentInstructions.processingLoop.map(step => step.replaceAll('<registration service URL>', serviceUrl));
+  const sourceGuidance = data.agentInstructions.sourceGuidance;
+  const sourceGuidanceLines = sourceGuidance
+    ? [
+        'Source authoring:',
+        sourceGuidance.summary,
+        ...sourceGuidance.editInstructions.map(step => `- ${step}`),
+        ...sourceGuidance.templateInstructions.map(step => `- ${step}`),
+        ''
+      ]
+    : [];
   return [
     'REQUIRED NEXT ACTION:',
     data.agentInstructions.nextAction,
     '',
+    ...sourceGuidanceLines,
     'Activate plan before queue commands:',
     `plan-review lifecycle set ${data.agentInstructions.planId} active --url ${serviceUrl}`,
     '',

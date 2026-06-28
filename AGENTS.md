@@ -36,15 +36,15 @@ bun run dev -- serve --host 127.0.0.1 --port 4317
 Register a plan during local development:
 
 ```bash
-bun run dev -- register thoughts/plans/<slug>.html --url http://127.0.0.1:4317 --repo auto --branch auto --commit auto --execution-ready false
 bun run dev -- register thoughts/plans/<slug>.markdoc --url http://127.0.0.1:4317 --repo auto --branch auto --commit auto --execution-ready false
+bun run dev -- register thoughts/plans/<slug>.html --url http://127.0.0.1:4317 --repo auto --branch auto --commit auto --execution-ready false # legacy HTML-only plans
 ```
 
 Installed CLI registration:
 
 ```bash
-plan-review register thoughts/plans/<slug>.html --repo auto --branch auto --commit auto --execution-ready false
 plan-review register thoughts/plans/<slug>.markdoc --repo auto --branch auto --commit auto --execution-ready false
+plan-review register thoughts/plans/<slug>.html --repo auto --branch auto --commit auto --execution-ready false # legacy HTML-only plans
 ```
 
 Targeted implementation checks:

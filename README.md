@@ -124,19 +124,21 @@ GitHub Release objects and packaged binary assets are optional. The default rele
 
 ## Register and Review
 
-```bash
-plan-review register thoughts/plans/my-plan.html --repo auto --branch auto --commit auto --execution-ready false
-plan-review index
-```
-
-New compact plans may be authored as Markdoc and registered directly:
+New plans should be authored as Markdoc and registered directly:
 
 ```bash
 plan-review compile thoughts/plans/my-plan.markdoc
 plan-review register thoughts/plans/my-plan.markdoc --repo auto --branch auto --commit auto --execution-ready false
+plan-review index
 ```
 
-When a sibling `.markdoc` exists, it is the editable source and the generated `.html` is the registered review artifact. Legacy HTML-only plans remain source-authoritative. Markdoc compile/register refuses to overwrite existing non-generated HTML unless `--force` is passed for an intentional migration. See `docs/plan-authoring.md` for tags, raw HTML escape reasons, and the MDX exclusion.
+When a sibling `.markdoc` exists, it is the editable source and the generated `.html` is the registered review artifact. Legacy HTML-only plans remain source-authoritative only when no sibling `.markdoc` exists:
+
+```bash
+plan-review register thoughts/plans/legacy-plan.html --repo auto --branch auto --commit auto --execution-ready false
+```
+
+Markdoc compile/register refuses to overwrite existing non-generated HTML unless `--force` is passed for an intentional migration. Repos can register reusable plan templates in `thoughts/plans/AGENTS.md` under a `Plan templates` section; create concrete plans by copying a template to `thoughts/plans/<slug>.markdoc`, replacing placeholders, and registering the copied plan rather than the template. See `docs/plan-authoring.md` for tags, raw HTML escape reasons, template registry guidance, and the MDX exclusion.
 
 Open the printed review URL. Records have an explicit `reviewMode`: `planning` preserves reviewed-plan behavior, while `collaboration` hosts general HTML documents for anchored human/agent conversations. If omitted, the server infers `planning` for records with execution-readiness metadata or `thoughts/plans/` paths, and `collaboration` for general HTML without planning metadata. Override or correct mode without editing source HTML:
 
@@ -147,14 +149,14 @@ plan-review mode plan_123 collaboration --json
 
 Planning-mode publishing requires metadata for the worktree path, branch, optional Linear issue, and whether codex/claude-code review results say the plan is execution ready. The CLI fills worktree and branch from git; pass `--linear-issue <issue>` when applicable and pass `--execution-ready true|false` based only on agent-review results. Collaboration mode may omit execution-readiness metadata and hides planning-specific buttons/status chrome.
 
-The registration response is also the canonical source of listener instructions for agents: successful CLI registration prints a `REQUIRED NEXT ACTION:` block with copy-paste `agent next` commands, and API registration returns `agentInstructions` inside the existing `{ ok, data }` response envelope. Human CLI output wraps printed plan URLs in angle brackets, such as `<http://127.0.0.1:4317/p/plan_123_>`, so terminal linkifiers include generated IDs that end in `_`; omit the brackets only when pasting into tools that do not accept bracketed URLs. Agents should drain pending queue work and start the listener command before continuing plan work.
+The registration response is also the canonical source of listener instructions for agents: successful CLI registration prints a `REQUIRED NEXT ACTION:` block with source-authoring guidance plus copy-paste `agent next` commands, and API registration returns `agentInstructions` inside the existing `{ ok, data }` response envelope. `agentInstructions.sourceGuidance` tells agents whether to edit Markdoc source or legacy HTML and reminds them how repo-local Markdoc templates are registered for future plans. Human CLI output wraps printed plan URLs in angle brackets, such as `<http://127.0.0.1:4317/p/plan_123_>`, so terminal linkifiers include generated IDs that end in `_`; omit the brackets only when pasting into tools that do not accept bracketed URLs. Agents should drain pending queue work and start the listener command before continuing plan work.
 
-By default, registration live-links the local source file: the repo HTML file is authoritative, service blobs are derived cache/history, and later edits to the file sync into the latest rendered version automatically. Open review pages reload their iframe when a synced version is available.
+By default, registration live-links the local source file: for Markdoc plans the repo `.markdoc` file is authoritative and the generated `.html` is derived review output; for legacy HTML-only plans the repo HTML file remains authoritative. Service blobs are derived cache/history, and later edits to the authoritative file sync into the latest rendered version automatically. Open review pages reload their iframe when a synced version is available.
 
 Use `--snapshot` only when you want a detached historical review that will not watch the source file:
 
 ```bash
-plan-review register thoughts/plans/my-plan.html --snapshot --execution-ready false
+plan-review register thoughts/plans/my-plan.markdoc --snapshot --execution-ready false
 ```
 
 Use the review shell's compact **Download raw plan** action, or the matching CLI command, to save a dated copy of the current source artifact for email or file sharing:
