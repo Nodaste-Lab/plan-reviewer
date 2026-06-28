@@ -1584,16 +1584,56 @@ test('markdoc validation fails for missing phase blocks and unsafe raw html reas
     /Unsupported raw HTML escape hatch reason/
   );
   assert.throws(
+    () => compileMarkdoc('{% phase id="phase-open" title="Open" %}{% endState %}Done{% /endState %}{% testsFirst %}Test{% /testsFirst %}{% expectedFiles %}Files{% /expectedFiles %}{% work %}Work{% /work %}{% verify %}Verify{% /verify %}'),
+    /missing closing/
+  );
+  assert.throws(
     () => compileMarkdoc('{% section id="goal" title="Goal" onclick="bad()" %}Body{% /section %}'),
-    /unsupported attribute 'onclick' on section/
+    /Invalid attribute: 'onclick'/
+  );
+  assert.throws(
+    () => compileMarkdoc('# Heading {% onclick="bad()" %}'),
+    /Invalid attribute: 'onclick'/
+  );
+  assert.throws(
+    () => compileMarkdoc('# Heading {% data-review-target="heading" %}'),
+    /Invalid attribute: 'data-review-target'/
+  );
+  assert.throws(
+    () => compileMarkdoc('{% endState data-review-target="dropped" %}Done{% /endState %}'),
+    /unsupported attribute 'data-review-target' on endState/
+  );
+  const preservedWildcardAttrs = compileMarkdoc('{% section id="mixed" title="Mixed" DATA-review-target="mixed" ARIA-describedby="note" %}Body{% /section %}\n{% matrix id="m" columns=["A"] %}{% row data-review-target="row" %}{% cell data-review-target="cell" %}A{% /cell %}{% /row %}{% /matrix %}\n{% figure id="f" %}{% caption data-review-target="cap" %}Cap{% /caption %}{% /figure %}\n{% mock ARIA-label="Mock label" %}Mock{% /mock %}\n{% mock ariaLabel="" ARIA-label="Fallback mock label" %}Mock fallback{% /mock %}\n{% command data-review-target="cmd" %}echo ok{% /command %}');
+  assert.match(preservedWildcardAttrs.html, /<section id="mixed" data-review-target="mixed" aria-describedby="note">/);
+  assert.match(preservedWildcardAttrs.html, /<tr data-review-target="row">/);
+  assert.match(preservedWildcardAttrs.html, /<td data-review-target="cell">/);
+  assert.match(preservedWildcardAttrs.html, /<figcaption data-review-target="cap">/);
+  assert.match(preservedWildcardAttrs.html, /<div aria-label="Mock label" class="mockup" role="img">/);
+  assert.match(preservedWildcardAttrs.html, /<div aria-label="Fallback mock label" class="mockup" role="img">/);
+  assert.match(preservedWildcardAttrs.html, /<pre data-review-target="cmd" class="command">/);
+  assert.throws(
+    () => compileMarkdoc('{% task id="task-reserved" data-phase-id="phase-a" %}Task{% /task %}'),
+    /task attribute 'data-phase-id' is generated; use 'phase' instead/
+  );
+  assert.throws(
+    () => compileMarkdoc('{% task id="task-reserved" data-Phase-id="phase-a" %}Task{% /task %}'),
+    /task attribute 'data-Phase-id' is generated; use 'phase' instead/
+  );
+  assert.throws(
+    () => compileMarkdoc('{% phase id="phase-reserved" title="Reserved" data-progress-task="task-a" %}{% endState %}Done{% /endState %}{% testsFirst %}Test{% /testsFirst %}{% expectedFiles %}Files{% /expectedFiles %}{% work %}Work{% /work %}{% verify %}Verify{% /verify %}{% /phase %}'),
+    /phase attribute 'data-progress-task' is generated; use 'mapsTo' instead/
+  );
+  assert.throws(
+    () => compileMarkdoc('{% phase id="phase-reserved" title="Reserved" data-progress-Task="task-a" %}{% endState %}Done{% /endState %}{% testsFirst %}Test{% /testsFirst %}{% expectedFiles %}Files{% /expectedFiles %}{% work %}Work{% /work %}{% verify %}Verify{% /verify %}{% /phase %}'),
+    /phase attribute 'data-progress-Task' is generated; use 'mapsTo' instead/
   );
   assert.throws(
     () => compileMarkdoc('{% phase title="Missing ID" %}{% endState %}Done{% /endState %}{% testsFirst %}Test{% /testsFirst %}{% expectedFiles %}Files{% /expectedFiles %}{% work %}Work{% /work %}{% verify %}Verify{% /verify %}{% /phase %}'),
-    /phase is missing required id/
+    /Missing required attribute: 'id'/
   );
   assert.throws(
     () => compileMarkdoc('{% decision %}Decision text{% /decision %}'),
-    /decision is missing required id/
+    /Missing required attribute: 'id'/
   );
   assert.throws(
     () => compileMarkdoc('{% acceptance id="" %}Acceptance text{% /acceptance %}'),
@@ -1605,7 +1645,7 @@ test('markdoc validation fails for missing phase blocks and unsafe raw html reas
     ['matrix', '{% matrix %}{% row %}{% cell %}A{% /cell %}{% /row %}{% /matrix %}'],
     ['figure', '{% figure %}Figure text{% /figure %}']
   ] as const) {
-    assert.throws(() => compileMarkdoc(source), new RegExp(`${tag} is missing required id`));
+    assert.throws(() => compileMarkdoc(source), /Missing required attribute: 'id'/);
   }
   const emptyMapsTo = compileMarkdoc('{% phase id="phase-empty-map" title="Empty map" mapsTo="" %}{% endState %}Done{% /endState %}{% testsFirst %}Test{% /testsFirst %}{% expectedFiles %}Files{% /expectedFiles %}{% work %}Work{% /work %}{% verify %}Verify{% /verify %}{% /phase %}');
   assert.match(emptyMapsTo.html, /id="phase-empty-map"/);

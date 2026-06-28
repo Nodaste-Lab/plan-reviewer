@@ -26,7 +26,9 @@ function passthrough(nodeAttrs: Record<string, any>, exclude: string[] = []): Re
   const output: Record<string, any> = {};
   for (const [key, value] of Object.entries(nodeAttrs)) {
     if (excluded.has(key) || value === undefined || value === '') continue;
-    if (['id', 'class', 'role', 'title'].includes(key) || key.startsWith('data-') || key.startsWith('aria-')) output[key] = value;
+    const normalizedKey = key.toLowerCase();
+    if (['id', 'class', 'role', 'title'].includes(key)) output[key] = value;
+    else if (normalizedKey.startsWith('data-') || normalizedKey.startsWith('aria-')) output[normalizedKey] = value;
   }
   return output;
 }
@@ -127,8 +129,18 @@ export const markdocConfig: any = {
         return new Markdoc.Tag('table', clean(passthrough(nodeAttrs, ['columns'])), [...head, new Markdoc.Tag('tbody', {}, children(node, config))]);
       }
     },
-    row: { transform(node: MarkdocNode, config: MarkdocConfig) { return new Markdoc.Tag('tr', {}, children(node, config)); } },
-    cell: { transform(node: MarkdocNode, config: MarkdocConfig) { return new Markdoc.Tag('td', {}, children(node, config)); } },
+    row: {
+      attributes: commonAttributes,
+      transform(node: MarkdocNode, config: MarkdocConfig) {
+        return new Markdoc.Tag('tr', clean(passthrough(attrs(node, config))), children(node, config));
+      }
+    },
+    cell: {
+      attributes: commonAttributes,
+      transform(node: MarkdocNode, config: MarkdocConfig) {
+        return new Markdoc.Tag('td', clean(passthrough(attrs(node, config))), children(node, config));
+      }
+    },
     figure: {
       attributes: { ...commonAttributes, id: { type: String, required: true }, src: { type: String }, alt: { type: String }, title: { type: String } },
       transform(node: MarkdocNode, config: MarkdocConfig) {
@@ -140,15 +152,29 @@ export const markdocConfig: any = {
         return new Markdoc.Tag('figure', clean(passthrough(nodeAttrs, ['src', 'alt'])), body);
       }
     },
-    caption: { transform(node: MarkdocNode, config: MarkdocConfig) { return new Markdoc.Tag('figcaption', {}, children(node, config)); } },
+    caption: {
+      attributes: commonAttributes,
+      transform(node: MarkdocNode, config: MarkdocConfig) {
+        return new Markdoc.Tag('figcaption', clean(passthrough(attrs(node, config))), children(node, config));
+      }
+    },
     mock: {
       attributes: { ...commonAttributes, kind: { type: String }, ariaLabel: { type: String } },
       transform(node: MarkdocNode, config: MarkdocConfig) {
         const nodeAttrs = attrs(node, config);
-        return new Markdoc.Tag('div', clean({ ...passthrough(nodeAttrs, ['kind', 'ariaLabel']), class: ['mockup', nodeAttrs.kind ? `mock-${nodeAttrs.kind}` : '', nodeAttrs.class].filter(Boolean).join(' '), role: nodeAttrs.role ?? 'img', 'aria-label': nodeAttrs.ariaLabel ?? nodeAttrs['aria-label'] }), children(node, config));
+        const passthroughAttrs = passthrough(nodeAttrs, ['kind', 'ariaLabel']);
+        const ariaLabel = [nodeAttrs.ariaLabel, nodeAttrs['aria-label'], passthroughAttrs['aria-label']]
+          .find(value => typeof value === 'string' && value.trim().length > 0);
+        return new Markdoc.Tag('div', clean({ ...passthroughAttrs, class: ['mockup', nodeAttrs.kind ? `mock-${nodeAttrs.kind}` : '', nodeAttrs.class].filter(Boolean).join(' '), role: nodeAttrs.role ?? 'img', 'aria-label': ariaLabel }), children(node, config));
       }
     },
-    command: { transform(node: MarkdocNode, config: MarkdocConfig) { return new Markdoc.Tag('pre', { class: 'command' }, [new Markdoc.Tag('code', {}, children(node, config))]); } },
+    command: {
+      attributes: commonAttributes,
+      transform(node: MarkdocNode, config: MarkdocConfig) {
+        const nodeAttrs = attrs(node, config);
+        return new Markdoc.Tag('pre', clean({ ...passthrough(nodeAttrs), class: ['command', nodeAttrs.class].filter(Boolean).join(' ') }), [new Markdoc.Tag('code', {}, children(node, config))]);
+      }
+    },
     rawHtmlSlot: {
       selfClosing: true,
       attributes: { id: { type: String, required: true }, reason: { type: String, required: true } },

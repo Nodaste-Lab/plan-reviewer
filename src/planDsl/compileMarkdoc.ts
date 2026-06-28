@@ -174,6 +174,24 @@ const tagAttributeAllowlist: Record<string, Set<string>> = Object.fromEntries(Ob
   rawHtmlSlot: ['id', 'reason']
 }).map(([tag, attrs]) => [tag, new Set(attrs)]));
 
+const wildcardAttributePassthroughTags = new Set([
+  'plan',
+  'section',
+  'progress',
+  'task',
+  'phase',
+  'decision',
+  'acceptance',
+  'bdd',
+  'matrix',
+  'row',
+  'cell',
+  'figure',
+  'caption',
+  'mock',
+  'command'
+]);
+
 const requiredTagAttributes: Record<string, string[]> = {
   section: ['id', 'title'],
   task: ['id'],
@@ -186,12 +204,38 @@ const requiredTagAttributes: Record<string, string[]> = {
   rawHtmlSlot: ['id', 'reason']
 };
 
+const reservedGeneratedAttributes: Record<string, Record<string, string>> = {
+  task: { 'data-phase-id': 'phase' },
+  phase: { 'data-progress-task': 'mapsTo' }
+};
+
 function isAllowedTagAttribute(tag: string, attribute: string): boolean {
-  return Boolean(tagAttributeAllowlist[tag]?.has(attribute) || attribute.startsWith('data-') || attribute.startsWith('aria-'));
+  const normalizedAttribute = attribute.toLowerCase();
+  return Boolean(tagAttributeAllowlist[tag]?.has(attribute) || (wildcardAttributePassthroughTags.has(tag) && (normalizedAttribute.startsWith('data-') || normalizedAttribute.startsWith('aria-'))));
 }
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isIntentionalWildcardAttributeValidationError(error: ReturnType<typeof Markdoc.validate>[number]): boolean {
+  if (error.type !== 'tag' || error.error.id !== 'attribute-undefined') return false;
+  const match = /Invalid attribute: '([^']+)'/.exec(error.error.message);
+  const attribute = match?.[1].toLowerCase();
+  return Boolean(attribute?.startsWith('data-') || attribute?.startsWith('aria-'));
+}
+
+function assertMarkdocValidation(ast: ReturnType<typeof Markdoc.parse>): void {
+  const validationErrors = Markdoc.validate(ast, markdocConfig).filter(error => !isIntentionalWildcardAttributeValidationError(error));
+  if (!validationErrors.length) return;
+  const errors = validationErrors.map(error => ({
+    id: error.error.id,
+    level: error.error.level,
+    message: error.error.message,
+    line: error.location?.start.line,
+    type: error.type
+  }));
+  throw new PlanReviewError('markdoc_validation_failed', `Markdoc plan failed validation: ${errors[0].message}`, 1, { errors }, 'Fix the Markdoc source syntax and schema errors, then retry.');
 }
 
 function validatePlanAst(ast: unknown): TocEntry[] {
@@ -213,6 +257,8 @@ function validatePlanAst(ast: unknown): TocEntry[] {
     }
     for (const attribute of Object.keys(attrs)) {
       if (!isAllowedTagAttribute(node.tag, attribute)) errors.push(`unsupported attribute '${attribute}' on ${node.tag}`);
+      const semanticAttribute = reservedGeneratedAttributes[node.tag]?.[attribute.toLowerCase()];
+      if (semanticAttribute) errors.push(`${node.tag} attribute '${attribute}' is generated; use '${semanticAttribute}' instead`);
     }
     for (const attribute of requiredTagAttributes[node.tag] ?? []) {
       if (!isNonEmptyString(attrs[attribute])) errors.push(`${node.tag} is missing required ${attribute}`);
@@ -264,6 +310,7 @@ export function compileMarkdoc(source: string, options: { sourcePath?: string } 
   const { frontmatter, body } = parseFrontmatter(source);
   const protectedSource = protectRawHtmlBlocks(body);
   const ast = Markdoc.parse(protectedSource.body);
+  assertMarkdocValidation(ast);
   const toc = validatePlanAst(ast);
   const transformed = Markdoc.transform(ast, markdocConfig);
   const renderedBody = replaceRawHtmlSlots(Markdoc.renderers.html(transformed), protectedSource.slots);
