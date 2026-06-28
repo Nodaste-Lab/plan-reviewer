@@ -1362,7 +1362,7 @@ test('registration instruction helper builds canonical agent-next guidance and r
   assert.match(instructions.processingLoop.join('\n'), /exits successfully after exactly one claim/);
   assert.match(instructions.processingLoop.join('\n'), /do not blindly loop successful claim commands/);
   assert.match(instructions.processingLoop.join('\n'), /Before implementation starts/);
-  assert.match(instructions.processingLoop.join('\n'), /before any queue drain or listen command, run plan-review lifecycle set plan_abc active --url <registration service URL>/);
+  assert.match(instructions.processingLoop.join('\n'), /Before any queue drain or listen command, run plan-review lifecycle set plan_abc active --url <registration service URL>/);
   assert.ok(instructions.processingLoop.findIndex((step) => step.includes('lifecycle set')) < instructions.processingLoop.findIndex((step) => step.includes('agent next plan_abc --no-wait')));
   assert.match(instructions.processingLoop.join('\n'), /when board columns are applicable/);
   assert.match(instructions.processingLoop.join('\n'), /plan-review columns list --json --url <registration service URL>/);
@@ -1400,10 +1400,16 @@ test('registration API returns agent instructions additively across registration
     assert.equal(snapshotData.agentInstructions.type, 'plan-review.registration.instructions.v1');
     assert.equal(snapshotData.agentInstructions.required, true);
     assert.match(snapshotData.agentInstructions.summary, /queue-backed agent next/);
+    assert.match(snapshotData.agentInstructions.summary, /authoritative Markdoc source/);
     assert.match(snapshotData.agentInstructions.summary, /align reviewer status/);
-    assert.match(snapshotData.agentInstructions.nextAction, /Before draining or listening for comments/);
+    assert.equal(snapshotData.agentInstructions.sourceGuidance.sourceType, 'legacy-html');
+    assert.match(snapshotData.agentInstructions.sourceGuidance.summary, /legacy HTML-only/);
+    assert.match(snapshotData.agentInstructions.sourceGuidance.templateInstructions.join('\n'), /thoughts\/plans\/templates\/<template-name>\.markdoc/);
+    assert.match(snapshotData.agentInstructions.nextAction, /authoritative plan source/);
     assert.match(snapshotData.agentInstructions.nextAction, /Before implementation/);
-    assert.match(snapshotData.agentInstructions.processingLoop.join('\n'), /before any queue drain or listen command, run plan-review lifecycle set .* active --url http:\/\/localhost:80/);
+    assert.match(snapshotData.agentInstructions.processingLoop.join('\n'), /use sourceGuidance first/);
+    assert.match(snapshotData.agentInstructions.processingLoop.join('\n'), /register reusable Markdoc templates/);
+    assert.match(snapshotData.agentInstructions.processingLoop.join('\n'), /Before any queue drain or listen command, run plan-review lifecycle set .* active --url http:\/\/localhost:80/);
     assert.ok(snapshotData.agentInstructions.processingLoop.findIndex((step: string) => step.includes('lifecycle set')) < snapshotData.agentInstructions.processingLoop.findIndex((step: string) => step.includes('agent next')));
     assert.match(snapshotData.agentInstructions.processingLoop.join('\n'), /when board columns are applicable/);
     assert.match(snapshotData.agentInstructions.processingLoop.join('\n'), /plan-review columns list --json --url http:\/\/localhost:80/);
@@ -1444,9 +1450,39 @@ test('registration API returns agent instructions additively across registration
     const filesystemData = filesystem.json().data;
     assert.equal(filesystemData.agentInstructions.planId, filesystemData.planId);
     assert.match(filesystemData.agentInstructions.preferredCommand, /--url http:\/\/localhost:80/);
+    assert.equal(filesystemData.agentInstructions.sourceGuidance.authoritativeSourcePath, sourcePath);
+    assert.match(filesystemData.agentInstructions.processingLoop.join('\n'), /--changed-files .*sample-plan\.html/);
     assert.equal(filesystemData.sourceSync.watchMode, 'filesystem');
     assert.equal(filesystemData.sourceSync.sourcePath, sourcePath);
     assert.equal(filesystemData.sourceSync.active, true);
+
+    const markdocPath = path.join(sourceRoot, 'thoughts/plans/markdoc-plan.markdoc');
+    fs.writeFileSync(markdocPath, fs.readFileSync(path.join(process.cwd(), 'src', '__tests__', 'fixtures', 'markdoc', 'simple-plan.markdoc'), 'utf8'));
+    const compiledMarkdoc = compileMarkdocFile(markdocPath, { write: true, force: true });
+    const markdocStat = fs.statSync(markdocPath);
+    const markdocRegistration = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload({
+        rootPath: sourceRoot,
+        slug: 'markdoc-plan',
+        planPath: 'thoughts/plans/markdoc-plan.html',
+        html: compiledMarkdoc.html,
+        watchMode: 'filesystem',
+        sourcePath: markdocPath,
+        sourceMtimeMs: markdocStat.mtimeMs,
+        sourceSize: markdocStat.size,
+        fileHash: compiledMarkdoc.fileHash
+      })
+    });
+    assert.equal(markdocRegistration.statusCode, 200);
+    const markdocData = markdocRegistration.json().data;
+    assert.equal(markdocData.agentInstructions.sourceGuidance.sourceType, 'markdoc');
+    assert.equal(markdocData.agentInstructions.sourceGuidance.authoritativeSourcePath, markdocPath);
+    assert.equal(markdocData.agentInstructions.sourceGuidance.registeredArtifactPath, 'thoughts/plans/markdoc-plan.html');
+    assert.match(markdocData.agentInstructions.sourceGuidance.summary, /Markdoc source/);
+    assert.match(markdocData.agentInstructions.processingLoop.join('\n'), /not in the generated HTML artifact/);
+    assert.match(markdocData.agentInstructions.processingLoop.join('\n'), /--changed-files .*markdoc-plan\.markdoc/);
 
     const reregister = await app.inject({
       method: 'POST',
@@ -3504,6 +3540,45 @@ test('build plan button creates an agent-visible skill request comment', async (
 
     const queue = await app.inject({ method: 'GET', url: `/api/plans/${planId}/events/poll?afterSequence=0&mode=queue` });
     assert.deepEqual(queue.json().data.events.map((event: { eventType: string }) => event.eventType), ['comment.created']);
+  } finally {
+    await app.close();
+  }
+});
+
+test('plan action buttons prefer markdoc source paths when registered', async () => {
+  const app = createApp({ dbPath: tempDbPath('markdoc-action-comments') });
+  const sourceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-review-markdoc-action-'));
+  try {
+    const markdocPath = path.join(sourceRoot, 'thoughts/plans/action-plan.markdoc');
+    fs.mkdirSync(path.dirname(markdocPath), { recursive: true });
+    fs.writeFileSync(markdocPath, fs.readFileSync(path.join(process.cwd(), 'src', '__tests__', 'fixtures', 'markdoc', 'simple-plan.markdoc'), 'utf8'));
+    const compiled = compileMarkdocFile(markdocPath, { write: true, force: true });
+    const stat = fs.statSync(markdocPath);
+    const registered = await app.inject({
+      method: 'POST',
+      url: '/api/plans/register',
+      payload: sampleRegisterPayload({
+        rootPath: sourceRoot,
+        slug: 'action-plan',
+        planPath: 'thoughts/plans/action-plan.html',
+        html: compiled.html,
+        watchMode: 'filesystem',
+        sourcePath: markdocPath,
+        sourceMtimeMs: stat.mtimeMs,
+        sourceSize: stat.size,
+        fileHash: compiled.fileHash
+      })
+    });
+    assert.equal(registered.statusCode, 200, registered.body);
+    const planId = registered.json().data.planId;
+
+    const executionRequest = await app.inject({ method: 'POST', url: `/api/plans/${planId}/request-execution-review` });
+    assert.equal(executionRequest.statusCode, 200, executionRequest.body);
+    assert.equal(executionRequest.json().data.comment.body, 'Use the plan-reviewer-execution-ready skill for this plan.\nPlan path: thoughts/plans/action-plan.markdoc');
+
+    const buildRequest = await app.inject({ method: 'POST', url: `/api/plans/${planId}/request-build-plan` });
+    assert.equal(buildRequest.statusCode, 200, buildRequest.body);
+    assert.equal(buildRequest.json().data.comment.body, 'Use the plan-reviewer-build skill for this plan.\nPlan path: thoughts/plans/action-plan.markdoc');
   } finally {
     await app.close();
   }

@@ -23,6 +23,32 @@ plan-review register thoughts/plans/my-plan.markdoc --repo auto --branch auto --
 
 Registration compiles the Markdoc source, registers the generated HTML, and keeps filesystem source sync pointed at the `.markdoc` file. If later compilation fails, source sync keeps serving the last good generated HTML and reports an actionable sync error.
 
+## Register repo templates
+
+Template registration is repo-local guidance, not a plan-review service record. To make structured Markdoc templates reusable in any repo:
+
+1. Store templates under `thoughts/plans/templates/<template-name>.markdoc` unless the repo already declares another template directory.
+2. Add a `Plan templates` section to `thoughts/plans/AGENTS.md` listing each template path, intended use, required placeholder substitutions, and any repo-specific rules.
+3. When creating a plan, copy the chosen template to `thoughts/plans/<slug>.markdoc`, replace placeholders, then compile/register the copied plan.
+4. Do not register template files themselves as review plans. Register only concrete copied plans with real slug/frontmatter/content.
+
+Example registry entry:
+
+```markdown
+## Plan templates
+
+- `thoughts/plans/templates/default.markdoc`: default feature plan. Replace `{{slug}}`, `{{title}}`, `{{status}}`, and phase placeholders before registration.
+- `thoughts/plans/templates/ui-change.markdoc`: use for reviewer-facing UI or flow changes. Include current/target evidence and UI-impact verification.
+```
+
+Example use:
+
+```bash
+cp thoughts/plans/templates/default.markdoc thoughts/plans/my-plan.markdoc
+$EDITOR thoughts/plans/my-plan.markdoc
+plan-review register thoughts/plans/my-plan.markdoc --repo auto --branch auto --commit auto --execution-ready false
+```
+
 ## Escape hatches and MDX
 
 Use Markdoc tags for normal sections, phases, progress, tables, figures, and mocks. Raw HTML is available only through an explicit reasoned block:

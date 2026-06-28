@@ -1,6 +1,6 @@
 # thoughts/plans AGENTS.md
 
-This directory contains browser-reviewable plans. New compact plans may be authored as `.markdoc` and compiled to reviewable `.html`; legacy HTML-only plans remain supported. All new plans in this repo must use the reviewed HTML workflow.
+This directory contains browser-reviewable plans. New plans should be authored as `.markdoc` and compiled to reviewable `.html`; legacy HTML-only plans remain supported only when no sibling Markdoc source exists. All new plans in this repo must use the reviewed plan-reviewer workflow.
 
 ## Required skill routing
 
@@ -10,7 +10,7 @@ This directory contains browser-reviewable plans. New compact plans may be autho
 
 ## Plan artifact rules
 
-- Prefer `thoughts/plans/<slug>.markdoc` for new compact authoring. Registering or compiling it generates semantic HTML at `thoughts/plans/<slug>.html`.
+- Use `thoughts/plans/<slug>.markdoc` for new compact authoring. Registering or compiling it generates semantic HTML at `thoughts/plans/<slug>.html`.
 - When a sibling `.markdoc` exists, edit the `.markdoc` source and treat `.html` as generated review output. When no `.markdoc` exists, the `.html` file remains authoritative.
 - Legacy/raw plans may still be written directly as semantic HTML at `thoughts/plans/<slug>.html`.
 - Use a dark-mode default theme with explicit dark background, light foreground, readable muted text, accessible accent/link colors, and `color-scheme: dark`.
@@ -23,13 +23,24 @@ This directory contains browser-reviewable plans. New compact plans may be autho
 - Each phase must include End State, Tests first, Expected files, Work, and Verify.
 - `execution-ready` plans must not contain unresolved open questions.
 
+## Plan templates
+
+Register reusable repo templates here, not in the plan-review service. Store templates under `thoughts/plans/templates/<template-name>.markdoc`, list each template in this section with its intended use and placeholders, then copy a template to `thoughts/plans/<slug>.markdoc` before compiling/registering a concrete plan. Do not register template files themselves as review plans.
+
+- Default template: not yet materialized in this repo. Until one exists, follow the Markdoc examples in `docs/plan-authoring.md` and the generated structure from `src/__tests__/fixtures/markdoc/simple-plan.markdoc`.
+
 ## Browser-review registration
 
-After creating or updating a plan for review:
+After creating or updating a plan for review, register the Markdoc source:
+
+```bash
+plan-review register thoughts/plans/<slug>.markdoc --repo auto --branch auto --commit auto --execution-ready false --json
+```
+
+Use the `.html` form only for legacy HTML-only plans with no sibling `.markdoc` source:
 
 ```bash
 plan-review register thoughts/plans/<slug>.html --repo auto --branch auto --commit auto --execution-ready false --json
-plan-review register thoughts/plans/<slug>.markdoc --repo auto --branch auto --commit auto --execution-ready false --json
 ```
 
 Use `--execution-ready true` only after the required plan-review gates agree the plan is ready by substance. When sharing links with the user, use the canonical reviewer URL from the `html-plan-reviewer` skill, not a loopback or relative URL.
