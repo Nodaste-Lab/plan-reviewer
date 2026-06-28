@@ -1657,7 +1657,10 @@ test('markdoc plan dsl compiles representative plan features to safe generated h
   const rendered = renderPlan(sampleRegisterPayload({ html: compiled.html, fileHash: compiled.fileHash }));
 
   assert.match(compiled.html, /Generated from src\/__tests__\/fixtures\/markdoc\/simple-plan\.markdoc/);
-  assert.match(compiled.html, /<section id="toc">/);
+  assert.match(compiled.html, /<section id="toc"><h2>Contents<\/h2><nav class="toc" aria-label="Plan contents">/);
+  assert.match(compiled.html, /<div class="toc-group">[\s\S]*<h3>Overview<\/h3>[\s\S]*href="#goal">Goal<\/a>/);
+  assert.match(compiled.html, /<div class="toc-group">[\s\S]*<h3>Contracts<\/h3>[\s\S]*href="#acceptance-criteria">Acceptance criteria<\/a>/);
+  assert.match(compiled.html, /<div class="toc-group">[\s\S]*<h3>Execution<\/h3>[\s\S]*href="#phase-p1">P1 — Lock contract<\/a>/);
   assert.match(compiled.html, /<section id="goal" data-review-target="goal" aria-describedby="goal-note">[\s\S]*<h2>Goal<\/h2>/);
   assert.match(compiled.html, /<ul class="progress-list">/);
   assert.match(compiled.html, /<article id="phase-p1" class="phase" data-progress-task="P1">/);
