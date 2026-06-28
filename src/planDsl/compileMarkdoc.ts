@@ -1,7 +1,8 @@
 import Markdoc from '@markdoc/markdoc';
+import { parse } from 'parse5';
 import fs from 'node:fs';
 import path from 'node:path';
-import { PlanReviewError, sha256 } from '../util.js';
+import { PlanReviewError, sha256, slugify } from '../util.js';
 import { approvedRawHtmlReasons, markdocConfig } from './schema.js';
 import { renderPlanTemplate, type MarkdocFrontmatter, type TocEntry } from './template.js';
 
@@ -238,12 +239,38 @@ function assertMarkdocValidation(ast: ReturnType<typeof Markdoc.parse>): void {
   throw new PlanReviewError('markdoc_validation_failed', `Markdoc plan failed validation: ${errors[0].message}`, 1, { errors }, 'Fix the Markdoc source syntax and schema errors, then retry.');
 }
 
-function validatePlanAst(ast: unknown): TocEntry[] {
+function templateReservedIds(frontmatter: MarkdocFrontmatter): string[] {
+  const title = String(frontmatter.title ?? 'Untitled Plan');
+  const planId = String(frontmatter.planId ?? slugify(title));
+  const reserved = [planId, 'title', 'plan-metadata', 'toc'];
+  const linear = frontmatter.linear === undefined ? undefined : String(frontmatter.linear);
+  if (linear) reserved.push('linear-reference');
+  return reserved;
+}
+
+function collectRawHtmlSlotIds(slots: RawHtmlSlot[]): string[] {
+  const ids: string[] = [];
+  const visit = (node: unknown) => {
+    if (!node || typeof node !== 'object') return;
+    const parsedNode = node as { attrs?: Array<{ name: string; value: string }>; childNodes?: unknown[] };
+    const id = parsedNode.attrs?.find(attr => attr.name.toLowerCase() === 'id')?.value;
+    if (id) ids.push(id);
+    for (const child of parsedNode.childNodes ?? []) visit(child);
+  };
+  for (const slot of slots) visit(parse(slot.html));
+  return ids;
+}
+
+function validatePlanAst(ast: unknown, frontmatter: MarkdocFrontmatter, rawHtmlSlots: RawHtmlSlot[]): TocEntry[] {
   const ids = new Map<string, number>();
+  for (const id of templateReservedIds(frontmatter)) ids.set(id, (ids.get(id) ?? 0) + 1);
+  for (const id of collectRawHtmlSlotIds(rawHtmlSlots)) ids.set(id, (ids.get(id) ?? 0) + 1);
   const taskIds = new Set<string>();
   const taskPhaseIds = new Set<string>();
   const phaseIds = new Set<string>();
   const phaseTaskIds = new Set<string>();
+  const rawHtmlSlotIds = new Map<string, number>();
+  const expectedRawHtmlSlotIds = new Set(rawHtmlSlots.map(slot => slot.id));
   const toc: TocEntry[] = [];
   const phaseRequired = ['endState', 'testsFirst', 'expectedFiles', 'work', 'verify'];
   const errors: string[] = [];
@@ -263,10 +290,12 @@ function validatePlanAst(ast: unknown): TocEntry[] {
     for (const attribute of requiredTagAttributes[node.tag] ?? []) {
       if (!isNonEmptyString(attrs[attribute])) errors.push(`${node.tag} is missing required ${attribute}`);
     }
-    if (isNonEmptyString(attrs.id)) ids.set(attrs.id, (ids.get(attrs.id) ?? 0) + 1);
+    if (node.tag === 'rawHtmlSlot' && isNonEmptyString(attrs.id)) rawHtmlSlotIds.set(attrs.id, (rawHtmlSlotIds.get(attrs.id) ?? 0) + 1);
+    if (node.tag !== 'rawHtmlSlot' && isNonEmptyString(attrs.id)) ids.set(attrs.id, (ids.get(attrs.id) ?? 0) + 1);
     if (node.tag === 'section') {
       if (isNonEmptyString(attrs.id) && isNonEmptyString(attrs.title)) toc.push({ id: attrs.id, title: attrs.title });
     }
+    if (node.tag === 'progress' && !isNonEmptyString(attrs.id)) ids.set('progress', (ids.get('progress') ?? 0) + 1);
     if (node.tag === 'task') {
       if (isNonEmptyString(attrs.id)) taskIds.add(attrs.id);
       if (isNonEmptyString(attrs.phase)) taskPhaseIds.add(attrs.phase);
@@ -285,6 +314,11 @@ function validatePlanAst(ast: unknown): TocEntry[] {
     }
   });
 
+  for (const [id, count] of rawHtmlSlotIds) {
+    if (!expectedRawHtmlSlotIds.has(id)) errors.push('rawHtmlSlot is reserved for compiler use');
+    else if (count !== 1) errors.push(`duplicate internal rawHtmlSlot '${id}'`);
+  }
+  for (const id of expectedRawHtmlSlotIds) if ((rawHtmlSlotIds.get(id) ?? 0) !== 1) errors.push(`missing internal rawHtmlSlot '${id}'`);
   for (const [id, count] of ids) if (count > 1) errors.push(`duplicate id '${id}'`);
   for (const phaseId of taskPhaseIds) if (!phaseIds.has(phaseId)) errors.push(`task references unknown phase '${phaseId}'`);
   for (const taskId of phaseTaskIds) if (!taskIds.has(taskId)) errors.push(`phase mapsTo references unknown task '${taskId}'`);
@@ -311,7 +345,7 @@ export function compileMarkdoc(source: string, options: { sourcePath?: string } 
   const protectedSource = protectRawHtmlBlocks(body);
   const ast = Markdoc.parse(protectedSource.body);
   assertMarkdocValidation(ast);
-  const toc = validatePlanAst(ast);
+  const toc = validatePlanAst(ast, frontmatter, protectedSource.slots);
   const transformed = Markdoc.transform(ast, markdocConfig);
   const renderedBody = replaceRawHtmlSlots(Markdoc.renderers.html(transformed), protectedSource.slots);
   const html = renderPlanTemplate(frontmatter, renderedBody, toc, options.sourcePath);

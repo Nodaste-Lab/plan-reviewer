@@ -49,6 +49,9 @@ const allowedAttributes: Record<string, sanitizeHtml.AllowedAttribute[]> = {
   meta: ['charset', 'name', 'content'],
   img: ['src', 'alt', 'width', 'height', 'title', 'data-*'],
   input: ['type', 'checked', 'disabled', 'readonly', 'aria-*', 'data-*'],
+  button: ['type', 'name', 'value', 'disabled', 'aria-*', 'data-*'],
+  select: ['name', 'disabled', 'multiple', 'aria-*', 'data-*'],
+  option: ['value', 'selected', 'disabled', 'label', 'aria-*', 'data-*'],
   a: ['href', 'name', 'target', 'rel', 'data-*']
 };
 

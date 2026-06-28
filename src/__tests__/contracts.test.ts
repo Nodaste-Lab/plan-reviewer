@@ -1546,6 +1546,15 @@ test('renderer strips active content, rewrites images, and adds deterministic no
   assert.equal(unsafeLink.renderedHtml.includes('href="data:text/html,bad"'), false);
   assert.equal(unsafeLink.renderedHtml.includes('src="data:image/png;base64,abc"'), true);
 
+  const uiControls = renderPlan(sampleRegisterPayload({
+    html: '<!doctype html><html><body><button type="button" value="stop" disabled data-action="stop">Stop</button><select name="mode" disabled multiple><option value="draft" selected label="Draft">Draft</option><option value="done" disabled>Done</option></select></body></html>',
+    fileHash: 'ui-control-state'
+  }));
+  assert.match(uiControls.renderedHtml, /<button[^>]*type="button"[^>]*value="stop"[^>]*disabled[^>]*data-action="stop"/);
+  assert.match(uiControls.renderedHtml, /<select[^>]*name="mode"[^>]*disabled[^>]*multiple/);
+  assert.match(uiControls.renderedHtml, /<option[^>]*value="draft"[^>]*selected[^>]*label="Draft"/);
+  assert.match(uiControls.renderedHtml, /<option[^>]*value="done"[^>]*disabled/);
+
   assert.throws(
     () => renderPlan(sampleRegisterPayload({ html: '<!doctype html><html><body><div id="x" id="y"></div></body></html>', fileHash: 'invalid-html' })),
     /Plan HTML could not be parsed safely/
@@ -1599,6 +1608,48 @@ test('markdoc validation fails for missing phase blocks and unsafe raw html reas
     () => compileMarkdoc('# Heading {% data-review-target="heading" %}'),
     /Invalid attribute: 'data-review-target'/
   );
+  assert.throws(
+    () => compileMarkdoc('{% section id="toc" title="Duplicate TOC" %}Body{% /section %}'),
+    /duplicate id 'toc'/
+  );
+  assert.throws(
+    () => compileMarkdoc('{% html reason="ui-mock" %}<section id="toc"><h2>Fake TOC</h2></section>{% /html %}'),
+    /duplicate id 'toc'/
+  );
+  assert.throws(
+    () => compileMarkdoc('---\nplanId: reserved-main\n---\n{% section id="reserved-main" title="Duplicate main" %}Body{% /section %}'),
+    /duplicate id 'reserved-main'/
+  );
+  assert.throws(
+    () => compileMarkdoc('---\nplanId: reserved-main\n---\n{% html reason="ui-mock" %}<div id="reserved-main">Duplicate main</div>{% /html %}'),
+    /duplicate id 'reserved-main'/
+  );
+  assert.throws(
+    () => compileMarkdoc('---\nplanId: reserved-main\n---\n{% html reason="legacy-fragment" %}<body id="reserved-main"><div>Legacy</div></body>{% /html %}'),
+    /duplicate id 'reserved-main'/
+  );
+  assert.throws(
+    () => compileMarkdoc('{% html reason="legacy-fragment" %}<html id="legacy-wrapper"><body><p>Legacy</p></body></html>{% /html %}\n{% section id="legacy-wrapper" title="Duplicate legacy" %}Body{% /section %}'),
+    /duplicate id 'legacy-wrapper'/
+  );
+  assert.throws(
+    () => compileMarkdoc('{% rawHtmlSlot id="raw-html-slot-0" reason="ui-mock" /%}'),
+    /rawHtmlSlot is reserved for compiler use/
+  );
+  assert.match(compileMarkdoc('{% html reason="ui-mock" %}<div id="raw-html-slot-0">Mock</div>{% /html %}').html, /id="raw-html-slot-0"/);
+  assert.throws(
+    () => compileMarkdoc('{% html reason="ui-mock" %}<div id="raw-html-slot-0">Mock</div>{% /html %}\n{% section id="raw-html-slot-0" title="Duplicate raw" %}Body{% /section %}'),
+    /duplicate id 'raw-html-slot-0'/
+  );
+  assert.throws(
+    () => compileMarkdoc('{% progress %}{% task id="task-p" %}Task{% /task %}{% /progress %}\n{% section id="progress" title="Duplicate progress" %}Body{% /section %}'),
+    /duplicate id 'progress'/
+  );
+  assert.throws(
+    () => compileMarkdoc('---\nlinear: NOD-1\n---\n{% section id="linear-reference" title="Duplicate Linear" %}Body{% /section %}'),
+    /duplicate id 'linear-reference'/
+  );
+  assert.match(compileMarkdoc('{% section id="linear-reference" title="Linear Reference" %}Body{% /section %}').html, /id="linear-reference"/);
   assert.throws(
     () => compileMarkdoc('{% endState data-review-target="dropped" %}Done{% /endState %}'),
     /unsupported attribute 'data-review-target' on endState/
