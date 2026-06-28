@@ -45,6 +45,7 @@ import { checkForUpdates, readBuildIdentity, type UpdateStatus } from '../update
 import { DeliveryWorker, type DeliveryWorkerOptions } from '../delivery/worker.js';
 import { buildAgentNextClaimed, buildAgentNextEmpty } from '../agentNext.js';
 import { buildPlanExport, contentDispositionAttachment } from '../exportPlan.js';
+import { markdocOptimizationSkillEndpointPath, markdocOptimizationSkillMarkdown, markdocOptimizationSkillName } from '../markdocOptimizationSkill.js';
 
 export interface AppOptions {
   dbPath: string;
@@ -3693,6 +3694,14 @@ export function createApp(options: AppOptions): FastifyInstance {
   });
 
   app.get('/health', async () => ok({ status: 'ok' }));
+  app.get(markdocOptimizationSkillEndpointPath, async (_request, reply) => {
+    reply.header('Cache-Control', 'no-store').type('text/markdown; charset=utf-8').send(markdocOptimizationSkillMarkdown());
+  });
+  app.get('/api/skills/plan-reviewer-markdoc-optimization', async () => ok({
+    name: markdocOptimizationSkillName,
+    endpointPath: markdocOptimizationSkillEndpointPath,
+    markdown: markdocOptimizationSkillMarkdown()
+  }));
   app.get('/favicon.ico', async (_request, reply) => reply.header('Cache-Control', 'no-store').type('image/svg+xml').send(faviconSvg));
   app.get('/favicon.svg', async (_request, reply) => reply.header('Cache-Control', 'no-store').type('image/svg+xml').send(faviconSvg));
   app.get('/client.css', async (_request, reply) => reply.header('Cache-Control', 'no-store').type('text/css').send(clientCss));

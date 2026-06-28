@@ -1,0 +1,46 @@
+export const markdocOptimizationSkillName = 'plan-reviewer-markdoc-optimization';
+export const markdocOptimizationSkillEndpointPath = `/skills/${markdocOptimizationSkillName}`;
+
+export function markdocOptimizationSkillMarkdown(): string {
+  return [
+    `# ${markdocOptimizationSkillName}`,
+    '',
+    'Use this when an operator approves the recommended Plan Reviewer Markdoc optimization after an agent registers or publishes legacy HTML with plan-reviewer.',
+    '',
+    '## Goal',
+    '',
+    'Move future reviewed-plan authoring from hand-written HTML to Markdoc source while preserving existing legacy HTML plans unless the operator explicitly approves migration.',
+    '',
+    '## Operator approval',
+    '',
+    'Before changing repo or agent configuration, ask: “Should I uptake the recommended Markdoc optimization for future Plan Reviewer plans in this repo?” Continue only when the operator says yes.',
+    '',
+    '## Update agent skills',
+    '',
+    'In repo-local or shared agent skills that create, publish, or register reviewed plans:',
+    '',
+    '- Prefer `thoughts/plans/<slug>.markdoc` as the authored source for new plans.',
+    '- Register the Markdoc source directly: `plan-review register thoughts/plans/<slug>.markdoc --repo auto --branch auto --commit auto --execution-ready false`.',
+    '- Treat generated sibling `.html` files as derived review output when a `.markdoc` source exists.',
+    '- Keep legacy HTML registration only for existing HTML-only plans or explicit operator requests.',
+    '- Tell agents to edit `.markdoc` and re-register/let filesystem sync update the rendered HTML.',
+    '',
+    '## Update repo configuration',
+    '',
+    'In the target repo guidance, usually `AGENTS.md` and `thoughts/plans/AGENTS.md`:',
+    '',
+    '- State that new reviewed plans should be authored as `.markdoc` and registered with plan-reviewer.',
+    '- State that `.html` is derived output when a sibling `.markdoc` exists.',
+    '- Preserve a legacy exception for existing HTML-only plans with no sibling Markdoc source.',
+    '- Add or update a `Plan templates` section that lists reusable `thoughts/plans/templates/<template-name>.markdoc` templates if the repo uses templates.',
+    '- Include the canonical registration command for Markdoc and the legacy HTML fallback command.',
+    '',
+    '## Safe migration rules',
+    '',
+    '- Do not rewrite completed historical HTML plans only to adopt Markdoc.',
+    '- Do not overwrite non-generated HTML with compiled Markdoc unless the operator approves an intentional migration and the compiler requires `--force`.',
+    '- Keep product code changes separate from the skills/repo-guidance optimization unless the operator explicitly asks for both.',
+    '- After updating guidance, register the next new plan as Markdoc to verify the workflow.',
+    ''
+  ].join('\n');
+}
