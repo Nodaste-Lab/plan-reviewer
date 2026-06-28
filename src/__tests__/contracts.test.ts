@@ -1587,6 +1587,28 @@ test('markdoc validation fails for missing phase blocks and unsafe raw html reas
     () => compileMarkdoc('{% section id="goal" title="Goal" onclick="bad()" %}Body{% /section %}'),
     /unsupported attribute 'onclick' on section/
   );
+  assert.throws(
+    () => compileMarkdoc('{% phase title="Missing ID" %}{% endState %}Done{% /endState %}{% testsFirst %}Test{% /testsFirst %}{% expectedFiles %}Files{% /expectedFiles %}{% work %}Work{% /work %}{% verify %}Verify{% /verify %}{% /phase %}'),
+    /phase is missing required id/
+  );
+  assert.throws(
+    () => compileMarkdoc('{% decision %}Decision text{% /decision %}'),
+    /decision is missing required id/
+  );
+  assert.throws(
+    () => compileMarkdoc('{% acceptance id="" %}Acceptance text{% /acceptance %}'),
+    /acceptance is missing required id/
+  );
+  for (const [tag, source] of [
+    ['task', '{% task %}Task text{% /task %}'],
+    ['bdd', '{% bdd %}Scenario text{% /bdd %}'],
+    ['matrix', '{% matrix %}{% row %}{% cell %}A{% /cell %}{% /row %}{% /matrix %}'],
+    ['figure', '{% figure %}Figure text{% /figure %}']
+  ] as const) {
+    assert.throws(() => compileMarkdoc(source), new RegExp(`${tag} is missing required id`));
+  }
+  const emptyMapsTo = compileMarkdoc('{% phase id="phase-empty-map" title="Empty map" mapsTo="" %}{% endState %}Done{% /endState %}{% testsFirst %}Test{% /testsFirst %}{% expectedFiles %}Files{% /expectedFiles %}{% work %}Work{% /work %}{% verify %}Verify{% /verify %}{% /phase %}');
+  assert.match(emptyMapsTo.html, /id="phase-empty-map"/);
   const codeExample = compileMarkdoc('```markdoc\n{% html reason="ui-mock" %}\n<nav>Example</nav>\n{% /html %}\n```');
   assert.equal(codeExample.warnings.some(warning => warning.code === 'raw_html_escape_hatch'), false);
   assert.match(codeExample.html, /\{% html reason=&quot;ui-mock&quot; %\}/);

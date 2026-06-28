@@ -174,8 +174,24 @@ const tagAttributeAllowlist: Record<string, Set<string>> = Object.fromEntries(Ob
   rawHtmlSlot: ['id', 'reason']
 }).map(([tag, attrs]) => [tag, new Set(attrs)]));
 
+const requiredTagAttributes: Record<string, string[]> = {
+  section: ['id', 'title'],
+  task: ['id'],
+  phase: ['id', 'title'],
+  decision: ['id'],
+  acceptance: ['id'],
+  bdd: ['id'],
+  matrix: ['id'],
+  figure: ['id'],
+  rawHtmlSlot: ['id', 'reason']
+};
+
 function isAllowedTagAttribute(tag: string, attribute: string): boolean {
   return Boolean(tagAttributeAllowlist[tag]?.has(attribute) || attribute.startsWith('data-') || attribute.startsWith('aria-'));
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
 }
 
 function validatePlanAst(ast: unknown): TocEntry[] {
@@ -198,22 +214,23 @@ function validatePlanAst(ast: unknown): TocEntry[] {
     for (const attribute of Object.keys(attrs)) {
       if (!isAllowedTagAttribute(node.tag, attribute)) errors.push(`unsupported attribute '${attribute}' on ${node.tag}`);
     }
-    if (typeof attrs.id === 'string') ids.set(attrs.id, (ids.get(attrs.id) ?? 0) + 1);
+    for (const attribute of requiredTagAttributes[node.tag] ?? []) {
+      if (!isNonEmptyString(attrs[attribute])) errors.push(`${node.tag} is missing required ${attribute}`);
+    }
+    if (isNonEmptyString(attrs.id)) ids.set(attrs.id, (ids.get(attrs.id) ?? 0) + 1);
     if (node.tag === 'section') {
-      if (typeof attrs.id !== 'string') errors.push('section is missing required id');
-      if (typeof attrs.title !== 'string') errors.push(`section ${String(attrs.id ?? '(unknown)')} is missing required title`);
-      if (typeof attrs.id === 'string' && typeof attrs.title === 'string') toc.push({ id: attrs.id, title: attrs.title });
+      if (isNonEmptyString(attrs.id) && isNonEmptyString(attrs.title)) toc.push({ id: attrs.id, title: attrs.title });
     }
     if (node.tag === 'task') {
-      if (typeof attrs.id === 'string') taskIds.add(attrs.id);
-      if (typeof attrs.phase === 'string') taskPhaseIds.add(attrs.phase);
+      if (isNonEmptyString(attrs.id)) taskIds.add(attrs.id);
+      if (isNonEmptyString(attrs.phase)) taskPhaseIds.add(attrs.phase);
     }
     if (node.tag === 'phase') {
-      if (typeof attrs.id === 'string') {
+      if (isNonEmptyString(attrs.id)) {
         phaseIds.add(attrs.id);
-        toc.push({ id: attrs.id, title: String(attrs.title ?? attrs.id) });
+        toc.push({ id: attrs.id, title: isNonEmptyString(attrs.title) ? attrs.title : attrs.id });
       }
-      if (typeof attrs.mapsTo === 'string') phaseTaskIds.add(attrs.mapsTo);
+      if (isNonEmptyString(attrs.mapsTo)) phaseTaskIds.add(attrs.mapsTo);
       for (const required of phaseRequired) {
         let found = false;
         walkMarkdoc(node, child => { if (child.type === 'tag' && child.tag === required) found = true; });
