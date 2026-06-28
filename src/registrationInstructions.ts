@@ -5,6 +5,15 @@ export interface RegistrationReferenceImplementation {
 }
 
 import { agentNextCommand, durableAgentNextCommand, optionalWatchCommand } from './agentNext.js';
+import { markdocOptimizationSkillEndpointPath } from './markdocOptimizationSkill.js';
+
+export interface MarkdocOptimizationNudge {
+  recommended: true;
+  askOperatorPrompt: string;
+  skillEndpointPath: string;
+  skillEndpointUrl: string;
+  nextSteps: string[];
+}
 
 export interface RegistrationSourceGuidance {
   sourceType: 'markdoc' | 'legacy-html' | 'unknown';
@@ -13,6 +22,7 @@ export interface RegistrationSourceGuidance {
   summary: string;
   editInstructions: string[];
   templateInstructions: string[];
+  markdocOptimizationNudge?: MarkdocOptimizationNudge;
 }
 
 export interface RegistrationAgentInstructions {
@@ -45,7 +55,26 @@ export interface RenderedRegistrationInstructionCommands {
 
 const instructionType = 'plan-review.registration.instructions.v1' as const;
 
-function sourceGuidanceFor(input: { planPath?: string; sourcePath?: string }): RegistrationSourceGuidance {
+function markdocOptimizationEndpointUrl(serviceUrl?: string): string {
+  const baseUrl = serviceUrl?.replace(/\/$/, '') ?? '<registration service URL>';
+  return `${baseUrl}${markdocOptimizationSkillEndpointPath}`;
+}
+
+function markdocOptimizationNudge(serviceUrl?: string): MarkdocOptimizationNudge {
+  return {
+    recommended: true,
+    askOperatorPrompt: 'Ask your operator: “Should I uptake the recommended Markdoc optimization for future Plan Reviewer plans in this repo?”',
+    skillEndpointPath: markdocOptimizationSkillEndpointPath,
+    skillEndpointUrl: markdocOptimizationEndpointUrl(serviceUrl),
+    nextSteps: [
+      'If the operator approves, fetch the skill endpoint and use its guidance to update agent skills that publish plan-reviewer documents.',
+      'Update repo guidance so new reviewed plans use .markdoc sources and generated .html remains derived output.',
+      'Keep existing legacy HTML-only plans unchanged unless the operator explicitly approves migration.'
+    ]
+  };
+}
+
+function sourceGuidanceFor(input: { planPath?: string; sourcePath?: string; serviceUrl?: string }): RegistrationSourceGuidance {
   const authoritativeSourcePath = input.sourcePath ?? input.planPath;
   const sourceType = authoritativeSourcePath?.toLowerCase().endsWith('.markdoc')
     ? 'markdoc'
@@ -75,7 +104,7 @@ function sourceGuidanceFor(input: { planPath?: string; sourcePath?: string }): R
       sourceType,
       ...(authoritativeSourcePath ? { authoritativeSourcePath } : {}),
       ...(input.planPath ? { registeredArtifactPath: input.planPath } : {}),
-      summary: 'This registration is legacy HTML-only unless a sibling Markdoc source is added intentionally.',
+      summary: 'This registration is legacy HTML-only unless a sibling Markdoc source is added intentionally. Ask the operator whether to uptake the recommended Markdoc optimization for future plan-reviewer work.',
       editInstructions: [
         `Edit ${authoritativeSourcePath ?? 'the registered HTML file'} only because no Markdoc source was registered.`,
         'For new plans, prefer thoughts/plans/<slug>.markdoc and register the .markdoc path so generated HTML remains derived output.',
@@ -85,7 +114,8 @@ function sourceGuidanceFor(input: { planPath?: string; sourcePath?: string }): R
         'For future plans in this repo, register reusable Markdoc templates in thoughts/plans/AGENTS.md under a "Plan templates" section.',
         'Store templates as thoughts/plans/templates/<template-name>.markdoc unless repo guidance names a different directory.',
         'Copy a template to thoughts/plans/<slug>.markdoc, replace placeholders, then compile/register the copied plan; do not register template files themselves as review plans.'
-      ]
+      ],
+      markdocOptimizationNudge: markdocOptimizationNudge(input.serviceUrl)
     };
   }
   return {
@@ -108,6 +138,13 @@ function sourceGuidanceFor(input: { planPath?: string; sourcePath?: string }): R
 export function buildRegistrationAgentInstructions(input: { planId: string; reviewUrl: string; serviceUrl?: string; planPath?: string; sourcePath?: string }): RegistrationAgentInstructions {
   const commands = renderRegistrationInstructionCommands({ planId: input.planId }, input.serviceUrl);
   const sourceGuidance = sourceGuidanceFor(input);
+  const markdocOptimizationSteps = sourceGuidance.markdocOptimizationNudge
+    ? [
+        `Recommended Markdoc optimization: ${sourceGuidance.markdocOptimizationNudge.askOperatorPrompt}`,
+        `If approved, fetch ${sourceGuidance.markdocOptimizationNudge.skillEndpointUrl} and use it to update agent skills plus repo guidance for future plan-reviewer Markdoc authoring.`,
+        ...sourceGuidance.markdocOptimizationNudge.nextSteps
+      ]
+    : [];
   return {
     type: instructionType,
     required: true,
@@ -127,6 +164,7 @@ export function buildRegistrationAgentInstructions(input: { planId: string; revi
       `On start or resume, use sourceGuidance first: ${sourceGuidance.summary}`,
       ...sourceGuidance.editInstructions,
       ...sourceGuidance.templateInstructions,
+      ...markdocOptimizationSteps,
       `Before any queue drain or listen command, run plan-review lifecycle set ${input.planId} active --url ${input.serviceUrl ?? '<registration service URL>'}.`,
       `Then run ${commands.drainCommand} until it returns status empty.`,
       `Then run ${commands.listenCommand}; it waits, atomically claims one pending browser.comment.v1, prints commentId and claimId, and exits successfully after exactly one claim.`,

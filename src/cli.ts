@@ -142,6 +142,15 @@ function registrationInstructionsOutput(data: RegisterResponse, serviceUrl: stri
         sourceGuidance.summary,
         ...sourceGuidance.editInstructions.map(step => `- ${step}`),
         ...sourceGuidance.templateInstructions.map(step => `- ${step}`),
+        ...(sourceGuidance.markdocOptimizationNudge
+          ? [
+              '',
+              'Recommended Markdoc optimization:',
+              `- ${sourceGuidance.markdocOptimizationNudge.askOperatorPrompt}`,
+              `- Skill endpoint: ${sourceGuidance.markdocOptimizationNudge.skillEndpointUrl.replaceAll('<registration service URL>', serviceUrl)}`,
+              ...sourceGuidance.markdocOptimizationNudge.nextSteps.map(step => `- ${step}`)
+            ]
+          : []),
         ''
       ]
     : [];

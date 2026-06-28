@@ -214,6 +214,27 @@ test('configuration API persists validated settings and preserves the last good 
   }
 });
 
+test('markdoc optimization skill endpoints return reusable migration guidance', async () => {
+  const app = createApp({ dbPath: tempDbPath('markdoc-optimization-skill'), delivery: { enabled: false } });
+  try {
+    const markdown = await app.inject({ method: 'GET', url: '/skills/plan-reviewer-markdoc-optimization' });
+    assert.equal(markdown.statusCode, 200, markdown.body);
+    assert.match(markdown.headers['content-type'] as string, /text\/markdown/);
+    assert.match(markdown.body, /# plan-reviewer-markdoc-optimization/);
+    assert.match(markdown.body, /Should I uptake the recommended Markdoc optimization/);
+    assert.match(markdown.body, /Update agent skills/);
+    assert.match(markdown.body, /Update repo configuration/);
+
+    const json = await app.inject({ method: 'GET', url: '/api/skills/plan-reviewer-markdoc-optimization' });
+    assert.equal(json.statusCode, 200, json.body);
+    assert.equal(json.json().data.name, 'plan-reviewer-markdoc-optimization');
+    assert.equal(json.json().data.endpointPath, '/skills/plan-reviewer-markdoc-optimization');
+    assert.match(json.json().data.markdown, /Register the Markdoc source directly/);
+  } finally {
+    await app.close();
+  }
+});
+
 test('unsafe legacy plan paths fail closed before action comments are created', async () => {
   const dbPath = tempDbPath('unsafe-action-plan-path');
   let app = createApp({ dbPath, delivery: { enabled: false } });
@@ -1384,6 +1405,31 @@ test('registration instruction helper builds canonical agent-next guidance and r
   assert.match(rendered.durableCommand, /until plan-review agent next plan_abc --wait --json --url http:\/\/reviewer\.example:4317; do sleep 1; done/);
   assert.equal(rendered.referenceImplementations[0].command, rendered.preferredCommand);
   assert.equal(rendered.referenceImplementations[1].command, rendered.durableCommand);
+
+  const legacyHtmlInstructions = buildRegistrationAgentInstructions({
+    planId: 'plan_html',
+    reviewUrl: '/p/plan_html',
+    serviceUrl: 'http://reviewer.example:4317',
+    planPath: 'thoughts/plans/legacy-plan.html'
+  });
+  const nudge = legacyHtmlInstructions.sourceGuidance.markdocOptimizationNudge;
+  assert.equal(legacyHtmlInstructions.sourceGuidance.sourceType, 'legacy-html');
+  assert.equal(nudge?.recommended, true);
+  assert.equal(nudge?.skillEndpointPath, '/skills/plan-reviewer-markdoc-optimization');
+  assert.equal(nudge?.skillEndpointUrl, 'http://reviewer.example:4317/skills/plan-reviewer-markdoc-optimization');
+  assert.match(nudge?.askOperatorPrompt ?? '', /Should I uptake the recommended Markdoc optimization/);
+  assert.match(legacyHtmlInstructions.processingLoop.join('\n'), /Recommended Markdoc optimization/);
+  assert.match(legacyHtmlInstructions.processingLoop.join('\n'), /update agent skills plus repo guidance/);
+
+  const markdocInstructions = buildRegistrationAgentInstructions({
+    planId: 'plan_markdoc',
+    reviewUrl: '/p/plan_markdoc',
+    serviceUrl: 'http://reviewer.example:4317',
+    planPath: 'thoughts/plans/markdoc-plan.html',
+    sourcePath: 'thoughts/plans/markdoc-plan.markdoc'
+  });
+  assert.equal(markdocInstructions.sourceGuidance.sourceType, 'markdoc');
+  assert.equal(markdocInstructions.sourceGuidance.markdocOptimizationNudge, undefined);
 });
 
 test('registration API returns agent instructions additively across registration variants', async () => {
@@ -1404,11 +1450,17 @@ test('registration API returns agent instructions additively across registration
     assert.match(snapshotData.agentInstructions.summary, /align reviewer status/);
     assert.equal(snapshotData.agentInstructions.sourceGuidance.sourceType, 'legacy-html');
     assert.match(snapshotData.agentInstructions.sourceGuidance.summary, /legacy HTML-only/);
+    assert.match(snapshotData.agentInstructions.sourceGuidance.summary, /recommended Markdoc optimization/);
+    assert.equal(snapshotData.agentInstructions.sourceGuidance.markdocOptimizationNudge.skillEndpointPath, '/skills/plan-reviewer-markdoc-optimization');
+    assert.equal(snapshotData.agentInstructions.sourceGuidance.markdocOptimizationNudge.skillEndpointUrl, 'http://localhost:80/skills/plan-reviewer-markdoc-optimization');
+    assert.match(snapshotData.agentInstructions.sourceGuidance.markdocOptimizationNudge.askOperatorPrompt, /Should I uptake the recommended Markdoc optimization/);
     assert.match(snapshotData.agentInstructions.sourceGuidance.templateInstructions.join('\n'), /thoughts\/plans\/templates\/<template-name>\.markdoc/);
     assert.match(snapshotData.agentInstructions.nextAction, /authoritative plan source/);
     assert.match(snapshotData.agentInstructions.nextAction, /Before implementation/);
     assert.match(snapshotData.agentInstructions.processingLoop.join('\n'), /use sourceGuidance first/);
     assert.match(snapshotData.agentInstructions.processingLoop.join('\n'), /register reusable Markdoc templates/);
+    assert.match(snapshotData.agentInstructions.processingLoop.join('\n'), /fetch http:\/\/localhost:80\/skills\/plan-reviewer-markdoc-optimization/);
+    assert.match(snapshotData.agentInstructions.processingLoop.join('\n'), /update agent skills plus repo guidance/);
     assert.match(snapshotData.agentInstructions.processingLoop.join('\n'), /Before any queue drain or listen command, run plan-review lifecycle set .* active --url http:\/\/localhost:80/);
     assert.ok(snapshotData.agentInstructions.processingLoop.findIndex((step: string) => step.includes('lifecycle set')) < snapshotData.agentInstructions.processingLoop.findIndex((step: string) => step.includes('agent next')));
     assert.match(snapshotData.agentInstructions.processingLoop.join('\n'), /when board columns are applicable/);
@@ -1478,6 +1530,7 @@ test('registration API returns agent instructions additively across registration
     assert.equal(markdocRegistration.statusCode, 200);
     const markdocData = markdocRegistration.json().data;
     assert.equal(markdocData.agentInstructions.sourceGuidance.sourceType, 'markdoc');
+    assert.equal(markdocData.agentInstructions.sourceGuidance.markdocOptimizationNudge, undefined);
     assert.equal(markdocData.agentInstructions.sourceGuidance.authoritativeSourcePath, markdocPath);
     assert.equal(markdocData.agentInstructions.sourceGuidance.registeredArtifactPath, 'thoughts/plans/markdoc-plan.html');
     assert.match(markdocData.agentInstructions.sourceGuidance.summary, /Markdoc source/);
