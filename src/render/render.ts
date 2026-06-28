@@ -34,15 +34,24 @@ const allowedTags = sanitizeHtml.defaults.allowedTags.concat([
   'th',
   'td',
   'input',
-  'label'
+  'label',
+  'header',
+  'footer',
+  'nav',
+  'button',
+  'select',
+  'option'
 ]);
 
 const allowedAttributes: Record<string, sanitizeHtml.AllowedAttribute[]> = {
   ...sanitizeHtml.defaults.allowedAttributes,
-  '*': ['id', 'class', 'style', 'title', 'aria-label', 'role', 'data-*'],
+  '*': ['id', 'class', 'style', 'title', 'aria-*', 'role', 'data-*'],
   meta: ['charset', 'name', 'content'],
   img: ['src', 'alt', 'width', 'height', 'title', 'data-*'],
-  input: ['type', 'checked', 'disabled', 'readonly', 'aria-label', 'data-*'],
+  input: ['type', 'checked', 'disabled', 'readonly', 'aria-*', 'data-*'],
+  button: ['type', 'name', 'value', 'disabled', 'aria-*', 'data-*'],
+  select: ['name', 'disabled', 'multiple', 'aria-*', 'data-*'],
+  option: ['value', 'selected', 'disabled', 'label', 'aria-*', 'data-*'],
   a: ['href', 'name', 'target', 'rel', 'data-*']
 };
 

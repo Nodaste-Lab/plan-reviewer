@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Markdoc Plan Authoring DSL for Token-Efficient HTML Plans</title>
+  <style>
+    :root { color-scheme: dark; --bg:#08111f; --panel:#101a2c; --panel-2:#0c1525; --text:#e6edf7; --muted:#9fb0c7; --accent:#66d9ef; --accent-2:#a78bfa; --ok:#34d399; --warn:#fbbf24; --bad:#fb7185; --border:#25344d; --code:#06101e; }
+    * { box-sizing: border-box; }
+    body { margin:0; background: radial-gradient(circle at top left, rgba(102,217,239,.10), transparent 30%), var(--bg); color:var(--text); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height:1.56; }
+    main { max-width:1180px; margin:0 auto; padding:38px 22px 80px; }
+    header, section, article, figure { border:1px solid var(--border); background:linear-gradient(180deg, rgba(16,26,44,.96), rgba(12,21,37,.96)); border-radius:18px; padding:22px; margin:18px 0; box-shadow:0 16px 50px rgba(0,0,0,.18); }
+    header { border-color:rgba(102,217,239,.55); background: radial-gradient(circle at 20% 0%, rgba(102,217,239,.18), transparent 34%), var(--panel); }
+    h1, h2, h3, h4 { line-height:1.18; margin:0 0 12px; }
+    h1 { font-size:clamp(2rem, 5vw, 3.65rem); letter-spacing:-.04em; }
+    h2 { font-size:1.45rem; color:#f8fbff; }
+    h3 { color:#dbeafe; margin-top:18px; }
+    h4 { color:#c4b5fd; }
+    p { margin:0 0 12px; }
+    a { color:#7dd3fc; }
+    code, pre { background:var(--code); color:#dbeafe; border:1px solid #213149; border-radius:8px; }
+    code { padding:.12rem .35rem; }
+    pre { padding:14px; overflow:auto; white-space:pre-wrap; }
+    ul, ol { margin-top:8px; }
+    li { margin:6px 0; }
+    table { width:100%; border-collapse:collapse; margin-top:10px; }
+    th, td { border:1px solid var(--border); padding:10px; vertical-align:top; text-align:left; }
+    th { color:#bfdbfe; background:#0b1322; }
+    .status { display:inline-flex; gap:8px; align-items:center; border-radius:999px; border:1px solid rgba(251,191,36,.6); color:#fde68a; padding:5px 11px; font-weight:800; background:rgba(251,191,36,.10); }
+    .meta { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px; margin-top:18px; }
+    .meta div, .callout, .card { background:rgba(12,21,37,.82); border:1px solid var(--border); border-radius:13px; padding:12px; }
+    .label { display:block; color:var(--muted); font-size:.78rem; text-transform:uppercase; letter-spacing:.08em; font-weight:800; }
+    .toc { display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:12px; }
+    .toc a { display:block; padding:4px 0; text-decoration:none; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:12px; }
+    .muted { color:var(--muted); }
+    .ok { color:#bbf7d0; }
+    .warn { color:#fde68a; }
+    .bad { color:#fecdd3; }
+    .decision { border-left:4px solid var(--accent); padding-left:12px; }
+    .phase { border-color:rgba(167,139,250,.45); }
+    .progress-list { list-style:none; padding-left:0; }
+    .progress-list li { display:flex; gap:10px; align-items:flex-start; }
+    .progress-list input { margin-top:.35rem; }
+    .example-pair { display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:12px; }
+    .example-pair pre { min-height:180px; }
+    .coverage-yes { color:#bbf7d0; font-weight:800; }
+    .coverage-caution { color:#fde68a; font-weight:800; }
+    .coverage-no { color:#fecdd3; font-weight:800; }
+  </style>
+</head>
+<body>
+<main id="plan-markdoc-plan-authoring-dsl">
+  <header id="title">
+    <p class="status">Status: execution-ready</p>
+    <h1>Markdoc Plan Authoring DSL for Token-Efficient HTML Plans</h1>
+    <p id="linear-reference"><strong>Linear issue:</strong> none provided. Do not invent a NOD key for this plan.</p>
+    <div class="meta" id="plan-metadata">
+      <div><span class="label">Plan path</span><code>thoughts/plans/markdoc-plan-authoring-dsl.html</code></div>
+      <div><span class="label">Primary surfaces</span><code>src/cli.ts</code>, <code>src/render/render.ts</code>, plan registration/source sync, documentation, fixtures</div>
+      <div><span class="label">Requested outcome</span>Agents author full-power reviewable plans with fewer tokens than raw HTML, without inventing a new language.</div>
+      <div><span class="label">Corpus audited</span>36 checked-in plan HTML files plus 5 supporting HTML asset fragments.</div>
+    </div>
+  </header>
+
+  <section id="toc">
+    <h2>Contents</h2>
+    <div class="toc">
+      <div><strong>Overview</strong><a href="#goal">Goal</a><a href="#decision-attention">Decision attention</a><a href="#solution-narrative">Solution narrative</a><a href="#why-this-exists">Why this exists</a></div>
+      <div><strong>Evidence</strong><a href="#authority-inputs">Authority and inputs</a><a href="#current-reality">Current implementation reality</a><a href="#corpus-audit">Corpus coverage audit</a><a href="#format-comparison">Format comparison</a></div>
+      <div><strong>Design</strong><a href="#markdoc-contract">Markdoc contract</a><a href="#existing-plan-examples">Examples from existing plans</a><a href="#mdx-option">MDX option and exclusion rationale</a><a href="#product-intent-alignment">Product intent alignment</a></div>
+      <div><strong>Execution</strong><a href="#progress">Progress</a><a href="#acceptance-criteria">Acceptance criteria</a><a href="#bdd-scenarios">BDD scenarios</a><a href="#test-coverage-matrix">Test coverage matrix</a><a href="#phases">Phases</a><a href="#resume-instructions">Resume instructions</a></div>
+    </div>
+  </section>
+
+  <section id="goal">
+    <h2>Goal</h2>
+    <p>Add an existing, token-efficient plan authoring format that preserves the full review power of the current HTML plan artifacts. Agents should write compact structured source, the service should compile it into semantic HTML, and the existing sanitizer/render/source-sync/review-comment lifecycle should remain the final authority.</p>
+    <p>The recommendation is <strong>Markdoc source plus generated HTML output</strong>. Raw HTML remains supported for historical plans and as an explicit escape hatch, not as the default agent-authored plan format.</p>
+  </section>
+
+  <section id="decision-attention">
+    <h2>Decision Attention / Low-confidence Areas</h2>
+    <ul>
+      <li id="attention-none"><strong>No unresolved product decision remains.</strong> The first slice uses Markdoc as the default compact source, permits raw HTML only through explicit audited escape blocks for rich mocks and legacy fragments, keeps MDX out of the default path, and updates repo/product guidance so agents know when <code>.markdoc</code> is authoritative versus legacy <code>.html</code>.</li>
+    </ul>
+  </section>
+
+  <section id="solution-narrative">
+    <h2>Solution narrative</h2>
+    <p>Introduce a plan-authoring pipeline where <code>thoughts/plans/&lt;slug&gt;.markdoc</code> compiles to <code>thoughts/plans/&lt;slug&gt;.html</code>. The generated HTML is the same semantic, dark-mode, stable-ID artifact that the browser reviewer already serves and annotates. Registration accepts either HTML or Markdoc: HTML follows the current path; Markdoc is compiled, validated, then sent through the existing HTML safety pipeline.</p>
+    <p>Markdoc gives the repository an existing language rather than a custom DSL. It starts with CommonMark, adds declarative tags such as <code>{% section %}</code> and <code>{% phase %}</code>, supports attributes and validation schemas, produces an AST/renderable tree, and can render HTML. Markdoc can also parse raw HTML when its tokenizer is configured with HTML support, so gaps in the custom tag set can be supplemented without inventing syntax. This plan intentionally routes that capability through an explicit <code>{% html reason="..." %}</code> escape hatch and the existing plan-review sanitizer, so raw HTML is available for rich mocks and legacy fragments but remains auditable rather than becoming the default authoring style. The repo-owned template supplies the repetitive page shell, shared CSS, table of contents, required section ordering, and stable wrapper structure.</p>
+    <p>The first implementation should be conservative: no plan-authored JavaScript, no MDX runtime, no React execution. If future work wants interactive trusted components, add a separate MDX/component mode with a different threat model and explicit trust boundary.</p>
+  </section>
+
+  <section id="why-this-exists">
+    <h2>Why this plan exists</h2>
+    <p>Raw HTML plans are reviewable but token-inefficient. Agents spend large context budgets on boilerplate tags, repeated CSS, closing tags, and layout scaffolding instead of product decisions, tests, and evidence. The current corpus shows that plans need more than Markdown: they contain structured phases, rich tables, screenshots, full UI mockups, ARIA-labeled pseudo-controls, stable IDs, code blocks, and generated review targets. The new authoring format must preserve those capabilities while reducing authoring noise.</p>
+  </section>
+
+  <section id="authority-inputs">
+    <h2>Authority and inputs</h2>
+    <ul>
+      <li>User request: publish a plan for a token-efficient HTML plan DSL, include examples from existing plans, audit all existing and archived plans for coverage, and explain the MDX option and concerns.</li>
+      <li><code>AGENTS.md</code>: non-trivial changes in this repo must use the reviewed HTML plan workflow, keep <code>dist/</code> generated, and preserve rendered-plan safety.</li>
+      <li><code>thoughts/plans/AGENTS.md</code>: plans require semantic HTML, stable IDs, dark-mode styling, progress checkboxes, product-intent alignment, phases, BDD scenarios, verification, and browser-review registration.</li>
+      <li><code>thoughts/specs/product_intent.md</code>: repo HTML plans are source-of-truth review artifacts today; sanitized render output must remain script-free and safe for the parent review shell.</li>
+      <li>Markdoc docs: Markdoc is a Markdown-based authoring framework with custom tags, attributes, validation, AST transform, and HTML rendering.</li>
+      <li>MDX docs: MDX combines Markdown with JSX, JavaScript expressions, and ESM import/export, then compiles to executable component code.</li>
+      <li>Corpus audit: 36 direct plan HTML files under <code>thoughts/plans/*.html</code> and 5 supporting HTML asset fragments under <code>thoughts/plans/assets/**</code>.</li>
+    </ul>
+  </section>
+
+  <section id="current-reality">
+    <h2>Current implementation reality</h2>
+    <table id="current-reality-table">
+      <thead><tr><th>Area</th><th>Current fact</th><th>Planning implication</th></tr></thead>
+      <tbody>
+        <tr><td>Registration input</td><td><code>plan-review register</code> currently registers HTML files and source-syncs the checked-in file.</td><td>Add Markdoc as an authoring input while preserving HTML registration as the generated artifact and legacy path.</td></tr>
+        <tr><td>Safety boundary</td><td><code>src/render/render.ts</code> parses/sanitizes HTML, removes scripts, rewrites images, and adds <code>data-plan-node-id</code>.</td><td>The Markdoc compiler should produce HTML, then reuse this safety boundary rather than bypass it.</td></tr>
+        <tr><td>Plan layout</td><td>Plans repeat dark theme CSS, headings, metadata, progress, tables, and phase wrappers.</td><td>Move boilerplate into a canonical renderer template so agents only supply structured content.</td></tr>
+        <tr><td>UI mocks</td><td>Many plans use rich hand-authored HTML mockups with fake browser chrome, buttons, selects, ARIA, classes, and data attributes.</td><td>Markdoc must include custom mock/layout tags and a constrained raw-HTML escape hatch.</td></tr>
+        <tr><td>Historical plans</td><td>Existing plans are already reviewed HTML artifacts; some are completed and should not be rewritten just to fit a new format.</td><td>Support dual mode: legacy HTML passthrough plus new Markdoc authoring for future plans.</td></tr>
+        <tr><td>Repo guidance</td><td><code>thoughts/specs/product_intent.md</code> and <code>thoughts/plans/AGENTS.md</code> currently describe repo HTML plans as the source of truth.</td><td>Execution must update those guidance files so <code>.markdoc</code> is authoritative when present, generated <code>.html</code> remains the registered review artifact, and HTML-only plans remain legacy/source-authoritative.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="corpus-audit">
+    <h2>Corpus coverage audit</h2>
+    <p>The audit covered every direct plan currently checked in under <code>thoughts/plans/*.html</code>. There is no separate archive directory in this worktree; archived/completed historical plans live in the same directory and were included. Supporting HTML fragments under <code>thoughts/plans/assets/**</code> were treated as static assets, not normal plan sources.</p>
+    <table id="corpus-audit-table">
+      <thead><tr><th>Feature in existing plans</th><th>Evidence</th><th>Markdoc support decision</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Semantic plan sections and phases</td><td>Common sections include status, goal, progress, decisions, acceptance criteria, BDD, phases, verification, review record, resume, and non-goals. Phase wrappers appear as <code>&lt;article class="phase" id="phase-..."&gt;</code> and sometimes <code>&lt;section&gt;</code>.</td><td>Add first-class <code>{% section %}</code> and <code>{% phase %}</code> tags with required IDs and generated wrapper HTML.</td><td class="coverage-yes">Covered</td></tr>
+        <tr><td>Progress checkboxes</td><td>34 of 36 direct plans contain progress checkboxes, usually disabled and checked for completed work.</td><td>Add <code>{% progress %}</code> and <code>{% task id="P1" checked=true %}</code>; renderer emits the only checkbox list and links tasks to phases.</td><td class="coverage-yes">Covered</td></tr>
+        <tr><td>Tables and matrices</td><td>35 of 36 direct plans use tables for implementation reality, test coverage, decisions, and review records.</td><td>Support Markdown tables for simple cases and a richer <code>{% matrix %}</code> tag for IDs, inline code, multi-paragraph cells, and generated accessibility markup.</td><td class="coverage-yes">Covered</td></tr>
+        <tr><td>Code blocks and commands</td><td>All direct plans use inline or block code. Long plans such as <code>codex-delivery-adapter-plan.html</code> include JSON, SQL, prompts, commands, and BDD text in code blocks.</td><td>Use fenced code blocks plus optional <code>{% command %}</code> wrappers for copy-paste verification commands.</td><td class="coverage-yes">Covered</td></tr>
+        <tr><td>Images and screenshots</td><td><code>plan-state-visual-regression-prevention.html</code> uses relative PNG assets under <code>thoughts/plans/assets/...</code> with captions.</td><td>Add <code>{% figure src="..." alt="..." id="..." %}</code> and preserve existing asset packaging/rewrite behavior.</td><td class="coverage-yes">Covered</td></tr>
+        <tr><td>Mermaid</td><td>No current plan contains an actual Mermaid source block, but <code>mermaid-diagram-rendering.html</code> explicitly plans support for <code>&lt;pre class="mermaid"&gt;</code>, <code>&lt;div class="mermaid"&gt;</code>, and <code>&lt;code class="language-mermaid"&gt;</code>.</td><td>Canonical Markdoc authoring should use fenced <code>```mermaid</code> blocks and transform them into safe viewer-owned Mermaid source containers.</td><td class="coverage-yes">Covered</td></tr>
+        <tr><td>Rich UI mockups</td><td><code>issue-43-plan-organization.html</code>, <code>configuration-panel-and-review-defaults.html</code>, <code>left-hand-plan-navigator.html</code>, and <code>hermes-html-artifact-reviewer.html</code> contain deeply nested fake UI HTML with <code>nav</code>, <code>button</code>, <code>select</code>, ARIA, classes, and data attributes.</td><td>Add structured mock tags for common shells and allow an explicit <code>{% html reason="ui-mock" %}</code> escape hatch that still compiles through sanitizer.</td><td class="coverage-caution">Covered with escape hatch</td></tr>
+        <tr><td>Custom IDs/classes/data/ARIA</td><td>Corpus has thousands of explicit IDs/classes and limited <code>data-*</code>/<code>aria-*</code> attributes; stable comment targets depend on them.</td><td>Allow explicit <code>id</code>, safe <code>class</code>, <code>data-*</code>, <code>aria-*</code>, <code>role</code>, and <code>title</code> on schema-approved tags; generate IDs when omitted.</td><td class="coverage-yes">Covered</td></tr>
+        <tr><td>Per-plan CSS</td><td>Every direct plan has a <code>&lt;style&gt;</code> block; eight plans use inline styles in mockups.</td><td>Renderer owns shared plan CSS. Custom CSS becomes an advanced scoped block for mockups only, with sanitizer and style allowlist unchanged at render time.</td><td class="coverage-caution">Constrain</td></tr>
+        <tr><td>Plan-authored active content</td><td>No direct plan uses <code>&lt;script&gt;</code>, <code>&lt;iframe&gt;</code>, <code>&lt;video&gt;</code>, <code>&lt;canvas&gt;</code>, or inline SVG. Buttons/selects are visual mocks, not active plan logic.</td><td>Do not add active content support in Markdoc. Keep plan-authored scripts out of scope.</td><td class="coverage-yes">Covered by exclusion</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="format-comparison">
+    <h2>Existing language comparison</h2>
+    <table id="format-comparison-table">
+      <thead><tr><th>Candidate</th><th>Fit</th><th>Why</th><th>Decision</th></tr></thead>
+      <tbody>
+        <tr><td>Markdoc</td><td>Best</td><td>Existing Markdown-based authoring framework with declarative tags, attributes, AST transform, validation, and HTML rendering in Node.</td><td>Adopt for first implementation.</td></tr>
+        <tr><td>Pug</td><td>Good fallback</td><td>Very concise HTML generation and Node-native, but it is mainly a template language and less suited to validating plan semantics.</td><td>Do not use unless Markdoc proves insufficient.</td></tr>
+        <tr><td>AsciiDoc</td><td>Plausible</td><td>Strong technical-document syntax with anchors, admonitions, tables, and includes, but less natural for repo-owned custom plan schemas in this Node app.</td><td>Do not use for first slice.</td></tr>
+        <tr><td>MDX</td><td>Future option, not first slice</td><td>Markdown plus JSX, expressions, and ESM imports. Powerful for components but introduces executable JavaScript and framework coupling.</td><td>Exclude from default authoring; document future trusted-component lane.</td></tr>
+        <tr><td>Haml/Slim</td><td>Weak fit</td><td>Concise HTML-like formats, but Ruby-centered and not aligned with this Node TypeScript package.</td><td>Reject.</td></tr>
+        <tr><td>Liquid/Nunjucks</td><td>Partial fit</td><td>Good templating, but content remains mostly HTML-shaped and does not give plan-specific validation by default.</td><td>Reject for plan source.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="markdoc-contract">
+    <h2>Proposed Markdoc contract</h2>
+    <h3 id="source-files">Source files and generated files</h3>
+    <ul>
+      <li><code>thoughts/plans/&lt;slug&gt;.markdoc</code> is the editable source for new compact plans.</li>
+      <li><code>thoughts/plans/&lt;slug&gt;.html</code> is generated and registered with the plan-review service.</li>
+      <li>Legacy <code>.html</code> remains valid and is not mass-converted.</li>
+      <li>Generated HTML includes a comment header naming the source file and warning agents not to hand-edit generated output when a Markdoc source exists.</li>
+    </ul>
+    <h3 id="frontmatter-contract">Frontmatter</h3>
+    <pre><code>---
+title: Markdoc Plan Authoring DSL for Token-Efficient HTML Plans
+status: browser-review-draft
+executionReady: false
+linear: none
+planId: markdoc-plan-authoring-dsl
+uiImpact: text-only
+surfaces:
+  - src/cli.ts
+  - src/render/render.ts
+  - src/planDsl/compileMarkdoc.ts
+---</code></pre>
+    <h3 id="custom-tags">Custom tags</h3>
+    <table id="custom-tags-table">
+      <thead><tr><th>Tag</th><th>Purpose</th><th>Output</th></tr></thead>
+      <tbody>
+        <tr><td><code>{% plan %}</code></td><td>Root plan wrapper and metadata.</td><td><code>&lt;main id="..."&gt;</code>, header, generated ToC, shared CSS.</td></tr>
+        <tr><td><code>{% section id title %}</code></td><td>Canonical plan sections.</td><td><code>&lt;section id="..."&gt;&lt;h2&gt;...&lt;/h2&gt;...</code></td></tr>
+        <tr><td><code>{% progress %}</code>, <code>{% task %}</code></td><td>Only progress checkbox list.</td><td>Disabled checkbox list with stable phase mapping.</td></tr>
+        <tr><td><code>{% phase id title mapsTo %}</code></td><td>Execution phase with required subblocks.</td><td><code>&lt;article class="phase" id="..."&gt;</code> plus End State, Tests first, Expected files, Work, Open questions, Verify.</td></tr>
+        <tr><td><code>{% decision %}</code>, <code>{% acceptance %}</code>, <code>{% bdd %}</code></td><td>Stable, commentable requirement items.</td><td>Anchored list item or article with consistent classes.</td></tr>
+        <tr><td><code>{% matrix %}</code></td><td>Complex tables/test matrices.</td><td>Accessible table with stable ID and rich cell content.</td></tr>
+        <tr><td><code>{% figure %}</code></td><td>Images, screenshots, and static mocks.</td><td><code>&lt;figure&gt;</code> with image or content body and caption.</td></tr>
+        <tr><td><code>{% mock %}</code></td><td>Common reviewer-friendly UI mock shells.</td><td>Safe styled mock containers with ARIA labels.</td></tr>
+        <tr><td><code>{% html reason="..." %}</code></td><td>Explicit escape hatch for complex legacy/mock HTML.</td><td>Sanitized passthrough, recorded as an audit warning unless reason is approved.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="existing-plan-examples">
+    <h2>Examples from existing plans</h2>
+
+    <article id="example-progress-phase">
+      <h3>Example 1 — progress and phase structure from <code>codex-delivery-adapter-plan.html</code></h3>
+      <div class="example-pair">
+        <div>
+          <h4>Current HTML shape</h4>
+          <pre><code>&lt;section id="progress"&gt;
+  &lt;h2&gt;Progress&lt;/h2&gt;
+  &lt;ul class="progress-list"&gt;
+    &lt;li&gt;&lt;input type="checkbox" checked disabled&gt;
+      &lt;span&gt;Phase 1: Lock product contract...&lt;/span&gt;
+    &lt;/li&gt;
+  &lt;/ul&gt;
+&lt;/section&gt;</code></pre>
+        </div>
+        <div>
+          <h4>Proposed Markdoc</h4>
+          <pre><code>{% progress %}
+{% task id="P1" checked=true phase="phase-p1-contract" %}
+Lock product contract and registration metadata
+{% /task %}
+{% /progress %}
+
+{% phase id="phase-p1-contract" title="Lock product contract" mapsTo="P1" %}
+{% endState %}Contracts and metadata are test-locked.{% /endState %}
+{% testsFirst %}Add contract tests for registration metadata.{% /testsFirst %}
+{% expectedFiles %}
+- src/__tests__/contracts.test.ts
+- src/registrationInstructions.ts
+{% /expectedFiles %}
+{% work %}Update registration metadata and assertions.{% /work %}
+{% openQuestions %}None{% /openQuestions %}
+{% verify %}`bun run build && node --test dist/__tests__/contracts.test.js`{% /verify %}
+{% /phase %}</code></pre>
+        </div>
+      </div>
+    </article>
+
+    <article id="example-reality-table">
+      <h3>Example 2 — implementation reality table from <code>configuration-panel-and-review-defaults.html</code></h3>
+      <div class="example-pair">
+        <div>
+          <h4>Current HTML shape</h4>
+          <pre><code>&lt;table&gt;
+  &lt;thead&gt;&lt;tr&gt;&lt;th&gt;Area&lt;/th&gt;&lt;th&gt;Current behavior&lt;/th&gt;&lt;th&gt;Planning implication&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;&lt;td&gt;Review shell side panels&lt;/td&gt;&lt;td&gt;Desktop left navigator...&lt;/td&gt;&lt;td&gt;Add persisted defaults...&lt;/td&gt;&lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;</code></pre>
+        </div>
+        <div>
+          <h4>Proposed Markdoc</h4>
+          <pre><code>{% matrix id="current-reality" columns=["Area", "Current behavior", "Planning implication"] %}
+{% row %}
+{% cell %}Review shell side panels{% /cell %}
+{% cell %}Desktop left navigator is visible by default; right comments panel defaults to a narrow rail.{% /cell %}
+{% cell %}Add persisted desktop defaults and render initial shell classes from config.{% /cell %}
+{% /row %}
+{% /matrix %}</code></pre>
+        </div>
+      </div>
+    </article>
+
+    <article id="example-ui-mock">
+      <h3>Example 3 — rich UI mockup from <code>issue-43-plan-organization.html</code></h3>
+      <p>This is the main coverage stress case. The existing plan uses full nested HTML for a fake Kanban board with ARIA labels, data attributes, buttons, links, and badges. A pure Markdown representation would lose review fidelity. The Markdoc plan must support either structured mock components or an explicit raw HTML escape hatch.</p>
+      <div class="example-pair">
+        <div>
+          <h4>Current HTML shape</h4>
+          <pre><code>&lt;figure id="prototype-kanban-board"&gt;
+  &lt;h3&gt;Kanban board with default configurable columns&lt;/h3&gt;
+  &lt;div class="mockup" role="img" aria-label="Kanban board..."&gt;
+    &lt;main class="screen index-mock"&gt;
+      &lt;section class="kanban-board" aria-label="Plan board columns"&gt;
+        &lt;div class="kanban-column" data-column-key="backlog"&gt;...&lt;/div&gt;
+      &lt;/section&gt;
+    &lt;/main&gt;
+  &lt;/div&gt;
+  &lt;figcaption&gt;The board is the primary organizer...&lt;/figcaption&gt;
+&lt;/figure&gt;</code></pre>
+        </div>
+        <div>
+          <h4>Proposed Markdoc</h4>
+          <pre><code>{% figure id="prototype-kanban-board" title="Kanban board with default configurable columns" %}
+{% mock kind="kanban" ariaLabel="Kanban board with Backlog, Ready to Pull, In Progress, and Done columns" %}
+{% kanbanColumn key="backlog" title="Backlog" count=3 %}
+{% planCard title="issue-43-plan-organization" readiness="not-ready" status="Active" progress="0/4" %}
+Organize planning documents into a configurable kanban board.
+{% /planCard %}
+{% /kanbanColumn %}
+{% /mock %}
+{% caption %}The board is the primary organizer for planning documents.{% /caption %}
+{% /figure %}
+
+{% html reason="legacy-ui-mock" %}
+&lt;!-- Allowed only when structured mock tags cannot preserve the existing review target. --&gt;
+{% /html %}</code></pre>
+        </div>
+      </div>
+    </article>
+
+    <article id="example-image-figure">
+      <h3>Example 4 — screenshot figures from <code>plan-state-visual-regression-prevention.html</code></h3>
+      <div class="example-pair">
+        <div>
+          <h4>Current HTML shape</h4>
+          <pre><code>&lt;figure class="ui-capture" id="real-active-toolbar-capture"&gt;
+  &lt;img src="assets/plan-state-visual-regression/active-toolbar-current.png" alt="Live capture..."&gt;
+  &lt;figcaption&gt;Live capture, active plan...&lt;/figcaption&gt;
+&lt;/figure&gt;</code></pre>
+        </div>
+        <div>
+          <h4>Proposed Markdoc</h4>
+          <pre><code>{% figure
+  id="real-active-toolbar-capture"
+  class="ui-capture"
+  src="assets/plan-state-visual-regression/active-toolbar-current.png"
+  alt="Live capture of the current active plan toolbar in the review shell" %}
+{% caption %}
+Live capture, active plan. Preserve toolbar order and hide the invalid Restore control.
+{% /caption %}
+{% /figure %}</code></pre>
+        </div>
+      </div>
+    </article>
+
+    <article id="example-mermaid">
+      <h3>Example 5 — Mermaid authoring planned by <code>mermaid-diagram-rendering.html</code></h3>
+      <div class="example-pair">
+        <div>
+          <h4>HTML variants the plan wants to support</h4>
+          <pre><code>&lt;pre class="mermaid"&gt;graph TD; A--&gt;B&lt;/pre&gt;
+&lt;div class="mermaid"&gt;graph TD; A--&gt;B&lt;/div&gt;
+&lt;pre&gt;&lt;code class="language-mermaid"&gt;graph TD; A--&gt;B&lt;/code&gt;&lt;/pre&gt;</code></pre>
+        </div>
+        <div>
+          <h4>Proposed Markdoc</h4>
+          <pre><code>```mermaid
+flowchart TD
+  author[Agent writes Markdoc]
+  compiler[Compile to safe HTML]
+  reviewer[Browser reviewer comments]
+  author --> compiler --> reviewer
+```
+
+Renderer output: trusted Mermaid source container with source hash and stable ID.</code></pre>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <section id="mdx-option">
+    <h2>MDX option and exclusion rationale</h2>
+    <p>MDX is a real candidate for the long-term vision where plans can contain trusted components. It combines Markdown with JSX, JavaScript expressions, and ESM imports/exports. Conceptually, an MDX plan could render custom components such as <code>&lt;PlanPhase /&gt;</code>, <code>&lt;EvidenceMatrix /&gt;</code>, or <code>&lt;InteractiveMock /&gt;</code>.</p>
+    <h3 id="mdx-example">What MDX would look like</h3>
+    <pre><code>import { Plan, Phase, EvidenceMatrix } from './plan-components'
+
+export const metadata = {
+  title: 'Markdoc Plan Authoring DSL',
+  executionReady: false
+}
+
+# Markdoc Plan Authoring DSL
+
+&lt;EvidenceMatrix rows={[
+  ['Safety boundary', 'renderPlan sanitizes HTML', 'Compiler must reuse it'],
+]} /&gt;
+
+&lt;Phase id="phase-p1-compiler" title="Add compiler" verify="bun run test"&gt;
+  Add a Markdoc compiler and fixtures.
+&lt;/Phase&gt;</code></pre>
+    <h3 id="mdx-concerns">Why not MDX first</h3>
+    <ul>
+      <li><strong>Execution model:</strong> MDX content compiles into JavaScript component code. That is not just markup; it can include expressions and module imports. The current product intent says browser shell interactivity is service-owned and plan-authored active content is not supported.</li>
+      <li><strong>Security boundary:</strong> Today the repo can reason about plan safety by parsing and sanitizing HTML and serving the iframe with no plan scripts. MDX would require a separate trusted compilation/execution sandbox or a strict component allowlist before it is safe for untrusted or agent-authored plans.</li>
+      <li><strong>Framework coupling:</strong> MDX is strongest when paired with React/Preact/Vue component rendering. This package currently serves first-party HTML from Fastify and vanilla client code, not a React app shell.</li>
+      <li><strong>Review determinism:</strong> Browser comments rely on stable DOM targets. Arbitrary components can produce dynamic DOM depending on props, imports, runtime state, or component versions unless the system freezes a render contract.</li>
+      <li><strong>Operational cost:</strong> Supporting MDX well means dependency policy, bundling, component registry, SSR/static rendering, sandboxing, source maps/error reporting, and generated-DOM stability tests. Markdoc gives most needed structure without that runtime.</li>
+    </ul>
+    <h3 id="mdx-future-lane">Future MDX lane</h3>
+    <p>Keep MDX as a possible future <em>trusted component mode</em>, not the default plan source. A later plan could add <code>.mdx</code> only for repo-owned component libraries, precompiled at registration time, with no network imports, no arbitrary user imports, deterministic static rendering, and the same final HTML sanitizer/source-sync behavior. That future mode should be gated by an explicit trust label such as <code>--trusted-components</code> and should never silently replace the default safe Markdoc path.</p>
+  </section>
+
+  <section id="product-intent-alignment">
+    <h2>Product intent alignment</h2>
+    <p>This plan advances <code>thoughts/specs/product_intent.md</code> by keeping browser-reviewable HTML as the delivered artifact while making authoring easier for agents. It preserves stable URLs, source sync, exact browser annotations, queue-backed comments, and safe rendered output.</p>
+    <ul>
+      <li><strong>Golden path:</strong> agents can register a compact Markdoc plan and receive the same reviewer URL and comment workflow.</li>
+      <li><strong>Safe defaults:</strong> Markdoc compiles to sanitized HTML; plan-authored JavaScript remains unsupported.</li>
+      <li><strong>Recovery:</strong> compiler validation errors should identify the source line, tag, missing ID, or unsupported escape hatch and keep the last good rendered HTML active.</li>
+      <li><strong>Truthful status:</strong> generated HTML should identify its source and stale/generated state so agents do not hand-edit the wrong file.</li>
+    </ul>
+  </section>
+
+  <section id="locked-decisions">
+    <h2>Locked decisions</h2>
+    <ul>
+      <li id="decision-use-markdoc" class="decision"><strong>Use Markdoc for the first compact authoring format.</strong> It is existing technology, Node-compatible, declarative, schema-validatable, and renders HTML.</li>
+      <li id="decision-html-artifact" class="decision"><strong>Keep HTML as the registered browser-review artifact.</strong> Markdoc source does not replace the viewer contract; it generates it.</li>
+      <li id="decision-legacy-html" class="decision"><strong>Keep legacy HTML passthrough.</strong> Historical plans and special artifacts remain registerable as HTML.</li>
+      <li id="decision-no-mdx-first" class="decision"><strong>Do not adopt MDX in the first slice.</strong> Reserve MDX for a later trusted-component mode with a separate security plan.</li>
+      <li id="decision-sanitizer-final" class="decision"><strong>The existing sanitizer/render path remains final.</strong> Markdoc compiler output must still pass through HTML parsing, sanitization, image rewriting, and node-ID assignment.</li>
+      <li id="decision-raw-html-escape" class="decision"><strong>Allow a controlled raw HTML escape hatch.</strong> The corpus requires it for rich UI mocks unless equivalent structured mock tags exist. The first slice permits approved reasons <code>ui-mock</code>, <code>legacy-fragment</code>, and <code>unsupported-markdoc-shape</code>; the compiler must require a reason, warn in generated metadata, and still pass output through the existing sanitizer.</li>
+      <li id="decision-source-authority" class="decision"><strong>Use source-by-extension authority.</strong> When <code>&lt;slug&gt;.markdoc</code> exists, agents edit that source and treat <code>&lt;slug&gt;.html</code> as generated review output. When only <code>&lt;slug&gt;.html</code> exists, the HTML remains the authoritative source. Repo guidance and product intent must be updated in this plan to prevent agents from hand-editing generated HTML.</li>
+      <li id="decision-no-legacy-overwrite" class="decision"><strong>Fail closed before overwriting legacy HTML.</strong> Compiling or registering <code>&lt;slug&gt;.markdoc</code> must not overwrite an existing <code>&lt;slug&gt;.html</code> unless that HTML is already marked as generated from the same Markdoc source or the operator uses an explicit migration/force path. The error must explain whether to choose a different slug, migrate intentionally, or keep the HTML-only plan authoritative.</li>
+    </ul>
+  </section>
+
+  <section id="acceptance-criteria">
+    <h2>Acceptance criteria</h2>
+    <ol>
+      <li id="ac-1">A new <code>.markdoc</code> plan can be compiled into a dark-mode semantic HTML plan with generated ToC, stable IDs, progress checkboxes, phases, acceptance criteria, BDD scenarios, verification strategy, and decisions log.</li>
+      <li id="ac-2">The compiler validates required plan structure and reports actionable errors for missing IDs, missing phase subblocks, unmatched progress/phase mappings, unsafe raw HTML escape hatches, and unsupported attributes.</li>
+      <li id="ac-3">Registering a Markdoc source produces or refreshes the generated HTML artifact and then follows the same <code>plan-review register ... --execution-ready false</code> path as HTML.</li>
+      <li id="ac-4">Existing raw HTML plans under <code>thoughts/plans/*.html</code> remain registerable without conversion.</li>
+      <li id="ac-5">Representative corpus features are covered: progress lists, complex tables, code blocks, image figures, Mermaid source blocks, rich UI mockups, stable IDs/classes/data/ARIA attributes, and scoped styling.</li>
+      <li id="ac-6">MDX is documented as a future trusted-component lane with explicit concerns and non-goals, not implemented as the default authoring format.</li>
+      <li id="ac-7">Compiler and registration failures preserve the last good rendered plan and explain the next safe action to an agent.</li>
+      <li id="ac-8">Compiling or registering <code>&lt;slug&gt;.markdoc</code> refuses to overwrite an existing non-generated <code>&lt;slug&gt;.html</code> unless an explicit migration or force path is used, preserving historical HTML plans and unrelated user edits.</li>
+    </ol>
+  </section>
+
+  <section id="bdd-scenarios">
+    <h2>BDD scenarios</h2>
+    <article id="bdd-markdoc-registers"><h3>BDD-1: Agent registers a compact Markdoc plan</h3><p><strong>Given</strong> an agent authored <code>thoughts/plans/example.markdoc</code> with required frontmatter and phase tags, <strong>when</strong> it runs <code>plan-review register thoughts/plans/example.markdoc --repo auto --branch auto --commit auto --execution-ready false --json</code>, <strong>then</strong> the CLI compiles <code>thoughts/plans/example.html</code>, registers that HTML, reports source sync truthfully, and returns normal agent instructions.</p></article>
+    <article id="bdd-validation-error"><h3>BDD-2: Missing phase contract fails before registration</h3><p><strong>Given</strong> a Markdoc plan phase omits <code>testsFirst</code> or <code>verify</code>, <strong>when</strong> the agent compiles or registers it, <strong>then</strong> the command fails before replacing the last good generated HTML and prints the exact phase ID, missing field, and fix pattern.</p></article>
+    <article id="bdd-legacy-html"><h3>BDD-3: Historical HTML plan still registers</h3><p><strong>Given</strong> an existing completed plan such as <code>thoughts/plans/queue-backed-agent-next.html</code>, <strong>when</strong> an agent registers the HTML path, <strong>then</strong> the current HTML registration behavior remains unchanged and no Markdoc conversion is required.</p></article>
+    <article id="bdd-ui-mock"><h3>BDD-4: Rich mockup survives with stable review targets</h3><p><strong>Given</strong> a Markdoc figure contains a structured mock or approved raw HTML block with nested controls and ARIA labels, <strong>when</strong> it compiles, <strong>then</strong> the generated HTML preserves commentable IDs/classes/ARIA/data attributes that are allowed by the sanitizer and still receives <code>data-plan-node-id</code> values.</p></article>
+    <article id="bdd-mdx-excluded"><h3>BDD-5: MDX source is not silently executed</h3><p><strong>Given</strong> an agent tries to register <code>thoughts/plans/example.mdx</code>, <strong>when</strong> MDX mode has not been explicitly implemented and enabled, <strong>then</strong> the CLI rejects it with a message explaining that MDX is reserved for a future trusted-component mode and suggests Markdoc or HTML.</p></article>
+    <article id="bdd-no-legacy-overwrite"><h3>BDD-6: Markdoc compile cannot clobber legacy HTML</h3><p><strong>Given</strong> <code>thoughts/plans/example.html</code> exists and is not marked as generated from <code>thoughts/plans/example.markdoc</code>, <strong>when</strong> an agent compiles or registers <code>thoughts/plans/example.markdoc</code>, <strong>then</strong> the command fails closed before writing HTML and explains how to choose a different slug, run an explicit migration, or keep the existing HTML as authoritative.</p></article>
+  </section>
+
+  <section id="test-coverage-matrix">
+    <h2>Test coverage matrix</h2>
+    <table>
+      <thead><tr><th>Coverage</th><th>Acceptance / BDD</th><th>Test layer</th><th>Verify</th></tr></thead>
+      <tbody>
+        <tr><td>Markdoc compiler output</td><td>AC-1, AC-5, BDD-1</td><td>Contract/unit fixtures for source-to-HTML snapshots and structural assertions.</td><td><code>bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "markdoc|plan dsl"</code></td></tr>
+        <tr><td>Validation errors</td><td>AC-2, AC-7, BDD-2</td><td>Contract tests for missing phase blocks, duplicate IDs, raw HTML reason requirements, unsafe attributes.</td><td><code>bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "markdoc validation"</code></td></tr>
+        <tr><td>Legacy overwrite guard</td><td>AC-8, BDD-6</td><td>Contract and CLI tests that Markdoc compile/register refuses to clobber existing non-generated HTML without explicit migration/force intent.</td><td><code>bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "markdoc.*overwrite|legacy.*html"</code></td></tr>
+        <tr><td>Registration path</td><td>AC-3, BDD-1</td><td>CLI/contract tests that registering <code>.markdoc</code> produces generated HTML and normal registration JSON.</td><td><code>bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "register.*markdoc"</code></td></tr>
+        <tr><td>Legacy HTML passthrough</td><td>AC-4, BDD-3</td><td>Existing registration tests plus one regression that HTML paths do not invoke Markdoc validation.</td><td><code>bun run test</code></td></tr>
+        <tr><td>Browser review behavior</td><td>AC-5, BDD-4</td><td>E2E fixture registers a generated plan with tables, images, mockups, and comments on generated nodes.</td><td><code>bun run test:e2e</code></td></tr>
+        <tr><td>MDX exclusion</td><td>AC-6, BDD-5</td><td>CLI contract test for clear unsupported extension guidance.</td><td><code>bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "mdx|unsupported"</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="phases">
+    <h2>Phase-by-phase execution plan</h2>
+    <article class="phase" id="phase-p1-contract">
+      <h3>P1 — Lock source format contract and fixtures</h3>
+      <h4>End State</h4><p>The repository has canonical Markdoc examples and fixtures that cover the audited plan corpus features before implementation starts.</p>
+      <h4>Tests first</h4><p>Add failing contract tests for representative Markdoc sources: simple plan, complex table, image figure, rich mock escape hatch, Mermaid block, validation failure, and legacy HTML passthrough.</p>
+      <h4>Expected files</h4><ul><li><code>src/__tests__/contracts.test.ts</code></li><li><code>src/test-fixtures/</code> or a new <code>src/__tests__/fixtures/markdoc/</code></li><li><code>docs/</code> or README section for source format examples</li></ul>
+      <h4>Work</h4><p>Codify the schema, required tags, approved raw HTML reasons, and expected generated HTML structure in fixtures. Include examples based on <code>codex-delivery-adapter-plan.html</code>, <code>issue-43-plan-organization.html</code>, <code>plan-state-visual-regression-prevention.html</code>, and <code>mermaid-diagram-rendering.html</code>.</p>
+      <h4>Open questions / decision dependencies</h4><p>None. Raw HTML policy is locked for the first slice: custom tags first, explicit reasoned escape hatch only when needed, sanitizer remains final.</p>
+      <h4>Verify</h4><pre><code>bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "markdoc|plan dsl"</code></pre>
+    </article>
+
+    <article class="phase" id="phase-p2-compiler">
+      <h3>P2 — Add Markdoc compiler and template renderer</h3>
+      <h4>End State</h4><p><code>.markdoc</code> sources compile into semantic reviewer-friendly HTML that passes the existing sanitizer/render path.</p>
+      <h4>Tests first</h4><p>Make P1 compiler snapshots fail against an empty compiler, then implement until generated HTML matches structural assertions without overfitting whitespace.</p>
+      <h4>Expected files</h4><ul><li><code>package.json</code> / lockfile for <code>@markdoc/markdoc</code></li><li><code>src/planDsl/compileMarkdoc.ts</code></li><li><code>src/planDsl/schema.ts</code></li><li><code>src/planDsl/template.ts</code></li></ul>
+      <h4>Work</h4><p>Add Markdoc dependency, parse frontmatter and custom tags, render canonical HTML shell, validate required sections/phases, handle figures/tables/Mermaid, and emit safe raw-HTML warnings.</p>
+      <h4>Open questions / decision dependencies</h4><p>None after P1 raw HTML policy is accepted.</p>
+      <h4>Verify</h4><pre><code>bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "markdoc|plan dsl|render"</code></pre>
+    </article>
+
+    <article class="phase" id="phase-p3-cli-registration">
+      <h3>P3 — Wire CLI compile and registration flow</h3>
+      <h4>End State</h4><p>Agents can explicitly compile Markdoc or register Markdoc directly, and the service stores/registers the generated HTML with truthful source metadata.</p>
+      <h4>Tests first</h4><p>Add CLI contract tests for <code>compile</code>, <code>register .markdoc</code>, unsupported <code>.mdx</code>, and legacy <code>.html</code>.</p>
+      <h4>Expected files</h4><ul><li><code>src/cli.ts</code></li><li><code>src/schemas.ts</code> if metadata shape changes</li><li><code>src/registrationInstructions.ts</code> if source guidance changes</li><li><code>src/__tests__/contracts.test.ts</code></li></ul>
+      <h4>Work</h4><p>Add <code>plan-review compile</code>; teach <code>register</code> to compile <code>.markdoc</code> to <code>.html</code> first; include generated-source metadata and errors that point agents back to the Markdoc source. Before writing generated HTML, detect whether the target HTML is already generated from the same Markdoc source; if not, fail closed unless an explicit migration/force option is provided.</p>
+      <h4>Open questions / decision dependencies</h4><p>None.</p>
+      <h4>Verify</h4><pre><code>bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "compile|register.*markdoc|mdx"</code></pre>
+    </article>
+
+    <article class="phase" id="phase-p4-browser-sync">
+      <h3>P4 — Preserve browser review and source-sync behavior</h3>
+      <h4>End State</h4><p>Generated HTML remains commentable, source-sync is truthful, and failed Markdoc compilation does not replace the last good rendered plan.</p>
+      <h4>Tests first</h4><p>Add fixture/e2e coverage that registers a Markdoc plan, comments on generated nodes, edits source, and observes safe refresh or safe failure.</p>
+      <h4>Expected files</h4><ul><li><code>src/server/sourceSync.ts</code></li><li><code>src/server/app.ts</code> if source metadata is exposed in the shell</li><li><code>src/test-fixtures/e2e-run.ts</code></li></ul>
+      <h4>Work</h4><p>Teach source sync to treat Markdoc as the source and HTML as generated cache, preserve last-good HTML on compile failure, and show actionable stale/generated status in browser or CLI output.</p>
+      <h4>Open questions / decision dependencies</h4><p>None.</p>
+      <h4>Verify</h4><pre><code>bun run test:e2e</code></pre>
+    </article>
+
+    <article class="phase" id="phase-p5-docs-final-gates">
+      <h3>P5 — Document examples and run full gates</h3>
+      <h4>End State</h4><p>README/docs show how agents author Markdoc plans, when to use raw HTML escape hatches, how legacy HTML is handled, and why MDX is not the default.</p>
+      <h4>Tests first</h4><p>Docs examples should be backed by fixture compilation tests from earlier phases.</p>
+      <h4>Expected files</h4><ul><li><code>README.md</code></li><li><code>docs/</code> if a dedicated authoring guide is preferred</li><li><code>AGENTS.md</code></li><li><code>thoughts/specs/product_intent.md</code></li><li><code>thoughts/plans/AGENTS.md</code></li><li><code>thoughts/plans/markdoc-plan-authoring-dsl.html</code> progress and deviation updates during execution</li></ul>
+      <h4>Work</h4><p>Add concise user-facing examples, migration guidance, MDX future-lane note, and final verification evidence. Update root repo guidance, product intent, and plan-author guidance to state the source-by-extension authority rule: Markdoc is authoritative when present, generated HTML is the registered review artifact, and legacy HTML remains authoritative when no Markdoc source exists. Document the legacy-overwrite guard and explicit migration/force path. Run implementation review before PR handoff.</p>
+      <h4>Open questions / decision dependencies</h4><p>None.</p>
+      <h4>Verify</h4><pre><code>bun run build
+bun run test
+bun run test:e2e</code></pre>
+    </article>
+  </section>
+
+  <section id="progress">
+    <h2>Progress</h2>
+    <ul class="progress-list">
+      <li><input type="checkbox" checked disabled> <span>P1 — Lock source format contract and fixtures</span></li>
+      <li><input type="checkbox" checked disabled> <span>P2 — Add Markdoc compiler and template renderer</span></li>
+      <li><input type="checkbox" checked disabled> <span>P3 — Wire CLI compile and registration flow</span></li>
+      <li><input type="checkbox" checked disabled> <span>P4 — Preserve browser review and source-sync behavior</span></li>
+      <li><input type="checkbox" checked disabled> <span>P5 — Document examples and run full gates</span></li>
+    </ul>
+  </section>
+
+  <section id="verification-strategy">
+    <h2>Verification strategy</h2>
+    <ul>
+      <li>Use snapshot-tolerant structural assertions rather than exact-whitespace snapshots for generated HTML.</li>
+      <li>Keep representative fixtures mapped to existing plan corpus features so future plans cannot regress rich mockups or stable IDs.</li>
+      <li>Run the existing sanitizer/render tests after compiler output is generated, proving Markdoc does not bypass the safety boundary.</li>
+      <li>Run browser e2e coverage for real registration, review-shell rendering, comment targeting, source refresh, and compile-failure recovery.</li>
+      <li>Run full <code>bun run test</code> and <code>bun run test:e2e</code> before marking execution complete.</li>
+    </ul>
+  </section>
+
+  <section id="delivery-order">
+    <h2>Delivery order</h2>
+    <ol>
+      <li>Run independent plan-readiness review after browser feedback is incorporated.</li>
+      <li>Execute phases P1 through P5 in order, updating this plan progress after each phase.</li>
+      <li>Run scoped implementation review and full gates before PR handoff.</li>
+    </ol>
+  </section>
+
+  <section id="non-goals">
+    <h2>Non-goals</h2>
+    <ul>
+      <li id="non-goal-convert-history">Do not convert all completed historical HTML plans to Markdoc.</li>
+      <li id="non-goal-mdx-runtime">Do not execute MDX, JSX, JavaScript expressions, or plan-authored scripts in the first slice.</li>
+      <li id="non-goal-new-review-ui">Do not redesign the browser reviewer UI as part of the authoring format work.</li>
+      <li id="non-goal-general-doc-system">Do not turn plan-reviewer into a general documentation site generator.</li>
+      <li id="non-goal-full-style-language">Do not add an unrestricted CSS or component system for arbitrary plan styling.</li>
+    </ul>
+  </section>
+
+  <section id="resume-instructions">
+    <h2>Resume instructions</h2>
+    <p>Implementation phases P1–P5 are complete in this branch. Resume at scoped implementation review, final verification, commit/push, PR creation, and post-PR monitoring. If code changes after review, rerun targeted Markdoc/source-sync tests plus the required full gates before PR handoff.</p>
+  </section>
+
+  <section id="decisions-deviations-log">
+    <h2>Decisions / Deviations Log</h2>
+    <table>
+      <thead><tr><th>Date</th><th>Decision / deviation</th><th>Evidence</th></tr></thead>
+      <tbody>
+        <tr><td>2026-06-28</td><td>Created browser-review draft recommending Markdoc as the first compact plan authoring format, with generated HTML as the registered artifact.</td><td>User requested published plan; corpus audit found Markdoc can cover existing plan needs with custom tags and a controlled raw HTML escape hatch.</td></tr>
+        <tr><td>2026-06-28</td><td>Excluded MDX from first slice but documented it as a future trusted-component lane.</td><td>MDX compiles Markdown/JSX into executable JavaScript component code, which conflicts with current plan-authored no-script safety boundaries.</td></tr>
+        <tr><td>2026-06-28</td><td>Resolved execution-ready review blockers: raw HTML escape hatch policy is locked, implementation now includes root/product/plan-author guidance updates for source-by-extension authority, and compiler/register work must fail closed before overwriting non-generated legacy HTML.</td><td>GPT and GLM readiness reviews identified unresolved raw HTML approval, the Markdoc source-of-truth guidance conflict, and the missing legacy overwrite guard.</td></tr>
+        <tr><td>2026-06-28</td><td>Implemented P1–P5: Markdoc fixtures, compiler/template, CLI compile/register path, Markdoc source-sync recovery, sanitizer support for mock controls, and docs/guidance updates.</td><td><code>bun run test</code> and <code>bun run test:e2e</code> passed after implementation.</td></tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+</body>
+</html>

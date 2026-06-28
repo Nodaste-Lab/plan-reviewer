@@ -1,0 +1,11 @@
+---
+title: Invalid Markdoc Plan
+---
+
+{% progress %}
+{% task id="P1" phase="phase-p1" %}Broken{% /task %}
+{% /progress %}
+
+{% phase id="phase-p1" title="P1" mapsTo="P1" %}
+{% endState %}Only one required block exists.{% /endState %}
+{% /phase %}

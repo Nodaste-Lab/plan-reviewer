@@ -6,6 +6,7 @@ import { renderPlan } from '../render/render.js';
 import type { RegisterPlanInput } from '../schemas.js';
 import { PlanReviewStore, type StoredEvent } from '../storage/database.js';
 import { sha256 } from '../util.js';
+import { assertCanWriteGeneratedHtml, compileMarkdoc, generatedHtmlPathFor } from '../planDsl/compileMarkdoc.js';
 
 interface EventEmitterTarget {
   emitEvent(event: StoredEvent): void;
@@ -91,6 +92,16 @@ function removeTrailingCloseTag(value: string, tagName: 'body' | 'html'): string
   return current.slice(0, match.index);
 }
 
+function isMarkdocPath(sourcePath: string): boolean {
+  return path.extname(sourcePath).toLowerCase() === '.markdoc';
+}
+
+function writeFileAtomic(targetPath: string, contents: string): void {
+  const temporaryPath = `${targetPath}.${process.pid}.${Date.now()}.tmp`;
+  fs.writeFileSync(temporaryPath, contents);
+  fs.renameSync(temporaryPath, targetPath);
+}
+
 function isCompleteHtmlSource(html: string): boolean {
   const withoutHtml = removeTrailingCloseTag(html, 'html');
   if (withoutHtml === undefined) return false;
@@ -162,7 +173,8 @@ export class SourceSyncService {
     if (plan.archivedAt || plan.lifecycleState === 'deferred' || plan.watchMode !== 'filesystem' || !plan.sourcePath) return;
     const watchPaths = [plan.sourcePath];
     try {
-      const html = fs.readFileSync(plan.sourcePath, 'utf8');
+      const source = fs.readFileSync(plan.sourcePath, 'utf8');
+      const html = isMarkdocPath(plan.sourcePath) ? compileMarkdoc(source, { sourcePath: path.relative(process.cwd(), plan.sourcePath) || plan.sourcePath }).html : source;
       for (const asset of discoverSourceAssets(html, plan.sourcePath)) {
         if (asset.absolutePath) watchPaths.push(asset.absolutePath);
       }
@@ -238,10 +250,15 @@ export class SourceSyncService {
     if (plan.archivedAt || plan.lifecycleState === 'deferred' || plan.watchMode !== 'filesystem' || !plan.sourcePath) return;
     try {
       const snapshot = readStableSourceSnapshot(plan.sourcePath);
-      if (!isCompleteHtmlSource(snapshot.html)) throw new IncompleteSourceWriteError(plan.sourcePath);
+      const isMarkdoc = isMarkdocPath(plan.sourcePath);
+      if (!isMarkdoc && !isCompleteHtmlSource(snapshot.html)) throw new IncompleteSourceWriteError(plan.sourcePath);
+      const compiled = isMarkdoc ? compileMarkdoc(snapshot.html, { sourcePath: path.relative(process.cwd(), plan.sourcePath) || plan.sourcePath }) : undefined;
+      const html = compiled?.html ?? snapshot.html;
+      const targetHtmlPath = compiled ? generatedHtmlPathFor(plan.sourcePath) : undefined;
+      if (targetHtmlPath) assertCanWriteGeneratedHtml(targetHtmlPath, plan.sourcePath);
       const htmlChanged = snapshot.fileHash !== version.fileHash;
       const needsWatcherRefresh = this.recoveryWatchers.has(plan.id);
-      const assets = discoverSourceAssets(snapshot.html, plan.sourcePath);
+      const assets = discoverSourceAssets(html, plan.sourcePath);
       const payload: RegisterPlanInput = {
         repoKey: plan.repoKey,
         repoName: plan.repoName,
@@ -253,7 +270,7 @@ export class SourceSyncService {
         publicationMetadata: plan.publicationMetadata,
         reviewMode: plan.reviewMode,
         slug: plan.slug,
-        html: snapshot.html,
+        html,
         fileHash: snapshot.fileHash,
         sourcePath: plan.sourcePath,
         sourceMtimeMs: snapshot.sourceMtimeMs,
@@ -289,6 +306,7 @@ export class SourceSyncService {
       ) {
         throw new StaleSourceSnapshotError(plan.sourcePath);
       }
+      if (targetHtmlPath) writeFileAtomic(targetHtmlPath, html);
       this.bus.emitEvent(result.event);
       if (htmlChanged || needsWatcherRefresh) await this.register(plan.id);
     } catch (error) {
