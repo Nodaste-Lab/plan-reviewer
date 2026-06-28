@@ -1,6 +1,6 @@
 # thoughts/plans AGENTS.md
 
-This directory contains browser-reviewable HTML plans. New plans in this repo must use the reviewed HTML workflow.
+This directory contains browser-reviewable plans. New compact plans may be authored as `.markdoc` and compiled to reviewable `.html`; legacy HTML-only plans remain supported. All new plans in this repo must use the reviewed HTML workflow.
 
 ## Required skill routing
 
@@ -10,7 +10,9 @@ This directory contains browser-reviewable HTML plans. New plans in this repo mu
 
 ## Plan artifact rules
 
-- Write semantic HTML at `thoughts/plans/<slug>.html`.
+- Prefer `thoughts/plans/<slug>.markdoc` for new compact authoring. Registering or compiling it generates semantic HTML at `thoughts/plans/<slug>.html`.
+- When a sibling `.markdoc` exists, edit the `.markdoc` source and treat `.html` as generated review output. When no `.markdoc` exists, the `.html` file remains authoritative.
+- Legacy/raw plans may still be written directly as semantic HTML at `thoughts/plans/<slug>.html`.
 - Use a dark-mode default theme with explicit dark background, light foreground, readable muted text, accessible accent/link colors, and `color-scheme: dark`.
 - Add stable `id` attributes to major sections, phase wrappers, acceptance criteria, BDD scenarios, diagrams, figures, mockups, and other likely comment targets.
 - Include a `Progress` section with the only checkboxes.
@@ -27,6 +29,7 @@ After creating or updating a plan for review:
 
 ```bash
 plan-review register thoughts/plans/<slug>.html --repo auto --branch auto --commit auto --execution-ready false --json
+plan-review register thoughts/plans/<slug>.markdoc --repo auto --branch auto --commit auto --execution-ready false --json
 ```
 
 Use `--execution-ready true` only after the required plan-review gates agree the plan is ready by substance. When sharing links with the user, use the canonical reviewer URL from the `html-plan-reviewer` skill, not a loopback or relative URL.
@@ -35,4 +38,4 @@ Immediately after registration, drain pending comments and start the queue-backe
 
 ## Existing plan policy
 
-Do not rewrite completed historical plans only to match this file. For active plans, add missing reviewer structure before continuing execution.
+Do not rewrite completed historical plans only to match this file or convert them to Markdoc. For active plans, add missing reviewer structure before continuing execution. Markdoc compile/register refuses to overwrite a non-generated sibling HTML file unless `--force` is used for an intentional migration.

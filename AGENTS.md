@@ -4,7 +4,7 @@ This is the repo-specific operating guide for coding agents in `plan-reviewer`. 
 
 ## Purpose
 
-`plan-reviewer` is the local HTML plan review daemon and CLI for reviewable plans under `thoughts/plans/`. Repository work should dogfood that workflow: non-trivial changes are planned as HTML, registered in the reviewer, annotated in the browser, and only then executed when the plan is marked execution-ready.
+`plan-reviewer` is the local HTML plan review daemon and CLI for reviewable plans under `thoughts/plans/`. Repository work should dogfood that workflow: non-trivial changes are planned as Markdoc-authored or legacy HTML artifacts, registered in the reviewer as HTML, annotated in the browser, and only then executed when the plan is marked execution-ready.
 
 ## Safety and repo reality
 
@@ -37,12 +37,14 @@ Register a plan during local development:
 
 ```bash
 bun run dev -- register thoughts/plans/<slug>.html --url http://127.0.0.1:4317 --repo auto --branch auto --commit auto --execution-ready false
+bun run dev -- register thoughts/plans/<slug>.markdoc --url http://127.0.0.1:4317 --repo auto --branch auto --commit auto --execution-ready false
 ```
 
 Installed CLI registration:
 
 ```bash
 plan-review register thoughts/plans/<slug>.html --repo auto --branch auto --commit auto --execution-ready false
+plan-review register thoughts/plans/<slug>.markdoc --repo auto --branch auto --commit auto --execution-ready false
 ```
 
 Targeted implementation checks:
@@ -58,7 +60,7 @@ When asked to create, update, review, or execute a non-trivial plan in this repo
 
 1. Load the `reviewed-html-plan` skill for pre-execution plan creation/review, or `scoped-plan-run` when explicitly executing an existing reviewed plan through PR monitoring.
 2. Load companion skills when their surface is reached, especially `html-plan-reviewer`, `planning-workflow`, and `product-principles`.
-3. Create or update one semantic HTML plan at `thoughts/plans/<slug>.html`. Do not create Markdown-only plans for new work unless the user explicitly asks for Markdown.
+3. Create or update one semantic plan source at `thoughts/plans/<slug>.markdoc` for new compact plans, or `thoughts/plans/<slug>.html` for legacy/raw HTML plans. The generated `.html` is the registered review artifact. Do not create Markdown-only plans for new work unless the user explicitly asks for Markdown.
 4. Follow `thoughts/plans/AGENTS.md` when present for plan-file structure, status, progress, stable IDs, and reviewer-friendly HTML requirements.
 5. Read `thoughts/specs/product_intent.md` before finalizing any plan. If product intent conflicts with the requested plan, stop and resolve the conflict before marking the plan execution-ready.
 6. Register the plan through `plan-review register ... --execution-ready false` before claiming the plan is ready for browser feedback unless the user explicitly says not to publish/register.

@@ -129,6 +129,15 @@ plan-review register thoughts/plans/my-plan.html --repo auto --branch auto --com
 plan-review index
 ```
 
+New compact plans may be authored as Markdoc and registered directly:
+
+```bash
+plan-review compile thoughts/plans/my-plan.markdoc
+plan-review register thoughts/plans/my-plan.markdoc --repo auto --branch auto --commit auto --execution-ready false
+```
+
+When a sibling `.markdoc` exists, it is the editable source and the generated `.html` is the registered review artifact. Legacy HTML-only plans remain source-authoritative. Markdoc compile/register refuses to overwrite existing non-generated HTML unless `--force` is passed for an intentional migration. See `docs/plan-authoring.md` for tags, raw HTML escape reasons, and the MDX exclusion.
+
 Open the printed review URL. Records have an explicit `reviewMode`: `planning` preserves reviewed-plan behavior, while `collaboration` hosts general HTML documents for anchored human/agent conversations. If omitted, the server infers `planning` for records with execution-readiness metadata or `thoughts/plans/` paths, and `collaboration` for general HTML without planning metadata. Override or correct mode without editing source HTML:
 
 ```bash

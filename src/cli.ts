@@ -14,6 +14,7 @@ import { discoverPullRequest, fetchPullRequestByUrl, parseGitHubRemote, refreshP
 import type { PlanPullRequest } from './schemas.js';
 import { deliveryTargetUpdateSchema } from './schemas.js';
 import { checkForUpdates, formatUpdateStatus, readBuildIdentity } from './updateStatus.js';
+import { compileMarkdocFile } from './planDsl/compileMarkdoc.js';
 
 interface PlanApiRecord {
   plan: {
@@ -198,16 +199,26 @@ function parseExecutionReady(value: string | undefined): boolean {
   throw new PlanReviewError('validation_failed', '--execution-ready must be true or false', 1, { executionReady: value });
 }
 
-async function registerPlan(filePath: string, options: { url?: string; json?: boolean; repo?: string; branch?: string; commit?: string; newThread?: boolean; snapshot?: boolean; executionReady?: string; linearIssue?: string; reviewMode?: 'planning' | 'collaboration'; codexThread?: string; codexDelivery?: string; codexMode?: string }) {
+async function registerPlan(filePath: string, options: { url?: string; json?: boolean; repo?: string; branch?: string; commit?: string; newThread?: boolean; snapshot?: boolean; executionReady?: string; linearIssue?: string; reviewMode?: 'planning' | 'collaboration'; codexThread?: string; codexDelivery?: string; codexMode?: string; force?: boolean }) {
   const serviceUrl = resolveServiceUrl(options.url);
   const absolute = path.resolve(filePath);
-  const html = fs.readFileSync(absolute, 'utf8');
+  const extension = path.extname(absolute).toLowerCase();
+  if (extension === '.mdx') {
+    throw new PlanReviewError('unsupported_plan_source', 'MDX plan sources are not supported by the default safe authoring path', 1, { filePath }, 'Use .markdoc for compact safe plan authoring, or .html for legacy plans. MDX is reserved for a future trusted-component mode.');
+  }
+  const siblingMarkdocPath = extension === '.html' ? absolute.replace(/\.html$/i, '.markdoc') : undefined;
+  if (siblingMarkdocPath && fs.existsSync(siblingMarkdocPath)) {
+    throw new PlanReviewError('markdoc_source_required', `Refusing to register generated HTML while sibling Markdoc source exists: ${absolute}`, 1, { filePath, sourcePath: siblingMarkdocPath }, 'Register the .markdoc source instead so filesystem sync tracks the authoritative source. Use a different slug or remove the sibling .markdoc only if this HTML is intentionally source-authoritative.');
+  }
+  const compiled = extension === '.markdoc' ? compileMarkdocFile(absolute, { write: true, force: options.force }) : undefined;
+  const html = compiled?.html ?? fs.readFileSync(absolute, 'utf8');
   const stat = fs.statSync(absolute);
+  const registeredArtifact = compiled?.targetHtmlPath ?? absolute;
   const meta = repoMetadata(path.dirname(absolute));
   const branch = options.branch && options.branch !== 'auto' ? options.branch : meta.branch;
   const commitSha = options.commit && options.commit !== 'auto' ? options.commit : meta.commitSha;
   const repoName = options.repo && options.repo !== 'auto' ? options.repo : meta.repoName;
-  const planPath = path.relative(meta.rootPath, absolute) || filePath;
+  const planPath = path.relative(meta.rootPath, registeredArtifact) || filePath;
   const inferredReviewMode = options.reviewMode ?? (options.executionReady !== undefined || planPath.startsWith('thoughts/plans/') ? 'planning' : 'collaboration');
   const publicationMetadata = inferredReviewMode === 'planning'
     ? {
@@ -228,7 +239,7 @@ async function registerPlan(filePath: string, options: { url?: string; json?: bo
     planPath,
     slug: slugify(path.basename(filePath, path.extname(filePath))),
     html,
-    fileHash: sha256(html),
+    fileHash: compiled?.fileHash ?? sha256(html),
     reviewMode: options.reviewMode,
     publicationMetadata,
     sourcePath: options.snapshot ? undefined : absolute,
@@ -265,6 +276,18 @@ async function registerPlan(filePath: string, options: { url?: string; json?: bo
       : `PR auto-discovery: ${pullRequestDiscovery.message}\nNEXT: ${pullRequestDiscovery.nextAction}\n`
     : '';
   process.stdout.write(`Plan ID: ${data.planId}\nIndex URL: ${terminalLink(fullUrl(serviceUrl, data.indexUrl))}\nReview URL: ${terminalLink(fullUrl(serviceUrl, data.reviewUrl))}\nSource sync: ${sync}\n${discoveryNote}${registrationInstructionsOutput(data, serviceUrl)}`);
+}
+
+function compileMarkdocCommand(filePath: string, options: { json?: boolean; force?: boolean }) {
+  const result = compileMarkdocFile(filePath, { write: true, force: options.force });
+  const output = {
+    sourcePath: path.resolve(filePath),
+    targetHtmlPath: result.targetHtmlPath,
+    fileHash: result.fileHash,
+    warnings: result.warnings
+  };
+  if (options.json) printJson(output);
+  else process.stdout.write(`Compiled ${output.sourcePath} -> ${output.targetHtmlPath}\n${result.warnings.map(warning => `WARNING ${warning.code}: ${warning.detail}`).join('\n')}${result.warnings.length ? '\n' : ''}`);
 }
 
 async function printIndex(options: { url?: string; json?: boolean; q?: string; repoKey?: string; limit?: string; cursor?: string }) {
@@ -1122,6 +1145,12 @@ export async function main(argv: string[] = process.argv.slice(2)) {
       await serve({ host: options.host, port: options.port, dbPath: options.db });
     });
 
+  program.command('compile <path>')
+    .description('Compile a .markdoc plan source into generated HTML')
+    .option('--force', 'overwrite an existing HTML target for an intentional migration')
+    .option('--json')
+    .action(compileMarkdocCommand);
+
   program.command('register <path>')
     .option('--url <url>')
     .option('--repo <repo>')
@@ -1129,6 +1158,7 @@ export async function main(argv: string[] = process.argv.slice(2)) {
     .option('--commit <commit>')
     .option('--new-thread')
     .option('--snapshot', 'register a detached snapshot instead of live filesystem sync')
+    .option('--force', 'allow .markdoc registration to overwrite an existing HTML target for an intentional migration')
     .option('--linear-issue <issue>', 'optional Linear issue associated with this plan')
     .option('--execution-ready <true|false>', 'whether agent-review results say this plan is execution ready')
     .option('--review-mode <mode>', 'review mode: planning|collaboration')

@@ -1,0 +1,54 @@
+---
+title: Compact Markdoc Plan
+status: execution-ready
+executionReady: true
+linear: none
+planId: compact-markdoc-plan
+surfaces:
+  - src/cli.ts
+  - src/planDsl/compileMarkdoc.ts
+---
+
+{% section id="goal" title="Goal" data-review-target="goal" aria-describedby="goal-note" %}
+Agents author compact plans that still render as reviewable HTML.
+{% /section %}
+
+{% progress %}
+{% task id="P1" phase="phase-p1" checked=true %}Lock contract{% /task %}
+{% /progress %}
+
+{% section id="acceptance-criteria" title="Acceptance criteria" %}
+1. Generated HTML includes semantic sections and a ToC.
+{% /section %}
+
+{% matrix id="coverage" columns=["Feature", "Status"] %}
+{% row %}{% cell %}Tables{% /cell %}{% cell %}Covered{% /cell %}{% /row %}
+{% /matrix %}
+
+```mermaid
+flowchart TD
+  A-->B
+```
+
+{% figure id="target-figure" src="assets/example.png" alt="Example screenshot" %}
+{% caption %}Screenshot survives as a relative asset.{% /caption %}
+{% /figure %}
+
+{% mock kind="kanban" ariaLabel="Kanban board mock" %}
+Mock body
+{% /mock %}
+
+{% html reason="ui-mock" %}
+<nav id="mock-nav" aria-label="Mock navigation"><button data-action="open">Open</button></nav>
+{% /html %}
+
+{% phase id="phase-p1" title="P1 — Lock contract" mapsTo="P1" %}
+{% endState %}Contract fixtures exist.{% /endState %}
+{% testsFirst %}Add contract tests first.{% /testsFirst %}
+{% expectedFiles %}
+- src/__tests__/contracts.test.ts
+{% /expectedFiles %}
+{% work %}Implement the smallest compiler slice.{% /work %}
+{% openQuestions %}None{% /openQuestions %}
+{% verify %}`bun run build && node --test dist/__tests__/contracts.test.js --test-name-pattern "markdoc"`{% /verify %}
+{% /phase %}

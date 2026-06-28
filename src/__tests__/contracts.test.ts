@@ -26,6 +26,7 @@ import { domAnchor, registeredApp, sampleHtml, sampleRegisterPayload, tempDbPath
 import { buildCodexDeliveryPrompt } from '../codex/prompt.js';
 import { AppServerCodexClient, buildAppServerInitializeRequest, buildAppServerThreadResumeRequest, buildAppServerTurnStartRequest, deliveryErrorFromAppServerJsonRpc } from '../codex/appServerClient.js';
 import { buildCodexProcessEnv, buildSdkRunOptions, codexDeliveryHome } from '../codex/config.js';
+import { assertCanWriteGeneratedHtml, compileMarkdoc, compileMarkdocFile } from '../planDsl/compileMarkdoc.js';
 import { SdkCodexClient } from '../codex/sdkClient.js';
 import { FakeCodexClient } from '../codex/client.js';
 import { DeliveryTransportError, type CodexDeliveryInput } from '../delivery/types.js';
@@ -1549,6 +1550,63 @@ test('renderer strips active content, rewrites images, and adds deterministic no
     () => renderPlan(sampleRegisterPayload({ html: '<!doctype html><html><body><div id="x" id="y"></div></body></html>', fileHash: 'invalid-html' })),
     /Plan HTML could not be parsed safely/
   );
+});
+
+test('markdoc plan dsl compiles representative plan features to safe generated html', () => {
+  const fixture = path.join(process.cwd(), 'src', '__tests__', 'fixtures', 'markdoc', 'simple-plan.markdoc');
+  const source = fs.readFileSync(fixture, 'utf8');
+  const compiled = compileMarkdoc(source, { sourcePath: 'src/__tests__/fixtures/markdoc/simple-plan.markdoc' });
+  const rendered = renderPlan(sampleRegisterPayload({ html: compiled.html, fileHash: compiled.fileHash }));
+
+  assert.match(compiled.html, /Generated from src\/__tests__\/fixtures\/markdoc\/simple-plan\.markdoc/);
+  assert.match(compiled.html, /<section id="toc">/);
+  assert.match(compiled.html, /<section id="goal" data-review-target="goal" aria-describedby="goal-note">[\s\S]*<h2>Goal<\/h2>/);
+  assert.match(compiled.html, /<ul class="progress-list">/);
+  assert.match(compiled.html, /<article id="phase-p1" class="phase" data-progress-task="P1">/);
+  assert.match(compiled.html, /<table id="coverage"/);
+  assert.match(compiled.html, /<code class="language-mermaid">/);
+  assert.match(compiled.html, /<figure id="target-figure"/);
+  assert.match(compiled.html, /data-raw-html-reason="ui-mock"/);
+  assert.equal(compiled.warnings.some(warning => warning.code === 'raw_html_escape_hatch'), true);
+  assert.match(rendered.renderedHtml, /data-plan-mermaid-source="true"/);
+  assert.match(rendered.renderedHtml, /<nav[^>]*id="mock-nav"[^>]*aria-label="Mock navigation"/);
+  assert.match(rendered.renderedHtml, /<button[^>]*data-action="open"/);
+});
+
+test('markdoc validation fails for missing phase blocks and unsafe raw html reasons', () => {
+  const fixtureDir = path.join(process.cwd(), 'src', '__tests__', 'fixtures', 'markdoc');
+  assert.throws(
+    () => compileMarkdoc(fs.readFileSync(path.join(fixtureDir, 'missing-phase-block.markdoc'), 'utf8')),
+    /Markdoc plan failed validation/
+  );
+  assert.throws(
+    () => compileMarkdoc(fs.readFileSync(path.join(fixtureDir, 'unsafe-raw-html.markdoc'), 'utf8')),
+    /Unsupported raw HTML escape hatch reason/
+  );
+  assert.throws(
+    () => compileMarkdoc('{% section id="goal" title="Goal" onclick="bad()" %}Body{% /section %}'),
+    /unsupported attribute 'onclick' on section/
+  );
+  const codeExample = compileMarkdoc('```markdoc\n{% html reason="ui-mock" %}\n<nav>Example</nav>\n{% /html %}\n```');
+  assert.equal(codeExample.warnings.some(warning => warning.code === 'raw_html_escape_hatch'), false);
+  assert.match(codeExample.html, /\{% html reason=&quot;ui-mock&quot; %\}/);
+});
+
+test('markdoc compile writes generated html but refuses to clobber legacy html without force', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-review-markdoc-'));
+  const sourcePath = path.join(dir, 'example.markdoc');
+  const htmlPath = path.join(dir, 'example.html');
+  const fixture = path.join(process.cwd(), 'src', '__tests__', 'fixtures', 'markdoc', 'simple-plan.markdoc');
+  fs.writeFileSync(sourcePath, fs.readFileSync(fixture, 'utf8'));
+  fs.writeFileSync(htmlPath, '<!doctype html><html><body><p>Legacy plan</p></body></html>');
+
+  assert.throws(() => compileMarkdocFile(sourcePath, { write: true }), /Refusing to overwrite existing non-generated HTML plan/);
+  assertCanWriteGeneratedHtml(htmlPath, sourcePath, true);
+  const forced = compileMarkdocFile(sourcePath, { write: true, force: true });
+  assert.equal(forced.targetHtmlPath, htmlPath);
+  assert.match(fs.readFileSync(htmlPath, 'utf8'), /Generated from/);
+  const refreshed = compileMarkdocFile(sourcePath, { write: true });
+  assert.equal(refreshed.targetHtmlPath, htmlPath);
 });
 
 test('registration upserts by default and creates a distinct plan for new-thread', async () => {
@@ -4970,6 +5028,83 @@ test('CLI register prints required watcher instructions and preserves JSON paylo
   }
 });
 
+test('CLI register rejects generated html when sibling markdoc source exists', async () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+  const planDir = fs.mkdtempSync(path.join(root, '.tmp-cli-register-html-with-markdoc-'));
+  const htmlPath = path.join(planDir, 'plan.html');
+  const markdocPath = path.join(planDir, 'plan.markdoc');
+  try {
+    fs.writeFileSync(htmlPath, '<!doctype html><html><body><main><p>Generated</p></main></body></html>');
+    fs.writeFileSync(markdocPath, fs.readFileSync(path.join(root, 'src', '__tests__', 'fixtures', 'markdoc', 'simple-plan.markdoc'), 'utf8'));
+    const result = spawnSync(process.execPath, ['dist/cli.js', 'register', htmlPath, '--url', 'http://127.0.0.1:1', '--execution-ready', 'false', '--json'], { cwd: root, encoding: 'utf8' });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /markdoc_source_required/);
+    assert.match(result.stderr, /Register the \.markdoc source instead/);
+  } finally {
+    fs.rmSync(planDir, { recursive: true, force: true });
+  }
+});
+
+test('CLI register compiles markdoc sources before sending registration payload', async () => {
+  let registerBody: Record<string, any> | undefined;
+  const registrationData = {
+    planId: 'plan_markdoc',
+    versionId: 'ver_markdoc',
+    repoId: 'repo_markdoc',
+    reviewUrl: '/p/plan_markdoc',
+    indexUrl: '/',
+    watchCommand: 'plan-review watch plan_markdoc --mode queue',
+    sourceSync: { watchMode: 'filesystem', status: 'synced', error: null, active: true },
+    renderedWithWarnings: [],
+    agentInstructions: buildRegistrationAgentInstructions({ planId: 'plan_markdoc', reviewUrl: '/p/plan_markdoc' })
+  };
+  const server = http.createServer((request, response) => {
+    if (request.url === '/api/plans/register') {
+      let body = '';
+      request.on('data', chunk => { body += chunk; });
+      request.on('end', () => {
+        registerBody = JSON.parse(body) as Record<string, any>;
+        response.setHeader('content-type', 'application/json');
+        response.end(JSON.stringify({ ok: true, data: registrationData }));
+      });
+      return;
+    }
+    response.statusCode = 404;
+    response.end('not found');
+  });
+
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+  const planDir = fs.mkdtempSync(path.join(root, '.tmp-cli-register-markdoc-'));
+  const markdocPath = path.join(planDir, 'plan.markdoc');
+  try {
+    fs.writeFileSync(markdocPath, fs.readFileSync(path.join(root, 'src', '__tests__', 'fixtures', 'markdoc', 'simple-plan.markdoc'), 'utf8'));
+    const address = server.address();
+    assert(address && typeof address !== 'string');
+    const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>(resolve => {
+      const child = spawn(process.execPath, ['dist/cli.js', 'register', markdocPath, '--url', `http://127.0.0.1:${address.port}`, '--execution-ready', 'false', '--json'], {
+        cwd: root,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', chunk => { stdout += chunk; });
+      child.stderr.on('data', chunk => { stderr += chunk; });
+      child.on('close', code => resolve({ code, stdout, stderr }));
+    });
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(registerBody?.planPath.endsWith('plan.html'), true);
+    assert.equal(registerBody?.sourcePath, markdocPath);
+    assert.equal(registerBody?.watchMode, 'filesystem');
+    assert.match(String(registerBody?.html), /Generated from/);
+    assert.match(String(registerBody?.html), /Compact Markdoc Plan/);
+    assert.equal(fs.existsSync(path.join(planDir, 'plan.html')), true);
+  } finally {
+    fs.rmSync(planDir, { recursive: true, force: true });
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
+
 test('CLI index wraps human review URLs with trailing underscores and preserves JSON payload', async () => {
   const indexData = {
     plans: [
@@ -5536,7 +5671,9 @@ test('CLI help is wired through the installed bin entrypoint', () => {
   assert.match(downloadHelp, /--output <directory>/);
   assert.match(downloadHelp, /--version-id <id>/);
   assert.match(downloadHelp, /--url <url>/);
+  assert.match(spawnSync(process.execPath, ['dist/cli.js', 'compile', '--help'], { cwd: root, encoding: 'utf8' }).stdout, /--force/);
   assert.match(spawnSync(process.execPath, ['dist/cli.js', 'register', '--help'], { cwd: root, encoding: 'utf8' }).stdout, /--new-thread/);
+  assert.match(spawnSync(process.execPath, ['dist/cli.js', 'register', '--help'], { cwd: root, encoding: 'utf8' }).stdout, /--force/);
   assert.match(spawnSync(process.execPath, ['dist/cli.js', 'index', '--help'], { cwd: root, encoding: 'utf8' }).stdout, /--repo-key/);
   assert.match(spawnSync(process.execPath, ['dist/cli.js', 'queue', '--help'], { cwd: root, encoding: 'utf8' }).stdout, /list/);
   assert.match(spawnSync(process.execPath, ['dist/cli.js', 'agent', '--help'], { cwd: root, encoding: 'utf8' }).stdout, /next/);
@@ -6373,6 +6510,77 @@ test('source sync failed render keeps last good render and actionable metadata',
     assert.match(String(failed.plan.lastSyncError?.message), /parsed safely/i);
     assert.match(String(failed.plan.lastSyncError?.nextAction), /source file/i);
     assert.match(store.getRenderedHtml(registered.planId), /BOTTOM render-good/);
+  } finally {
+    await sourceSync.close();
+    store.close();
+    fs.rmSync(sourceDir, { recursive: true, force: true });
+  }
+});
+
+test('markdoc source sync preserves last good html on compile failure and refreshes generated artifact', async () => {
+  const store = new PlanReviewStore(tempDbPath('markdoc-source-sync'));
+  const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-review-markdoc-sync-'));
+  const sourcePath = path.join(sourceDir, 'sync-plan.markdoc');
+  const htmlPath = path.join(sourceDir, 'sync-plan.html');
+  const fixture = path.join(process.cwd(), 'src', '__tests__', 'fixtures', 'markdoc', 'simple-plan.markdoc');
+  const validSource = fs.readFileSync(fixture, 'utf8').replace('Compact Markdoc Plan', 'Synced Markdoc Plan');
+  fs.writeFileSync(sourcePath, validSource);
+  const initial = compileMarkdocFile(sourcePath, { write: true });
+  const stat = fs.statSync(sourcePath);
+  const sourceSync = new SourceSyncService(store, { emitEvent() {} });
+  try {
+    const payload = sampleRegisterPayload({
+      planPath: path.relative(sourceDir, htmlPath),
+      slug: 'sync-plan',
+      html: initial.html,
+      fileHash: initial.fileHash,
+      sourcePath,
+      sourceMtimeMs: stat.mtimeMs,
+      sourceSize: stat.size,
+      watchMode: 'filesystem',
+      assets: []
+    });
+    const rendered = renderPlan(payload);
+    const registered = store.registerPlan(payload, rendered.renderedHtml, rendered.warnings);
+
+    const invalidSource = fs.readFileSync(path.join(process.cwd(), 'src', '__tests__', 'fixtures', 'markdoc', 'missing-phase-block.markdoc'), 'utf8');
+    fs.writeFileSync(sourcePath, invalidSource);
+    await sourceSync.syncNow(registered.planId, 'manual');
+    const failed = store.getPlan(registered.planId);
+    assert.equal(failed.version.id, registered.versionId);
+    assert.equal(failed.plan.lastSyncStatus, 'failed');
+    assert.match(String(failed.plan.lastSyncError?.message), /Markdoc plan failed validation/);
+    assert.match(store.getRenderedHtml(registered.planId), /Synced Markdoc Plan/);
+    assert.match(fs.readFileSync(htmlPath, 'utf8'), /Synced Markdoc Plan/);
+
+    const racedSource = validSource.replace('Agents author compact plans', 'Raced Markdoc source should not reach generated HTML');
+    const originalRegisterPlan = store.registerPlan.bind(store) as any;
+    let injectedRace = false;
+    (store as any).registerPlan = (...args: any[]) => {
+      if (!injectedRace) {
+        injectedRace = true;
+        fs.writeFileSync(sourcePath, racedSource);
+      }
+      return originalRegisterPlan(...args);
+    };
+    fs.writeFileSync(sourcePath, validSource.replace('Agents author compact plans', 'Candidate HTML must wait for commit'));
+    await sourceSync.syncNow(registered.planId, 'manual');
+    (store as any).registerPlan = originalRegisterPlan;
+    const stale = store.getPlan(registered.planId);
+    assert.equal(stale.version.id, registered.versionId);
+    assert.equal(stale.plan.lastSyncStatus, 'failed');
+    assert.match(String(stale.plan.lastSyncError?.message), /Source file changed during source sync/);
+    assert.match(fs.readFileSync(htmlPath, 'utf8'), /Synced Markdoc Plan/);
+    assert.doesNotMatch(fs.readFileSync(htmlPath, 'utf8'), /Candidate HTML must wait for commit/);
+
+    const changedSource = validSource.replace('Agents author compact plans', 'Source sync refreshes compact plans');
+    fs.writeFileSync(sourcePath, changedSource);
+    await sourceSync.syncNow(registered.planId, 'manual');
+    const synced = store.getPlan(registered.planId);
+    assert.notEqual(synced.version.id, registered.versionId);
+    assert.equal(synced.plan.lastSyncStatus, 'synced');
+    assert.match(store.getRenderedHtml(registered.planId), /Source sync refreshes compact plans/);
+    assert.match(fs.readFileSync(htmlPath, 'utf8'), /Source sync refreshes compact plans/);
   } finally {
     await sourceSync.close();
     store.close();

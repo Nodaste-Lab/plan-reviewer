@@ -1,0 +1,7 @@
+---
+title: Unsafe Markdoc Plan
+---
+
+{% html reason="scripted-widget" %}
+<div>Unsupported escape reason</div>
+{% /html %}
