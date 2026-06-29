@@ -2076,8 +2076,9 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     const invalidCookieShell = await app.inject({ method: 'GET', url: `/p/${notReady.json().data.planId}`, headers: { cookie: 'plan_review_plan_nav=maybe' } });
     assert.equal(invalidCookieShell.statusCode, 200);
     assert.match(invalidCookieShell.body, /<body[^>]*class="plan-nav-collapsed"/);
+    assert.match(shell.body, /id="annotations-toggle"[^>]*aria-pressed="true"[^>]*aria-label="Turn annotations off"[^>]*title="Annotations on"/);
     assert.match(shell.body, /id="desktop-comments-toggle"[^>]*aria-controls="sidebar"[^>]*aria-expanded="false"/);
-    assert.match(shell.body, /id="archive-plan"[\s\S]*id="restore-plan"[\s\S]*id="configuration-link"[\s\S]*id="desktop-comments-toggle"/);
+    assert.match(shell.body, /id="archive-plan"[\s\S]*id="restore-plan"[\s\S]*id="configuration-link"[\s\S]*id="annotations-toggle"[\s\S]*id="desktop-comments-toggle"/);
     assert.match(shell.body, /<nav class="doc-kind-switcher" aria-label="Document view selector"><a class="doc-kind-seg" href="\/">Kanban<\/a><a class="doc-kind-seg" href="\/\?view=all">All documents<\/a><\/nav>/);
     assert.doesNotMatch(shell.body, /class="doc-kind-seg active"/);
     assert.match(shell.body, /id="current-plan-bar"/);
@@ -2115,6 +2116,11 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     assert.match(shellCss.body, /\.plan-nav-filters\{display:grid;gap:8px;margin:12px 0 14px;padding:10px;border:1px solid #253248;border-radius:12px;background:#08111f\}/);
     assert.match(shellCss.body, /\.plan-nav-filters \.filter-control\{display:grid;gap:5px;align-items:stretch\}/);
     assert.match(shellCss.body, /\.current-plan-status-control/);
+    assert.match(shellCss.body, /body\.annotations-off #plan-touch-layer\{pointer-events:none!important\}/);
+    assert.match(shellCss.body, /body\.annotations-off #review\{overflow:hidden\}/);
+    assert.match(shellCss.body, /body\.annotations-off #plan-frame\{height:calc\(100dvh - var\(--plan-navbar-height\)\)!important;min-height:calc\(100dvh - var\(--plan-navbar-height\)\);pointer-events:auto\}/);
+    assert.match(shellCss.body, /\.annotations-toggle\[aria-pressed="true"\]/);
+    assert.match(shellCss.body, /body\.annotations-off \.annotations-toggle/);
     assert.match(shellCss.body, /#quick-open-backdrop/);
     assert.match(shellCss.body, /#quick-open-result-list/);
     assert.match(shellCss.body, /\.quick-open-result\.active/);
@@ -2132,6 +2138,13 @@ test('review shell exposes titled left navigator with nav-only monitoring sort',
     assert.match(shellClient.body, /planListNav\.inert = !open/);
     assert.match(shellClient.body, /planNavStateCookieName = 'plan_review_plan_nav'/);
     assert.match(shellClient.body, /document\.cookie = planNavStateCookieName \+ '=' \+ \(open \? 'open' : 'closed'\) \+ '; Path=\/; SameSite=Lax'/);
+    assert.match(shellClient.body, /annotationsStorageKey = 'plan_review_annotations_' \+ planId/);
+    assert.match(shellClient.body, /function setAnnotationsEnabled\(enabled, options = \{\}\)/);
+    assert.match(shellClient.body, /initializeAnnotationMode\(\)/);
+    assert.match(shellClient.body, /ensureFrameTapTargets\(\)/);
+    assert.match(shellClient.body, /plan-review-tap-target-styles/);
+    assert.match(shellClient.body, /if \(!annotationsAreEnabled\(\)\) return false/);
+    assert.match(shellClient.body, /if \(!annotationsAreEnabled\(\)\) return;/);
     assert.match(shellClient.body, /initializePlanNavState\(\)/);
     assert.doesNotMatch(shellClient.body, /sessionStorage/);
     assert.doesNotMatch(shellClient.body, /readPlanNavSessionState/);
@@ -2738,6 +2751,7 @@ test('review shell toolbar distinguishes actions from lifecycle status across st
     assertIconOnlyControl(activeShell.body, 'defer-plan', 'Defer plan', '⏸');
     assertIconOnlyControl(activeShell.body, 'archive-plan', 'Archive plan', '🗄');
     assertIconOnlyControl(activeShell.body, 'configuration-link', 'Configuration', '⚙');
+    assertIconOnlyControl(activeShell.body, 'annotations-toggle', 'Turn annotations off', '⌖', 'Annotations on');
     assertIconOnlyControl(activeShell.body, 'desktop-comments-toggle', 'Open comments', '💬', 'Comments');
     const activeRestore = elementById(activeShell.body, 'restore-plan');
     assert.match(activeRestore, /\bhidden\b/);

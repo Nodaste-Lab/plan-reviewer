@@ -1350,6 +1350,14 @@ try {
     assert.equal(await page.evaluate(() => Boolean(document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#plan-navbar'))), false);
     assert.equal(await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.getAttribute('src')), `/render/${navSwitch.planId}`);
     assert.equal(await page.evaluate(() => Boolean(document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#nav-switch'))), true);
+    await page.goto(`${baseUrl}/p/${linkedPlan.planId}`);
+    await page.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#linked-plan-link'));
+    await page.click('#annotations-toggle');
+    assert.equal(await page.locator('#annotations-toggle').getAttribute('aria-pressed'), 'false');
+    await page.frameLocator('#plan-frame').locator('#linked-plan-link').click();
+    await page.waitForURL(`${baseUrl}/p/${navSwitch.planId}`);
+    assert.equal(await page.evaluate(() => Boolean(document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#plan-navbar'))), false);
+    assert.equal(await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.getAttribute('src')), `/render/${navSwitch.planId}`);
     await page.goto(`${baseUrl}/p/${registered.planId}`);
     assert.equal((await context.post(`/api/plans/${navSwitch.planId}/archive`)).ok(), true);
     let planListRequests = 0;
@@ -1882,6 +1890,61 @@ try {
     );
     assert.equal(await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollY), 0);
     await page.evaluate(() => window.scrollTo(0, 0));
+
+    assert.equal(await page.locator('#annotations-toggle').getAttribute('aria-pressed'), 'true');
+    await page.evaluate(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const target = iframe.contentDocument!.querySelector('#dom-annotation')!;
+      target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: iframe.contentWindow ?? window }));
+    });
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#composer')?.hidden === false);
+    await page.fill('#comment-body', 'Draft before disabling annotations');
+    await page.click('#annotations-toggle');
+    assert.equal(await page.locator('#annotations-toggle').getAttribute('aria-pressed'), 'true');
+    assert.equal(await page.evaluate(() => document.body.classList.contains('annotations-off')), false);
+    assert.equal(await page.evaluate(() => document.querySelector<HTMLElement>('#composer')?.hidden), false);
+    assert.equal(await page.evaluate(() => document.querySelector<HTMLElement>('#comment-discard-warning')?.hidden), false);
+    await page.click('#cancel-comment');
+    await page.click('#annotations-toggle');
+    assert.equal(await page.locator('#annotations-toggle').getAttribute('aria-pressed'), 'false');
+    assert.equal(await page.evaluate(() => document.body.classList.contains('annotations-off')), true);
+    await page.waitForFunction(() => (document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelectorAll('.comment-anchor').length ?? 0) === 0);
+    assert.equal(await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.getElementById('plan-review-tap-target-styles') === null), true);
+    await page.evaluate(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const target = iframe.contentDocument!.querySelector('#dom-annotation')!;
+      target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: iframe.contentWindow ?? window }));
+    });
+    assert.equal(await page.evaluate(() => document.querySelector<HTMLElement>('#composer')?.hidden), true);
+    const offModeSelection = await page.evaluate(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      const doc = iframe.contentDocument!;
+      const target = doc.querySelector('#text-target')!;
+      const text = target.firstChild!;
+      const range = doc.createRange();
+      range.setStart(text, 0);
+      range.setEnd(text, 18);
+      const selection = doc.getSelection()!;
+      selection.removeAllRanges();
+      selection.addRange(range);
+      target.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: iframe.contentWindow ?? window }));
+      return selection.toString();
+    });
+    assert.equal(offModeSelection, 'Text range context');
+    assert.equal(await page.evaluate(() => document.querySelector<HTMLElement>('#composer')?.hidden), true);
+    if (!await page.evaluate(() => document.body.classList.contains('comments-open'))) await page.click('#desktop-comments-toggle');
+    assert.equal((await page.locator('#comments').innerText()).includes('Browser DOM annotation comment'), true);
+    await page.click('#annotations-toggle');
+    assert.equal(await page.locator('#annotations-toggle').getAttribute('aria-pressed'), 'true');
+    await page.waitForFunction(() => (document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelectorAll('.comment-anchor').length ?? 0) > 0);
+    await page.evaluate(() => {
+      const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+      iframe.contentDocument!.getSelection()?.removeAllRanges();
+      const target = iframe.contentDocument!.querySelector('#dom-annotation')!;
+      target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: iframe.contentWindow ?? window }));
+    });
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('#composer')?.hidden === false);
+    await page.click('#cancel-comment');
 
     await page.evaluate(() => { (window as typeof window & { __html2canvasMode?: 'success' | 'fail' }).__html2canvasMode = 'fail'; });
     await page.evaluate(() => {
@@ -2831,6 +2894,83 @@ try {
       assert.equal(mobileTapState.topDelta <= 1, true);
       assert.equal(mobileTapState.widthDelta <= 1, true);
       assert.equal(mobileTapState.heightDelta <= 1, true);
+      await touchPage.fill('#comment-body', 'Mobile off-mode jump target');
+      await touchPage.click('#submit-comment');
+      await touchPage.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('Mobile off-mode jump target'));
+      if (await touchPage.evaluate(() => document.body.classList.contains('comments-open'))) await touchPage.click('#mobile-comments-toggle');
+      await touchPage.waitForFunction(() => !document.body.classList.contains('comments-open'));
+      await touchPage.click('#annotations-toggle');
+      assert.equal(await touchPage.locator('#annotations-toggle').getAttribute('aria-pressed'), 'false');
+      const mobileOffSurface = await touchPage.evaluate(() => {
+        const frame = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+        const layer = document.querySelector<HTMLElement>('#plan-touch-layer')!;
+        return {
+          annotationsOff: document.body.classList.contains('annotations-off'),
+          framePointerEvents: getComputedStyle(frame).pointerEvents,
+          layerPointerEvents: getComputedStyle(layer).pointerEvents,
+          tapTargetStylesRemoved: frame.contentDocument!.getElementById('plan-review-tap-target-styles') === null
+        };
+      });
+      assert.deepEqual(mobileOffSurface, {
+        annotationsOff: true,
+        framePointerEvents: 'auto',
+        layerPointerEvents: 'none',
+        tapTargetStylesRemoved: true
+      });
+      await touchPage.evaluate(() => {
+        document.querySelector<HTMLElement>('#review')!.scrollTo(0, 0);
+        document.querySelector<HTMLIFrameElement>('#plan-frame')!.contentWindow?.scrollTo(0, 0);
+      });
+      const offFrameBox = await touchPage.locator('#plan-frame').boundingBox();
+      assert.ok(offFrameBox);
+      await dragTouch(offFrameBox.y + Math.min(520, offFrameBox.height - 20), offFrameBox.y + 160);
+      await touchPage.waitForFunction(() => (document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollY ?? 0) > 20, undefined, { timeout: 3000 });
+      const mobileOffScrollState = await touchPage.evaluate(() => ({
+        reviewScrollTop: document.querySelector<HTMLElement>('#review')?.scrollTop ?? 0,
+        frameInternalScrollY: document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollY ?? 0,
+        composerOpen: document.querySelector<HTMLElement>('#composer')?.hidden === false
+      }));
+      assert.equal(mobileOffScrollState.reviewScrollTop, 0);
+      assert.equal(mobileOffScrollState.frameInternalScrollY > 20, true);
+      assert.equal(mobileOffScrollState.composerOpen, false);
+      await touchPage.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')!.contentWindow?.scrollTo(0, 0));
+      await touchPage.click('#mobile-comments-toggle');
+      await touchPage.waitForFunction(() => document.body.classList.contains('comments-open'));
+      await touchPage.locator('.comment-row').filter({ hasText: 'Mobile off-mode jump target' }).locator('.comment-jump').click();
+      await touchPage.waitForFunction(() => (document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollY ?? 0) > 20, undefined, { timeout: 3000 });
+      assert.equal(await touchPage.evaluate(() => document.querySelector<HTMLElement>('#composer')?.hidden), true);
+      assert.equal(await touchPage.evaluate(() => document.querySelector<HTMLElement>('#review')?.scrollTop ?? 0), 0);
+      await touchPage.click('#mobile-comments-toggle');
+      await touchPage.waitForFunction(() => !document.body.classList.contains('comments-open'));
+      await touchPage.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')!.contentWindow?.scrollTo(0, 0));
+      await settleScrollTop();
+      const offTextBox = await touchPage.frameLocator('#plan-frame').locator('#link-adjacent-text').boundingBox();
+      assert.ok(offTextBox);
+      await trustedTap(offTextBox.x + offTextBox.width / 2, offTextBox.y + offTextBox.height / 2);
+      await touchPage.waitForTimeout(180);
+      assert.equal(await touchPage.evaluate(() => document.querySelector<HTMLElement>('#composer')?.hidden), true);
+      const offSelectionText = await touchPage.evaluate(() => {
+        const iframe = document.querySelector<HTMLIFrameElement>('#plan-frame')!;
+        const doc = iframe.contentDocument!;
+        const target = doc.querySelector('#text-target')!;
+        const text = target.firstChild!;
+        const range = doc.createRange();
+        range.setStart(text, 0);
+        range.setEnd(text, 18);
+        const selection = doc.getSelection()!;
+        selection.removeAllRanges();
+        selection.addRange(range);
+        target.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: iframe.contentWindow ?? window }));
+        return { selected: selection.toString(), composerOpen: document.querySelector<HTMLElement>('#composer')?.hidden === false };
+      });
+      assert.deepEqual(offSelectionText, { selected: 'Text range context', composerOpen: false });
+      const offLinkBox = await touchPage.frameLocator('#plan-frame').locator('#plan-test-link').boundingBox();
+      assert.ok(offLinkBox);
+      await trustedTap(offLinkBox.x + offLinkBox.width / 2, offLinkBox.y + offLinkBox.height / 2);
+      await touchPage.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.location.hash === '#link-target', undefined, { timeout: 3000 });
+      await touchPage.waitForFunction(() => (document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollY ?? 0) > 20, undefined, { timeout: 3000 });
+      assert.equal(await touchPage.evaluate(() => document.querySelector<HTMLElement>('#composer')?.hidden), true);
+      assert.equal(await touchPage.evaluate(() => document.querySelector<HTMLElement>('#review')?.scrollTop ?? 0), 0);
     } finally {
       await touchContext.close();
       const resetMobileDefault = await context.put('/api/configuration', {
