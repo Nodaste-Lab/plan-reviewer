@@ -1,6 +1,8 @@
 # Plan Reviewer
 
-Local HTML review daemon and CLI for planning-mode implementation plans under `thoughts/plans` and collaboration-mode HTML documents.
+`plan-reviewer` turns repo-authored implementation plans into browser-reviewable HTML so humans can leave precise comments and coding agents can receive that feedback through a reliable queue. It replaces ad hoc screenshots, chat-only review notes, and fragile watch streams with one local daemon and CLI for registering plans, selecting exact sections/images/text in the browser, claiming comments, acknowledging work, and resolving feedback.
+
+Repo files stay authoritative: new plans should be compact Markdoc sources that compile to generated HTML for registration and are sanitized in the review render path, legacy HTML-only plans remain supported, and collaboration-mode HTML documents can use the same anchored comment workflow. The service coordinates review artifacts and comment delivery; it does not execute implementation work and should be run only on loopback or a trusted network until authentication exists.
 
 ## Install
 
