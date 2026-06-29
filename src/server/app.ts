@@ -750,6 +750,7 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
   const buildButton = isCollaboration ? '' : '<button id="build-plan" class="tool-button" type="button" aria-label="Build Plan" title="Build Plan">⚒</button>';
   const planNavToggle = `<button id="desktop-plan-nav-toggle" class="tool-button" type="button" aria-controls="plan-list-nav" aria-expanded="${planNavigatorOpen ? 'true' : 'false'}" aria-label="Plan Navigator" title="Plan Navigator">☰</button>`;
   const downloadAction = `<a id="download-raw-plan" class="tool-button download-tool" href="/download/${escapedPlanId}" aria-label="Download raw plan" title="Download raw plan HTML; ZIP includes required assets." download>⬇</a>`;
+  const annotationsButton = '<button id="annotations-toggle" class="tool-button annotations-toggle" type="button" aria-pressed="true" aria-label="Turn annotations off" title="Annotations on">⌖</button>';
   const commentsButton = `<button id="desktop-comments-toggle" class="tool-button comments-toggle" type="button" aria-controls="sidebar" aria-expanded="${configuration.showCommentsByDefault ? 'true' : 'false'}" aria-label="${configuration.showCommentsByDefault ? 'Close comments' : 'Open comments'}" title="Comments">💬 <span id="desktop-comments-count" class="comments-count" hidden></span></button>`;
   const indexLink = documentViewSwitcher(undefined, configuration.kanbanEnabled);
   const pinControl = isCollaboration ? '' : `<button id="pin-plan" class="pin-button" type="button" data-pin-plan="${escapedPlanId}" aria-pressed="${plan.pinnedAt ? 'true' : 'false'}" aria-label="${plan.pinnedAt ? 'Unpin plan' : 'Pin plan'}" title="${plan.pinnedAt ? 'Unpin plan' : 'Pin plan'}">${plan.pinnedAt ? '★' : '☆'}</button>`;
@@ -764,10 +765,10 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
   const bodyClasses = [planNavigatorOpen ? '' : 'plan-nav-collapsed', configuration.showCommentsByDefault ? 'comments-open' : ''].filter(Boolean).join(' ');
   const bodyClassAttribute = bodyClasses ? ` class="${escapeHtml(bodyClasses)}"` : '';
   const navActions = plan.archivedAt
-    ? `${planNavToggle}${indexLink}${organizationControls}${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="lifecycle-status archived" role="status" aria-label="Status: Archived" title="Archived">Status: Archived</span><button id="restore-plan" class="tool-button" type="button" aria-label="${restoreLabel}" title="${restoreLabel}">↩</button>${configurationToolAction()}${commentsButton}`
+    ? `${planNavToggle}${indexLink}${organizationControls}${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="lifecycle-status archived" role="status" aria-label="Status: Archived" title="Archived">Status: Archived</span><button id="restore-plan" class="tool-button" type="button" aria-label="${restoreLabel}" title="${restoreLabel}">↩</button>${configurationToolAction()}${annotationsButton}${commentsButton}`
     : plan.lifecycleState === 'deferred'
-      ? `${planNavToggle}${indexLink}${organizationControls}${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="lifecycle-status deferred" role="status" aria-label="Status: Deferred" title="Deferred">Deferred</span><button id="resume-plan" class="tool-button" type="button" aria-label="${resumeLabel}" title="${resumeLabel}">▶</button><button id="archive-plan" class="tool-button" type="button" aria-label="${archiveLabel}" title="${archiveLabel}">🗄</button><button id="restore-plan" class="tool-button" type="button" aria-label="${restoreLabel}" title="${restoreLabel}" hidden>↩</button>${configurationToolAction()}${commentsButton}`
-      : `${planNavToggle}${indexLink}${organizationControls}${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="lifecycle-status archived" hidden></span>${deferAction}<button id="archive-plan" class="tool-button" type="button" aria-label="${archiveLabel}" title="${archiveLabel}">🗄</button><button id="restore-plan" class="tool-button" type="button" aria-label="${restoreLabel}" title="${restoreLabel}" hidden>↩</button>${configurationToolAction()}${commentsButton}`;
+      ? `${planNavToggle}${indexLink}${organizationControls}${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="lifecycle-status deferred" role="status" aria-label="Status: Deferred" title="Deferred">Deferred</span><button id="resume-plan" class="tool-button" type="button" aria-label="${resumeLabel}" title="${resumeLabel}">▶</button><button id="archive-plan" class="tool-button" type="button" aria-label="${archiveLabel}" title="${archiveLabel}">🗄</button><button id="restore-plan" class="tool-button" type="button" aria-label="${restoreLabel}" title="${restoreLabel}" hidden>↩</button>${configurationToolAction()}${annotationsButton}${commentsButton}`
+      : `${planNavToggle}${indexLink}${organizationControls}${downloadAction}${reviewButton}${buildButton}<span id="archive-status" class="lifecycle-status archived" hidden></span>${deferAction}<button id="archive-plan" class="tool-button" type="button" aria-label="${archiveLabel}" title="${archiveLabel}">🗄</button><button id="restore-plan" class="tool-button" type="button" aria-label="${restoreLabel}" title="${restoreLabel}" hidden>↩</button>${configurationToolAction()}${annotationsButton}${commentsButton}`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapedShellTitle}</title>
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
@@ -817,19 +818,20 @@ const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" 
 
 const clientCss = `
 body{--plan-nav-width:260px;--comments-width:48px;--plan-navbar-height:86px;margin:0;background:#0b1020;color:#e5e7eb;font-family:system-ui,sans-serif}body.plan-nav-collapsed{--plan-nav-width:0}body.comments-open{--comments-width:320px}
-#plan-navbar{position:sticky;top:0;z-index:30;min-height:86px;box-sizing:border-box;display:grid;grid-template-rows:auto auto;gap:8px;padding:10px 16px;border-bottom:1px solid #2b364d;background:#0f172a}#plan-navbar [hidden]{display:none!important}#plan-navbar-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}#plan-navbar a{color:#7dd3fc;text-decoration:none;font-weight:700}#plan-navbar a.nav-index{margin-right:auto}#plan-navbar .doc-kind-switcher{display:inline-flex;gap:2px;padding:3px;border:1px solid #334155;border-radius:999px;background:#08111f;margin-right:auto}#plan-navbar .doc-kind-seg{border-radius:999px;padding:5px 10px;color:#a7b0c0;font-size:12px;font-weight:850;text-decoration:none;white-space:nowrap}#plan-navbar .doc-kind-seg.active{background:#0ea5e9;color:#e0f2fe}.filter-control{display:inline-flex;align-items:center;gap:5px;border:1px solid #334155;border-radius:8px;background:#111827;padding:3px 6px;color:#cbd5e1;font-size:12px;font-weight:800}.filter-control select{max-width:150px;background:#020617;color:#e5e7eb;border:1px solid #7dd3fc;border-radius:6px;padding:6px 8px}.pin-button{border-color:#facc15!important;color:#fef08a!important}#plan-navbar button,#plan-navbar .tool-button{background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px 10px;cursor:pointer}#plan-navbar button:hover,#plan-navbar .tool-button:hover{border-color:#93c5fd}#plan-navbar .tool-button{display:inline-flex;align-items:center;justify-content:center;min-width:38px;min-height:34px;box-sizing:border-box;line-height:1}.download-tool{border-color:rgba(56,189,248,.72)!important;background:#075985!important;color:#ecfeff!important}#current-plan-bar{display:flex;align-items:center;gap:8px;min-width:0;border-top:1px solid rgba(71,85,105,.55);padding-top:8px;color:#cbd5e1}#current-plan-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f8fafc}.lifecycle-status{display:inline-flex;align-items:center;justify-content:center;color:#cbd5e1;border:1px solid #475569;background:#111827;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:850;line-height:1;white-space:nowrap;cursor:default;pointer-events:none}.lifecycle-status.archived{border-color:#64748b;color:#e2e8f0}.lifecycle-status.deferred{border-color:#f59e0b;color:#fde68a;background:rgba(120,53,15,.35)}#archive-status[hidden]{display:none}.current-plan-status-guidance{margin-left:auto;color:#a7b0c0;font-size:12px;font-weight:800}.current-plan-status-control+.current-plan-status-guidance{margin-left:0}#restore-plan{border-color:#22c55e;color:#bbf7d0}.comments-toggle{display:inline-flex;align-items:center;gap:6px}.comments-count{min-width:18px;height:18px;border-radius:999px;background:#7e22ce;color:white;display:inline-grid;place-items:center;padding:0 5px;font-size:11px;font-weight:900}.comment-status-banner{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:800;border:1px solid #475569;background:#1e293b;color:#cbd5e1;white-space:nowrap}.comment-status-banner.red{border-color:rgba(251,113,133,.7);background:rgba(127,29,29,.55);color:#fecaca}.comment-status-banner.yellow{border-color:rgba(234,179,8,.7);background:rgba(120,53,15,.55);color:#fde68a}.comment-status-banner.green{border-color:rgba(34,197,94,.7);background:rgba(22,101,52,.55);color:#dcfce7}
+#plan-navbar{position:sticky;top:0;z-index:30;min-height:86px;box-sizing:border-box;display:grid;grid-template-rows:auto auto;gap:8px;padding:10px 16px;border-bottom:1px solid #2b364d;background:#0f172a}#plan-navbar [hidden]{display:none!important}#plan-navbar-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}#plan-navbar a{color:#7dd3fc;text-decoration:none;font-weight:700}#plan-navbar a.nav-index{margin-right:auto}#plan-navbar .doc-kind-switcher{display:inline-flex;gap:2px;padding:3px;border:1px solid #334155;border-radius:999px;background:#08111f;margin-right:auto}#plan-navbar .doc-kind-seg{border-radius:999px;padding:5px 10px;color:#a7b0c0;font-size:12px;font-weight:850;text-decoration:none;white-space:nowrap}#plan-navbar .doc-kind-seg.active{background:#0ea5e9;color:#e0f2fe}.filter-control{display:inline-flex;align-items:center;gap:5px;border:1px solid #334155;border-radius:8px;background:#111827;padding:3px 6px;color:#cbd5e1;font-size:12px;font-weight:800}.filter-control select{max-width:150px;background:#020617;color:#e5e7eb;border:1px solid #7dd3fc;border-radius:6px;padding:6px 8px}.pin-button{border-color:#facc15!important;color:#fef08a!important}#plan-navbar button,#plan-navbar .tool-button{background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px 10px;cursor:pointer}#plan-navbar button:hover,#plan-navbar .tool-button:hover{border-color:#93c5fd}#plan-navbar .tool-button{display:inline-flex;align-items:center;justify-content:center;min-width:38px;min-height:34px;box-sizing:border-box;line-height:1}.download-tool{border-color:rgba(56,189,248,.72)!important;background:#075985!important;color:#ecfeff!important}#current-plan-bar{display:flex;align-items:center;gap:8px;min-width:0;border-top:1px solid rgba(71,85,105,.55);padding-top:8px;color:#cbd5e1}#current-plan-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f8fafc}.lifecycle-status{display:inline-flex;align-items:center;justify-content:center;color:#cbd5e1;border:1px solid #475569;background:#111827;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:850;line-height:1;white-space:nowrap;cursor:default;pointer-events:none}.lifecycle-status.archived{border-color:#64748b;color:#e2e8f0}.lifecycle-status.deferred{border-color:#f59e0b;color:#fde68a;background:rgba(120,53,15,.35)}#archive-status[hidden]{display:none}.current-plan-status-guidance{margin-left:auto;color:#a7b0c0;font-size:12px;font-weight:800}.current-plan-status-control+.current-plan-status-guidance{margin-left:0}#restore-plan{border-color:#22c55e;color:#bbf7d0}.comments-toggle{display:inline-flex;align-items:center;gap:6px}.annotations-toggle[aria-pressed="true"]{border-color:#7dd3fc!important;background:#075985!important;color:#ecfeff!important;box-shadow:0 0 0 3px rgba(56,189,248,.14)}body.annotations-off .annotations-toggle{border-color:#475569!important;background:#111827!important;color:#94a3b8!important;box-shadow:none}.comments-count{min-width:18px;height:18px;border-radius:999px;background:#7e22ce;color:white;display:inline-grid;place-items:center;padding:0 5px;font-size:11px;font-weight:900}.comment-status-banner{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:800;border:1px solid #475569;background:#1e293b;color:#cbd5e1;white-space:nowrap}.comment-status-banner.red{border-color:rgba(251,113,133,.7);background:rgba(127,29,29,.55);color:#fecaca}.comment-status-banner.yellow{border-color:rgba(234,179,8,.7);background:rgba(120,53,15,.55);color:#fde68a}.comment-status-banner.green{border-color:rgba(34,197,94,.7);background:rgba(22,101,52,.55);color:#dcfce7}
 #app{display:grid;grid-template-columns:var(--plan-nav-width) minmax(0,1fr) var(--comments-width);min-height:calc(100vh - var(--plan-navbar-height));transition:grid-template-columns .18s ease}
 .current-plan-status-control{display:inline-flex;align-items:center;gap:6px;margin-left:auto;color:#cbd5e1;font-size:12px;font-weight:850}.current-plan-status-control select{background:#020617;color:#e5e7eb;border:1px solid #7dd3fc;border-radius:6px;padding:6px 8px}.current-plan-status-error{color:#fecaca;font-size:12px;font-weight:800}
 #plan-list-nav{grid-column:1;align-self:start;position:sticky;top:var(--plan-navbar-height);height:calc(100vh - var(--plan-navbar-height));box-sizing:border-box;border-right:1px solid #2b364d;background:#0b1220;padding:14px;overflow:auto}body.plan-nav-collapsed #plan-list-nav{padding:0;border-right:0;overflow:hidden}body.plan-nav-collapsed #plan-list-nav>*{visibility:hidden}#plan-list-nav h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#a7b0c0;margin:0}.plan-list-header{display:flex;align-items:center;justify-content:space-between;gap:8px}.plan-nav-filters{display:grid;gap:8px;margin:12px 0 14px;padding:10px;border:1px solid #253248;border-radius:12px;background:#08111f}.plan-nav-filters .filter-control{display:grid;gap:5px;align-items:stretch}.plan-nav-filters .filter-control select{width:100%;max-width:none}.plan-list-error{border:1px solid #f59e0b;background:rgba(245,158,11,.12);color:#fde68a;border-radius:8px;padding:8px;margin:10px 0;font-size:13px}.plan-list-empty{color:#a7b0c0;font-size:13px}.plan-nav-item{display:grid;gap:5px;padding:10px;margin:8px 0;border:1px solid #253248;border-radius:10px;background:#101827;color:#cbd5e1;text-decoration:none}.plan-nav-item:hover{border-color:#64748b}.plan-nav-item.active{border-color:#38bdf8;background:linear-gradient(135deg,rgba(14,165,233,.18),rgba(16,24,39,.95))}.plan-nav-item.attention{border-color:#f59e0b}.plan-nav-title{font-size:13px;font-weight:850;color:#f8fafc;line-height:1.25}.plan-nav-meta{display:flex;gap:6px;align-items:center;flex-wrap:wrap;color:#a7b0c0;font-size:11px}.plan-nav-submeta{color:#8fa0b8;font-size:11px}.plan-nav-pill{border:1px solid #475569;border-radius:999px;padding:1px 6px;background:#0b1220}.plan-nav-pill.ready{border-color:#22c55e;color:#bbf7d0}.plan-nav-pill.not-ready{border-color:#f59e0b;color:#fde68a}
 #review{grid-column:2;position:relative;min-width:0}#sidebar{grid-column:3;grid-row:1;align-self:start;position:sticky;top:var(--plan-navbar-height);height:calc(100vh - var(--plan-navbar-height));box-sizing:border-box;border-left:1px solid #2b364d;padding:0;background:#111827;overflow:hidden}#sidebar>h1,#sidebar>#sync-warning,#sidebar>#plan-notes-panel,#sidebar>#deferred-refresh-notice,#sidebar>#comments{display:none}body.comments-open #sidebar{padding:16px;overflow:auto}body.comments-open #sidebar>h1,body.comments-open #sidebar>#sync-warning,body.comments-open #sidebar>#plan-notes-panel,body.comments-open #sidebar>#deferred-refresh-notice,body.comments-open #sidebar>#comments{display:block}
 #plan-touch-layer{display:none;position:absolute;top:0;left:0;width:100%;min-height:100%;z-index:22;background:transparent;pointer-events:none}
+body.annotations-off #plan-touch-layer{pointer-events:none!important}
 #plan-frame{width:100%;min-height:calc(100vh - var(--plan-navbar-height));border:0;background:white;display:block}.selection-box,.comment-anchor{position:fixed;pointer-events:none;border-radius:6px;transition:left .22s cubic-bezier(.2,0,.2,1),top .22s cubic-bezier(.2,0,.2,1),width .22s cubic-bezier(.2,0,.2,1),height .22s cubic-bezier(.2,0,.2,1),opacity .14s ease}.selection-box{z-index:8;box-sizing:border-box;background:transparent;box-shadow:none}.selection-box.hover{border:2px dotted rgba(56,189,248,.82)}.selection-box.active{z-index:9;border:2px dotted #38bdf8;box-shadow:0 0 0 1px rgba(255,255,255,.72)}.comment-anchor{z-index:7}.comment-anchor.pending{border:2px dotted rgba(192,132,252,.95);background:transparent;box-shadow:0 0 0 3px rgba(168,85,247,.08)}.comment-anchor.claimed{border:2px dotted rgba(234,179,8,.95);background:transparent;box-shadow:0 0 0 3px rgba(234,179,8,.10)}.comment-anchor.acknowledged{border:2px dotted rgba(34,197,94,.95);background:transparent;box-shadow:0 0 0 3px rgba(34,197,94,.10)}.comment-anchor.resolved{border:2px dotted rgba(59,130,246,.9);background:transparent;box-shadow:none}.comment-anchor-label{position:absolute;right:-10px;top:-12px;min-width:24px;height:24px;border-radius:999px;display:grid;place-items:center;padding:0 6px;font-weight:800;font-size:12px;box-shadow:0 8px 18px rgba(0,0,0,.35)}.comment-anchor.pending .comment-anchor-label{background:#a855f7;color:white;border:2px solid #e9d5ff}.comment-anchor.claimed .comment-anchor-label{background:#eab308;color:#1c1206;border:2px solid #fef08a}.comment-anchor.acknowledged .comment-anchor-label{background:#22c55e;color:white;border:2px solid #bbf7d0}.comment-anchor.resolved .comment-anchor-label{background:#3b82f6;color:white;border:2px solid #bfdbfe}.comment-row{border:1px solid #2b364d;padding:10px;margin:8px 0;border-radius:8px;background:#0f172a}.comment-row small{color:#a7b0c0}.marker{position:absolute;z-index:9;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#0ea5e9;color:white;border:2px solid #dbeafe;font-weight:700;box-shadow:0 8px 18px rgba(0,0,0,.35);pointer-events:none}
 #archive-toast{position:fixed;top:12px;right:16px;width:min(520px,calc(100vw - 32px));z-index:65;display:flex;align-items:center;justify-content:space-between;gap:14px;border:1px solid #38bdf8;border-radius:14px;background:rgba(15,23,42,.97);color:#e5e7eb;padding:12px 14px;box-shadow:0 18px 50px rgba(2,6,23,.64)}#archive-toast[hidden]{display:none}#archive-toast strong{color:#f8fafc}#archive-toast p{margin:2px 0 0;color:#a7b0c0;font-size:13px}#archive-toast button{border:2px solid #86efac;border-radius:10px;background:linear-gradient(180deg,#22c55e,#15803d);color:#052e16;padding:10px 18px;font-weight:950;box-shadow:0 0 0 3px rgba(34,197,94,.18),0 10px 24px rgba(21,128,61,.38);cursor:pointer}#archive-toast.error{border-color:#fb7185}#archive-toast.error button{display:none}#comments-tray-handle,#comments-status-filters{display:none}.comment-jump{margin-top:8px;min-height:34px;border:1px solid #475569;border-radius:999px;background:#1e293b;color:#dbeafe;padding:6px 10px;font-weight:800;cursor:pointer}#sync-warning{border:1px solid #f59e0b;background:rgba(245,158,11,.12);color:#fde68a;border-radius:8px;padding:10px;margin:8px 0 14px;font-size:13px}#deferred-refresh-notice{border:1px solid #38bdf8;background:rgba(56,189,248,.12);color:#bae6fd;border-radius:8px;padding:10px;margin:8px 0 14px;font-size:13px}#composer{position:fixed;right:calc(var(--comments-width) + 20px);top:calc(var(--plan-navbar-height) + 26px);background:#0f172a;border:1px solid #38bdf8;padding:12px;border-radius:8px;z-index:60;box-shadow:0 12px 32px rgba(0,0,0,.4)}#composer.discard-warning{border-color:#ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.22),0 12px 32px rgba(0,0,0,.4)}
 #composer-context{max-width:300px;margin:0 0 10px;border-left:3px solid #38bdf8;border-radius:8px;background:rgba(56,189,248,.12);color:#e0f2fe;padding:8px 10px;font-size:13px;line-height:1.35}#comment-discard-warning{margin-top:8px;color:#fecaca;font-size:13px;font-weight:700}#composer.discard-warning textarea{border-color:#ef4444}
 #composer textarea{width:260px;height:90px;background:#020617;color:#e5e7eb;border:1px solid #2b364d;border-radius:6px;padding:8px;display:block;pointer-events:auto;touch-action:manipulation;-webkit-user-select:text;user-select:text}
 #composer button{margin-top:8px;margin-right:8px}#plan-notes-panel{border:1px solid #2b364d;border-radius:10px;background:#0f172a;padding:10px;margin:0 0 14px}#plan-notes-panel h2{font-size:15px;margin:0 0 8px}#plan-notes .note-row{border-top:1px solid #263246;padding:8px 0}#plan-notes .note-row:first-child{border-top:0}#plan-note-body{width:100%;min-height:70px;box-sizing:border-box;background:#020617;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px}#add-plan-note{margin-top:8px;background:#1e293b;color:#e5e7eb;border:1px solid #475569;border-radius:6px;padding:8px 10px;cursor:pointer}.plan-review-selected{outline:2px dotted #38bdf8!important;box-shadow:none!important}#quick-open-backdrop{position:fixed;inset:0;z-index:70;display:grid;align-items:start;justify-items:center;padding-top:min(12vh,96px);background:rgba(2,6,23,.46)}#quick-open-backdrop[hidden]{display:none}#quick-open-dialog{width:min(680px,calc(100vw - 36px));max-height:min(78vh,720px);display:grid;grid-template-rows:auto auto auto auto minmax(0,1fr);overflow:hidden;border:1px solid #38bdf8;border-radius:16px;background:#0f172a;color:#e5e7eb;box-shadow:0 30px 90px rgba(2,6,23,.68)}.quick-open-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:16px 18px 10px}.quick-open-header h2{margin:0;color:#f8fafc;font-size:18px}.quick-open-header p{margin:4px 0 0;color:#a7b0c0;font-size:13px}.quick-open-shortcut{border:1px solid #475569;border-bottom-color:#64748b;border-radius:7px;background:#111827;color:#dbeafe;padding:2px 8px;font:12px ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:800}#quick-open-input{margin:0 18px 14px;width:calc(100% - 36px);box-sizing:border-box;border:1px solid #475569;border-radius:10px;background:#020617;color:#e5e7eb;padding:12px 14px;font:16px system-ui,sans-serif;outline:none}#quick-open-input:focus{border-color:#38bdf8;box-shadow:0 0 0 3px rgba(56,189,248,.18)}#quick-open-error,#quick-open-empty{margin:0 18px 12px;border-radius:10px;padding:10px 12px;font-size:13px}#quick-open-error{border:1px solid #f59e0b;background:rgba(245,158,11,.12);color:#fde68a}#quick-open-error button{margin-left:8px;border:1px solid #f59e0b;border-radius:6px;background:#1e293b;color:#fde68a;padding:4px 8px;cursor:pointer}#quick-open-empty{border:1px solid #475569;background:#111827;color:#a7b0c0}#quick-open-results{overflow:auto;border-top:1px solid #2b364d}#quick-open-result-list{padding:6px}.quick-open-result{display:grid;gap:3px;width:100%;box-sizing:border-box;text-align:left;border:1px solid transparent;border-radius:10px;background:transparent;color:#cbd5e1;padding:11px 12px;cursor:pointer}.quick-open-result:hover,.quick-open-result.active{border-color:#38bdf8;background:rgba(56,189,248,.14)}.quick-open-result-title{font-weight:850;color:#f8fafc;line-height:1.25}.quick-open-result-meta{font-size:12px;color:#a7b0c0}.lightbox{position:fixed;inset:36px calc(var(--comments-width) + 40px) 36px 36px;background:#020617;border:1px solid #38bdf8;z-index:50;display:grid;grid-template-rows:auto 1fr}.lightbox[hidden]{display:none}.lightbox header{display:flex;gap:8px;padding:10px;border-bottom:1px solid #2b364d}.lightbox img{max-width:100%;max-height:100%;place-self:center;transform-origin:center}.lightbox-stage{display:grid;overflow:hidden;position:relative}#image-selection-box{position:absolute;border:2px solid #38bdf8;background:rgba(56,189,248,.2);pointer-events:none}#mobile-comments-toggle{display:none}
 @media(prefers-reduced-motion:reduce){.selection-box{transition:none}}
-@media(max-width:760px),(pointer:coarse){body{overflow:hidden;--comments-width:0;--plan-navbar-height:88px}#plan-navbar{position:sticky;top:0;z-index:30;min-height:88px;box-sizing:border-box;gap:6px;padding:8px;overflow-x:auto;overscroll-behavior-x:contain}#plan-navbar-actions{justify-content:flex-start;gap:8px}#plan-navbar a,#plan-navbar button{flex:0 0 auto;min-height:40px;padding:8px 10px;font-size:13px;line-height:1.15;white-space:normal}#current-plan-bar{font-size:13px}#request-execution-review{max-width:170px}#build-plan{max-width:120px}#plan-navbar #desktop-plan-nav-toggle,#desktop-comments-toggle{display:none}#app{display:block;min-height:calc(100dvh - var(--plan-navbar-height))}#plan-list-nav{display:none}#review{height:calc(100dvh - var(--plan-navbar-height));overflow-y:auto;overscroll-behavior-y:contain;overflow-x:hidden;-webkit-overflow-scrolling:touch}#plan-frame{width:100%;min-height:calc(100dvh - var(--plan-navbar-height));border:0;display:block;pointer-events:none}#plan-touch-layer{display:block;position:absolute;top:0;left:0;width:100%;min-height:calc(100dvh - var(--plan-navbar-height));z-index:22;background:transparent;touch-action:pan-y;pointer-events:auto}#sidebar{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:24;height:auto;max-height:min(72dvh,620px);box-sizing:border-box;border-left:0;border-top:1px solid #2b364d;border-radius:18px 18px 0 0;padding:12px 16px calc(16px + env(safe-area-inset-bottom));background:#111827;box-shadow:0 -16px 40px rgba(0,0,0,.45);overflow:auto;transform:translateY(100%);transition:transform .18s ease}#sidebar>h1,#sidebar>#sync-warning,#sidebar>#plan-notes-panel,#sidebar>#deferred-refresh-notice,#sidebar>#comments{display:block}body.comments-open #sidebar{transform:translateY(0)}#comments-tray-handle{display:block;width:44px;height:5px;border-radius:999px;background:#475569;margin:0 auto 10px}#comments-status-filters{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px}.comment-status-chip{border:1px solid #475569;border-radius:999px;background:#0b1220;color:#dbeafe;padding:6px 9px;font-size:12px;font-weight:850}.comment-jump{min-height:44px}.comment-row-header{display:flex;align-items:center;justify-content:space-between;gap:8px}#sidebar h1{position:sticky;top:-12px;margin:0 0 12px;padding:8px 0 10px;background:#111827;font-size:20px;z-index:1}.comment-row{padding:12px;margin:10px 0}.comment-row p{margin:.55rem 0}.comments-empty{margin:0;color:#a7b0c0;font-size:14px}#mobile-comments-toggle{display:flex;position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:25;min-height:44px;align-items:center;gap:6px;border:1px solid #38bdf8;border-radius:999px;background:#075985;color:#e0f2fe;padding:0 14px;font-weight:800;box-shadow:0 12px 28px rgba(0,0,0,.35)}body.comments-open #mobile-comments-toggle{background:#0f172a;border-color:#64748b}#quick-open-backdrop{padding-top:18px;align-items:start}#quick-open-dialog{width:calc(100vw - 24px);max-height:calc(100dvh - 36px)}#composer{left:0;right:0;bottom:0;top:auto;z-index:60;box-sizing:border-box;border-left:0;border-right:0;border-bottom:0;border-radius:18px 18px 0 0;padding:14px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -16px 40px rgba(0,0,0,.48)}#composer-context{max-width:none;font-size:14px}#composer textarea{width:100%;height:122px;box-sizing:border-box;font-size:16px}#composer button{min-height:44px;padding:8px 12px}.lightbox{inset:0;z-index:50;border:0}.lightbox header{flex-wrap:wrap}.selection-box{border-radius:4px}.marker{width:28px;height:28px}}
+@media(max-width:760px),(pointer:coarse){body{overflow:hidden;--comments-width:0;--plan-navbar-height:88px}#plan-navbar{position:sticky;top:0;z-index:30;min-height:88px;box-sizing:border-box;gap:6px;padding:8px;overflow-x:auto;overscroll-behavior-x:contain}#plan-navbar-actions{justify-content:flex-start;gap:8px}#plan-navbar a,#plan-navbar button{flex:0 0 auto;min-height:40px;padding:8px 10px;font-size:13px;line-height:1.15;white-space:normal}#current-plan-bar{font-size:13px}#request-execution-review{max-width:170px}#build-plan{max-width:120px}#plan-navbar #desktop-plan-nav-toggle,#desktop-comments-toggle{display:none}#app{display:block;min-height:calc(100dvh - var(--plan-navbar-height))}#plan-list-nav{display:none}#review{height:calc(100dvh - var(--plan-navbar-height));overflow-y:auto;overscroll-behavior-y:contain;overflow-x:hidden;-webkit-overflow-scrolling:touch}#plan-frame{width:100%;min-height:calc(100dvh - var(--plan-navbar-height));border:0;display:block;pointer-events:none}body.annotations-off #review{overflow:hidden}body.annotations-off #plan-frame{height:calc(100dvh - var(--plan-navbar-height))!important;min-height:calc(100dvh - var(--plan-navbar-height));pointer-events:auto}#plan-touch-layer{display:block;position:absolute;top:0;left:0;width:100%;min-height:calc(100dvh - var(--plan-navbar-height));z-index:22;background:transparent;touch-action:pan-y;pointer-events:auto}#sidebar{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:24;height:auto;max-height:min(72dvh,620px);box-sizing:border-box;border-left:0;border-top:1px solid #2b364d;border-radius:18px 18px 0 0;padding:12px 16px calc(16px + env(safe-area-inset-bottom));background:#111827;box-shadow:0 -16px 40px rgba(0,0,0,.45);overflow:auto;transform:translateY(100%);transition:transform .18s ease}#sidebar>h1,#sidebar>#sync-warning,#sidebar>#plan-notes-panel,#sidebar>#deferred-refresh-notice,#sidebar>#comments{display:block}body.comments-open #sidebar{transform:translateY(0)}#comments-tray-handle{display:block;width:44px;height:5px;border-radius:999px;background:#475569;margin:0 auto 10px}#comments-status-filters{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px}.comment-status-chip{border:1px solid #475569;border-radius:999px;background:#0b1220;color:#dbeafe;padding:6px 9px;font-size:12px;font-weight:850}.comment-jump{min-height:44px}.comment-row-header{display:flex;align-items:center;justify-content:space-between;gap:8px}#sidebar h1{position:sticky;top:-12px;margin:0 0 12px;padding:8px 0 10px;background:#111827;font-size:20px;z-index:1}.comment-row{padding:12px;margin:10px 0}.comment-row p{margin:.55rem 0}.comments-empty{margin:0;color:#a7b0c0;font-size:14px}#mobile-comments-toggle{display:flex;position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:25;min-height:44px;align-items:center;gap:6px;border:1px solid #38bdf8;border-radius:999px;background:#075985;color:#e0f2fe;padding:0 14px;font-weight:800;box-shadow:0 12px 28px rgba(0,0,0,.35)}body.comments-open #mobile-comments-toggle{background:#0f172a;border-color:#64748b}#quick-open-backdrop{padding-top:18px;align-items:start}#quick-open-dialog{width:calc(100vw - 24px);max-height:calc(100dvh - 36px)}#composer{left:0;right:0;bottom:0;top:auto;z-index:60;box-sizing:border-box;border-left:0;border-right:0;border-bottom:0;border-radius:18px 18px 0 0;padding:14px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -16px 40px rgba(0,0,0,.48)}#composer-context{max-width:none;font-size:14px}#composer textarea{width:100%;height:122px;box-sizing:border-box;font-size:16px}#composer button{min-height:44px;padding:8px 12px}.lightbox{inset:0;z-index:50;border:0}.lightbox header{flex-wrap:wrap}.selection-box{border-radius:4px}.marker{width:28px;height:28px}}
 ${runtimeUpdateIndicatorStyles()}`;
 
 const clientJs = `
@@ -868,6 +870,7 @@ const currentPlanStatusControl = document.getElementById('current-plan-status-co
 const currentPlanStatusError = document.getElementById('current-plan-status-error');
 const executionReviewButton = document.getElementById('request-execution-review');
 const buildPlanButton = document.getElementById('build-plan');
+const annotationsToggle = document.getElementById('annotations-toggle');
 const planNotes = document.getElementById('plan-notes');
 const planNoteBody = document.getElementById('plan-note-body');
 const addPlanNoteButton = document.getElementById('add-plan-note');
@@ -971,6 +974,8 @@ function isMobileShell(){ return window.matchMedia('(max-width: 760px), (pointer
 function debugTouch(label, data = {}){
 }
 const passiveTouchCapture = { capture: true, passive: true };
+const annotationsStorageKey = 'plan_review_annotations_' + planId;
+let annotationsEnabled = true;
 function updatePlanNavbarHeight(){
   if (!planNavbar) return;
   const height = Math.ceil(planNavbar.getBoundingClientRect().height);
@@ -1001,8 +1006,65 @@ function updateCommentsToggles(){
     }
   }
 }
+function annotationsAreEnabled(){ return annotationsEnabled; }
+function storedAnnotationsEnabled(){
+  try { return localStorage.getItem(annotationsStorageKey) !== 'off'; } catch { return true; }
+}
+function removeFrameTapTargetAffordances(){
+  const doc = frame?.contentDocument;
+  if (!doc) return;
+  doc.getElementById('plan-review-tap-target-styles')?.remove();
+  doc.querySelectorAll('[data-plan-review-tap-target="true"]').forEach(element => { delete element.dataset.planReviewTapTarget; });
+}
+function clearAnnotationArtifacts(options = {}){
+  hovered = null;
+  selected = null;
+  selectedForScreenshot = null;
+  pendingAnchor = null;
+  pendingCommentMutationId = null;
+  touchStart = null;
+  pointerStart = null;
+  clearWideScrollTouch();
+  clearCommentAnchors();
+  document.querySelectorAll('.marker').forEach(marker => marker.remove());
+  removeFrameTapTargetAffordances();
+  if (imageSelectionBox) imageSelectionBox.hidden = true;
+  if (lightbox) lightbox.hidden = true;
+  if (options.clearEmptyComposer && composer && !composer.hidden && !String(body?.value || '').trim()) {
+    composer.hidden = true;
+    clearDiscardWarning();
+  }
+  updateSelectionBoxes();
+}
+function setAnnotationsEnabled(enabled, options = {}){
+  const nextEnabled = Boolean(enabled);
+  if (!nextEnabled && composer && !composer.hidden && String(body?.value || '').trim()) {
+    showDiscardWarning();
+    return;
+  }
+  annotationsEnabled = nextEnabled;
+  document.body.classList.toggle('annotations-off', !annotationsEnabled);
+  if (annotationsToggle) {
+    annotationsToggle.setAttribute('aria-pressed', String(annotationsEnabled));
+    annotationsToggle.setAttribute('aria-label', annotationsEnabled ? 'Turn annotations off' : 'Turn annotations on');
+    annotationsToggle.setAttribute('title', annotationsEnabled ? 'Annotations on' : 'Annotations off');
+  }
+  if (options.persist) {
+    try { localStorage.setItem(annotationsStorageKey, annotationsEnabled ? 'on' : 'off'); } catch {}
+  }
+  syncFrameHeight();
+  if (annotationsEnabled) {
+    ensureFrameTapTargets();
+    redrawMarkers();
+  } else {
+    clearAnnotationArtifacts({ clearEmptyComposer: true });
+  }
+}
+function initializeAnnotationMode(){
+  setAnnotationsEnabled(storedAnnotationsEnabled(), { persist: false });
+}
 function hasLayoutSensitiveOverlays(){
-  return markerComments.length > 0 || Boolean(selected) || Boolean(hovered) || Boolean(pendingAnchor);
+  return annotationsAreEnabled() && (markerComments.length > 0 || Boolean(selected) || Boolean(hovered) || Boolean(pendingAnchor));
 }
 function reflowAfterShellTransition(){
   let reflowed = false;
@@ -1108,7 +1170,11 @@ desktopPlanNavToggle?.addEventListener('click', () => {
 desktopCommentsToggle?.addEventListener('click', () => {
   setCommentsOpen(!document.body.classList.contains('comments-open'));
 });
+annotationsToggle?.addEventListener('click', () => {
+  setAnnotationsEnabled(!annotationsAreEnabled(), { persist: true });
+});
 initializePlanNavState();
+initializeAnnotationMode();
 setCommentsOpen(!isMobileShell() && document.body.classList.contains('comments-open'));
 updateDownloadLink();
 let archiveToastTimer = null;
@@ -2104,6 +2170,11 @@ document.addEventListener('keydown', handleQuickOpenKeydown, true);
 setInterval(() => { void loadPlanNavigator(); }, 30000);
 function renderMarkers(items){
   markerComments = items.filter(comment => comment.anchor?.rect);
+  if (!annotationsAreEnabled()) {
+    clearCommentAnchors();
+    document.querySelectorAll('.marker').forEach(marker => marker.remove());
+    return;
+  }
   redrawMarkers();
 }
 function selectorForPlanNodeId(planNodeId){
@@ -2184,7 +2255,7 @@ function ensureFrameWideScrollAffordances(doc = frame.contentDocument){
   }
 }
 function ensureFrameTapTargets(doc = frame.contentDocument){
-  if (!doc) return;
+  if (!annotationsAreEnabled() || !doc) return;
   let style = doc.getElementById('plan-review-tap-target-styles');
   if (!style) {
     style = doc.createElement('style');
@@ -2255,6 +2326,7 @@ function currentRectForComment(comment){
 function redrawMarkers(){
   document.querySelectorAll('.marker').forEach(marker => marker.remove());
   clearCommentAnchors();
+  if (!annotationsAreEnabled()) return;
   markerCount = 0;
   for (const comment of markerComments) {
     const rect = currentRectForComment(comment);
@@ -2264,6 +2336,7 @@ function redrawMarkers(){
   }
 }
 function scheduleMarkerReflow(){
+  if (!annotationsAreEnabled()) return;
   if (markerReflowQueued) return;
   markerReflowQueued = true;
   requestAnimationFrame(() => {
@@ -2292,6 +2365,11 @@ function syncFrameHeight(){
     doc.body?.getBoundingClientRect().height || 0
   ));
   if (height > 0) {
+    if (isMobileShell() && !annotationsAreEnabled()) {
+      frame.style.height = '';
+      if (planTouchLayer) planTouchLayer.style.height = '';
+      return;
+    }
     frame.style.height = height + 'px';
     if (planTouchLayer) planTouchLayer.style.height = isMobileShell() ? height + 'px' : '';
   }
@@ -2599,6 +2677,11 @@ function positionSelectionBox(box, element){
   box.hidden = false;
 }
 function updateSelectionBoxes(){
+  if (!annotationsAreEnabled()) {
+    positionSelectionBox(hoverSelectionBox, null);
+    positionSelectionBox(activeSelectionBox, null);
+    return;
+  }
   positionSelectionBox(hoverSelectionBox, hovered && hovered !== selected ? hovered : null);
   positionSelectionBox(activeSelectionBox, selected);
 }
@@ -2782,6 +2865,11 @@ function activateFrameInteractiveTarget(point, sourceLabel, event){
   return true;
 }
 function openComposerFromFramePoint(point, sourceLabel, event){
+  if (!annotationsAreEnabled()) {
+    const doc = frame.contentDocument;
+    const interactive = doc && point ? interactiveTargetFromTouchPoint(doc, point) : null;
+    return interactive ? activateFrameInteractiveTarget(point, sourceLabel, event) : false;
+  }
   const doc = frame.contentDocument;
   if (!doc || !point) {
     debugTouch(sourceLabel + '-blocked', { hasDoc: Boolean(doc), point });
@@ -2794,6 +2882,7 @@ function openComposerFromFramePoint(point, sourceLabel, event){
   return openElementComposer(target, eventForTouchPoint(point, event || null));
 }
 function openElementComposer(element, event){
+  if (!annotationsAreEnabled()) return false;
   if (submitInFlight || !element || typeof element.getBoundingClientRect !== 'function') {
     debugTouch('open-blocked', { submitInFlight, hasElement: Boolean(element), tag: element?.tagName || null });
     return false;
@@ -2959,7 +3048,7 @@ function attachFrameListeners(){
   doc.addEventListener('keydown', handleQuickOpenKeydown, true);
   debugTouch('listeners-attached', { readyState: doc.readyState, url: doc.location.href });
   const adoptTextSelection = () => {
-    if (submitInFlight || !composer.hidden) return false;
+    if (!annotationsAreEnabled() || submitInFlight || !composer.hidden) return false;
     const selection = doc.getSelection();
     if (!selection || selection.isCollapsed || !selection.toString().trim()) return false;
     pendingAnchor = anchorForSelection(selection);
@@ -2971,6 +3060,7 @@ function attachFrameListeners(){
   };
   doc.addEventListener('mouseup', () => { adoptTextSelection(); }, true);
   doc.addEventListener('touchstart', event => {
+    if (!annotationsAreEnabled()) return;
     const point = touchPoint(event);
     touchStart = point ? { ...point, moved: false } : null;
     debugTouch('touchstart', { point, target: elementFromEvent(event)?.tagName || null, id: elementFromEvent(event)?.id || '' });
@@ -2986,6 +3076,7 @@ function attachFrameListeners(){
     }
   }, passiveTouchCapture);
   doc.addEventListener('touchmove', event => {
+    if (!annotationsAreEnabled()) return;
     if (!touchStart) return;
     if (touchMoved(touchStart, event)) {
       touchStart.moved = true;
@@ -2995,6 +3086,7 @@ function attachFrameListeners(){
     }
   }, passiveTouchCapture);
   doc.addEventListener('touchend', event => {
+    if (!annotationsAreEnabled()) return;
     const endPoint = touchPoint(event);
     const fallbackTarget = commentTargetFromEvent(event);
     const endedOnInteractiveTarget = Boolean(interactiveTargetFromTouchPoint(doc, endPoint) || interactiveTargetFromEvent(event));
@@ -3015,15 +3107,18 @@ function attachFrameListeners(){
     }, 120);
   }, true);
   doc.addEventListener('pointerdown', event => {
+    if (!annotationsAreEnabled()) return;
     if (event.pointerType !== 'touch' && event.pointerType !== 'pen') return;
     const point = touchPoint(event);
     pointerStart = point ? { ...point, moved: false } : null;
   }, true);
   doc.addEventListener('pointermove', event => {
+    if (!annotationsAreEnabled()) return;
     if (!pointerStart || (event.pointerType !== 'touch' && event.pointerType !== 'pen')) return;
     if (touchMoved(pointerStart, event)) pointerStart.moved = true;
   }, true);
   doc.addEventListener('pointerup', event => {
+    if (!annotationsAreEnabled()) return;
     if (event.pointerType !== 'touch' && event.pointerType !== 'pen') return;
     const endPoint = touchPoint(event);
     const start = pointerStart;
@@ -3034,6 +3129,7 @@ function attachFrameListeners(){
     if (openElementComposer(commentTargetFromEvent(event), event)) suppressSyntheticClickUntil = Date.now() + 700;
   }, true);
   doc.addEventListener('mousemove', event => {
+    if (!annotationsAreEnabled()) return;
     if (interactiveTargetFromEvent(event)) {
       hovered = null;
       scheduleSelectionBoxUpdate();
@@ -3050,6 +3146,7 @@ function attachFrameListeners(){
     scheduleSelectionBoxUpdate();
   }, true);
   doc.addEventListener('click', event => {
+    if (!annotationsAreEnabled()) return;
     debugTouch('click', { target: elementFromEvent(event)?.tagName || null, id: elementFromEvent(event)?.id || '', suppressed: Date.now() < suppressSyntheticClickUntil });
     const interactiveTarget = interactiveTargetFromEvent(event);
     if (interactiveTarget) {

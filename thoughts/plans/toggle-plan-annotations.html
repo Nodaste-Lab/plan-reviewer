@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Toggle Plan Annotations</title>
+  <style>
+    :root{color-scheme:dark;--bg:#070b14;--panel:#0f172a;--panel2:#111827;--text:#e5e7eb;--muted:#a7b0c0;--accent:#38bdf8;--good:#22c55e;--warn:#f59e0b;--purple:#a855f7;--line:#2b364d;--off:#64748b}
+    *{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#08111f 0%,var(--bg) 48rem);color:var(--text);font:16px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}body>main{width:min(1180px,calc(100vw - 40px));margin:0 auto;padding:32px 0 80px}a{color:#7dd3fc}code{background:#020617;border:1px solid #263246;border-radius:6px;padding:.12rem .32rem;color:#dbeafe}pre{background:#020617;border:1px solid #263246;border-radius:12px;padding:14px;overflow:auto;color:#dbeafe}section,article{margin:24px 0;padding:22px;border:1px solid var(--line);border-radius:18px;background:rgba(15,23,42,.82);box-shadow:0 18px 50px rgba(0,0,0,.18)}h1,h2,h3,h4{line-height:1.18;color:#f8fafc}h1{font-size:clamp(2rem,5vw,3.8rem);margin:0 0 10px}h2{margin:0 0 12px;font-size:1.55rem}h3{margin:1.1rem 0 .6rem;font-size:1.18rem}h4{margin:1rem 0 .4rem;font-size:1rem;color:#dbeafe}.status{display:inline-flex;gap:8px;align-items:center;border:1px solid var(--warn);border-radius:999px;background:rgba(245,158,11,.12);color:#fde68a;padding:6px 12px;font-weight:850}.muted{color:var(--muted)}.toc{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}.toc div{display:grid;gap:5px}.toc strong{color:#f8fafc}.toc a{text-decoration:none}.callout{border-color:#475569;background:#0b1220}.attention{border-color:#f59e0b;background:rgba(120,53,15,.2)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse}th,td{border:1px solid #334155;padding:10px;text-align:left;vertical-align:top}th{background:#111827;color:#f8fafc}.progress-list{list-style:none;padding:0;margin:0;display:grid;gap:8px}.progress-list label{display:flex;gap:10px;align-items:flex-start}.phase{border-color:#334155}#target-mocks{width:min(1600px,calc(100vw - 40px));margin-left:50%;transform:translateX(-50%)}.mock-wall{display:grid;grid-template-columns:1fr;gap:22px}.mock{overflow:hidden;padding:0;border:1px solid #334155;border-radius:18px;background:#0b1220}.mock>figcaption{padding:12px 14px;border-top:1px solid #263246;background:#0f172a}.mock-shell{overflow:hidden;border-radius:18px 18px 0 0;background:#0b1020;color:#e5e7eb;font:13px/1.35 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.mock-navbar{min-height:86px;display:grid;grid-template-rows:auto auto;gap:8px;padding:10px 12px;border-bottom:1px solid #2b364d;background:#0f172a}.mock-navbar-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}.doc-kind-switcher{display:inline-flex;gap:2px;padding:3px;border:1px solid #334155;border-radius:999px;background:#08111f;margin-right:auto}.doc-kind-seg{border-radius:999px;padding:5px 9px;color:#a7b0c0;font-size:11px;font-weight:850;text-decoration:none;white-space:nowrap}.doc-kind-seg.active{background:#0ea5e9;color:#e0f2fe}.tool{display:inline-flex;align-items:center;justify-content:center;min-width:38px;min-height:34px;border:1px solid #475569;border-radius:6px;background:#1e293b;color:#e5e7eb;font-weight:900;line-height:1}.tool.pin{border-color:#facc15;color:#fef08a}.tool.download{border-color:rgba(56,189,248,.72);background:#075985;color:#ecfeff}.tool.active{border-color:#7dd3fc;background:#075985;color:#ecfeff;box-shadow:0 0 0 3px rgba(56,189,248,.14)}.tool.off{border-color:#475569;background:#111827;color:#94a3b8}.comments-toggle{gap:6px}.comments-count{min-width:18px;height:18px;border-radius:999px;background:#7e22ce;color:#fff;display:inline-grid;place-items:center;padding:0 5px;font-size:11px;font-weight:900}.mock-current-bar{display:flex;align-items:center;gap:8px;min-width:0;border-top:1px solid rgba(71,85,105,.55);padding-top:8px;color:#cbd5e1}.mock-current-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f8fafc;font-weight:850}.ready-pill{display:inline-flex;align-items:center;border-radius:999px;padding:3px 9px;font-size:12px;font-weight:850;white-space:nowrap}.ready-pill.not-ready{background:#7f1d1d;color:#fecaca}.comment-status-banner{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:800;border:1px solid rgba(34,197,94,.7);background:rgba(22,101,52,.55);color:#dcfce7;white-space:nowrap}.mock-app{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,340px);min-height:430px}.mock-review{position:relative;min-width:0;width:auto;margin:0;padding:0;background:#fff}.mock-frame{min-height:430px;padding:28px 34px;background:#fff;color:#0f172a;font:17px/1.6 ui-serif,Georgia,serif}.mock-frame h3{margin:0 0 .8rem;color:#0f172a;font:700 1.25rem/1.2 system-ui,sans-serif}.mock-frame p{margin:.85rem 0}.commented{position:relative;display:inline;border:2px dotted rgba(168,85,247,.95);border-radius:6px;background:rgba(168,85,247,.10);box-shadow:0 0 0 3px rgba(168,85,247,.08);padding:1px 2px}.commented.resolved{border-color:rgba(59,130,246,.9);background:transparent;box-shadow:none}.bubble{position:relative;top:-8px;display:inline-grid;place-items:center;min-width:24px;height:24px;margin-left:4px;border-radius:999px;background:#a855f7;color:white;border:2px solid #e9d5ff;font:800 12px system-ui}.bubble.resolved{background:#3b82f6;border-color:#bfdbfe}.hover-target{position:relative;margin-top:18px!important;padding:8px 10px;border-radius:6px;outline:2px dotted rgba(56,189,248,.82);outline-offset:4px;background:rgba(56,189,248,.04)}.hover-label{position:absolute;right:8px;top:-14px;border:1px solid #38bdf8;border-radius:999px;background:#e0f2fe;color:#075985;padding:2px 7px;font:800 11px system-ui}.off-note{display:inline-block;margin-top:8px;border:1px solid #cbd5e1;border-radius:999px;background:#f8fafc;color:#334155;padding:4px 9px;font:800 12px system-ui}.comments-rail{border-left:1px solid #2b364d;background:#111827;padding:16px;font-size:13px;overflow:auto}.comments-rail h4{margin:0 0 12px;color:#f8fafc;font-size:20px;line-height:1.1}.comment-row{border:1px solid #2b364d;border-radius:8px;background:#0f172a;padding:10px;margin:8px 0;color:#cbd5e1}.comment-row-header{display:flex;align-items:center;justify-content:space-between;gap:8px}.comment-row strong{color:#f8fafc}.comment-row small{display:block;color:#a7b0c0;margin-top:6px}.comment-thread{margin-top:8px}.thread-entry{border-left:2px solid #334155;padding-left:8px}.thread-entry p{margin:.35rem 0;color:#dbe4f0}.comment-jump{min-height:34px;border:1px solid #475569;border-radius:999px;background:#1e293b;color:#dbeafe;padding:6px 10px;font-weight:800;white-space:nowrap}.legend{display:flex;gap:10px;flex-wrap:wrap;color:#a7b0c0;font-size:13px;margin:10px 0 0}.pill{border:1px solid #475569;border-radius:999px;padding:2px 8px;background:#08111f}.kbd{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;border:1px solid #475569;border-bottom-color:#64748b;border-radius:6px;padding:1px 6px;background:#111827;color:#dbeafe}.log time{color:#a7b0c0}
+    @media(max-width:720px){body>main{width:min(100vw - 24px,1180px);padding-top:20px}#target-mocks{width:min(100vw - 24px,1180px)}.mock-wall{grid-template-columns:1fr}.mock-app{grid-template-columns:1fr}.comments-rail{border-left:0;border-top:1px solid #263246}.doc{min-height:260px}}
+  </style>
+</head>
+<body>
+<main>
+  <header id="title">
+    <p class="status">Status: execution-ready; rebased onto <code>origin/main</code> 849bc21; GPT and GLM readiness reviews passed</p>
+    <h1>Toggle Plan Annotations</h1>
+    <p class="muted" id="issue-reference">Linear issue: none. This request came directly from the user; do not invent a <code>NOD-NNN</code> key.</p>
+    <p id="goal-summary">Add a plan-level UI control that turns browser annotation affordances on and off without hiding the comment sidebar or losing existing comments.</p>
+  </header>
+
+  <nav id="table-of-contents" class="toc" aria-label="Plan contents">
+    <div><strong>Overview</strong><a href="#goal">Goal</a><a href="#decision-attention">Decision Attention</a><a href="#solution-narrative">Solution narrative</a><a href="#current-reality">Current implementation reality</a></div>
+    <div><strong>Experience</strong><a href="#target-mocks">Enabled / disabled document mock</a><a href="#product-intent">Product intent alignment</a><a href="#locked-decisions">Locked decisions</a></div>
+    <div><strong>Contracts</strong><a href="#acceptance-criteria">Acceptance criteria</a><a href="#bdd-scenarios">BDD scenarios</a><a href="#test-coverage">Test coverage matrix</a></div>
+    <div><strong>Execution</strong><a href="#progress">Progress</a><a href="#phases">Phases</a><a href="#verification">Verification strategy</a><a href="#resume">Resume instructions</a></div>
+  </nav>
+
+  <section id="goal">
+    <h2>Goal</h2>
+    <p>Give reviewers a clear annotation-target control in the plan toolbar. Annotations are enabled by default. When the reviewer turns them off, the rendered plan behaves like a normal web page: ordinary clicks do not open the composer, hover/touch selection outlines disappear, comment number badges and highlight boxes disappear, and text can be selected for copying. The sidebar can still be opened and still shows all comments.</p>
+  </section>
+
+  <section id="decision-attention" class="attention">
+    <h2>Decision Attention / Low-confidence Areas</h2>
+    <ul>
+      <li><strong>Browser feedback requested:</strong> confirm the toolbar placement and icon treatment in the mocks below before execution-ready review.</li>
+      <li><strong>No product decision required:</strong> the default behavior, sidebar behavior, and document-marker behavior are specified by the user request.</li>
+      <li><strong>Implementation risk to prove:</strong> mobile/coarse-pointer pass-through is coupled to <code>#plan-touch-layer</code>; on rebased main the layer is pointer-inert on desktop and pointer-active only in the mobile media query, so execution must include a shipped-surface e2e check that disabling annotations prevents comment creation while preserving practical scroll/link/text-selection behavior.</li>
+      <li><strong>Source-authority update from main:</strong> new compact plans now prefer Markdoc, but this already-registered raw HTML plan has no sibling <code>.markdoc</code> and remains source-authoritative under the current legacy HTML rule.</li>
+    </ul>
+  </section>
+
+  <section id="solution-narrative">
+    <h2>Solution narrative</h2>
+    <p>Add an <code>Annotations</code> toolbar toggle beside the comments control. The current shell has no dedicated annotation icon beyond the comments glyph, so use a target/crosshair glyph <span class="kbd">⌖</span> in the existing icon-only toolbar style with <code>aria-pressed="true"</code> when annotation mode is active. Store the browser-local plan-specific state in <code>localStorage</code> so each plan starts on unless the reviewer turned it off for that plan.</p>
+    <p>Annotation mode becomes a single client-side source of truth. Every path that draws anchors, shows hover or active selection boxes, opens the composer from frame clicks/touches, captures text selection as a comment, proxies mobile taps, or adds marker screenshots must first check that source of truth. Turning annotations off clears visible annotation overlays immediately; turning them back on redraws current comment anchors from the already-loaded metadata.</p>
+    <p>The comment sidebar is independent. Its toggle, counts, filters, plan notes, comment rows, delete/resolve controls, and metadata polling continue to work whether annotations are on or off.</p>
+  </section>
+
+  <section id="target-mocks">
+    <h2>Document mock: annotations enabled and disabled</h2>
+    <p class="muted">These full-width reviewer-facing target states show the same plan in each mode. The right sidebar is intentionally shown in both states to make the split between “comments exist” and “document annotations visible” explicit.</p>
+    <div class="mock-wall">
+      <figure id="mock-enabled" class="mock" data-plan-node-id="mock-enabled">
+        <div class="mock-shell" aria-label="Plan review shell mock with annotations enabled">
+          <nav class="mock-navbar" aria-label="Plan actions mock">
+            <div class="mock-navbar-actions">
+              <span class="tool" title="Plan Navigator">☰</span>
+              <span class="doc-kind-switcher" aria-label="Document view selector"><span class="doc-kind-seg">Kanban</span><span class="doc-kind-seg active">All documents</span></span>
+              <span class="tool pin" title="Pin plan">☆</span><span class="tool download" title="Download raw plan">⬇</span><span class="tool" title="Request execution-ready review">✓</span><span class="tool" title="Build Plan">⚒</span><span class="tool" title="Archive plan">🗄</span><span class="tool" title="Configuration">⚙</span><span class="tool active" title="Annotations on" aria-pressed="true">⌖</span><span class="tool comments-toggle" title="Comments">💬 <span class="comments-count">3</span></span>
+            </div>
+            <div class="mock-current-bar"><strong class="mock-current-title">Toggle Plan Annotations</strong><span class="ready-pill not-ready">Execution not ready</span><span class="comment-status-banner">1 pending · 1 claimed · 1 resolved</span></div>
+          </nav>
+          <div class="mock-app">
+            <main class="mock-review">
+              <div class="mock-frame">
+                <h3>Plan excerpt</h3>
+                <p><span class="commented">The plan must keep source files authoritative<span class="bubble">1</span></span> while the browser shell owns review interactivity.</p>
+                <p class="hover-target"><span class="hover-label">new comment target</span>Hovering or clicking this paragraph shows the dotted target affordance and opens the comment composer.</p>
+                <p><span class="commented resolved">Queue-backed delivery remains the correctness-critical path.<span class="bubble resolved">2</span></span></p>
+              </div>
+            </main>
+            <aside class="comments-rail" aria-label="Comments mock enabled">
+              <h4>Comments</h4>
+              <div class="comment-row"><div class="comment-row-header"><strong>#1 pending</strong><button class="comment-jump" type="button">Jump</button></div><div class="comment-thread"><div class="thread-entry human"><strong>Reviewer</strong><p>Clarify source sync.</p><small>human · Plan excerpt</small></div></div><small>dom · mapped</small></div>
+              <div class="comment-row"><div class="comment-row-header"><strong>#2 resolved</strong><button class="comment-jump" type="button">Jump</button></div><div class="comment-thread"><div class="thread-entry human"><strong>Reviewer</strong><p>Queue wording fixed.</p><small>human · Plan excerpt</small></div></div><small>dom · mapped</small></div>
+              <div class="comment-row"><div class="comment-row-header"><strong>#3 claimed</strong><button class="comment-jump" type="button">Jump</button></div><div class="comment-thread"><div class="thread-entry human"><strong>Reviewer</strong><p>Check UI copy.</p><small>human · Toolbar</small></div></div><small>dom · mapped</small></div>
+            </aside>
+          </div>
+        </div>
+        <figcaption class="muted">Enabled state: the target icon sits immediately before the comments toggle, is visibly pressed, and document anchors, number badges, and hover targeting are visible.</figcaption>
+      </figure>
+
+      <figure id="mock-disabled" class="mock" data-plan-node-id="mock-disabled">
+        <div class="mock-shell" aria-label="Plan review shell mock with annotations disabled">
+          <nav class="mock-navbar" aria-label="Plan actions mock">
+            <div class="mock-navbar-actions">
+              <span class="tool" title="Plan Navigator">☰</span>
+              <span class="doc-kind-switcher" aria-label="Document view selector"><span class="doc-kind-seg">Kanban</span><span class="doc-kind-seg active">All documents</span></span>
+              <span class="tool pin" title="Pin plan">☆</span><span class="tool download" title="Download raw plan">⬇</span><span class="tool" title="Request execution-ready review">✓</span><span class="tool" title="Build Plan">⚒</span><span class="tool" title="Archive plan">🗄</span><span class="tool" title="Configuration">⚙</span><span class="tool off" title="Annotations off" aria-pressed="false">⌖</span><span class="tool comments-toggle" title="Comments">💬 <span class="comments-count">3</span></span>
+            </div>
+            <div class="mock-current-bar"><strong class="mock-current-title">Toggle Plan Annotations</strong><span class="ready-pill not-ready">Execution not ready</span><span class="comment-status-banner">1 pending · 1 claimed · 1 resolved</span></div>
+          </nav>
+          <div class="mock-app">
+            <main class="mock-review">
+              <div class="mock-frame">
+                <h3>Plan excerpt</h3>
+                <p>The plan must keep source files authoritative while the browser shell owns review interactivity.</p>
+                <p>Clicking or dragging text behaves like a normal document instead of opening the comment composer; the mock intentionally shows no pre-highlighted selection state.</p>
+                <p>Queue-backed delivery remains the correctness-critical path.</p>
+                <p><span class="off-note">No document comment badges, dotted anchors, or hover boxes are rendered.</span></p>
+              </div>
+            </main>
+            <aside class="comments-rail" aria-label="Comments mock disabled">
+              <h4>Comments</h4>
+              <div class="comment-row"><div class="comment-row-header"><strong>#1 pending</strong><button class="comment-jump" type="button">Jump</button></div><div class="comment-thread"><div class="thread-entry human"><strong>Reviewer</strong><p>Clarify source sync.</p><small>human · Plan excerpt</small></div></div><small>dom · mapped</small></div>
+              <div class="comment-row"><div class="comment-row-header"><strong>#2 resolved</strong><button class="comment-jump" type="button">Jump</button></div><div class="comment-thread"><div class="thread-entry human"><strong>Reviewer</strong><p>Queue wording fixed.</p><small>human · Plan excerpt</small></div></div><small>dom · mapped</small></div>
+              <div class="comment-row"><div class="comment-row-header"><strong>#3 claimed</strong><button class="comment-jump" type="button">Jump</button></div><div class="comment-thread"><div class="thread-entry human"><strong>Reviewer</strong><p>Check UI copy.</p><small>human · Toolbar</small></div></div><small>dom · mapped</small></div>
+            </aside>
+          </div>
+        </div>
+        <figcaption class="muted">Disabled state: the comments sidebar remains populated, but the white document area behaves like ordinary selectable text with no annotation overlays.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="authority-inputs">
+    <h2>Authority and inputs</h2>
+    <ul>
+      <li>User request in this session: annotation toggle, on by default, disables mouseover/click-to-comment, hides numbered existing annotations and comment highlights in the document, keeps sidebar comments visible. Browser feedback rejected the fountain-pen-tip glyph, so this plan now uses a target/crosshair glyph aligned to the current icon-only toolbar pattern.</li>
+      <li>Repo guidance: <code>AGENTS.md</code> and <code>thoughts/plans/AGENTS.md</code> now prefer <code>.markdoc</code> authoring for new compact plans, while allowing source-authoritative legacy/raw HTML plans when no sibling Markdoc source exists. This plan remains an HTML-only raw UI-mock plan unless an intentional migration is approved.</li>
+      <li>Product intent: <code>thoughts/specs/product_intent.md</code>.</li>
+      <li>Code evidence after rebase: <code>src/server/app.ts</code>, <code>src/__tests__/contracts.test.ts</code>, <code>src/test-fixtures/e2e-run.ts</code>, <code>docs/plan-authoring.md</code>, and <code>src/__tests__/fixtures/markdoc/simple-plan.markdoc</code>.</li>
+    </ul>
+  </section>
+
+  <section id="current-reality">
+    <h2>Current implementation reality</h2>
+    <ul>
+      <li><code>src/server/app.ts</code> renders the review shell toolbar, <code>#plan-frame</code>, sidebar, mobile touch layer, hover/active selection boxes, composer, and comments toggle in <code>reviewShell()</code>. Rebased main also adds <code>data-board-column-labels</code> to the shell body and passes all board columns through navigator rendering; annotation work must not disturb those status/navigation surfaces.</li>
+      <li>The client script in the same file attaches iframe listeners in <code>attachFrameListeners()</code>. Non-interactive clicks currently call <code>preventDefault()</code>/<code>stopPropagation()</code> and open the composer; <code>mouseup</code> adopts text selection as a comment.</li>
+      <li>Existing comment anchors are redrawn by <code>renderMarkers()</code>, <code>redrawMarkers()</code>, <code>ensureFrameAnchorStyles()</code>, and <code>addCommentAnchor()</code>, which inject dotted boxes and number labels into the rendered plan document.</li>
+      <li>Mobile/coarse-pointer behavior uses <code>#plan-touch-layer</code> and disables iframe pointer events in CSS. On rebased main the base <code>#plan-touch-layer</code> style is <code>pointer-events:none</code> with <code>min-height:100%</code>, while the mobile media query enables <code>pointer-events:auto</code>; annotation-off behavior must preserve that split and be verified in e2e rather than assumed from desktop changes.</li>
+      <li><code>docs/plan-authoring.md</code>, <code>thoughts/plans/AGENTS.md</code>, and registration instructions now define Markdoc as the preferred source for future compact plans. When a sibling <code>.markdoc</code> exists, implementation must edit/register that source; this plan has no sibling Markdoc, so its HTML file is still authoritative.</li>
+      <li><code>src/test-fixtures/e2e-run.ts</code> already covers DOM annotation, text annotation, image annotation, mobile touch annotation, sidebar jump behavior, toolbar interaction surfaces, mobile readability, Markdoc action-comment source paths, and comment-anchor remapping.</li>
+    </ul>
+  </section>
+
+  <section id="progress">
+    <h2>Progress</h2>
+    <ul class="progress-list">
+      <li><label><input type="checkbox" checked disabled> P1 add annotation-mode state and toolbar control</label></li>
+      <li><label><input type="checkbox" checked disabled> P2 gate desktop annotation interactions and overlays</label></li>
+      <li><label><input type="checkbox" checked disabled> P3 gate mobile annotation interactions safely</label></li>
+      <li><label><input type="checkbox" checked disabled> P4 verify sidebar parity and persistence</label></li>
+      <li><label><input type="checkbox" checked disabled> P5 run final browser and regression gates</label></li>
+    </ul>
+  </section>
+
+  <section id="resume">
+    <h2>Resume instructions</h2>
+    <p>Read this whole plan, inspect the Progress list, and verify all phases remain checked before handoff. P1-P5 are implemented and verified with targeted contracts, shipped e2e coverage, full unit/contract tests, full e2e, and queue fixture gates. This branch is rebased onto <code>origin/main</code> at 849bc21. Treat <code>thoughts/plans/toggle-plan-annotations.html</code> as the authoritative legacy/raw HTML plan unless a deliberate Markdoc migration is approved; do not create a sibling <code>.markdoc</code> casually because that changes source authority and registration behavior. Do not change queue semantics, comment storage, source sync, rendered-plan sanitization, or server-side comment lifecycle unless a phase explicitly requires it. If mobile annotation-off pass-through conflicts with safe scrolling or link behavior, stop and record the specific evidence before changing the product contract.</p>
+  </section>
+
+  <section id="product-intent">
+    <h2>Product intent alignment</h2>
+    <p>This plan advances <code>thoughts/specs/product_intent.md</code> by making browser review actions more intentional: reviewers can choose between precise plan commenting and ordinary document reading/copying without losing comments or agent-visible queue state. The rebased product intent also distinguishes Markdoc-authored plans from legacy HTML-only plans; this plan preserves that boundary by keeping the existing raw HTML source authoritative while requiring implementation to preserve both Markdoc and legacy HTML source-sync behavior.</p>
+    <ul>
+      <li><strong>Desired outcome:</strong> reviewers can select exact plan content when they want annotations, while plan authors and reviewers can read/copy text normally when they do not.</li>
+      <li><strong>Experience principle:</strong> the golden path remains unavoidable because annotations stay on by default; turning them off is explicit, reversible, and visible in the toolbar.</li>
+      <li><strong>Quality bar:</strong> browser comment interactions and rendered-plan markers change, so e2e coverage is required. Queue-backed delivery, Markdoc compilation/source sync, and legacy HTML registration remain untouched.</li>
+    </ul>
+  </section>
+
+  <section id="locked-decisions">
+    <h2>Locked decisions</h2>
+    <ul>
+      <li id="decision-default-on"><strong>Default:</strong> annotations are on when no browser-local preference exists.</li>
+      <li id="decision-plan-scoped"><strong>Persistence:</strong> the preference is browser-local and plan-scoped, keyed by plan id, so turning annotations off in one plan does not silently alter every plan.</li>
+      <li id="decision-icon"><strong>Control:</strong> use an icon-only target/crosshair control (<code>⌖</code>) in the toolbar, immediately before the comments toggle because both controls affect review/comment surfaces. Repo evidence shows no dedicated annotation icon in the current design system; the shell uses simple icon glyphs, and the target glyph better communicates click/selection targeting than the rejected fountain-pen glyph.</li>
+      <li id="decision-sidebar-independent"><strong>Sidebar:</strong> comment metadata and sidebar rendering are independent of annotation visibility.</li>
+      <li id="decision-no-markers-off"><strong>Off state:</strong> do not render document comment anchors, labels, hover boxes, active boxes, marker screenshot badges, or new-comment composer activation from plan-body clicks/selections.</li>
+      <li id="decision-no-server-contract"><strong>Server contract:</strong> no new API, CLI, schema, queue, or persisted database field is needed for this UI-only preference.</li>
+      <li id="decision-source-authority"><strong>Plan source authority:</strong> keep this active plan as source-authoritative HTML because it predates the Markdoc-preferred mainline change, contains raw product mocks, and has no sibling Markdoc file. Future compact plans should use Markdoc; this plan should not be migrated unless explicitly approved.</li>
+    </ul>
+  </section>
+
+  <section id="acceptance-criteria">
+    <h2>Acceptance criteria</h2>
+    <ol>
+      <li id="ac-1">The review toolbar includes an accessible <code>Annotations</code> icon control with the target/crosshair glyph (<code>⌖</code>), visible active/off state, <code>aria-pressed</code>, and labels that tell the user whether activating it will turn annotations on or off.</li>
+      <li id="ac-2">A newly opened plan defaults to annotations enabled unless that browser has a stored off preference for that same plan.</li>
+      <li id="ac-3">With annotations enabled, existing hover/click/text/image/mobile comment creation and visible comment anchors continue to work.</li>
+      <li id="ac-4">With annotations disabled, ordinary clicks and text drags in the plan body do not open the composer, do not clear native text selection for copy, and do not show hover/active selection boxes.</li>
+      <li id="ac-5">With annotations disabled, existing comment anchors, highlight outlines, number labels, and newly submitted marker badges are absent from the rendered document.</li>
+      <li id="ac-6">Opening the comment sidebar while annotations are disabled still shows all comments, counts, statuses, plan notes, and existing comment actions.</li>
+      <li id="ac-7">Toggling annotations back on redraws comment anchors from current metadata without reloading the page or duplicating comments.</li>
+      <li id="ac-8">Links, fragment navigation, plan-shell links, wide-content scrolling, and mobile/coarse-pointer scrolling remain usable in both modes.</li>
+      <li id="ac-9">The change is limited to the review shell UI/client behavior and does not change comment queue, ack/release/resolve, source sync, registration, or rendered-plan sanitization contracts.</li>
+    </ol>
+  </section>
+
+  <section id="bdd-scenarios">
+    <h2>BDD scenarios</h2>
+    <article id="bdd-default-on"><h3>Default annotation mode</h3><p><strong>Given</strong> a reviewer opens a plan for the first time, <strong>When</strong> the review shell loads, <strong>Then</strong> the target/crosshair control is pressed/on, comment anchors render, and clicking commentable plan content opens the composer.</p></article>
+    <article id="bdd-copy-text-off"><h3>Copy text without creating a comment</h3><p><strong>Given</strong> annotations are off, <strong>When</strong> the reviewer drags across text in the rendered plan and releases the mouse, <strong>Then</strong> the browser selection remains available for copy and the composer stays hidden.</p></article>
+    <article id="bdd-hide-existing"><h3>Existing comments hidden from document only</h3><p><strong>Given</strong> a plan has pending and resolved comments with anchors, <strong>When</strong> annotations are turned off, <strong>Then</strong> the document no longer shows highlight boxes or number badges, but the sidebar still lists those comments and counts.</p></article>
+    <article id="bdd-toggle-back"><h3>Re-enable annotations</h3><p><strong>Given</strong> annotations are off and the sidebar has loaded comments, <strong>When</strong> the reviewer turns annotations on, <strong>Then</strong> anchors redraw once from current metadata and clicking a normal plan target opens the composer again.</p></article>
+    <article id="bdd-sidebar-jump-off"><h3>Sidebar remains useful while document annotations are hidden</h3><p><strong>Given</strong> annotations are off and comments are visible in the sidebar, <strong>When</strong> the reviewer opens or filters the sidebar, <strong>Then</strong> all comment rows and actions remain available without forcing annotations back on or drawing document badges.</p></article>
+    <article id="bdd-mobile-off"><h3>Mobile/coarse pointer off mode</h3><p><strong>Given</strong> a narrow or coarse-pointer review shell, <strong>When</strong> annotations are off, <strong>Then</strong> tapping text does not create comments, comments remain visible through the tray, links still activate, scrolling still works, and text selection/copy behavior is preserved. If implementation evidence shows those cannot all hold together on a target mobile browser, stop for explicit product approval before carving out mobile text selection/copy behavior.</p></article>
+  </section>
+
+  <section id="test-coverage">
+    <h2>Test coverage matrix</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Acceptance</th><th>Test layer</th><th>Planned evidence</th></tr></thead>
+      <tbody>
+        <tr><td>AC1, AC2</td><td>Contract + e2e</td><td>Shell HTML/CSS/JS assertions for toolbar control, labels, <code>aria-pressed</code>, localStorage key, default-on class/state, visible toggle state, and preservation of existing current-plan/status/navigator body metadata from rebased main.</td></tr>
+        <tr><td>AC3, AC4, AC5, AC7</td><td>E2E</td><td>Extend the browser annotation scenario to assert enabled behavior, toggle off, no composer on click/selection, no anchors in iframe, then toggle on and anchors/composer return.</td></tr>
+        <tr><td>AC6</td><td>E2E + contract</td><td>With annotations off, open sidebar and assert comments, counts, statuses, plan notes, and comment actions still render from metadata.</td></tr>
+        <tr><td>AC8</td><td>E2E</td><td>Reuse/extend fragment link, plan-shell link, wide-scroll, and mobile touch scenarios in both annotation modes. Mobile/coarse-pointer evidence must cover toggle off, tap text does not open the composer, links still activate, scrolling still works, and text selection/copy behavior is preserved or a product-approved carve-out is recorded before execution proceeds.</td></tr>
+        <tr><td>AC9</td><td>Contract/full suite</td><td>Existing comment lifecycle, queue, registration, Markdoc compile/source sync, legacy HTML registration, action-button source-path, and fixture suites continue to pass unchanged.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="phases">
+    <h2>Phase-by-phase execution plan</h2>
+
+    <article id="phase-p1" class="phase" data-plan-node-id="phase-p1">
+      <h3>P1 add annotation-mode state and toolbar control</h3>
+      <h4>End State</h4><p>The shell renders an accessible target/crosshair annotation toggle with default-on, plan-scoped browser persistence, and visible pressed/off styling.</p>
+      <h4>Tests first</h4><p>Add contract assertions around <code>/p/:planId</code> shell HTML and <code>/client.css</code>/<code>/client.js</code> for the button, labels, <code>aria-pressed</code>, CSS state class, and storage key. Add the first e2e assertion that a fresh plan starts enabled.</p>
+      <h4>Expected files</h4><p><code>src/server/app.ts</code>, <code>src/__tests__/contracts.test.ts</code>, <code>src/test-fixtures/e2e-run.ts</code>.</p>
+      <h4>Work</h4><ul><li>Add a reusable annotations button constant near <code>commentsButton</code>, then include <code>#annotations-toggle</code> immediately before <code>#desktop-comments-toggle</code> in every active, deferred, and archived <code>navActions</code> branch.</li><li>Keep existing shell metadata and controls intact, including <code>data-board-column-labels</code>, current-plan status controls, lifecycle guidance, Markdoc-aware action-button plan paths, and navigator filters.</li><li>Add CSS for active/off visual states using existing <code>.tool-button</code> patterns.</li><li>Add a small client state module: read default, set body class, persist per plan, update <code>aria-pressed</code>, title, and label.</li></ul>
+      <h4>Open questions / decision dependencies</h4><p>None.</p>
+      <h4>Verify</h4><pre>bun run build &amp;&amp; node --test --test-name-pattern "review shell toolbar|annotation" dist/__tests__/contracts.test.js</pre>
+    </article>
+
+    <article id="phase-p2" class="phase" data-plan-node-id="phase-p2">
+      <h3>P2 gate desktop annotation interactions and overlays</h3>
+      <h4>End State</h4><p>Desktop annotation off mode stops composer activation and overlay drawing while leaving normal links and text selection alone.</p>
+      <h4>Tests first</h4><p>Extend the e2e annotation scenario to fail on current behavior: after toggling off, selecting text leaves native selection in the iframe and the composer remains hidden; comment anchors are absent.</p>
+      <h4>Expected files</h4><p><code>src/server/app.ts</code>, <code>src/test-fixtures/e2e-run.ts</code>.</p>
+      <h4>Work</h4><ul><li>Guard <code>renderMarkers()</code>, <code>redrawMarkers()</code>, <code>scheduleMarkerReflow()</code>, hover box updates, <code>adoptTextSelection()</code>, <code>openElementComposer()</code>, <code>ensureFrameTapTargets()</code>, and <code>plan-review-tap-target-styles</code> with annotation-mode checks.</li><li>In disabled mode, let non-interactive iframe clicks bubble normally; do not call <code>preventDefault()</code> solely for annotations.</li><li>When disabling, clear anchors, marker badges, pending hover/active state, tap-target cursor/tap-highlight affordances, lightbox/image selection, and any empty composer state.</li></ul>
+      <h4>Open questions / decision dependencies</h4><p>None.</p>
+      <h4>Verify</h4><pre>bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js</pre>
+    </article>
+
+    <article id="phase-p3" class="phase" data-plan-node-id="phase-p3">
+      <h3>P3 gate mobile annotation interactions safely</h3>
+      <h4>End State</h4><p>Mobile/coarse-pointer users can turn annotations off without accidental comment creation and without regressing the mobile tray, scroll, links, or text-selection/copy path.</p>
+      <h4>Tests first</h4><p>Add or adapt mobile e2e assertions that toggle annotations off, tap/drag plan content, assert no composer, assert sidebar tray still opens, assert links activate, assert scrolling works, and assert text selection/copy behavior is preserved. If the browser automation cannot directly assert clipboard contents, assert the shipped selectable text state and document the smallest manual verification step before phase completion.</p>
+      <h4>Expected files</h4><p><code>src/server/app.ts</code>, <code>src/test-fixtures/e2e-run.ts</code>.</p>
+      <h4>Work</h4><ul><li>Make <code>#plan-touch-layer</code> mode-aware without undoing rebased main’s CSS split: desktop remains pointer-inert, mobile remains the scroll/tap surface, and annotation-off mode must not route taps into <code>openComposerFromFramePoint()</code>.</li><li>Preserve current wide-scroll proxy behavior, <code>syncFrameHeight()</code> sizing, and mobile readability affordances while keeping links, scrolling, and text selection/copy behavior usable in off mode.</li><li>If implementation evidence shows mobile off mode cannot preserve readable/copyable behavior while also keeping scroll/link usability, stop and return a product question; do not silently ship or merely document a platform limitation.</li></ul>
+      <h4>Open questions / decision dependencies</h4><p>None at planning time. During execution, mobile implementation evidence may create a product question only if readable/copyable off-mode behavior cannot be preserved together with scroll/link usability.</p>
+      <h4>Verify</h4><pre>bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js</pre>
+    </article>
+
+    <article id="phase-p4" class="phase" data-plan-node-id="phase-p4">
+      <h3>P4 verify sidebar parity and persistence</h3>
+      <h4>End State</h4><p>The sidebar and plan-scoped preference work independently from annotation overlays.</p>
+      <h4>Tests first</h4><p>Add e2e assertions that comments/sidebar state remains visible while annotations are off, off state persists across reload for the same plan, a different plan still starts on, and toggling on redraws anchors once.</p>
+      <h4>Expected files</h4><p><code>src/test-fixtures/e2e-run.ts</code>, possibly <code>src/__tests__/contracts.test.ts</code>.</p>
+      <h4>Work</h4><ul><li>Ensure <code>loadMeta()</code> still refreshes comments/counts when off but does not call visible anchor rendering until enabled.</li><li>Ensure sidebar jump/filter buttons do not silently re-enable annotation mode or leave stale highlight artifacts.</li><li>Ensure both Markdoc-generated plan refreshes and legacy HTML source-sync refreshes respect the current annotation state after iframe reloads.</li><li>Preserve action-button comments that now prefer <code>.markdoc</code> paths when plans are registered from Markdoc sources.</li></ul>
+      <h4>Open questions / decision dependencies</h4><p>None.</p>
+      <h4>Verify</h4><pre>bun run build &amp;&amp; node dist/test-fixtures/e2e-run.js</pre>
+    </article>
+
+    <article id="phase-p5" class="phase" data-plan-node-id="phase-p5">
+      <h3>P5 run final browser and regression gates</h3>
+      <h4>End State</h4><p>The feature is verified against UI behavior, contract stability, queue fixtures, and implementation review.</p>
+      <h4>Tests first</h4><p>No new red test in this phase; this is final verification after P1-P4 are green.</p>
+      <h4>Expected files</h4><p>No additional source files expected beyond review notes if the execution workflow requires them.</p>
+      <h4>Work</h4><ul><li>Run targeted checks, full unit/contract tests, e2e, and queue fixtures.</li><li>Include Markdoc compile/source-sync and action-button source-path assertions in the regression readout because those landed on main during rebase.</li><li>Run a scoped implementation review focused on annotation mode guards, mobile behavior, source-authority boundaries, and comment lifecycle non-regression.</li><li>Update this plan’s Progress and Decisions / Deviations Log with evidence.</li></ul>
+      <h4>Open questions / decision dependencies</h4><p>None.</p>
+      <h4>Verify</h4><pre>bun run build
+bun run test
+bun run test:e2e
+bun run test:fixtures -- --scenario seeded-comment-stream
+bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated</pre>
+    </article>
+  </section>
+
+  <section id="verification">
+    <h2>Verification strategy</h2>
+    <p>The primary proof is shipped-surface browser behavior: the same registered plan must visibly switch between annotated review mode and normal reading/copying mode, while comments remain in the sidebar. Contract tests lock the toolbar/control semantics and confirm rebased main’s Markdoc/source-authority contracts are preserved; e2e tests prove real iframe, mouse, touch, sidebar, reload, and source-sync behavior. Full repo tests and queue fixtures prove the UI-only feature did not affect comment delivery.</p>
+  </section>
+
+  <section id="delivery-order">
+    <h2>Delivery order</h2>
+    <ol><li>Browser review of this mock and product contract.</li><li>Execution-ready plan review gates.</li><li>Implement phases P1 through P5 in order.</li><li>Run scoped implementation review and full verification before PR handoff.</li></ol>
+  </section>
+
+  <section id="non-goals">
+    <h2>Non-goals</h2>
+    <ul><li>No server-side user preferences, authentication, database migration, API change, or CLI flag.</li><li>No changes to comment queue delivery, ack/release/resolve/delete semantics, Markdoc compile/source sync, legacy HTML source sync, registration, or execution-readiness metadata.</li><li>No redesign of the comment sidebar beyond preserving it while document annotations are off.</li><li>No migration of this plan from HTML to Markdoc unless explicitly approved; future compact plans can follow the new Markdoc-preferred workflow separately.</li><li>No change to the authored plan artifact contract; this is review-shell behavior only.</li></ul>
+  </section>
+
+  <section id="decisions-log" class="log">
+    <h2>Decisions / Deviations Log</h2>
+    <ul>
+      <li id="log-2026-06-27-draft"><time datetime="2026-06-27">2026-06-27</time>: Created browser-review draft from user request. Locked default-on, plan-scoped local browser persistence, annotation toolbar control, hidden document annotations while off, and sidebar independence.</li>
+      <li id="log-2026-06-27-glm-mocks"><time datetime="2026-06-27">2026-06-27</time>: Integrated browser feedback via GLM by reworking enabled/disabled mocks to match the shipped plan-reviewer shell: dark navbar, doc kind switcher, current-plan bar, icon toolbar buttons, white rendered-plan area, and populated comments sidebar.</li>
+      <li id="log-2026-06-29-rebase-main"><time datetime="2026-06-29">2026-06-29</time>: Rebased branch onto <code>origin/main</code> at 849bc21. Updated plan evidence for Markdoc-preferred source authority, generated HTML behavior, rebased shell metadata, and the current <code>#plan-touch-layer</code> CSS split. Decision: keep this active raw UI-mock plan as HTML-only source-authoritative because no sibling Markdoc exists and migration was not requested.</li>
+      <li id="log-2026-06-29-icon-feedback"><time datetime="2026-06-29">2026-06-29</time>: Integrated browser feedback rejecting the fountain-pen glyph. Repo inspection found no dedicated annotation icon in the current shell/design-system pattern, so the plan now uses a target/crosshair glyph (<code>⌖</code>) for annotation targeting and updates both mocks plus acceptance language.</li>
+      <li id="log-2026-06-29-full-width-mocks"><time datetime="2026-06-29">2026-06-29</time>: Integrated browser feedback to make the enabled and disabled mocks full-width. The mock section now expands beyond the normal plan text column, stacks states vertically, widens the comment sidebar, and increases the document pane height/text scale so the browser shell can be reviewed at realistic proportions.</li>
+      <li id="log-2026-06-29-comment-alignment"><time datetime="2026-06-29">2026-06-29</time>: Fixed mock alignment after screenshot review. The plan mock now scopes top-level layout CSS away from nested <code>&lt;main class="mock-review"&gt;</code>, preventing the document pane from overlapping the comments rail, and restyles mock comments to match the shipped app’s <code>.comment-row</code>, header, thread, metadata, and Jump button pattern.</li>
+      <li id="log-2026-06-29-no-disabled-selection-highlight"><time datetime="2026-06-29">2026-06-29</time>: Integrated browser feedback that disabled mode should not show any highlighted selection in the document mock. Removed the fake native selection/caret treatment so the disabled mock shows plain document text with all annotation selections off.</li>
+      <li id="log-2026-06-29-readiness-review"><time datetime="2026-06-29">2026-06-29</time>: Execution-ready review found one blocker: mobile/coarse-pointer off mode could not leave text selection/copy as an optional documented limitation. Updated P2/P3, BDD, and test coverage to require guarding tap-target styles and to stop for a product question if mobile off mode cannot preserve text selection/copy alongside scroll and link usability.</li>
+      <li id="log-2026-06-29-execution-ready"><time datetime="2026-06-29">2026-06-29</time>: Reran GPT and GLM readiness reviews after the mobile/tap-target edits. Both reviewers returned <code>VERDICT: PLAN_EXECUTION_READY</code> with no blockers, so this plan is marked execution-ready.</li>
+      <li id="log-2026-06-29-p1-p4-implemented"><time datetime="2026-06-29">2026-06-29</time>: Implemented P1-P4. Added the toolbar annotation toggle, plan-scoped localStorage state, disabled-mode overlay/composer/tap-target guards, desktop selectable-text behavior, mobile off-mode frame pass-through, sidebar independence, and e2e coverage for toggling off/on. Verification evidence: <code>bun run build</code>, targeted contract tests for review shell toolbar/side panels, and <code>node dist/test-fixtures/e2e-run.js</code> passed.</li>
+      <li id="log-2026-06-29-p5-final-gates"><time datetime="2026-06-29">2026-06-29</time>: Completed P5 final gates. Verification evidence: <code>bun run build</code>, <code>bun run test</code> (152 passing tests), <code>bun run test:e2e</code> (plan index, DOM annotation, image annotation, plan sync, deferred notes resume sync), <code>bun run test:fixtures -- --scenario seeded-comment-stream</code>, and <code>bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated</code> all passed.</li>
+      <li id="log-2026-06-29-review-fixes"><time datetime="2026-06-29">2026-06-29</time>: Resolved scoped implementation review findings. Mobile annotation-off mode now uses iframe scrolling with e2e coverage for drag scrolling while the composer remains closed. Non-empty composer drafts now block annotation disablement and show the discard warning instead of clearing the pending anchor; e2e covers warning, cancel, and successful disable after discard. GPT and GLM follow-up reviews both returned <code>CLEAN_FOR_PR</code>.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>
