@@ -2968,7 +2968,9 @@ try {
       assert.ok(offLinkBox);
       await trustedTap(offLinkBox.x + offLinkBox.width / 2, offLinkBox.y + offLinkBox.height / 2);
       await touchPage.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.location.hash === '#link-target', undefined, { timeout: 3000 });
+      await touchPage.waitForFunction(() => (document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollY ?? 0) > 20, undefined, { timeout: 3000 });
       assert.equal(await touchPage.evaluate(() => document.querySelector<HTMLElement>('#composer')?.hidden), true);
+      assert.equal(await touchPage.evaluate(() => document.querySelector<HTMLElement>('#review')?.scrollTop ?? 0), 0);
     } finally {
       await touchContext.close();
       const resetMobileDefault = await context.put('/api/configuration', {

@@ -2763,6 +2763,10 @@ function scrollShellToFrameTarget(target){
   const rect = target.getBoundingClientRect();
   const frameRect = frame.getBoundingClientRect();
   if (isMobileShell()) {
+    if (!annotationsAreEnabled()) {
+      frame.contentWindow?.scrollTo({ top: Math.max(0, (frame.contentWindow?.scrollY || 0) + rect.top), behavior: 'auto' });
+      return;
+    }
     const review = document.getElementById('review');
     if (!review) return;
     const reviewRect = review.getBoundingClientRect();
