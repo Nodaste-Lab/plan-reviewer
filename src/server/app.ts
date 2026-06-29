@@ -1810,18 +1810,18 @@ function updateCommentStatusBanner(items){
     else pending += 1;
   }
   const total = items.length;
+  const working = claimed + acknowledged;
   banner.className = 'comment-status-banner';
   let state, label;
   if (total === 0 || resolved === total) {
     state = 'green';
     label = total === 0 ? 'No comments' : 'All resolved';
-  } else if (pending > 0 && claimed === 0 && acknowledged === 0) {
+  } else if (working > 0) {
+    state = 'yellow';
+    label = 'Agent working ' + working;
+  } else {
     state = 'red';
     label = pending + ' pending';
-  } else {
-    state = 'yellow';
-    const working = claimed + acknowledged;
-    label = 'Agent working ' + working;
   }
   banner.classList.add(state);
   banner.textContent = label;
