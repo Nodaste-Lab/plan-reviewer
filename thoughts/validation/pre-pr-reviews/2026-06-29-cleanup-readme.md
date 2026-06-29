@@ -55,10 +55,15 @@ None. Both reviewers returned clean verdicts with no P1/P2/P3 findings.
 - `bun run build` — initially failed because `node_modules` was absent and TypeScript could not find `@types/node`.
 - `bun install` — installed dependencies; no tracked package files changed.
 - `bun run build` — passed (`tsc`).
+- After Codex feedback fix, `bun run build` — passed (`tsc`).
 
 ## Remaining follow-ups
 
 None.
+
+## Post-PR Codex feedback
+
+Codex reported that the README opening overstated Markdoc output as “sanitized HTML.” Decision: fixed. The README now says Markdoc sources compile to generated HTML for registration and are sanitized in the review render path, matching `compileMarkdoc()` versus service rendering behavior.
 
 ## Final gate result
 
