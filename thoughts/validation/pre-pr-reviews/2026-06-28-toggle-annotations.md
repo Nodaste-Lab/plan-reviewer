@@ -66,9 +66,13 @@ Triage:
 | GPT quality-reviewer | `CLEAN_FOR_PR` | Prior P2 path resolved; no new blocker found. |
 | GLM quality-reviewer-glm | `CLEAN_FOR_PR` | Prior P2 path resolved; mobile/touch sanity check clean. |
 
+## Codex PR feedback
+
+Codex reviewed PR #72 and reported one P2 finding: when annotations were off, rendered-plan links to another review shell (`/p/<id>`) returned before `navigatePlanShellLink()`, so clicking an in-plan cross-link could load a nested review shell inside the iframe. Fixed by preserving interactive link handling before the annotation-off return and adding e2e coverage for clicking a plan cross-link while annotations are disabled. Targeted verification after the fix: `bun run build && node dist/test-fixtures/e2e-run.js` passed.
+
 ## Final gate result
 
-`OPEN_PR_READY`: both GPT and GLM follow-up reviews are clean and final verification passed after the last fix.
+`OPEN_PR_READY`: both GPT and GLM follow-up reviews are clean, Codex PR feedback has been addressed, and final verification passed after the last fix. Final post-Codex gate: `bun run build && bun run test && bun run test:e2e && bun run test:fixtures -- --scenario seeded-comment-stream && bun run test:fixtures -- --scenario agent-listener-harness-smoke --harness-mode simulated` passed with 152 tests, e2e scenarios, and both fixture scenarios green.
 
 ## Follow-ups
 

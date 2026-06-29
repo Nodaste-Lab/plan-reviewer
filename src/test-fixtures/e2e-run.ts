@@ -1350,6 +1350,14 @@ try {
     assert.equal(await page.evaluate(() => Boolean(document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#plan-navbar'))), false);
     assert.equal(await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.getAttribute('src')), `/render/${navSwitch.planId}`);
     assert.equal(await page.evaluate(() => Boolean(document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#nav-switch'))), true);
+    await page.goto(`${baseUrl}/p/${linkedPlan.planId}`);
+    await page.waitForFunction(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#linked-plan-link'));
+    await page.click('#annotations-toggle');
+    assert.equal(await page.locator('#annotations-toggle').getAttribute('aria-pressed'), 'false');
+    await page.frameLocator('#plan-frame').locator('#linked-plan-link').click();
+    await page.waitForURL(`${baseUrl}/p/${navSwitch.planId}`);
+    assert.equal(await page.evaluate(() => Boolean(document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentDocument?.querySelector('#plan-navbar'))), false);
+    assert.equal(await page.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')?.getAttribute('src')), `/render/${navSwitch.planId}`);
     await page.goto(`${baseUrl}/p/${registered.planId}`);
     assert.equal((await context.post(`/api/plans/${navSwitch.planId}/archive`)).ok(), true);
     let planListRequests = 0;

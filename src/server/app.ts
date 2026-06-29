@@ -3146,14 +3146,16 @@ function attachFrameListeners(){
     scheduleSelectionBoxUpdate();
   }, true);
   doc.addEventListener('click', event => {
-    if (!annotationsAreEnabled()) return;
-    debugTouch('click', { target: elementFromEvent(event)?.tagName || null, id: elementFromEvent(event)?.id || '', suppressed: Date.now() < suppressSyntheticClickUntil });
     const interactiveTarget = interactiveTargetFromEvent(event);
     if (interactiveTarget) {
       const anchor = interactiveTarget.closest?.('a[href],area[href]');
       if (anchor && (navigatePlanShellLink(anchor, event) || navigateFrameFragmentLink(anchor, event))) return;
+      if (!annotationsAreEnabled()) return;
+      debugTouch('click', { target: elementFromEvent(event)?.tagName || null, id: elementFromEvent(event)?.id || '', suppressed: Date.now() < suppressSyntheticClickUntil });
       return;
     }
+    if (!annotationsAreEnabled()) return;
+    debugTouch('click', { target: elementFromEvent(event)?.tagName || null, id: elementFromEvent(event)?.id || '', suppressed: Date.now() < suppressSyntheticClickUntil });
     event.preventDefault();
     event.stopPropagation();
     if (Date.now() < suppressSyntheticClickUntil) return;
