@@ -2894,7 +2894,11 @@ try {
       assert.equal(mobileTapState.topDelta <= 1, true);
       assert.equal(mobileTapState.widthDelta <= 1, true);
       assert.equal(mobileTapState.heightDelta <= 1, true);
-      await touchPage.click('#cancel-comment');
+      await touchPage.fill('#comment-body', 'Mobile off-mode jump target');
+      await touchPage.click('#submit-comment');
+      await touchPage.waitForFunction(() => document.querySelector('#comments')?.textContent?.includes('Mobile off-mode jump target'));
+      if (await touchPage.evaluate(() => document.body.classList.contains('comments-open'))) await touchPage.click('#mobile-comments-toggle');
+      await touchPage.waitForFunction(() => !document.body.classList.contains('comments-open'));
       await touchPage.click('#annotations-toggle');
       assert.equal(await touchPage.locator('#annotations-toggle').getAttribute('aria-pressed'), 'false');
       const mobileOffSurface = await touchPage.evaluate(() => {
@@ -2929,6 +2933,15 @@ try {
       assert.equal(mobileOffScrollState.reviewScrollTop, 0);
       assert.equal(mobileOffScrollState.frameInternalScrollY > 20, true);
       assert.equal(mobileOffScrollState.composerOpen, false);
+      await touchPage.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')!.contentWindow?.scrollTo(0, 0));
+      await touchPage.click('#mobile-comments-toggle');
+      await touchPage.waitForFunction(() => document.body.classList.contains('comments-open'));
+      await touchPage.locator('.comment-row').filter({ hasText: 'Mobile off-mode jump target' }).locator('.comment-jump').click();
+      await touchPage.waitForFunction(() => (document.querySelector<HTMLIFrameElement>('#plan-frame')?.contentWindow?.scrollY ?? 0) > 20, undefined, { timeout: 3000 });
+      assert.equal(await touchPage.evaluate(() => document.querySelector<HTMLElement>('#composer')?.hidden), true);
+      assert.equal(await touchPage.evaluate(() => document.querySelector<HTMLElement>('#review')?.scrollTop ?? 0), 0);
+      await touchPage.click('#mobile-comments-toggle');
+      await touchPage.waitForFunction(() => !document.body.classList.contains('comments-open'));
       await touchPage.evaluate(() => document.querySelector<HTMLIFrameElement>('#plan-frame')!.contentWindow?.scrollTo(0, 0));
       await settleScrollTop();
       const offTextBox = await touchPage.frameLocator('#plan-frame').locator('#link-adjacent-text').boundingBox();
