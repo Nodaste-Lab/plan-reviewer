@@ -2366,7 +2366,8 @@ try {
     }
     assert.ok(yellowBanner);
     assert.match(yellowBanner!.cls, /yellow/);
-    assert.match(yellowBanner!.text!, /Agent working/);
+    assert.match(yellowBanner!.text!, /^Agent working \d+$/);
+    assert.doesNotMatch(yellowBanner!.text!, /pending/i);
 
     // Banner Red/Green/live-transition coverage (AC9, AC11, AC12) on an isolated plan
     // so the main scenario's comment state is not disturbed.
