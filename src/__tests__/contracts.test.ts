@@ -7390,3 +7390,34 @@ test('CLI download saves server-provided filename into output directory and refu
     await new Promise<void>(resolve => server.close(() => resolve()));
   }
 });
+
+test('weft design-system tokens are served with provenance and linked into the overlay', async () => {
+  const dbPath = tempDbPath('weft-tokens-route');
+  const app = createApp({ dbPath, delivery: { enabled: false } });
+  try {
+    const tokens = await app.inject({ method: 'GET', url: '/weft-tokens.css' });
+    assert.equal(tokens.statusCode, 200, tokens.body.slice(0, 200));
+    assert.match(String(tokens.headers['content-type'] ?? ''), /text\/css/);
+    // Vendored copy of the published package CSS — provenance header intact,
+    // token layer present (pure token file: linking it must resolve
+    // var(--weft-*) without restyling anything).
+    assert.match(tokens.body, /Vendored from @nodaste-lab\/weft@\d+\.\d+\.\d+/);
+    assert.match(tokens.body, /--weft-paper:/);
+    assert.match(tokens.body, /--weft-cream:/);
+    assert.doesNotMatch(tokens.body, /@media/);
+
+    // The overlay shell must load the tokens BEFORE client.css so overlay
+    // rules can consume var(--weft-*).
+    const registered = await app.inject({ method: 'POST', url: '/api/plans/register', payload: sampleRegisterPayload() });
+    assert.equal(registered.statusCode, 200, registered.body);
+    const planId = registered.json().data.planId;
+    const shell = await app.inject({ method: 'GET', url: `/p/${planId}` });
+    assert.equal(shell.statusCode, 200);
+    const tokensIdx = shell.body.indexOf('/weft-tokens.css');
+    const clientIdx = shell.body.indexOf('/client.css');
+    assert.ok(tokensIdx > -1, 'overlay must link /weft-tokens.css');
+    assert.ok(clientIdx > tokensIdx, 'tokens stylesheet must precede client.css');
+  } finally {
+    await app.close();
+  }
+});
