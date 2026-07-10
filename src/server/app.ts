@@ -772,6 +772,7 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapedShellTitle}</title>
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/weft-tokens.css?v=${clientAssetVersion}">
     <link rel="stylesheet" href="/client.css?v=${clientAssetVersion}">
   </head><body${bodyClassAttribute} data-plan-id="${escapedPlanId}" data-review-mode="${escapeHtml(plan.reviewMode)}" data-plan-title-fallback="${encodedTitleFallback}" data-board-column-labels="${encodedBoardColumnLabels}">
     <nav id="plan-navbar" aria-label="Plan actions"><div id="plan-navbar-actions">${navActions}</div><div id="current-plan-bar"><strong id="current-plan-title">${escapedCurrentTitle}</strong><span class="ready-pill ${isCollaboration || plan.publicationMetadata?.executionReady ? 'ready' : 'not-ready'}">${escapeHtml(readyLabel)}</span>${currentStatusControl}${currentStatusGuidance}<span id="comment-status-banner" class="comment-status-banner" hidden></span></div></nav>
@@ -801,6 +802,15 @@ function reviewShell(plan: ReturnType<PlanReviewStore['getPlan']>['plan'], curre
 function resolvedModuleFile(specifier: string): string {
   return fileURLToPath(import.meta.resolve(specifier));
 }
+
+// Vendored Weft design-system token layer (assets/weft-tokens.css, refreshed by
+// scripts/refresh-weft-tokens.mjs). A pure token file: linking it makes
+// var(--weft-*) resolvable in the overlay without restyling anything, so UI
+// can adopt Weft tokens incrementally.
+const weftTokensCss = fs.readFileSync(
+  path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'assets', 'weft-tokens.css'),
+  'utf8',
+);
 
 const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Plan review comments">
   <defs>
@@ -3812,6 +3822,7 @@ export function createApp(options: AppOptions): FastifyInstance {
   app.get('/favicon.ico', async (_request, reply) => reply.header('Cache-Control', 'no-store').type('image/svg+xml').send(faviconSvg));
   app.get('/favicon.svg', async (_request, reply) => reply.header('Cache-Control', 'no-store').type('image/svg+xml').send(faviconSvg));
   app.get('/client.css', async (_request, reply) => reply.header('Cache-Control', 'no-store').type('text/css').send(clientCss));
+  app.get('/weft-tokens.css', async (_request, reply) => reply.header('Cache-Control', 'no-store').type('text/css').send(weftTokensCss));
   app.get('/client.js', async (_request, reply) => reply.header('Cache-Control', 'no-store').type('application/javascript').send(clientJs));
   app.get('/vendor/html2canvas.js', async (_request, reply) => {
     reply

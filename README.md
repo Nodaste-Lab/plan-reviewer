@@ -124,6 +124,20 @@ Stable updates require a new Homebrew-installable formula version. Keep this pro
 
 GitHub Release objects and packaged binary assets are optional. The default release is the tag plus formula URL/checksum update that `brew update && brew upgrade` can consume.
 
+## Weft design-system tokens
+
+The review overlay links `/weft-tokens.css` — the Nodaste **Weft** design-system
+token layer (`--weft-*` custom properties), vendored at
+`assets/weft-tokens.css` from the private `@nodaste-lab/weft` package so this
+public repo never needs registry auth to build or run. It is a pure token
+file: nothing is restyled until a rule opts in with `var(--weft-*)`.
+
+Maintainers refresh it after a Weft release:
+
+```bash
+NODE_AUTH_TOKEN=$(gh auth token) node scripts/refresh-weft-tokens.mjs   # token needs read:packages
+```
+
 ## Register and Review
 
 New plans should be authored as Markdoc and registered directly:
