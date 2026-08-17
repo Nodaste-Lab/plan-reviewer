@@ -1,5 +1,5 @@
 /*
- * Vendored from @nodaste-lab/weft@0.1.0 (css/weft.css) — DO NOT EDIT.
+ * Vendored from @nodaste-lab/weft@0.5.0 (css/weft.css) — DO NOT EDIT.
  * Refresh: NODE_AUTH_TOKEN=$(gh auth token) node scripts/refresh-weft-tokens.mjs
  * Pure token file: --weft-* custom properties + palette/theme/density axes.
  */
@@ -38,6 +38,7 @@
   --weft-warn:         #b45309;  /* amber-700 — AA as text: 5.02:1 on white, 4.73:1 on cream (was #d97706 at 3.19/3.00, fail). Feeds --hud-warning, used as small warning text across panels. */
   --weft-danger:       #ef4444;
   --weft-info:         #60a5fa;
+  --weft-info-text:    #2563eb;  /* blue-600 — AA as text: 5.17:1 on white, 4.87:1 on cream. The info decision is SETTLED as a split (owner call, 2026-08-14): --weft-info keeps #60a5fa for non-text and dark-canvas uses; info-as-text on paper/cream rides this token. Enforced in contrast-contract (no field-hint rule may paint with the bare token). Same shape as --weft-warn's amber-700 lift. */
 
   /* ── Surfaces (mode-aware) ───────────────────────────────────────────── */
   --weft-cream:        #fbf8f0;
@@ -55,6 +56,39 @@
 
   /* ── Modal overlay ───────────────────────────────────────────────────── */
   --weft-overlay:      rgba(11, 16, 32, 0.40);
+
+  /* ── Elevation + soft fills ──────────────────────────────────────────── */
+  --weft-shadow:       0 4px 12px rgba(11, 16, 32, 0.08);  /* resting card elevation */
+  --weft-fill-soft:    rgba(11, 16, 32, 0.025);            /* subtle section wash */
+  --weft-stop-soft:    rgba(248, 113, 113, 0.22);          /* danger surface tint */
+  /* Fill for a control that is present but not editable — disabled and
+   * read-only. Deliberately its own token rather than --weft-fill-soft: at
+   * 0.025 that wash lands 8/255 from paper, exactly on the threshold where two
+   * renderings stop being distinguishable, and a state that separates itself by
+   * the smallest visible amount is not separating itself. 0.055 reads as a
+   * distinctly static field and still leaves value text well clear of AA.
+   *
+   * Raised from 0.055 when the resting fill stopped being opaque paper: the two
+   * washes then differed by only 2% of ink, about 5/255, and a read-only field
+   * stopped being distinguishable from an editable one. Caught by
+   * states/readonly-renders-distinctly rather than by looking at it — which is
+   * the point of measuring a state against its neighbour rather than against a
+   * fixed colour. */
+  --weft-control-fill-static: rgba(11, 16, 32, 0.075);
+  /* THE BOUNDARY THAT CARRIES WCAG 1.4.11, and the quiet fill that does not.
+   *
+   * A field had no boundary reaching the 3:1 non-text contrast floor in either
+   * theme — border 1.30:1, and a fill identical to the surface behind it at
+   * 1.00:1. Neither cue identified the control.
+   *
+   * Option C, from rendering all four: the BORDER carries the floor and the fill
+   * is decorative. Fill-alone was ruled out by measurement, not preference —
+   * reaching 3:1 as a fill needs 45% ink over white, and at that fill the muted
+   * placeholder drops to 1.90:1 and fails text contrast. One border value covers
+   * both light surfaces: 0.48 ink measures 3.35:1 on paper and 3.15:1 on cream,
+   * so this is one token per theme rather than one per surface. */
+  --weft-control-border:      rgba(11, 16, 32, 0.48);
+  --weft-control-fill:        rgba(11, 16, 32, 0.035);
 
   /* ── On-blue tier (WCAG calibrated) ──────────────────────────────────── */
   /* 0.95 = AA NORMAL (4.55:1). 0.88 / 0.78 = AA LARGE ONLY — only at ≥18pt or ≥14pt bold. */
@@ -107,9 +141,30 @@
 
   /* ── Density (marketing default — see [data-density="compact"] for app) ── */
   --weft-control-h:         44px;
+  /* Choice rows (decision 1, clearance reading (b)): the row clears the 24px
+   * control floor on its own, and row + stack gap = 44px puts adjacent rows
+   * exactly one clearance band apart. Density-invariant by that decision —
+   * 32 + 12 = 44 at marketing, compact and dense alike. */
+  --weft-choice-row-h:      32px;
+  --weft-choice-gap:        12px;
   --weft-control-pad-x:     14px;
+  --weft-control-pad-y:     11px;
   --weft-control-gap:       12px;
   --weft-control-text:      16px;
+  /* ── Size step (P5, compose model — owner call 2026-08-11) ──
+   * Density sets the tier; size steps within it. sm is one step down, and the
+   * map is decided per tier rather than one fixed pixel value: 44→36, 36→32,
+   * 34→32 — chosen so D4's 32px board buttons render unchanged at dense.
+   * input-geometry.spec.ts pins the decided values; this block only carries
+   * them. */
+  --weft-control-h-sm:      36px;
+  --weft-control-pad-x-sm:  10px;
+  /* The textarea floor finally tracks its tier (P5): ~2 rows + chrome per
+   * tier, on the 4px grid — 96/80/72. */
+  --weft-textarea-min-h:    96px;
+  /* Search trailing reserve: 4px inset + 24px clear + a density-scaled text
+   * gap (8/4/2) — owner call 2026-08-10. */
+  --weft-search-pad-end:    36px;
   --weft-stack-gap:         16px;
   --weft-row-h:             48px;
   --weft-section-pad-y:     110px;
@@ -140,6 +195,24 @@
   --weft-chart-4:      var(--weft-warn);
   --weft-chart-5:      var(--weft-sepia);
 
+  /* ── Category palette (fixed hue-spread encoders) ─────────────────────────
+   * A theme-independent categorical palette for encoding *which bucket*
+   * something belongs to (e.g. a per-space colour on Scratchpad notes) —
+   * distinct from --weft-chart-* (semantic, theme-flipping) and never built
+   * from --weft-stop / --weft-warn (a danger-red category would read as an
+   * error). Every value clears 3:1 against the dark panel canvas
+   * (--weft-paper #141a2e: 4.58–11.44:1), no two are closer than the redmean
+   * separation floor, and the single dark --weft-on-category clears AA on all
+   * six (5.02–12.56:1). Fixed across light/dark by design — a category header
+   * carries its own bright background with dark on-colour text everywhere. */
+  --weft-category-1:   #4a7bff;   /* blue */
+  --weft-category-2:   #34d399;   /* emerald (distinct from --weft-ok) */
+  --weft-category-3:   #a3e635;   /* lime */
+  --weft-category-4:   #fbbf24;   /* amber (distinct from --weft-warn) */
+  --weft-category-5:   #fb7185;   /* rose */
+  --weft-category-6:   #e879f9;   /* fuchsia */
+  --weft-on-category:  #0b1020;   /* dark on-colour, AA on every category */
+
   /* ── Layer 4: domain-encoding aliases ────────────────────────────────────
    * Document the meaning of each color in CSS rather than implicit in
    * component code. Each alias resolves to a Layer 1 semantic — a future
@@ -161,7 +234,7 @@
  * Only the small set of tokens that flip is overridden. Brand colors and
  * the on-blue tier hold their values across modes.
  */
-:root[data-theme="dark"][data-palette="heritage-purple"] {
+:root[data-theme^="dark"][data-palette="heritage-purple"] {
   /* Heritage purple in dark mode — same surface flip as Weft, plus a slightly
    * brighter primary so violet-400 stays readable on deep navy paper.
    * Marks pull from the violet ramp's cooler end (violet-300) so the active
@@ -173,6 +246,13 @@
   --weft-rule:         rgba(244, 241, 232, 0.12);
   --weft-rule-strong:  rgba(244, 241, 232, 0.28);
   --weft-overlay:      rgba(11, 16, 32, 0.65);
+  --weft-shadow:       0 4px 14px rgba(0, 0, 0, 0.45);
+  --weft-fill-soft:    rgba(244, 241, 232, 0.03);
+  --weft-stop-soft:    rgba(248, 113, 113, 0.20);
+  --weft-control-fill-static: rgba(244, 241, 232, 0.10);
+  /* 0.38 cream measures 3.28:1 on dark paper and 3.60:1 on dark cream. */
+  --weft-control-border:      rgba(244, 241, 232, 0.38);
+  --weft-control-fill:        rgba(244, 241, 232, 0.05);
 
   --weft-blue:         #c4b5fd;  /* violet-300 — lifted primary */
   --weft-blue-deep:    #a78bfa;  /* violet-400 — deep */
@@ -183,12 +263,33 @@
   --weft-warn:         #f59e0b;
   --weft-danger:       #f87171;
   --weft-info:         #c4b5fd;
+  --weft-info-text:    #c4b5fd;  /* matches --weft-info: already 9.35:1 on this paper */
+  --weft-ok:           #4ade80;  /* board pass 3: without this the block inherited LIGHT ok (#3a7a4a, 3.34:1 here) — 9.90:1 on this paper */
+  --weft-stop:         #f87171;  /* same catch: inherited LIGHT stop measured 2.68:1 — 6.24:1 on this paper, matching --weft-danger's family */
 
   --primary:                       var(--weft-blue);
   /* Dark-mode primary is a LIGHT violet (violet-300), so on-primary text must be
    * dark ink, not white. #1a0f33 (deep violet-ink) on #c4b5fd = 9.9:1 (AA).
    * White would be 1.85:1 (fail) — the value inherited from the light block. */
   --primary-foreground:            #1a0f33;
+
+  /* THE SAME CORRECTION FOR THE OTHER LAYER. The line above fixes the flat
+   * shadcn token the React primitives read; the whole --weft-on-blue tier is
+   * what the plain-CSS component layer reads, and it was still inheriting white
+   * from the light block. So this palette shipped a React button at 9.9:1 and a
+   * `.weft-btn` at 1.85:1 — with the plain-CSS layer, the one a sandboxed panel
+   * iframe gets, being the broken half. Same for the checked radio dot.
+   *
+   * Alphas mirror the base tier's ratios so every consumer keeps its intended
+   * emphasis, just inverted in tone. */
+  --weft-on-blue:            rgba( 26,  15,  51, 0.95);
+  --weft-on-blue-muted:      rgba( 26,  15,  51, 0.88);
+  --weft-on-blue-soft:       rgba( 26,  15,  51, 0.78);
+  --weft-on-blue-rule:       rgba( 26,  15,  51, 0.18);
+  --weft-on-blue-rule-soft:  rgba( 26,  15,  51, 0.15);
+  --weft-on-blue-dot:        rgba( 26,  15,  51, 0.12);
+  --weft-on-blue-bg:         rgba( 26,  15,  51, 0.03);
+  --weft-on-blue-bg-hover:   rgba( 26,  15,  51, 0.08);
   --accent:                        var(--weft-blue);
   --accent-foreground:             #1a0f33;
   --hud-border-accent:             var(--weft-blue);
@@ -210,8 +311,8 @@
   --hud-danger-border:             rgba(248, 113, 113, 0.35);
 }
 
-:root[data-theme="dark"][data-palette="weft"],
-:root[data-theme="dark"]:not([data-palette]) {
+:root[data-theme^="dark"][data-palette="weft"],
+:root[data-theme^="dark"]:not([data-palette]) {
   --weft-cream:        #0b1020;
   --weft-paper:        #141a2e;
   --weft-ink:          #f4f1e8;
@@ -221,21 +322,50 @@
   --weft-yellow-soft:  #2a241a;
   --weft-mark:         rgba(255, 216, 102, 0.28);
   --weft-overlay:      rgba(11, 16, 32, 0.65);
+  --weft-shadow:       0 4px 14px rgba(0, 0, 0, 0.45);
+  --weft-fill-soft:    rgba(244, 241, 232, 0.03);
+  --weft-stop-soft:    rgba(248, 113, 113, 0.20);
+  --weft-control-fill-static: rgba(244, 241, 232, 0.10);
+  /* 0.38 cream measures 3.28:1 on dark paper and 3.60:1 on dark cream. */
+  --weft-control-border:      rgba(244, 241, 232, 0.38);
+  --weft-control-fill:        rgba(244, 241, 232, 0.05);
 
   --weft-thread-blue:    rgba( 37,  99, 255, 0.18);
   --weft-thread-wash:    rgba( 37,  99, 255, 0.10);
   --weft-thread-yellow:  rgba(255, 216, 102, 0.12);
   --weft-glass-cream:    rgba( 11,  16,  32, 0.78);
 
-  --weft-link:               #4a7bff;
+  /* Link lifted from #4a7bff on 2026-07-18: that value measured 4.58:1 on
+   * --weft-paper but only 4.27:1 on the tinted fills links actually sit on
+   * (--weft-fill-soft over paper = #1b2034) — under the 4.5:1 AA floor for
+   * small text. Heddle's Updates Dashboard shipped
+   * color-mix(in srgb, var(--weft-link) 90%, var(--weft-ink)) as a local
+   * workaround; this bakes that exact result into the canonical token:
+   * #5b87fd = 5.20:1 on paper, 4.86:1 on the tinted fill. Consumers can drop
+   * the mix. */
+  --weft-link:               #5b87fd;
   --weft-link-visited:       #b8a3e8;
   --weft-focus-ring-color:   var(--weft-yellow);
 
   /* Semantic colors lift slightly in dark mode for legibility on the deep navy
-   * canvas. Warn shifts to a lighter amber, danger holds, info brightens. */
+   * canvas. Warn shifts to a lighter amber, danger holds, info brightens.
+   *
+   * ok/stop were missed here until 2026-07-16: they held their light-mode
+   * values (#3a7a4a / #a8382b) on dark paper, which measures 3.34:1 and 2.68:1
+   * against --weft-paper — both below the 4.5:1 WCAG AA floor. They are the two
+   * darkest semantic hues, so they are precisely the ones that cannot survive
+   * the surface flip. Lifted to the same 400-level ramp the others use
+   * ok lands on green-400 rather than emerald-400 (#34d399, what hud-glass
+   * uses): emerald leans teal and reads muted on the navy, and green-400 is both
+   * more vivid (69% vs 64% saturation) AND higher contrast (9.90:1 vs 8.98:1) —
+   * no trade. stop mirrors --weft-danger's red-400, so the pair sits on the same
+   * 400 level as warn/danger/info. */
+  --weft-ok:           #4ade80;
+  --weft-stop:         #f87171;
   --weft-warn:         #f59e0b;
   --weft-danger:       #f87171;
   --weft-info:         #93c5fd;
+  --weft-info-text:    #93c5fd;  /* matches --weft-info: already 9.57:1 on this paper */
 
   /* Severity-row backgrounds use the lifted dark-mode hues. Slightly higher
    * alpha so the tint registers against the deep navy paper. */
@@ -253,6 +383,11 @@
 :root[data-density="compact"] {
   --weft-control-h:         36px;
   --weft-control-pad-x:     10px;
+  --weft-control-pad-y:     11px;   /* unchanged from base: compact rendering must not move */
+  --weft-control-h-sm:      32px;
+  --weft-control-pad-x-sm:  9px;
+  --weft-textarea-min-h:    80px;
+  --weft-search-pad-end:    32px;
   --weft-control-gap:       8px;
   --weft-control-text:      14px;
   --weft-stack-gap:         12px;
@@ -260,6 +395,53 @@
   --weft-section-pad-y:     32px;
   --weft-section-pad-y-sm:  24px;
   --weft-touch-target:      24px;
+}
+
+/* ── Density: dense (operator-board density — 34px control height) ──────── */
+/* Tighter than compact for surfaces that stack many controls in a narrow
+ * column (e.g. the operator board rail). WCAG 2.5.8 AA touch target is
+ * guaranteed by the 24px --weft-touch-target floor; interactive rows in this
+ * tier must still reach 24px even though the control chrome may be shorter. */
+/* Root-scoped like every other density axis. weft.css is injected verbatim into
+ * sandboxed panel iframes, so it may only ever carry :root selectors — a nested
+ * [data-density] here would restyle third-party panels. Density is therefore an
+ * application-level preference (set on <html>), which is what T2 asked for:
+ * "users should be able to opt for a high density interface". */
+:root[data-density="dense"] {
+  --weft-control-h:         34px;
+  --weft-control-pad-x:     9px;
+  --weft-control-pad-y:     6px;    /* so min-height, not padding, governs at 34px */
+  --weft-control-h-sm:      32px;   /* D4's board buttons stay exactly 32px */
+  --weft-control-pad-x-sm:  9px;
+  --weft-textarea-min-h:    72px;
+  --weft-search-pad-end:    30px;
+  --weft-control-gap:       6px;
+  --weft-control-text:      13px;
+  --weft-stack-gap:         10px;
+  --weft-row-h:             30px;
+  --weft-section-pad-y:     28px;
+  --weft-section-pad-y-sm:  20px;
+  --weft-touch-target:      24px;
+}
+
+/* ── Consumer-supplied: sticky chrome height ────────────────────────────────
+ * Height of any sticky chrome the surface puts over its own scroll region. A
+ * control scrolled to by an in-page navigation top-aligns, which on a surface
+ * with a sticky header lands it underneath — measured at 99% covered before the
+ * component layer turned this into scroll-padding-top. Weft cannot know the
+ * height, so the surface declares it.
+ *
+ * DECLARED IN ITS OWN BARE `:root` BLOCK, and that is the whole point of the
+ * block existing. Every other token here lives under
+ * `:root, :root[data-palette="weft"]`, which weighs (0,2,0) — so a consumer
+ * writing the obvious `:root { --weft-sticky-chrome-h: 68px }` in its own
+ * stylesheet LOSES, silently, and the padding never applies. Found exactly that
+ * way. At (0,1,0) a consumer's declaration ties and, loading later, wins.
+ *
+ * Defaults to 0: a panel iframe with no chrome must not inherit scroll padding
+ * it never asked for. */
+:root {
+  --weft-sticky-chrome-h: 0px;
 }
 
 /* ── Palette alternative: heritage purple ──
@@ -318,10 +500,14 @@
   --weft-muted:               #a0a8c0;
   --weft-rule:                rgba(255, 255, 255, 0.07);
   --weft-rule-strong:         rgba(255, 255, 255, 0.18);
+  --weft-control-fill-static: rgba(255, 255, 255, 0.10);
+  --weft-control-border:      rgba(255, 255, 255, 0.38);
+  --weft-control-fill:        rgba(255, 255, 255, 0.05);
   --weft-blue:                #2563ff;
   --weft-stop:                #ef4444;
   --weft-ok:                  #34d399;
   --weft-warn:                #fbbf24;
+  --weft-info-text:           #93c5fd;  /* hud-glass is a dark palette in its own right (the chevron lesson): without this it would inherit the LIGHT text blue onto a dark canvas. 9.6:1 on the glass paper. */
 }
 
 /* ── Font alternative: system fonts ─────────────────────────────────────── */
@@ -355,9 +541,17 @@
   --destructive:                 var(--weft-stop);
   --destructive-foreground:      var(--weft-on-blue);
   --border:                      var(--weft-rule);
-  --input:                       var(--weft-paper);
-  --input-background:            var(--weft-paper);
+  /* P5 closes the recorded layer-parity gap: the React primitives paint their
+   * boundary from these two, and both pointed at --weft-paper — a 1.30:1
+   * hairline on the layer the plain-CSS field left behind at P4. They now
+   * read the same Option C pair the plain-CSS boundary reads. */
+  --input:                       var(--weft-control-border);
+  --input-background:            var(--weft-control-fill);
   --ring:                        var(--weft-focus-ring-color);
+  --success:                     var(--weft-ok);
+  --success-foreground:          var(--weft-fixed-white);
+  --warning:                     var(--weft-warn);
+  --warning-foreground:          var(--weft-fixed-white);
 
   --radius:                      var(--weft-radius-card);
   --radius-sm:                   var(--weft-radius-chip);
@@ -510,7 +704,7 @@
  * selected — even on surfaces that don't use the bridged tokens directly.
  */
 :root[data-palette="weft"] body {
-  background: var(--weft-cream);
-  color: var(--weft-ink);
+  background: var(--background, var(--weft-cream));
+  color: var(--foreground, var(--weft-ink));
   font-family: var(--weft-font-sans);
 }
